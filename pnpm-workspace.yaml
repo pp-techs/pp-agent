@@ -17,6 +17,7 @@ allowBuilds:
 catalog:
   "@base-ui/react": ^1.9.0
   "@buiducnhat/better-modal": ^0.0.6
+  "@changesets/cli": ^3.0.3
   "@earendil-works/pi-agent-core": ^1.4.0
   "@earendil-works/pi-ai": ^1.4.0
   "@earendil-works/pi-coding-agent": ^1.4.0

@@ -18,6 +18,7 @@
 | `vp test`                         | Vitest.                                                                |
 | `vp run build` / `vp run ready`   | Build all packages / check then build.                                 |
 | `vp run dist`                     | Build web, then pack the desktop app with electron-builder.            |
+| `vp run changeset`                | Add a changeset for the next release (see `release-process.md`).       |
 
 `vp <name>` is a built-in; `vp run <name>` runs a `package.json` script. `vp dev` and `vp run dev` differ — use `vp run dev`.
 

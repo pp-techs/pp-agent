@@ -39,10 +39,10 @@ The other runtime `dependencies` of `apps/desktop` (`fflate`, `officeparser`, `t
 
 `apps/desktop/electron-builder.yml`:
 
-- App id `com.pp.agent`, product name "PP Agent", output `apps/desktop/release`.
+- App id `com.pptechs.agent`, product name "PP Agent", output `apps/desktop/release`, asset names `pp-agent-<version>-<os>-<arch>.<ext>`.
 - Ships `dist/**` and `package.json` inside an asar archive; production `dependencies` (including the Pi SDK) come along from `node_modules`.
 - `extraResources` copies `../web/dist` to `resources/renderer`. In a packaged app main loads `process.resourcesPath/renderer/index.html`, which is why `dist` builds the web app first.
-- Targets: macOS `dmg` + `zip` (category productivity), Windows `nsis`, Linux `AppImage`. `--publish never`.
+- Targets: macOS `dmg` + `zip` (category productivity), Windows `nsis` (assisted installer, install folder selectable), Linux `AppImage` + `deb`. `publish: null`: the release workflow uploads installers itself (see [Release process](../code-standard/release-process.md)).
 
 ```mermaid
 flowchart LR
@@ -54,7 +54,7 @@ flowchart LR
   end
   D2 --> EB["electron-builder"]
   W2 -- "extraResources → resources/renderer" --> EB
-  EB --> OUT["release/: dmg, zip, nsis, AppImage"]
+  EB --> OUT["release/: dmg, zip, exe, AppImage, deb"]
 ```
 
 ## Development flow

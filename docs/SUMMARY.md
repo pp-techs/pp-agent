@@ -44,6 +44,7 @@ Conventions, naming rules, tech stack versions, and development workflows.
 | [electron-security.md](code-standard/electron-security.md)               | Window hardening, external links, IPC input and path validation, keys only in main            |
 | [pi-sdk-integration.md](code-standard/pi-sdk-integration.md)             | Pi agent dir, explicit extensions, skills loading, deferred changes, reload vs active tools   |
 | [verification-and-secrets.md](code-standard/verification-and-secrets.md) | `vp check`, Electron smoke tests over CDP with copied user data, secrets hygiene              |
+| [release-process.md](code-standard/release-process.md)                   | Changesets, Version Packages PR, installer builds, GitHub Releases, signing secrets           |
 
 ## Project PDR
 

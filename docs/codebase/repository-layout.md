@@ -46,13 +46,15 @@ flowchart LR
 
 Run with `vp run <name>` from the repo root (`vp <name>` alone runs a Vite+ built-in, not the script).
 
-| Command                              | Defined in                    | Effect                                                                                                                          |
-| ------------------------------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `vp run dev`                         | root `package.json`           | Runs `dev` in `@workspace/web` (`vp dev`) and `@workspace/desktop` in parallel.                                                 |
-| desktop `dev` task                   | `apps/desktop/vite.config.ts` | `vp pack && electron .`; uncached because cache tracking crashes Electron's sandboxed renderer.                                 |
-| `vp run build`                       | root                          | `vp run -r build`: `vp build` (web), `vp pack` (desktop).                                                                       |
-| `vp run dist`                        | root                          | Builds web, then desktop `dist`: `vp pack` + electron-builder installers into `apps/desktop/release` (dmg/zip, nsis, AppImage). |
-| `vp run @workspace/desktop#dist:dir` | `apps/desktop/package.json`   | Same as `dist` but an unpacked directory (`--dir`); build web first so `apps/web/dist` exists.                                  |
-| `vp run ready`                       | root                          | `vp check` (format, lint, type check) then `vp run -r build`.                                                                   |
+| Command                              | Defined in                           | Effect                                                                                                                       |
+| ------------------------------------ | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `vp run dev`                         | root `package.json`                  | Runs `dev` in `@workspace/web` (`vp dev`) and `@workspace/desktop` in parallel.                                              |
+| desktop `dev` task                   | `apps/desktop/vite.config.ts`        | `vp pack && electron .`; uncached because cache tracking crashes Electron's sandboxed renderer.                              |
+| `vp run build`                       | root                                 | `vp run -r build`: `vp build` (web), `vp pack` (desktop).                                                                    |
+| `vp run dist`                        | root                                 | Builds web, then desktop `dist`: `vp pack` + electron-builder installers for the current system into `apps/desktop/release`. |
+| `vp run @workspace/desktop#dist:dir` | `apps/desktop/package.json`          | Same as `dist` but an unpacked directory (`--dir`); build web first so `apps/web/dist` exists.                               |
+| `vp run ready`                       | root                                 | `vp check` (format, lint, type check) then `vp run -r build`.                                                                |
+| `vp run changeset`                   | root                                 | Records a change for the next release in `.changeset/`.                                                                      |
+| `vp run version-packages`            | root (`scripts/version-packages.ts`) | Release workflow's version step: bumps desktop + web, root version, CHANGELOGs.                                              |
 
-`dist:dir` is only defined in `apps/desktop`; there is no root alias.
+`dist:dir` is only defined in `apps/desktop`; there is no root alias. CI and release workflows live in `.github/workflows/` (see [Release process](../code-standard/release-process.md)).

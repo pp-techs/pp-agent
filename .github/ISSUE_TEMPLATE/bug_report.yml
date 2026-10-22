@@ -1,0 +1,51 @@
+name: Bug report
+description: Something in PP Agent does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Security problems go to a private advisory instead (see SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Settings › Models
+        2. …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: PP Agent version
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS (Apple silicon)
+        - macOS (Intel)
+        - Windows
+        - Linux
+    validations:
+      required: true
+  - type: input
+    id: provider
+    attributes:
+      label: Model provider or gateway (if relevant)
+      placeholder: Anthropic, OpenRouter, a custom OpenAI-compatible gateway, …
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error messages or screenshots
+      description: Remove API keys, tokens, and private data first.

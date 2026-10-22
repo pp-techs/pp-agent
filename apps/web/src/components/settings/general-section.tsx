@@ -102,7 +102,7 @@ function DefaultModelField({ bridge }: { bridge: DesktopBridge }) {
       <FieldDescription>
         {available.length === 0
           ? "Connect a provider in Models to choose a default."
-          : "Used for new chats. You can switch models in any chat from the top bar."}
+          : "Used for new chats. You can switch models in any chat from below the message box."}
       </FieldDescription>
     </Field>
   );

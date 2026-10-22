@@ -2,15 +2,28 @@
   "name": "pp-agent",
   "version": "0.0.0",
   "private": true,
+  "description": "Desktop AI agent for business teams: chat with documents, use business systems through MCP, and switch between purpose-built agents.",
+  "homepage": "https://github.com/pp-techs/pp-agent#readme",
+  "bugs": {
+    "url": "https://github.com/pp-techs/pp-agent/issues"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pp-techs/pp-agent.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "vp run --parallel --filter @workspace/web --filter @workspace/desktop dev",
     "build": "vp run -r build",
     "dist": "vp run @workspace/web#build && vp run @workspace/desktop#dist",
     "ready": "vp check && vp run -r build",
+    "changeset": "changeset",
+    "version-packages": "node scripts/version-packages.ts",
     "prepare": "vp config"
   },
   "devDependencies": {
+    "@changesets/cli": "catalog:",
     "vite-plus": "catalog:"
   },
   "devEngines": {
