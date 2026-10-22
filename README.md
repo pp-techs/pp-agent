@@ -2,6 +2,8 @@
 
 Desktop chat agent for business teams. Non-technical users chat with it; models, tools, skills, and business systems are managed in the app's Settings.
 
+Full documentation (architecture, codebase, code standards, product requirements) starts at [docs/SUMMARY.md](docs/SUMMARY.md).
+
 ## Stack
 
 | Layer                  | Choice                                                                                                                                        |
