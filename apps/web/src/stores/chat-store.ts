@@ -1,4 +1,12 @@
-import type { AgentEvent, AgentStatus, ApprovalRequest, ChatMessage } from "@workspace/shared";
+import type {
+  AgentEvent,
+  AgentSnapshot,
+  AgentSummary,
+  AgentStatus,
+  ApprovalRequest,
+  ChatMessage,
+  ModelSummary,
+} from "@workspace/shared";
 import { create } from "zustand";
 
 interface ChatState {
@@ -6,7 +14,13 @@ interface ChatState {
   messages: ChatMessage[];
   /** Pending approvals keyed by request id. */
   approvals: Record<string, ApprovalRequest>;
-  model: string | null;
+  /** Model of the open conversation. */
+  model: ModelSummary | null;
+  /** Agent of the open conversation. */
+  agent: AgentSummary | null;
+  /** Thinking level of the open conversation and the levels its model offers. */
+  thinking: AgentSnapshot["thinking"];
+  /** Workspace of the open conversation (its agent's folder). */
   workspaceDir: string | null;
   sessionPath: string | null;
   apply: (event: AgentEvent) => void;
@@ -17,6 +31,8 @@ export const useChatStore = create<ChatState>()((set) => ({
   messages: [],
   approvals: {},
   model: null,
+  agent: null,
+  thinking: { level: "off", available: [] },
   workspaceDir: null,
   sessionPath: null,
 
@@ -34,6 +50,8 @@ export const useChatStore = create<ChatState>()((set) => ({
               snapshot.approvals.map((request) => [request.requestId, request]),
             ),
             model: snapshot.model,
+            agent: snapshot.agent,
+            thinking: snapshot.thinking,
             workspaceDir: snapshot.workspaceDir,
             sessionPath: snapshot.sessionPath,
           };
@@ -54,6 +72,10 @@ export const useChatStore = create<ChatState>()((set) => ({
           return { approvals };
         }
         case "sessions_changed":
+        case "settings_changed":
+        case "auth_prompt":
+        case "auth_prompt_closed":
+        case "auth_info":
         case "error":
           return {};
       }

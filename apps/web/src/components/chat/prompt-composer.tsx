@@ -12,42 +12,67 @@ import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
-  InputGroupText,
   InputGroupTextarea,
 } from "@workspace/ui/components/input-group";
-import { ArrowUpIcon, FileTextIcon, PaperclipIcon, SquareIcon, XIcon } from "lucide-react";
+import { ArrowUpIcon, FileTextIcon, SquareIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
+import { ComposerMenu } from "@/components/chat/composer-menu";
+import { ModelPicker } from "@/components/chat/model-picker";
+import { SlashSuggestions } from "@/components/chat/slash-suggestions";
+import { ThinkingPicker } from "@/components/chat/thinking-picker";
+import { useSendMessage } from "@/hooks/use-send-message";
 import { useAgentCommands } from "@/lib/queries";
+import {
+  filterSlashItems,
+  findTypedCommand,
+  focusComposer,
+  type SlashItem,
+  slashQuery,
+  slashText,
+  useSlashItems,
+} from "@/lib/slash-commands";
 import { useChatStore } from "@/stores/chat-store";
 import { toAttachments, useComposerStore } from "@/stores/composer-store";
 
 export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; disabled: boolean }) {
-  const [draft, setDraft] = React.useState("");
   const formRef = React.useRef<HTMLFormElement>(null);
   const running = useChatStore((state) => state.status === "running");
+  const draft = useComposerStore((state) => state.draft);
   const attachments = useComposerStore((state) => state.attachments);
-  const { add, remove, clear, restore } = useComposerStore.getState();
-  const { prompt, abort } = useAgentCommands(bridge);
+  const { setDraft, add, remove } = useComposerStore.getState();
+  const { abort } = useAgentCommands(bridge);
+  const send = useSendMessage(bridge);
+  const { commands, skills } = useSlashItems(bridge);
   const canSend = !disabled && (draft.trim().length > 0 || attachments.length > 0);
+
+  // Suggestions follow the `/` token being typed; Escape hides them until the text changes.
+  const [activeIndex, setActiveIndex] = React.useState(0);
+  const [dismissedFor, setDismissedFor] = React.useState<string | null>(null);
+  const query = slashQuery(draft);
+  const suggestions = React.useMemo(
+    () => (query === null ? [] : filterSlashItems([...commands, ...skills], query)),
+    [query, commands, skills],
+  );
+  const showSuggestions = !disabled && suggestions.length > 0 && dismissedFor !== draft;
+  const active = Math.min(activeIndex, Math.max(suggestions.length - 1, 0));
+
+  function pickItem(item: SlashItem) {
+    setActiveIndex(0);
+    if (item.kind === "command") {
+      setDraft("");
+      item.run();
+    } else {
+      setDraft(slashText(item));
+    }
+    focusComposer();
+  }
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canSend) return;
-    const text = draft;
-    const sent = attachments;
-    setDraft("");
-    clear();
-    prompt.mutate(
-      { text, attachments: sent.map(({ id: _id, ...attachment }) => attachment) },
-      {
-        onError: (error) => {
-          setDraft(text);
-          restore(sent);
-          toast.error(error.message);
-        },
-      },
-    );
+    const command = attachments.length === 0 ? findTypedCommand(commands, draft) : undefined;
+    if (command) pickItem(command);
+    else if (canSend) send(draft);
   }
 
   async function pick() {
@@ -56,6 +81,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     }
+    focusComposer();
   }
 
   async function onPaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
@@ -69,8 +95,46 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
     }
   }
 
+  function onKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.nativeEvent.isComposing) return;
+    if (showSuggestions) {
+      const count = suggestions.length;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        setActiveIndex((active + (event.key === "ArrowDown" ? 1 : count - 1)) % count);
+        return;
+      }
+      if (event.key === "Tab" || (event.key === "Enter" && !event.shiftKey)) {
+        const item = suggestions[active];
+        // Enter on a command typed in full runs it; otherwise Enter and Tab pick the highlight.
+        if (item) {
+          event.preventDefault();
+          pickItem(item);
+          return;
+        }
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setDismissedFor(draft);
+        return;
+      }
+    }
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      formRef.current?.requestSubmit();
+    }
+  }
+
   return (
-    <form ref={formRef} onSubmit={onSubmit} className="mx-auto w-full max-w-3xl px-6 pb-6">
+    <form ref={formRef} onSubmit={onSubmit} className="relative mx-auto w-full max-w-3xl px-6 pb-6">
+      {showSuggestions && (
+        <SlashSuggestions
+          items={suggestions}
+          activeIndex={active}
+          onHover={setActiveIndex}
+          onPick={pickItem}
+        />
+      )}
       <InputGroup>
         {attachments.length > 0 && (
           <InputGroupAddon align="block-start" className="flex-wrap gap-2">
@@ -100,35 +164,32 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
         )}
         <InputGroupTextarea
           value={draft}
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setActiveIndex(0);
+          }}
           onPaste={(event) => void onPaste(event)}
-          placeholder={disabled ? "Connect a model in Settings to start" : "Ask the agent…"}
+          placeholder={
+            disabled ? "Connect a model in Settings to start" : "Ask the agent, or type / for more"
+          }
           aria-label="Message"
+          aria-controls={showSuggestions ? "slash-suggestions" : undefined}
+          aria-activedescendant={showSuggestions ? `slash-option-${active}` : undefined}
           className="min-h-14"
           disabled={disabled}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              formRef.current?.requestSubmit();
-            }
-          }}
+          onKeyDown={onKeyDown}
         />
-        <InputGroupAddon align="block-end" className="pt-1">
-          <InputGroupButton
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            aria-label="Attach files"
+        <InputGroupAddon align="block-end" className="gap-1 pt-1">
+          <ComposerMenu
+            bridge={bridge}
             disabled={disabled}
-            onClick={() => void pick()}
-          >
-            <PaperclipIcon />
-          </InputGroupButton>
-          <InputGroupText className="text-xs">
-            {running
-              ? "Messages you send now run after this reply."
-              : "Enter to send, Shift+Enter for a new line. Drop or paste files to attach."}
-          </InputGroupText>
+            commands={commands}
+            skills={skills}
+            onAttach={() => void pick()}
+            onPick={pickItem}
+          />
+          <ModelPicker bridge={bridge} />
+          <ThinkingPicker bridge={bridge} disabled={disabled} />
           {running && (
             <InputGroupButton
               type="button"

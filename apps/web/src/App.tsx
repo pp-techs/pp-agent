@@ -1,6 +1,5 @@
 import * as React from "react";
 import type { DesktopBridge } from "@workspace/shared";
-import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import {
   Empty,
@@ -13,65 +12,28 @@ import {
 import { MessageScrollerProvider } from "@workspace/ui/components/message-scroller";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@workspace/ui/components/sidebar";
 import { Spinner } from "@workspace/ui/components/spinner";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
-import {
-  FileUpIcon,
-  MessageCircleDashedIcon,
-  MonitorIcon,
-  MoonIcon,
-  PlugIcon,
-  SunIcon,
-} from "lucide-react";
+import { FileUpIcon, PlugIcon } from "lucide-react";
 import { toast } from "sonner";
 
+import { AgentPicker } from "@/components/chat/agent-picker";
 import { ChatSidebar } from "@/components/chat/chat-sidebar";
 import { ChatThread } from "@/components/chat/chat-thread";
+import { EmptyChat } from "@/components/chat/empty-chat";
 import { PromptComposer } from "@/components/chat/prompt-composer";
+import { AuthPromptModal } from "@/components/modals/auth-prompt-modal";
 import { SettingsModal } from "@/components/modals/settings-modal";
-import { useTheme } from "@/components/theme-provider";
 import { useAgentConnection } from "@/hooks/use-agent-connection";
 import { bridge } from "@/lib/bridge";
 import { useChatStore } from "@/stores/chat-store";
 import { toAttachments, useComposerStore } from "@/stores/composer-store";
 
-const THEME_ORDER = ["system", "light", "dark"] as const;
-const THEME_ICONS = { system: MonitorIcon, light: SunIcon, dark: MoonIcon };
-
-function ThemeButton() {
-  const { theme, setTheme } = useTheme();
-  const Icon = THEME_ICONS[theme];
-  const next = THEME_ORDER[(THEME_ORDER.indexOf(theme) + 1) % THEME_ORDER.length];
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Change theme"
-            onClick={() => setTheme(next)}
-          />
-        }
-      >
-        <Icon />
-      </TooltipTrigger>
-      <TooltipContent>Theme: {theme}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-function Header() {
-  const model = useChatStore((state) => state.model);
+/** Top bar: the sidebar toggle and the agent of the open conversation. */
+function Header({ bridge }: { bridge: DesktopBridge }) {
   const status = useChatStore((state) => state.status);
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
+    <header className="flex h-12 shrink-0 items-center gap-1 px-3">
       <SidebarTrigger />
-      <span className="font-heading font-medium">PP Agent</span>
-      {model && <Badge variant="secondary">{model}</Badge>}
-      {status === "running" && <Spinner className="text-muted-foreground" />}
-      <div className="ml-auto">
-        <ThemeButton />
-      </div>
+      <AgentPicker bridge={bridge} disabled={status === "starting"} />
     </header>
   );
 }
@@ -79,7 +41,6 @@ function Header() {
 function ChatBody({ bridge }: { bridge: DesktopBridge }) {
   const status = useChatStore((state) => state.status);
   const empty = useChatStore((state) => state.messages.length === 0);
-  const workspaceDir = useChatStore((state) => state.workspaceDir);
 
   if (status === "starting") {
     return (
@@ -100,34 +61,21 @@ function ChatBody({ bridge }: { bridge: DesktopBridge }) {
           <EmptyMedia variant="icon">
             <PlugIcon />
           </EmptyMedia>
-          <EmptyTitle>Connect a model</EmptyTitle>
+          <EmptyTitle>Choose a model to start</EmptyTitle>
           <EmptyDescription>
-            Add your team's AI gateway and pick a model to start chatting.
+            Connect an AI provider with your API key, or add your team's gateway, in Settings ›
+            Models.
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button onClick={() => void SettingsModal.show({ bridge })}>Open settings</Button>
+          <Button onClick={() => void SettingsModal.show({ bridge, section: "models" })}>
+            Set up models
+          </Button>
         </EmptyContent>
       </Empty>
     );
   }
-  if (empty) {
-    return (
-      <Empty className="h-full">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <MessageCircleDashedIcon />
-          </EmptyMedia>
-          <EmptyTitle>What can I help with?</EmptyTitle>
-          <EmptyDescription>
-            I can read and search the files in {workspaceDir ?? "your workspace"}, including PDF,
-            Word, Excel, and PowerPoint. Attach files or images to a message, and I'll save new
-            files after you approve.
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    );
-  }
+  if (empty) return <EmptyChat bridge={bridge} />;
   return <ChatThread bridge={bridge} />;
 }
 
@@ -155,7 +103,8 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
     <SidebarProvider>
       <ChatSidebar bridge={bridge} />
       <SidebarInset
-        className="relative h-svh"
+        // Inset leaves an 0.5rem gutter around the chat panel on desktop; keep it within the window.
+        className="relative h-svh overflow-hidden md:h-[calc(100svh-(--spacing(4)))] md:ring-1 md:ring-foreground/5 dark:md:ring-foreground/10"
         onDragEnter={(event) => {
           if (event.dataTransfer.types.includes("Files")) setDragDepth((depth) => depth + 1);
         }}
@@ -164,7 +113,7 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
         onDrop={(event) => void onDrop(event)}
       >
         <MessageScrollerProvider autoScroll>
-          <Header />
+          <Header bridge={bridge} />
           <div className="min-h-0 flex-1">
             <ChatBody bridge={bridge} />
           </div>
@@ -177,6 +126,7 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
           </div>
         )}
       </SidebarInset>
+      <AuthPromptModal bridge={bridge} />
     </SidebarProvider>
   );
 }

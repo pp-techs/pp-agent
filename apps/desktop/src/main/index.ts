@@ -1,17 +1,24 @@
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import {
   type AgentCommand,
   type AgentEvent,
   type AgentToMainMessage,
   IPC,
-  type ListModelsRequest,
   type MainToAgentMessage,
-  type ProviderConfig,
-  type SaveProviderSettings,
+  type VaultRequest,
 } from "@workspace/shared";
 import { app, BrowserWindow, ipcMain, shell, type UtilityProcess, utilityProcess } from "electron";
-import { pickFiles } from "./files.ts";
-import { getProviderConfig, getSettingsView, listModels, saveSettings } from "./settings.ts";
+import {
+  isInside,
+  openAgentFile,
+  openFolder,
+  pickFiles,
+  pickFolder,
+  pickSkill,
+  saveAgentFile,
+} from "./files.ts";
+import { migrateLegacyProvider } from "./legacy.ts";
+import { handleVaultRequest } from "./vault.ts";
 
 const DIST_DIR = import.meta.dirname;
 /** Unpackaged runs load the renderer dev server (`vp dev` in apps/web); packaged builds load bundled files. */
@@ -21,11 +28,15 @@ const RENDERER_URL = app.isPackaged
 const RESTART_DELAY_MS = 1_000;
 /** Folder the agent reads and writes; attachments are copied here too. */
 const WORKSPACE_DIR = join(app.getPath("documents"), "PP Agent");
+const USER_DATA_DIR = app.getPath("userData");
+const SETTINGS_FILE = join(USER_DATA_DIR, "settings.json");
 
 let window: BrowserWindow | null = null;
 let agent: UtilityProcess | null = null;
 let nextCommandId = 0;
 let quitting = false;
+/** Resolves once the legacy provider.json has been migrated; the agent starts after it. */
+let migration: Promise<void> | null = null;
 const pending = new Map<
   number,
   { resolve: (data: unknown) => void; reject: (error: Error) => void }
@@ -40,17 +51,37 @@ function postToAgent(message: MainToAgentMessage): void {
   agent.postMessage(message);
 }
 
+/** Opens http(s) URLs in the default browser; anything else is refused. */
+async function openExternal(url: string): Promise<void> {
+  const protocol = URL.canParse(url) ? new URL(url).protocol : "";
+  if (protocol !== "https:" && protocol !== "http:")
+    throw new Error("Only web links (http or https) can be opened.");
+  await shell.openExternal(url);
+}
+
+function answerVault(child: UtilityProcess, id: number, request: VaultRequest): void {
+  handleVaultRequest(request).then(
+    (data) => {
+      const message: MainToAgentMessage = { kind: "vault_result", id, ok: true, data };
+      child.postMessage(message);
+    },
+    (error: unknown) => {
+      const message: MainToAgentMessage = {
+        kind: "vault_result",
+        id,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+      child.postMessage(message);
+    },
+  );
+}
+
 async function startAgent(): Promise<void> {
-  // Resolve the key before forking so `init` is the first message the agent receives.
-  let provider: ProviderConfig | null = null;
-  try {
-    provider = await getProviderConfig();
-  } catch {
-    sendToRenderer({
-      type: "error",
-      message: "The saved API key could not be read. Enter it again in Settings.",
-    });
-  }
+  migration ??= migrateLegacyProvider(SETTINGS_FILE).catch((error: unknown) => {
+    console.error("Settings migration failed:", error);
+  });
+  await migration;
 
   const child = utilityProcess.fork(join(DIST_DIR, "agent.mjs"), [], {
     serviceName: "PP Agent",
@@ -59,15 +90,26 @@ async function startAgent(): Promise<void> {
   agent = child;
 
   child.on("message", (message: AgentToMainMessage) => {
-    if (message.kind === "event") {
-      sendToRenderer(message.event);
-      return;
+    switch (message.kind) {
+      case "event":
+        sendToRenderer(message.event);
+        return;
+      case "vault":
+        answerVault(child, message.id, message.request);
+        return;
+      case "open_url":
+        openExternal(message.url).catch((error: unknown) => {
+          console.error("Could not open link:", error);
+        });
+        return;
+      case "result": {
+        const request = pending.get(message.id);
+        if (!request) return;
+        pending.delete(message.id);
+        if (message.ok) request.resolve(message.data);
+        else request.reject(new Error(message.error));
+      }
     }
-    const request = pending.get(message.id);
-    if (!request) return;
-    pending.delete(message.id);
-    if (message.ok) request.resolve(message.data);
-    else request.reject(new Error(message.error));
   });
 
   child.on("exit", (code) => {
@@ -85,15 +127,14 @@ async function startAgent(): Promise<void> {
     setTimeout(() => void startAgent(), RESTART_DELAY_MS);
   });
 
-  const userData = app.getPath("userData");
   postToAgent({
     kind: "init",
     paths: {
       workspaceDir: WORKSPACE_DIR,
-      agentDir: join(userData, "agent"),
-      sessionDir: join(userData, "sessions"),
+      agentDir: join(USER_DATA_DIR, "agent"),
+      sessionDir: join(USER_DATA_DIR, "sessions"),
+      settingsFile: SETTINGS_FILE,
     },
-    provider,
   });
 }
 
@@ -149,18 +190,29 @@ function createWindow(): void {
 }
 
 ipcMain.handle(IPC.agentCommand, (_event, command: AgentCommand) => commandAgent(command));
-ipcMain.handle(IPC.settingsGet, () => getSettingsView());
-ipcMain.handle(IPC.settingsListModels, (_event, request: ListModelsRequest) => listModels(request));
 ipcMain.handle(IPC.filesPick, () => pickFiles(window));
-ipcMain.handle(IPC.filesOpenWorkspace, async () => {
-  const error = await shell.openPath(WORKSPACE_DIR);
-  if (error) throw new Error(error);
+ipcMain.handle(IPC.filesPickSkill, () => pickSkill(window));
+ipcMain.handle(IPC.filesOpenWorkspace, (_event, dir: unknown) => {
+  // Only folders can be opened this way, never files (opening a file could run it).
+  if (typeof dir !== "string" || !isAbsolute(dir)) throw new Error("That folder cannot be opened.");
+  return openFolder(dir);
 });
-ipcMain.handle(IPC.settingsSave, async (_event, input: SaveProviderSettings) => {
-  const view = await saveSettings(input);
-  const provider = await getProviderConfig();
-  if (provider) postToAgent({ kind: "configure", provider });
-  return view;
+ipcMain.handle(IPC.filesPickFolder, () => pickFolder(window));
+ipcMain.handle(IPC.filesOpenAgent, () => openAgentFile(window));
+ipcMain.handle(IPC.filesSaveAgent, (_event, suggestedName: unknown, json: unknown) => {
+  if (typeof suggestedName !== "string" || typeof json !== "string")
+    throw new Error("The agent could not be exported.");
+  return saveAgentFile(window, suggestedName, json);
+});
+ipcMain.handle(IPC.filesReveal, (_event, path: unknown) => {
+  // Only the app's own files (skills, mcp.json) and the workspace can be shown.
+  if (typeof path !== "string" || !(isInside(USER_DATA_DIR, path) || isInside(WORKSPACE_DIR, path)))
+    throw new Error("That location cannot be shown.");
+  shell.showItemInFolder(path);
+});
+ipcMain.handle(IPC.openExternal, (_event, url: unknown) => {
+  if (typeof url !== "string") throw new Error("Only web links (http or https) can be opened.");
+  return openExternal(url);
 });
 
 app.on("before-quit", () => {

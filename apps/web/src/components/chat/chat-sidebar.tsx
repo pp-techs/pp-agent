@@ -27,14 +27,12 @@ import {
   SettingsIcon,
   SquarePenIcon,
   Trash2Icon,
-  WrenchIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { PromptModal } from "@/components/modals/prompt-modal";
 import { SettingsModal } from "@/components/modals/settings-modal";
-import { ToolsModal } from "@/components/modals/tools-modal";
 import { sessionsQuery, useAgentCommands } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
 
@@ -68,6 +66,7 @@ export function ChatSidebar({ bridge }: { bridge: DesktopBridge }) {
   const sessionPath = useChatStore((state) => state.sessionPath);
   const status = useChatStore((state) => state.status);
   const hasMessages = useChatStore((state) => state.messages.length > 0);
+  const workspaceDir = useChatStore((state) => state.workspaceDir);
   const { newChat, openSession, renameSession, deleteSession } = useAgentCommands(bridge);
   const ready = status === "idle" || status === "running";
   const onError = (error: Error) => toast.error(error.message);
@@ -92,7 +91,7 @@ export function ChatSidebar({ bridge }: { bridge: DesktopBridge }) {
   }
 
   return (
-    <Sidebar>
+    <Sidebar variant="inset">
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -172,16 +171,14 @@ export function ChatSidebar({ bridge }: { bridge: DesktopBridge }) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              onClick={() => bridge.files.openWorkspace().catch((error: Error) => onError(error))}
+              disabled={!workspaceDir}
+              title={workspaceDir ?? undefined}
+              onClick={() => {
+                if (workspaceDir) bridge.files.openWorkspace(workspaceDir).catch(onError);
+              }}
             >
               <FolderOpenIcon />
               <span>Open workspace folder</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton disabled={!ready} onClick={() => void ToolsModal.show({ bridge })}>
-              <WrenchIcon />
-              <span>Tools and connections</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>

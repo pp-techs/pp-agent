@@ -1,5 +1,5 @@
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import type { ToolTier } from "@workspace/shared";
+import type { AppSettings, ToolPolicy, ToolTier } from "@workspace/shared";
 import { Type } from "typebox";
 
 /** Example business tool. Replace or extend with tools that reach your own systems. */
@@ -19,17 +19,48 @@ export const currentDateTimeTool = defineTool({
   },
 });
 
-/**
- * Changes to pi's default tool set (read, bash, edit, write). No shell and no in-place editing:
- * business users get read access to their workspace plus the ability to save new files, which
- * always asks first. Custom tools (`read_document`, `current_datetime`) and the tools of MCP servers
- * configured in `<agentDir>/mcp.json` are added on top; the MCP extension activates `codemode` and
- * `tool_search` when a server needs them.
- */
-export const TOOL_SELECTION = ["-bash", "-edit", "+ls", "+find", "+grep"];
+/** The shell the agent may use when Settings allows it: PowerShell on Windows, bash elsewhere. */
+export const SHELL_TOOL = process.platform === "win32" ? "powershell" : "bash";
+/** The other platform's shell; pi registers it, but it is never offered or run. */
+const FOREIGN_SHELL = SHELL_TOOL === "bash" ? "powershell" : "bash";
 
-/** Never run, even when a codemode script tries to call them. */
-export const BLOCKED_TOOLS: Record<string, true> = { bash: true, edit: true, powershell: true };
+/**
+ * Tools that only find or call other tools; every call they make passes through the approval gate
+ * on its own, so they stay on.
+ */
+const DISCOVERY_TOOLS: Record<string, true> = {
+  codemode: true,
+  tool_search: true,
+  list_mcp_resources: true,
+  list_mcp_resource_templates: true,
+  read_mcp_resource: true,
+};
+
+/** Pi's built-in tools; their policy decides which of them start active in a session. */
+const BUILTIN_TOOLS = ["read", "ls", "find", "grep", "write", "edit", "bash", "powershell"];
+/** Built-in and app tools whose policy decides whether they are in the session's active tool set. */
+const MANAGED_TOOLS = [...BUILTIN_TOOLS, "read_document", currentDateTimeTool.name];
+
+/** Tools an agent can be limited to, in the order its editor lists them. */
+export const AGENT_TOOLS = [
+  "read",
+  "ls",
+  "find",
+  "grep",
+  "read_document",
+  currentDateTimeTool.name,
+  "write",
+  "edit",
+  SHELL_TOOL,
+];
+
+/**
+ * Whether an agent limited to `agentTools` (null = every tool) may use `name`. Only app tools are
+ * limited per agent; MCP tools follow the agent's servers, and discovery tools stay available.
+ */
+export function agentAllowsTool(agentTools: readonly string[] | null, name: string): boolean {
+  return agentTools === null || !MANAGED_TOOLS.includes(name) || agentTools.includes(name);
+}
 
 const TIERS: Record<string, ToolTier> = {
   read: "read",
@@ -39,6 +70,9 @@ const TIERS: Record<string, ToolTier> = {
   read_document: "read",
   [currentDateTimeTool.name]: "read",
   write: "write",
+  edit: "write",
+  bash: "exec",
+  powershell: "exec",
   // codemode only computes; every tool its script calls passes through the approval gate itself.
   codemode: "read",
   tool_search: "read",
@@ -46,6 +80,67 @@ const TIERS: Record<string, ToolTier> = {
   list_mcp_resource_templates: "read",
   read_mcp_resource: "read",
 };
+
+export interface ToolRule {
+  policy: ToolPolicy;
+  effective: "allow" | "ask" | "off";
+  locked: boolean;
+}
+
+/** What happens when the agent calls `name` under the current settings. */
+export function toolRule(name: string, tier: ToolTier, settings: AppSettings): ToolRule {
+  if (name === SHELL_TOOL) {
+    const policy = settings.shellEnabled ? "ask" : "off";
+    return { policy, effective: policy, locked: true };
+  }
+  if (name === FOREIGN_SHELL) return { policy: "off", effective: "off", locked: true };
+  if (DISCOVERY_TOOLS[name] === true) return { policy: "allow", effective: "allow", locked: true };
+  // Untouched tools run on `auto`, except `edit`, which is off: non-developers use `write`.
+  const policy = settings.toolPolicies[name] ?? (name === "edit" ? "off" : "auto");
+  const effective = policy === "auto" ? (tier === "read" ? "allow" : "ask") : policy;
+  return { policy, effective, locked: false };
+}
+
+/** Whether the tool is shown in Settings › Tools. */
+export function isListedTool(name: string): boolean {
+  return name !== FOREIGN_SHELL;
+}
+
+/**
+ * `+name`/`-name` changes to pi's default tool set (read, bash, edit, write) for a new session.
+ * Custom tools (`read_document`, `current_datetime`) and MCP tools are added on top; the MCP
+ * extension activates `codemode` and `tool_search` when a server needs them.
+ */
+export function toolSelection(
+  settings: AppSettings,
+  agentTools: readonly string[] | null,
+): string[] {
+  return BUILTIN_TOOLS.map((name) => `${isOff(name, settings, agentTools) ? "-" : "+"}${name}`);
+}
+
+/**
+ * The session's active tools after applying the settings and the agent's tool list: managed tools
+ * that are off are removed, managed tools that are on are added, everything else (MCP, discovery
+ * tools) is kept.
+ */
+export function activeToolsFor(
+  current: readonly string[],
+  settings: AppSettings,
+  agentTools: readonly string[] | null,
+): string[] {
+  const active = new Set(
+    current.filter((name) => !MANAGED_TOOLS.includes(name) || !isOff(name, settings, agentTools)),
+  );
+  for (const name of MANAGED_TOOLS) if (!isOff(name, settings, agentTools)) active.add(name);
+  return [...active];
+}
+
+function isOff(name: string, settings: AppSettings, agentTools: readonly string[] | null): boolean {
+  return (
+    toolRule(name, toolTier(name), settings).effective === "off" ||
+    !agentAllowsTool(agentTools, name)
+  );
+}
 
 const MCP_PREFIX = "mcp__";
 
@@ -65,7 +160,7 @@ export function parseMcpToolName(toolName: string): { server: string; tool: stri
  */
 export function toolTier(toolName: string, annotations?: { readOnlyHint?: boolean }): ToolTier {
   if (toolName.startsWith(MCP_PREFIX)) return annotations?.readOnlyHint ? "read" : "write";
-  return TIERS[toolName] ?? "exec";
+  return Object.hasOwn(TIERS, toolName) ? TIERS[toolName] : "exec";
 }
 
 const PREVIEW_LIMIT = 600;
@@ -78,10 +173,19 @@ export function describeToolCall(
   toolName: string,
   input: Record<string, unknown>,
 ): { title: string; detail: string } {
-  if (toolName === "write") {
+  if (toolName === "write" || toolName === "edit") {
     const path = typeof input.path === "string" ? input.path : "a file";
+    if (toolName === "edit")
+      return {
+        title: `Edit ${path}`,
+        detail: preview(JSON.stringify(input.edits ?? input, null, 2)),
+      };
     const content = typeof input.content === "string" ? input.content : "";
     return { title: `Save ${path}`, detail: preview(content) };
+  }
+  if (toolName === SHELL_TOOL) {
+    const command = typeof input.command === "string" ? input.command : "";
+    return { title: "Run a command", detail: preview(command) };
   }
   const mcp = parseMcpToolName(toolName);
   if (mcp) {
@@ -95,9 +199,11 @@ export function describeToolCall(
 
 export const SYSTEM_PROMPT = `You are PP Agent, an assistant for business teams. You help with research, writing, analysis, and everyday office work.
 
-Work with the files in the user's workspace folder. You can read and search them, read office documents and PDFs with read_document, and save new files there; saving always asks the user first. Files the user attaches are copied into the workspace and listed in an <attached_files> block at the end of their message.
+Work with the files in the user's workspace folder. You can read and search them, read office documents and PDFs with read_document, and save new files there; saving usually asks the user first. Files the user attaches are copied into the workspace and listed in an <attached_files> block at the end of their message.
 
 Your team may also connect business systems (CRM, drives, email, and others) as tools. Use them when they fit the request; actions that change data ask the user first.
+
+Skills are instructions your team installed for specific kinds of work. When a user message starts with a <skill> block, the user chose that skill: follow its instructions for that request. When a listed skill fits a request, read its SKILL.md and follow it.
 
 - Write for a non-technical reader: plain language, short paragraphs, no jargon unless the user uses it.
 - Ask a brief clarifying question when a request is ambiguous instead of guessing.

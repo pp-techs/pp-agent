@@ -13,11 +13,14 @@
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "catalog:",
+    "fflate": "catalog:",
     "officeparser": "catalog:",
-    "typebox": "catalog:"
+    "typebox": "catalog:",
+    "yaml": "catalog:"
   },
   "devDependencies": {
     "@earendil-works/pi-agent-core": "catalog:",
+    "@earendil-works/pi-ai": "catalog:",
     "@types/node": "catalog:",
     "@workspace/shared": "workspace:*",
     "electron": "catalog:",

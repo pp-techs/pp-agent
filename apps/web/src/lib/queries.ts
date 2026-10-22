@@ -1,26 +1,61 @@
-import type { Attachment, DesktopBridge, SaveProviderSettings } from "@workspace/shared";
-import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
+import type {
+  AppSettings,
+  Attachment,
+  DesktopBridge,
+  FetchGatewayModelsInput,
+  GatewayView,
+  ModelRef,
+  ProviderSummary,
+  SaveGatewayInput,
+  ThinkingLevel,
+} from "@workspace/shared";
+import {
+  queryOptions,
+  useMutation,
+  useQueryClient,
+  type UseMutationResult,
+} from "@tanstack/react-query";
 
+/** Keys match `SettingsScope`, so `settings_changed` can invalidate `[scope]` directly. */
 export const queryKeys = {
   settings: ["settings"] as const,
-  models: (baseUrl: string, apiKey: string) => ["models", baseUrl, apiKey] as const,
-  sessions: ["sessions"] as const,
+  providers: ["providers"] as const,
+  gateways: ["gateways"] as const,
+  models: ["models"] as const,
   tools: ["tools"] as const,
+  skills: ["skills"] as const,
+  skill: (name: string) => ["skill", name] as const,
+  mcp: ["mcp"] as const,
+  mcpJson: ["mcp-json"] as const,
+  sessions: ["sessions"] as const,
+  agents: ["agents"] as const,
+  agentToolOptions: ["agent-tool-options"] as const,
 };
 
 export const settingsQuery = (bridge: DesktopBridge) =>
   queryOptions({
     queryKey: queryKeys.settings,
-    queryFn: () => bridge.settings.get(),
+    queryFn: () => bridge.agent.command({ type: "get_settings" }),
   });
 
-/** Models offered by the gateway. `apiKey` empty means "use the stored key". */
-export const modelsQuery = (bridge: DesktopBridge, baseUrl: string, apiKey: string) =>
+/** Built-in providers and gateways, configured first. */
+export const providersQuery = (bridge: DesktopBridge) =>
   queryOptions({
-    queryKey: queryKeys.models(baseUrl, apiKey),
-    queryFn: () => bridge.settings.listModels({ baseUrl, apiKey: apiKey || undefined }),
-    staleTime: 5 * 60_000,
-    retry: false,
+    queryKey: queryKeys.providers,
+    queryFn: () => bridge.agent.command({ type: "list_providers" }),
+  });
+
+export const gatewaysQuery = (bridge: DesktopBridge) =>
+  queryOptions({
+    queryKey: queryKeys.gateways,
+    queryFn: () => bridge.agent.command({ type: "list_gateways" }),
+  });
+
+/** Models of every connected provider. */
+export const modelsQuery = (bridge: DesktopBridge) =>
+  queryOptions({
+    queryKey: queryKeys.models,
+    queryFn: () => bridge.agent.command({ type: "list_models" }),
   });
 
 /** Saved conversations, newest first. Refetched when the agent reports `sessions_changed`. */
@@ -30,18 +65,76 @@ export const sessionsQuery = (bridge: DesktopBridge) =>
     queryFn: () => bridge.agent.command({ type: "list_sessions" }),
   });
 
-/** Tools the agent can use, including those of connected MCP servers. */
-export const toolsQuery = (bridge: DesktopBridge) =>
+/** Agents (profiles), the default one first. */
+export const agentsQuery = (bridge: DesktopBridge) =>
   queryOptions({
-    queryKey: queryKeys.tools,
-    queryFn: () => bridge.agent.command({ type: "list_tools" }),
+    queryKey: queryKeys.agents,
+    queryFn: () => bridge.agent.command({ type: "list_agents" }),
   });
 
-export function useSaveSettings(bridge: DesktopBridge) {
+export function useUpdateSettings(bridge: DesktopBridge) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (settings: SaveProviderSettings) => bridge.settings.save(settings),
-    onSuccess: (view) => queryClient.setQueryData(queryKeys.settings, view),
+    mutationFn: (patch: Partial<Pick<AppSettings, "defaultModel" | "shellEnabled">>) =>
+      bridge.agent.command({ type: "update_settings", patch }),
+    onSuccess: (settings) => queryClient.setQueryData(queryKeys.settings, settings),
+  });
+}
+
+/** Provider changes also change the gateway list and the models people can pick. */
+function useInvalidateProviders() {
+  const queryClient = useQueryClient();
+  return () =>
+    Promise.all(
+      [queryKeys.providers, queryKeys.gateways, queryKeys.models].map((queryKey) =>
+        queryClient.invalidateQueries({ queryKey }),
+      ),
+    );
+}
+
+/** Mutations of Settings › Models; each refreshes providers, gateways, and models. */
+export interface ProviderCommands {
+  /** Resolves once the person answered the key prompt; rejects with "Cancelled" when closed. */
+  connect: UseMutationResult<ProviderSummary, Error, string>;
+  disconnect: UseMutationResult<void, Error, string>;
+  saveGateway: UseMutationResult<GatewayView, Error, SaveGatewayInput>;
+  deleteGateway: UseMutationResult<void, Error, string>;
+  /** Model ids the gateway lists; does not change anything. */
+  fetchGatewayModels: UseMutationResult<string[], Error, FetchGatewayModelsInput>;
+}
+
+export function useProviderCommands(bridge: DesktopBridge): ProviderCommands {
+  const invalidate = useInvalidateProviders();
+  const connect = useMutation({
+    mutationFn: (providerId: string) =>
+      bridge.agent.command({ type: "connect_provider", providerId }),
+    onSettled: invalidate,
+  });
+  const disconnect = useMutation({
+    mutationFn: (providerId: string) =>
+      bridge.agent.command({ type: "disconnect_provider", providerId }),
+    onSettled: invalidate,
+  });
+  const saveGateway = useMutation({
+    mutationFn: (gateway: SaveGatewayInput) =>
+      bridge.agent.command({ type: "save_gateway", gateway }),
+    onSuccess: invalidate,
+  });
+  const deleteGateway = useMutation({
+    mutationFn: (id: string) => bridge.agent.command({ type: "delete_gateway", id }),
+    onSuccess: invalidate,
+  });
+  const fetchGatewayModels = useMutation({
+    mutationFn: (input: FetchGatewayModelsInput) =>
+      bridge.agent.command({ type: "fetch_gateway_models", ...input }),
+  });
+  return { connect, disconnect, saveGateway, deleteGateway, fetchGatewayModels };
+}
+
+export function useRespondAuthPrompt(bridge: DesktopBridge) {
+  return useMutation({
+    mutationFn: (input: { promptId: string; value: string | null }) =>
+      bridge.agent.command({ type: "respond_auth_prompt", ...input }),
   });
 }
 
@@ -71,5 +164,30 @@ export function useAgentCommands(bridge: DesktopBridge) {
   const deleteSession = useMutation({
     mutationFn: (path: string) => bridge.agent.command({ type: "delete_session", path }),
   });
-  return { prompt, abort, newChat, respondApproval, openSession, renameSession, deleteSession };
+  const setModel = useMutation({
+    mutationFn: (model: ModelRef) => bridge.agent.command({ type: "set_model", ...model }),
+  });
+  const setAgent = useMutation({
+    mutationFn: (id: string) => bridge.agent.command({ type: "set_agent", id }),
+  });
+  const setThinkingLevel = useMutation({
+    mutationFn: (level: ThinkingLevel) =>
+      bridge.agent.command({ type: "set_thinking_level", level }),
+  });
+  const compact = useMutation({
+    mutationFn: () => bridge.agent.command({ type: "compact" }),
+  });
+  return {
+    prompt,
+    abort,
+    newChat,
+    respondApproval,
+    openSession,
+    renameSession,
+    deleteSession,
+    setModel,
+    setAgent,
+    setThinkingLevel,
+    compact,
+  };
 }

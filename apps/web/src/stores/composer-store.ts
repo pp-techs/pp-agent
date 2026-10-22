@@ -6,6 +6,8 @@ export interface DraftAttachment extends Attachment {
 }
 
 interface ComposerState {
+  draft: string;
+  setDraft: (draft: string) => void;
   attachments: DraftAttachment[];
   add: (attachments: Attachment[]) => void;
   remove: (id: string) => void;
@@ -14,8 +16,13 @@ interface ComposerState {
   restore: (attachments: DraftAttachment[]) => void;
 }
 
-/** Attachments live outside the composer so files dropped anywhere on the chat land in it. */
+/**
+ * The draft and its attachments live outside the composer so files dropped anywhere on the chat,
+ * and starter prompts on the empty chat, land in it.
+ */
 export const useComposerStore = create<ComposerState>()((set) => ({
+  draft: "",
+  setDraft: (draft) => set({ draft }),
   attachments: [],
   add: (attachments) =>
     set((state) => ({

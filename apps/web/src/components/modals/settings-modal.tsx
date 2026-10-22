@@ -1,201 +1,193 @@
 import * as React from "react";
 import { createModal } from "@buiducnhat/better-modal";
-import { PROVIDER_APIS, type DesktopBridge, type ProviderApi } from "@workspace/shared";
-import { Button } from "@workspace/ui/components/button";
+import type { DesktopBridge } from "@workspace/shared";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from "@workspace/ui/components/dialog";
 import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-} from "@workspace/ui/components/field";
-import { Input } from "@workspace/ui/components/input";
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from "@workspace/ui/components/sidebar";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@workspace/ui/components/select";
-import { Spinner } from "@workspace/ui/components/spinner";
-import { useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
+  BlocksIcon,
+  BookOpenIcon,
+  BotIcon,
+  ChevronRightIcon,
+  SlidersHorizontalIcon,
+  SparklesIcon,
+  WrenchIcon,
+  type LucideIcon,
+} from "lucide-react";
 
-import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { modelsQuery, settingsQuery, useSaveSettings } from "@/lib/queries";
+import { AgentsSection } from "@/components/settings/agents-section";
+import { GeneralSection } from "@/components/settings/general-section";
+import { McpSection } from "@/components/settings/mcp-section";
+import { ModelsSection } from "@/components/settings/models-section";
+import { SkillsSection } from "@/components/settings/skills-section";
+import { SettingsSubPageProvider } from "@/components/settings/settings-subpage";
+import { ToolsSection } from "@/components/settings/tools-section";
 
-const API_LABELS: Record<ProviderApi, string> = {
-  "openai-completions": "OpenAI-compatible (Chat Completions)",
-  "openai-responses": "OpenAI Responses",
-  "anthropic-messages": "Anthropic Messages",
-};
-const API_ITEMS = PROVIDER_APIS.map((value) => ({ value, label: API_LABELS[value] }));
+export type SettingsSection = "general" | "models" | "agents" | "tools" | "skills" | "mcp";
 
-type SettingsModalProps = { bridge: DesktopBridge };
+const SECTIONS: {
+  id: SettingsSection;
+  label: string;
+  icon: LucideIcon;
+  Component: React.ComponentType<{ bridge: DesktopBridge }>;
+}[] = [
+  { id: "general", label: "General", icon: SlidersHorizontalIcon, Component: GeneralSection },
+  { id: "models", label: "Models", icon: SparklesIcon, Component: ModelsSection },
+  { id: "agents", label: "Agents", icon: BotIcon, Component: AgentsSection },
+  { id: "tools", label: "Tools", icon: WrenchIcon, Component: ToolsSection },
+  { id: "skills", label: "Skills", icon: BookOpenIcon, Component: SkillsSection },
+  { id: "mcp", label: "MCP servers", icon: BlocksIcon, Component: McpSection },
+];
 
-function isHttpUrl(value: string) {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:";
-  } catch {
-    return false;
-  }
+type SettingsModalProps = { bridge: DesktopBridge; section?: SettingsSection };
+
+/** The nested sidebar is always expanded; it never toggles or persists state. */
+const keepOpen = () => {};
+
+/**
+ * Keeps Cmd/Ctrl+B inside Settings: the app's sidebar would otherwise toggle behind the dialog and
+ * the nested provider would overwrite the shared sidebar cookie.
+ */
+function stopSidebarShortcut(event: React.KeyboardEvent) {
+  if (event.key === "b" && (event.metaKey || event.ctrlKey)) event.nativeEvent.stopPropagation();
 }
 
-function SettingsForm({
-  bridge,
-  onDone,
+function SettingsBreadcrumb({
+  section,
+  subPage,
+  onSectionClick,
 }: {
-  bridge: DesktopBridge;
-  onDone: (saved: boolean) => void;
+  section: string;
+  subPage: string | null;
+  onSectionClick: () => void;
 }) {
-  const settings = useQuery(settingsQuery(bridge));
-  const current = settings.data;
-  const [api, setApi] = React.useState<ProviderApi>(current?.api ?? "openai-completions");
-  const [baseUrl, setBaseUrl] = React.useState(current?.baseUrl ?? "");
-  const [apiKey, setApiKey] = React.useState("");
-  const [modelId, setModelId] = React.useState(current?.modelId ?? "");
-  const save = useSaveSettings(bridge);
-
-  const lookupUrl = useDebouncedValue(baseUrl.trim(), 400);
-  const lookupKey = useDebouncedValue(apiKey.trim(), 400);
-  const models = useQuery({
-    ...modelsQuery(bridge, lookupUrl, lookupKey),
-    enabled: isHttpUrl(lookupUrl) && (lookupKey !== "" || Boolean(current?.hasApiKey)),
-  });
-
-  function onSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    save.mutate(
-      { api, baseUrl, modelId, apiKey: apiKey || undefined },
-      {
-        onSuccess: () => {
-          toast.success("Settings saved");
-          onDone(true);
-        },
-      },
-    );
-  }
-
-  const canSave =
-    isHttpUrl(baseUrl.trim()) &&
-    modelId.trim() !== "" &&
-    (apiKey !== "" || Boolean(current?.hasApiKey));
-
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-6">
-      <FieldGroup>
-        <Field>
-          <FieldLabel htmlFor="gateway-url">Gateway URL</FieldLabel>
-          <Input
-            id="gateway-url"
-            value={baseUrl}
-            onChange={(event) => setBaseUrl(event.target.value)}
-            placeholder="https://gateway.example.com/v1"
-            autoComplete="off"
-          />
-          <FieldDescription>
-            Your team's AI gateway. Ask your tech team if you don't know it.
-          </FieldDescription>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="api-key">API key</FieldLabel>
-          <Input
-            id="api-key"
-            type="password"
-            value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
-            placeholder={current?.hasApiKey ? "Saved. Leave blank to keep it." : "Paste your key"}
-            autoComplete="off"
-          />
-          <FieldDescription>Stored encrypted in your system keychain.</FieldDescription>
-        </Field>
-        <Field>
-          <FieldLabel>API format</FieldLabel>
-          <Select items={API_ITEMS} value={api} onValueChange={(value) => value && setApi(value)}>
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {API_ITEMS.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="model-id">Model</FieldLabel>
-          <Input
-            id="model-id"
-            value={modelId}
-            onChange={(event) => setModelId(event.target.value)}
-            placeholder="Type or pick a model"
-            list="gateway-models"
-            autoComplete="off"
-          />
-          <datalist id="gateway-models">
-            {models.data?.map((id) => (
-              <option key={id} value={id} />
-            ))}
-          </datalist>
-          {models.isFetching ? (
-            <FieldDescription className="flex items-center gap-2">
-              <Spinner /> Loading models…
-            </FieldDescription>
-          ) : models.isError ? (
-            <FieldError>Couldn't load models: {models.error.message}</FieldError>
-          ) : models.data ? (
-            <FieldDescription>{models.data.length} models available.</FieldDescription>
-          ) : null}
-        </Field>
-      </FieldGroup>
-      {save.isError && <FieldError>{save.error.message}</FieldError>}
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={() => onDone(false)}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={!canSave || save.isPending}>
-          {save.isPending && <Spinner />}
-          Save
-        </Button>
-      </DialogFooter>
-    </form>
+    <nav aria-label="Breadcrumb" className="min-w-0">
+      <ol className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+        <li className="shrink-0">Settings</li>
+        <li aria-hidden className="shrink-0 [&>svg]:size-3.5">
+          <ChevronRightIcon />
+        </li>
+        {subPage === null ? (
+          <li aria-current="page" className="truncate font-medium text-foreground">
+            {section}
+          </li>
+        ) : (
+          <>
+            <li className="shrink-0">
+              <button
+                type="button"
+                className="rounded-md transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+                onClick={onSectionClick}
+              >
+                {section}
+              </button>
+            </li>
+            <li aria-hidden className="shrink-0 [&>svg]:size-3.5">
+              <ChevronRightIcon />
+            </li>
+            <li aria-current="page" className="truncate font-medium text-foreground">
+              {subPage}
+            </li>
+          </>
+        )}
+      </ol>
+    </nav>
   );
 }
 
-export const SettingsModal = createModal<SettingsModalProps, boolean>(
+function SettingsPanes({
+  bridge,
+  initialSection,
+}: {
+  bridge: DesktopBridge;
+  initialSection: SettingsSection;
+}) {
+  const [active, setActive] = React.useState(initialSection);
+  const [subPage, setSubPage] = React.useState<string | null>(null);
+  // Bumped by the breadcrumb to remount the section, which returns it to its list.
+  const [resetCount, setResetCount] = React.useState(0);
+  const current = SECTIONS.find((section) => section.id === active) ?? SECTIONS[0];
+  const Component = current.Component;
+  return (
+    <SidebarProvider
+      open
+      onOpenChange={keepOpen}
+      onKeyDown={stopSidebarShortcut}
+      className="min-h-0 flex-1"
+      style={{ "--sidebar-width": "13rem" } as React.CSSProperties}
+    >
+      <Sidebar collapsible="none" aria-label="Settings sections">
+        <SidebarContent>
+          <SidebarGroup className="pt-4">
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {SECTIONS.map(({ id, label, icon: Icon }) => (
+                  <SidebarMenuItem key={id}>
+                    <SidebarMenuButton
+                      isActive={active === id}
+                      aria-current={active === id ? "page" : undefined}
+                      onClick={() => setActive(id)}
+                    >
+                      <Icon />
+                      <span>{label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+      </Sidebar>
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">
+        {/* Right padding keeps the breadcrumb clear of the dialog's close button. */}
+        <header className="flex h-16 shrink-0 items-center gap-2 pr-16 pl-6">
+          <SettingsBreadcrumb
+            section={current.label}
+            subPage={subPage}
+            onSectionClick={() => setResetCount((count) => count + 1)}
+          />
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-1 pb-6">
+          <SettingsSubPageProvider value={setSubPage}>
+            <Component key={`${active}-${resetCount}`} bridge={bridge} />
+          </SettingsSubPageProvider>
+        </div>
+      </main>
+    </SidebarProvider>
+  );
+}
+
+/** `SettingsModal.show({ bridge, section })` opens Settings at the given section. */
+export const SettingsModal = createModal<SettingsModalProps, void>(
   "settings",
-  ({ modal, bridge }) => {
-    const settings = useQuery(settingsQuery(bridge));
-    return (
-      <Dialog open={modal.visible} onOpenChange={(open) => !open && modal.resolve(false)}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Model settings</DialogTitle>
-            <DialogDescription>Connect PP Agent to the AI model your team uses.</DialogDescription>
-          </DialogHeader>
-          {settings.isPending ? (
-            <Spinner />
-          ) : (
-            // Mounted once settings load, and again on every open, so it starts from saved values.
-            <SettingsForm
-              key={String(modal.visible)}
-              bridge={bridge}
-              onDone={(saved) => modal.resolve(saved)}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-    );
-  },
+  ({ modal, bridge, section = "general" }) => (
+    <Dialog open={modal.visible} onOpenChange={(open) => !open && modal.resolve(undefined)}>
+      <DialogContent className="flex h-[80vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
+        <DialogTitle className="sr-only">Settings</DialogTitle>
+        <DialogDescription className="sr-only">
+          Models, agents, tools, skills, and connections used by PP Agent.
+        </DialogDescription>
+        {/* Remount on every open so it starts at the requested section. */}
+        <SettingsPanes
+          key={`${modal.visible}-${section}`}
+          bridge={bridge}
+          initialSection={section}
+        />
+      </DialogContent>
+    </Dialog>
+  ),
 );

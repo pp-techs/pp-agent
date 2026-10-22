@@ -2,3 +2,14 @@
 
 /* Streamdown renders markdown with Tailwind classes shipped in its dist files. */
 @source "../node_modules/streamdown/dist/*.js";
+
+/*
+ * Streamdown puts list markers inside the text box (`list-inside`), flush with the paragraph edge.
+ * Hang them in an indent instead, so bullets and numbers sit clear of the left margin and wrapped
+ * lines align with the item text. Unlayered, so it wins over Streamdown's utility classes.
+ */
+[data-streamdown="unordered-list"],
+[data-streamdown="ordered-list"] {
+  list-style-position: outside;
+  padding-left: 1.5rem;
+}

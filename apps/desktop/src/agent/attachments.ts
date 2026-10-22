@@ -70,14 +70,23 @@ export async function buildPrompt(
   return { text: `${text}\n\n${OPEN_TAG}\n${list}\n${CLOSE_TAG}`, images };
 }
 
-/** Splits a stored user message back into the person's text and the files they attached. */
+/**
+ * Splits a stored user message back into the person's text and the files they attached. The block
+ * follows the text after a blank line, or stands alone (a `/skill:` command without other text).
+ */
 export function splitAttachedFiles(text: string): {
   text: string;
   files: Array<{ name: string; path: string }>;
 } {
-  const start = text.lastIndexOf(`\n\n${OPEN_TAG}\n`);
-  if (start === -1 || !text.trimEnd().endsWith(CLOSE_TAG)) return { text, files: [] };
-  const block = text.slice(start + OPEN_TAG.length + 3, text.lastIndexOf(CLOSE_TAG));
+  const start = text.lastIndexOf(`${OPEN_TAG}\n`);
+  const before = text.slice(0, start);
+  if (
+    start === -1 ||
+    (before !== "" && !before.endsWith("\n\n")) ||
+    !text.trimEnd().endsWith(CLOSE_TAG)
+  )
+    return { text, files: [] };
+  const block = text.slice(start + OPEN_TAG.length + 1, text.lastIndexOf(CLOSE_TAG));
   const files = block
     .split("\n")
     .filter((line) => line.startsWith("- "))
@@ -85,5 +94,5 @@ export function splitAttachedFiles(text: string): {
       const path = line.slice(2).trim();
       return { path, name: basename(path).replace(COPY_PREFIX, "") };
     });
-  return { text: text.slice(0, start), files };
+  return { text: before.slice(0, -2), files };
 }

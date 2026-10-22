@@ -6,6 +6,7 @@ import {
   AttachmentMedia,
   AttachmentTitle,
 } from "@workspace/ui/components/attachment";
+import { Badge } from "@workspace/ui/components/badge";
 import { Bubble, BubbleContent } from "@workspace/ui/components/bubble";
 import { Message, MessageContent } from "@workspace/ui/components/message";
 import {
@@ -17,7 +18,7 @@ import {
   TraceLine,
   TraceTitle,
 } from "@workspace/ui/components/trace";
-import { BrainIcon, CircleAlertIcon, FileTextIcon } from "lucide-react";
+import { BrainIcon, CircleAlertIcon, FileTextIcon, SparklesIcon } from "lucide-react";
 
 import { Markdown } from "@/components/markdown";
 import { ToolStep } from "@/components/chat/tool-step";
@@ -64,9 +65,20 @@ function UserMessage({ parts }: { parts: ChatPart[] }) {
     .join("\n");
   const images = parts.filter((part) => part.type === "image");
   const files = parts.filter((part) => part.type === "file");
+  const skills = parts.filter((part) => part.type === "skill");
   return (
     <Message align="end">
       <MessageContent>
+        {skills.length > 0 && (
+          <div className="flex flex-wrap justify-end gap-1.5 self-end">
+            {skills.map((skill, index) => (
+              <Badge key={index} variant="secondary">
+                <SparklesIcon data-icon="inline-start" />
+                Skill: {skill.name}
+              </Badge>
+            ))}
+          </div>
+        )}
         {(images.length > 0 || files.length > 0) && (
           <div className="flex max-w-[80%] flex-wrap justify-end gap-2 self-end">
             {images.map((image, index) => (
