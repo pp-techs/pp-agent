@@ -1,0 +1,19 @@
+appId: com.pp.agent
+productName: PP Agent
+directories:
+  output: release
+files:
+  - dist/**
+  - package.json
+extraResources:
+  # Built by `vp run @workspace/web#build`; loaded by the main process in packaged builds.
+  - from: ../web/dist
+    to: renderer
+asar: true
+mac:
+  category: public.app-category.productivity
+  target: [dmg, zip]
+win:
+  target: [nsis]
+linux:
+  target: [AppImage]

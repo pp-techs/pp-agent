@@ -1,0 +1,29 @@
+{
+  "name": "@workspace/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "description": "PP Agent desktop app",
+  "type": "module",
+  "main": "dist/main.mjs",
+  "scripts": {
+    "build": "vp pack",
+    "start": "electron .",
+    "dist": "vp pack && electron-builder --config electron-builder.yml --publish never",
+    "dist:dir": "vp pack && electron-builder --config electron-builder.yml --dir --publish never"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "catalog:",
+    "officeparser": "catalog:",
+    "typebox": "catalog:"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-agent-core": "catalog:",
+    "@types/node": "catalog:",
+    "@workspace/shared": "workspace:*",
+    "electron": "catalog:",
+    "electron-builder": "catalog:",
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "productName": "PP Agent"
+}

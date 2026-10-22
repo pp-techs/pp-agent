@@ -1,0 +1,4 @@
+@import "@workspace/ui/globals.css";
+
+/* Streamdown renders markdown with Tailwind classes shipped in its dist files. */
+@source "../node_modules/streamdown/dist/*.js";
