@@ -54,10 +54,11 @@ jobs:
       - name: Build
         run: vp run -r build
 
-      # Unpacked Linux app only: proves the electron-builder config without making installers.
-      - name: Package (unpacked)
+      # Linux installers (AppImage + deb): proves the electron-builder config on every change,
+      # including target-specific checks an unpacked build skips.
+      - name: Package (Linux installers)
         working-directory: apps/desktop
-        run: vp exec electron-builder --config electron-builder.yml --linux --x64 --dir --publish never
+        run: vp exec electron-builder --config electron-builder.yml --linux --x64 --publish never
 
   changeset:
     name: Changeset

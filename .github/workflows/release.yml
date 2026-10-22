@@ -166,7 +166,8 @@ jobs:
     permissions:
       contents: read
     strategy:
-      fail-fast: true
+      # Let every platform finish so one failure shows all problems; `publish` still needs all.
+      fail-fast: false
       matrix:
         include:
           - name: macOS arm64

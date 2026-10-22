@@ -24,6 +24,8 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
 linux:
+  # The package name (@workspace/desktop) is not a valid file name.
+  executableName: pp-agent
   target: [AppImage, deb]
   category: Office
   maintainer: PP Techs <https://github.com/pp-techs>
