@@ -26,6 +26,7 @@ import { useAgentConnection } from "@/hooks/use-agent-connection";
 import { bridge } from "@/lib/bridge";
 import { useChatStore } from "@/stores/chat-store";
 import { toAttachments, useComposerStore } from "@/stores/composer-store";
+import { connectUpdates } from "@/stores/update-store";
 
 /** Top bar: the sidebar toggle and the agent of the open conversation. */
 function Header({ bridge }: { bridge: DesktopBridge }) {
@@ -81,6 +82,7 @@ function ChatBody({ bridge }: { bridge: DesktopBridge }) {
 
 function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
   useAgentConnection(bridge);
+  React.useEffect(() => connectUpdates(bridge), [bridge]);
   const status = useChatStore((state) => state.status);
   const ready = status === "idle" || status === "running";
   // Counts nested dragenter/dragleave pairs so the overlay does not flicker over child elements.

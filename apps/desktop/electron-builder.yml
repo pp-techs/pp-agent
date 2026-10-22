@@ -13,8 +13,13 @@ extraResources:
 asar: true
 # Space-free names for release assets, e.g. pp-agent-0.1.0-mac-arm64.dmg.
 artifactName: pp-agent-${version}-${os}-${arch}.${ext}
-# Installers are attached to GitHub Releases by .github/workflows/release.yml, not by electron-builder.
-publish: null
+# Installers are attached to GitHub Releases by .github/workflows/release.yml (always run with
+# `--publish never`). This block only makes electron-builder write the update feed (latest*.yml)
+# and the app-update.yml the installed app reads to find new releases.
+publish:
+  provider: github
+  owner: pp-techs
+  repo: pp-agent
 mac:
   category: public.app-category.productivity
   target: [dmg, zip]

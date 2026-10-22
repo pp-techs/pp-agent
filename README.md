@@ -42,6 +42,8 @@ Download the installer for your system from the [latest release](https://github.
 
 Each release lists SHA-256 checksums in `SHA256SUMS.txt`.
 
+The app checks for new versions on start and under **Settings → General → Updates**. Windows and Linux (AppImage) install updates from inside the app; on macOS and with the `.deb` it opens the download page.
+
 > [!NOTE]
 > Release builds are not yet signed with a Developer ID or Windows certificate.
 > On macOS, if the app "is damaged" or "cannot be opened", run `xattr -dr com.apple.quarantine "/Applications/PP Agent.app"` once.

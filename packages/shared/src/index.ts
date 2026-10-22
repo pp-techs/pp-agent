@@ -471,6 +471,30 @@ export type AgentCommand = {
 }[AgentCommandType];
 export type AgentCommandResult<K extends AgentCommandType> = AgentCommandMap[K]["result"];
 
+/**
+ * Where the app stands with updates. `in-app` updates download and install from inside the app
+ * (Windows, Linux AppImage); `download-page` ones open the release page (macOS builds are not
+ * Developer ID signed, so macOS cannot replace itself, and `.deb` installs belong to the system).
+ */
+export type UpdateState = { currentVersion: string } &
+  /** Development runs and unpackaged builds never check. */
+  (
+    | { status: "disabled" }
+    /** Nothing checked yet in this session. */
+    | { status: "idle" }
+    | { status: "checking" }
+    | { status: "up-to-date" }
+    | {
+        status: "available";
+        version: string;
+        install: "in-app" | "download-page";
+        releaseUrl: string;
+      }
+    | { status: "downloading"; version: string; percent: number }
+    | { status: "ready"; version: string }
+    | { status: "error"; message: string }
+  );
+
 /** API exposed on `window.ppAgent` by the preload script. */
 export interface DesktopBridge {
   agent: {
@@ -495,6 +519,16 @@ export interface DesktopBridge {
     /** Asks where to save an exported agent; false when cancelled. */
     saveAgentFile(suggestedName: string, json: string): Promise<boolean>;
   };
+  updates: {
+    state(): Promise<UpdateState>;
+    /** Looks for a newer release; the result arrives as a state change. */
+    check(): Promise<void>;
+    /** Downloads the update in the app, or opens its release page when it cannot install itself. */
+    download(): Promise<void>;
+    /** Quits and installs a downloaded update. */
+    install(): Promise<void>;
+    onState(listener: (state: UpdateState) => void): () => void;
+  };
   /** Opens an http(s) URL in the default browser. */
   openExternal(url: string): Promise<void>;
 }
@@ -510,6 +544,11 @@ export const IPC = {
   filesOpenAgent: "files:open-agent",
   filesSaveAgent: "files:save-agent",
   openExternal: "shell:open-external",
+  updatesState: "updates:state",
+  updatesCheck: "updates:check",
+  updatesDownload: "updates:download",
+  updatesInstall: "updates:install",
+  updatesEvent: "updates:event",
 } as const;
 
 // ---------------------------------------------------------------------------------------------

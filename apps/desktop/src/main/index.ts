@@ -18,6 +18,7 @@ import {
   saveAgentFile,
 } from "./files.ts";
 import { migrateLegacyProvider } from "./legacy.ts";
+import { createUpdater } from "./updates.ts";
 import { handleVaultRequest } from "./vault.ts";
 
 const DIST_DIR = import.meta.dirname;
@@ -30,6 +31,8 @@ const RESTART_DELAY_MS = 1_000;
 const WORKSPACE_DIR = join(app.getPath("documents"), "PP Agent");
 const USER_DATA_DIR = app.getPath("userData");
 const SETTINGS_FILE = join(USER_DATA_DIR, "settings.json");
+
+const updater = createUpdater((state) => window?.webContents.send(IPC.updatesEvent, state));
 
 let window: BrowserWindow | null = null;
 let agent: UtilityProcess | null = null;
@@ -215,6 +218,11 @@ ipcMain.handle(IPC.openExternal, (_event, url: unknown) => {
   return openExternal(url);
 });
 
+ipcMain.handle(IPC.updatesState, () => updater.state());
+ipcMain.handle(IPC.updatesCheck, () => updater.check(true));
+ipcMain.handle(IPC.updatesDownload, () => updater.download(openExternal));
+ipcMain.handle(IPC.updatesInstall, () => updater.install());
+
 app.on("before-quit", () => {
   quitting = true;
   agent?.kill();
@@ -232,4 +240,5 @@ app.on("activate", () => {
 void app.whenReady().then(() => {
   void startAgent();
   createWindow();
+  updater.start();
 });

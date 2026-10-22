@@ -242,6 +242,8 @@ jobs:
             apps/desktop/release/*.exe
             apps/desktop/release/*.AppImage
             apps/desktop/release/*.deb
+            apps/desktop/release/latest.yml
+            apps/desktop/release/latest-linux.yml
           if-no-files-found: error
           retention-days: 7
 
@@ -269,6 +271,10 @@ jobs:
           assets="$RUNNER_TEMP/assets"
           mkdir -p "$assets"
           find "$RUNNER_TEMP/release" -path '*/installers-*/*' -type f -exec mv {} "$assets/" \;
+          # The installed app finds updates through these feeds; a release without them cannot update.
+          for feed in latest.yml latest-linux.yml; do
+            [ -f "$assets/$feed" ] || { echo "::error::Missing update feed $feed"; exit 1; }
+          done
           (cd "$assets" && sha256sum -- * > SHA256SUMS.txt)
           ls -l "$assets"
           echo "dir=$assets" >> "$GITHUB_OUTPUT"

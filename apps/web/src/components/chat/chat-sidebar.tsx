@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { UpdateNotice } from "@/components/chat/update-notice";
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { PromptModal } from "@/components/modals/prompt-modal";
 import { SettingsModal } from "@/components/modals/settings-modal";
@@ -168,6 +169,7 @@ export function ChatSidebar({ bridge }: { bridge: DesktopBridge }) {
         )}
       </SidebarContent>
       <SidebarFooter>
+        <UpdateNotice bridge={bridge} />
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton

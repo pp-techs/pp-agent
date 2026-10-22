@@ -41,6 +41,19 @@ vp run version-packages
 git restore . && git clean -fd .changeset
 ```
 
+## Updates inside the app
+
+The installed app checks GitHub Releases ten seconds after start, every six hours, and when someone presses **Check for updates** (Settings → General). Implementation: `apps/desktop/src/main/updates.ts`.
+
+| Platform                | Behaviour                                                                                                                                                                                                 |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows, Linux AppImage | `electron-updater` downloads the installer and restarts into it. It reads `latest.yml` / `latest-linux.yml`, which electron-builder writes next to the installers and `publish` uploads with the release. |
+| macOS, Linux `.deb`     | The app only compares versions (GitHub Releases API) and opens the release page. macOS cannot replace an app that has no Developer ID signature, and `.deb` belongs to the system package manager.        |
+
+The `publish` job fails when `latest.yml` or `latest-linux.yml` is missing. Once macOS builds are signed and notarized (see below), `electron-updater` can update macOS too: add `zip` feed `latest-mac.yml` to the uploaded files and drop the macOS exception in `installMode()`.
+
+Development runs (`app.isPackaged` false) never check.
+
 ## Repository settings the workflow needs
 
 - **Actions → General → Workflow permissions:** "Allow GitHub Actions to create and approve pull requests" (for the Version Packages PR).

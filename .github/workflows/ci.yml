@@ -58,7 +58,10 @@ jobs:
       # including target-specific checks an unpacked build skips.
       - name: Package (Linux installers)
         working-directory: apps/desktop
-        run: vp exec electron-builder --config electron-builder.yml --linux --x64 --publish never
+        run: |
+          vp exec electron-builder --config electron-builder.yml --linux --x64 --publish never
+          # The release workflow uploads this feed; the installed app finds updates through it.
+          test -f release/latest-linux.yml
 
   changeset:
     name: Changeset

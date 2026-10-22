@@ -1,4 +1,4 @@
-import { type AgentEvent, type DesktopBridge, IPC } from "@workspace/shared";
+import { type AgentEvent, type DesktopBridge, IPC, type UpdateState } from "@workspace/shared";
 import { contextBridge, ipcRenderer, type IpcRendererEvent, webUtils } from "electron";
 
 /**
@@ -35,6 +35,19 @@ const bridge: DesktopBridge = {
     openAgentFile: () => invoke(IPC.filesOpenAgent),
     saveAgentFile: (suggestedName, json) => invoke(IPC.filesSaveAgent, suggestedName, json),
     reveal: (path) => invoke(IPC.filesReveal, path),
+  },
+  updates: {
+    state: () => invoke(IPC.updatesState),
+    check: () => invoke(IPC.updatesCheck),
+    download: () => invoke(IPC.updatesDownload),
+    install: () => invoke(IPC.updatesInstall),
+    onState(listener) {
+      const handler = (_event: IpcRendererEvent, state: UpdateState) => listener(state);
+      ipcRenderer.on(IPC.updatesEvent, handler);
+      return () => {
+        ipcRenderer.off(IPC.updatesEvent, handler);
+      };
+    },
   },
   openExternal: (url) => invoke(IPC.openExternal, url),
 };

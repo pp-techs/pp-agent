@@ -18,6 +18,11 @@ Channel names are the `IPC` constant in `packages/shared/src/index.ts`. All are 
 | `files:open-agent`     | `files.openAgentFile()`           | Reads an exported agent file                                        |
 | `files:save-agent`     | `files.saveAgentFile(name, json)` | Writes an exported agent file                                       |
 | `shell:open-external`  | `openExternal(url)`               | http(s) URL in the default browser                                  |
+| `updates:state`        | `updates.state()`                 | Current `UpdateState`                                               |
+| `updates:check`        | `updates.check()`                 | Looks for a newer release (a person asked)                          |
+| `updates:download`     | `updates.download()`              | Downloads in the app, or opens the release page on macOS / `.deb`   |
+| `updates:install`      | `updates.install()`               | Quits and installs a downloaded update                              |
+| `updates:event`        | `updates.onState(listener)`       | Pushed by main whenever the `UpdateState` changes                   |
 
 `files.pathFor(file)` is answered in the preload itself (`webUtils.getPathForFile`) without IPC.
 

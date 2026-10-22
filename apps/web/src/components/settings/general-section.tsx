@@ -27,7 +27,9 @@ import { useTheme } from "@/components/theme-provider";
 import { SectionHeading } from "@/components/settings/section-heading";
 import { groupByProvider, modelKey } from "@/lib/models";
 import { modelsQuery, settingsQuery, useUpdateSettings } from "@/lib/queries";
+import { describeUpdate, updateAction } from "@/components/update-actions";
 import { useChatStore } from "@/stores/chat-store";
+import { useUpdateStore } from "@/stores/update-store";
 
 const THEMES = [
   { value: "system", label: "System", icon: MonitorIcon },
@@ -108,6 +110,28 @@ function DefaultModelField({ bridge }: { bridge: DesktopBridge }) {
   );
 }
 
+function UpdatesField({ bridge }: { bridge: DesktopBridge }) {
+  const update = useUpdateStore((state) => state.update);
+  if (!update) return null;
+  const action = updateAction(bridge, update);
+  const busy = update.status === "checking" || update.status === "downloading";
+
+  return (
+    <Field orientation="horizontal">
+      <FieldContent>
+        <FieldTitle>Updates</FieldTitle>
+        <FieldDescription>{describeUpdate(update)}</FieldDescription>
+      </FieldContent>
+      {update.status !== "disabled" && (
+        <Button variant="outline" disabled={busy || !action} onClick={() => action?.run()}>
+          {busy && <Spinner data-icon="inline-start" />}
+          {action?.label ?? "Check for updates"}
+        </Button>
+      )}
+    </Field>
+  );
+}
+
 export function GeneralSection({ bridge }: { bridge: DesktopBridge }) {
   const workspaceDir = useChatStore((state) => state.workspaceDir);
   const { theme, setTheme } = useTheme();
@@ -116,7 +140,7 @@ export function GeneralSection({ bridge }: { bridge: DesktopBridge }) {
     <div className="flex flex-col gap-6">
       <SectionHeading
         title="General"
-        description="Your workspace, appearance, and default model."
+        description="Your workspace, appearance, default model, and updates."
       />
       <FieldGroup>
         <Field orientation="horizontal">
@@ -163,6 +187,7 @@ export function GeneralSection({ bridge }: { bridge: DesktopBridge }) {
           </ToggleGroup>
         </Field>
         <DefaultModelField bridge={bridge} />
+        <UpdatesField bridge={bridge} />
       </FieldGroup>
     </div>
   );
