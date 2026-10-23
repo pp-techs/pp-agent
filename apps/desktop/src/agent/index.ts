@@ -110,12 +110,15 @@ import {
   describeToolCall,
   isListedTool,
   parseMcpToolName,
+  SHELL_TOOL,
   SYSTEM_PROMPT,
   toolRule,
   toolSelection,
   toolTier,
 } from "./tools.ts";
 import { Transcript } from "./transcript.ts";
+import { createWebFetchTool, createWebSearchTool } from "./web/tools.ts";
+import { WebSearchService } from "./web/search.ts";
 
 const TITLE_LENGTH = 80;
 const NO_MODEL_MESSAGE = "Choose a model in Settings › Models before starting a chat.";
@@ -151,6 +154,7 @@ interface Services {
   runtime: ModelRuntime;
   settings: SettingsStore;
   skills: SkillLibrary;
+  webSearch: WebSearchService;
   mcpConfig: McpConfigFile;
   /** MCP servers connected for the open conversation's agent. */
   mcpServers: McpRegistrations;
@@ -205,6 +209,7 @@ class AgentHost {
         runtime,
         settings,
         skills: new SkillLibrary(skillsDir),
+        webSearch: new WebSearchService(settings, this.credentials),
         mcpConfig,
         mcpServers: new McpRegistrations(mcpConfig, (name) => {
           const { mcpServers } = this.currentAgent();
@@ -282,6 +287,12 @@ class AgentHost {
       case "set_model":
         return this.setModel({ provider: command.provider, modelId: command.modelId });
 
+      case "list_web_search":
+        return services.webSearch.view();
+      case "save_web_search":
+        return services.webSearch.save(command.config);
+      case "test_web_search":
+        return services.webSearch.test(command.provider);
       case "list_tools":
         return this.listTools();
       case "set_tool_policy":
@@ -574,7 +585,7 @@ class AgentHost {
     sessionManager: SessionManager,
     preferredModel: ModelRef | null = sessionManager.buildSessionContext().model,
   ): Promise<void> {
-    const { paths, runtime, settings, skills } = this.requireServices();
+    const { paths, runtime, settings, skills, webSearch } = this.requireServices();
     const cwd = sessionManager.getCwd();
     const settingsManager = SettingsManager.inMemory({
       compaction: { enabled: true },
@@ -629,7 +640,12 @@ class AgentHost {
           ? undefined
           : (this.currentWorkspace().thinkingLevel ?? settings.get().thinkingLevel),
       tools: toolSelection(settings.get(), this.currentAgent().tools),
-      customTools: [currentDateTimeTool, createReadDocumentTool(cwd)],
+      customTools: [
+        currentDateTimeTool,
+        createReadDocumentTool(cwd),
+        createWebSearchTool(webSearch),
+        createWebFetchTool(),
+      ],
       resourceLoader,
       settingsManager,
       sessionManager,
@@ -1129,6 +1145,9 @@ class AgentHost {
   private setToolPolicy(name: string, policy: ToolPolicy): void {
     const { settings } = this.requireServices();
     if (!TOOL_POLICIES.includes(policy)) throw new Error(`Unknown policy: ${policy}`);
+    // The shell asks or runs freely; `auto` and `off` do not apply (turn it off with its switch).
+    if (name === SHELL_TOOL && policy !== "ask" && policy !== "allow")
+      throw new Error("Shell commands either ask first or run freely.");
     if (toolRule(name, toolTier(name), settings.get()).locked)
       throw new Error("This tool's setting cannot be changed here.");
     settings.update((draft) => {

@@ -24,6 +24,7 @@ export const queryKeys = {
   gateways: ["gateways"] as const,
   models: ["models"] as const,
   tools: ["tools"] as const,
+  webSearch: ["web-search"] as const,
   skills: ["skills"] as const,
   skill: (name: string) => ["skill", name] as const,
   mcp: ["mcp"] as const,

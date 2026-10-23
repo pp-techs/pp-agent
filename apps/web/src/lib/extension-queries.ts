@@ -3,7 +3,9 @@ import type {
   McpServerSettings,
   SaveAgentInput,
   SaveSkillInput,
+  SaveWebSearchInput,
   SaveWorkspaceInput,
+  SearchProviderId,
   ToolPolicy,
   ToolSummary,
 } from "@workspace/shared";
@@ -88,6 +90,34 @@ export function useSetToolPolicy(bridge: DesktopBridge) {
       showError(error);
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.tools }),
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Web search
+// ---------------------------------------------------------------------------------------------
+
+export const webSearchQuery = (bridge: DesktopBridge) =>
+  queryOptions({
+    queryKey: queryKeys.webSearch,
+    queryFn: () => bridge.agent.command({ type: "list_web_search" }),
+  });
+
+export function useSaveWebSearch(bridge: DesktopBridge) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (config: SaveWebSearchInput) =>
+      bridge.agent.command({ type: "save_web_search", config }),
+    onSuccess: (view) => queryClient.setQueryData(queryKeys.webSearch, view),
+    onError: showError,
+  });
+}
+
+export function useTestWebSearch(bridge: DesktopBridge) {
+  return useMutation({
+    mutationFn: (provider: SearchProviderId) =>
+      bridge.agent.command({ type: "test_web_search", provider }),
+    onError: showError,
   });
 }
 

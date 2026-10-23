@@ -10,6 +10,7 @@ import {
 } from "@workspace/shared";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
+import { emptyWebSearchConfig, readWebSearchConfig } from "./web/config.ts";
 import { readAgents } from "./agents.ts";
 import { readWorkspaces } from "./workspaces.ts";
 
@@ -48,6 +49,7 @@ function parse(raw: unknown): SettingsFile {
     workspaces: readWorkspaces(null, readAgents(null), null),
     activeAgentId: DEFAULT_AGENT_ID,
     thinkingLevel: "off",
+    webSearch: emptyWebSearchConfig(),
   };
   if (typeof raw !== "object" || raw === null) return settings;
   const value = raw as Partial<Record<keyof SettingsFile, unknown>>;
@@ -73,6 +75,7 @@ function parse(raw: unknown): SettingsFile {
     settings.activeAgentId = activeAgentId;
   if (THINKING_LEVELS.includes(value.thinkingLevel as ThinkingLevel))
     settings.thinkingLevel = value.thinkingLevel as ThinkingLevel;
+  settings.webSearch = readWebSearchConfig(value.webSearch);
   return settings;
 }
 

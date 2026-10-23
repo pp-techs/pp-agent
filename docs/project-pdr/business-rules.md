@@ -4,11 +4,11 @@ Rules enforced in code. Paths are under `apps/desktop/src/agent/` unless noted.
 
 ## Approvals and tools (`tools.ts`)
 
-| Tool tier | Tools                                                                                                             |
-| --------- | ----------------------------------------------------------------------------------------------------------------- |
-| read      | `read`, `ls`, `find`, `grep`, `read_document`, `current_datetime`, discovery tools, MCP tools with `readOnlyHint` |
-| write     | `write`, `edit`, MCP tools without `readOnlyHint`                                                                 |
-| exec      | `bash`, `powershell`, and any tool without a tier                                                                 |
+| Tool tier | Tools                                                                                                                                        |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| read      | `read`, `ls`, `find`, `grep`, `read_document`, `current_datetime`, `web_search`, `web_fetch`, discovery tools, MCP tools with `readOnlyHint` |
+| write     | `write`, `edit`, MCP tools without `readOnlyHint`                                                                                            |
+| exec      | `bash`, `powershell`, and any tool without a tier                                                                                            |
 
 | Tool policy    | Effect                                                    |
 | -------------- | --------------------------------------------------------- |
@@ -17,7 +17,8 @@ Rules enforced in code. Paths are under `apps/desktop/src/agent/` unless noted.
 | allow          | runs without asking                                       |
 | off            | removed from the session and blocked in the approval gate |
 
-- The shell (`bash`; `powershell` on Windows) is off by default. When **Settings › Tools** turns it on, every command still asks; its policy cannot be changed. The other platform's shell is always off.
+- The shell (`bash`; `powershell` on Windows) is off by default. When **Settings › Tools** turns it on, every command asks, unless its policy is set to `allow` ("Run without asking"). The shell takes only `ask` or `allow`; choosing `allow` needs a confirmation that spells out the risk, and while it is set the Tools page shows a warning. The other platform's shell is always off.
+- **Web search** (`web/`): `web_search` tries the enabled providers (SearXNG, Serper, Tavily, Brave, Exa, webclaw) in the saved order and moves on when one fails; none enabled → an error that points to Settings › Tools. Keys sit in the vault under `websearch:<provider>`, never in `settings.json` and never in the renderer. `web_fetch` refuses non-http(s) addresses, embedded credentials, and any host that resolves to a private, loopback, link-local or metadata address (checked at connect time and on every redirect, up to 5); it reads at most 8 MB and returns Markdown (HTML, PDF, Office). Both tools wrap results in `<web_results>`/`<web_page>` and the system prompt tells the model that web text is data, not instructions.
 - `edit` is off by default; non-developers use `write`.
 - Discovery tools (`codemode`, `tool_search`, MCP resource tools) are always allowed; the calls they make pass the gate individually.
 - Stopping a run denies all pending approvals first.
