@@ -28,7 +28,8 @@ export type ChatPart =
 
 export interface ChatMessage {
   id: string;
-  role: "user" | "assistant";
+  /** `compaction` marks where older messages were summarized for the model; it has no parts. */
+  role: "user" | "assistant" | "compaction";
   parts: ChatPart[];
   error?: string;
 }

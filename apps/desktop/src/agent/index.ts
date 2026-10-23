@@ -6,7 +6,6 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import {
   type AgentSession,
@@ -86,6 +85,7 @@ import {
 } from "./workspaces.ts";
 import { buildPrompt, splitAttachedFiles } from "./attachments.ts";
 import { AuthPrompts } from "./auth-prompts.ts";
+import { pruneToolOutputs } from "./context.ts";
 import { VaultCredentialStore } from "./credentials.ts";
 import { createReadDocumentTool } from "./documents.ts";
 import { configureLanguage, t } from "./i18n.ts";
@@ -117,7 +117,7 @@ import {
   toolSelection,
   toolTier,
 } from "./tools.ts";
-import { Transcript } from "./transcript.ts";
+import { Transcript, type TranscriptItem } from "./transcript.ts";
 import { createWebFetchTool, createWebSearchTool } from "./web/tools.ts";
 import { WebSearchService } from "./web/search.ts";
 
@@ -161,6 +161,12 @@ interface Services {
   /** MCP servers connected for the open conversation's agent. */
   mcpServers: McpRegistrations;
 }
+
+/** Pi's error when the messages it keeps already cover the whole conversation. */
+const NOTHING_TO_COMPACT = /nothing to compact/i;
+/** Pi's default `compaction.keepRecentTokens`; manual compaction retries with less. */
+const DEFAULT_KEEP_TOKENS = 20_000;
+const MANUAL_KEEP_TOKENS = 2_000;
 
 class AgentHost {
   private services: Services | null = null;
@@ -445,10 +451,21 @@ class AgentHost {
     const short = t("conversations.tooShort");
     if (session.messages.length === 0) throw new Error(short);
     try {
-      await session.compact();
+      await session.compact().catch(async (error: unknown) => {
+        if (!NOTHING_TO_COMPACT.test(errorMessage(error))) throw error;
+        // Pi keeps the newest 20,000 tokens, which can be the whole chat. The person asked for it,
+        // so retry keeping less; the default comes back afterwards for automatic compaction.
+        const { settingsManager } = session;
+        settingsManager.applyOverrides({ compaction: { keepRecentTokens: MANUAL_KEEP_TOKENS } });
+        try {
+          await session.compact();
+        } finally {
+          settingsManager.applyOverrides({ compaction: { keepRecentTokens: DEFAULT_KEEP_TOKENS } });
+        }
+      });
     } catch (error) {
-      // Pi refuses when the recent messages it keeps already cover the whole conversation.
-      if (/nothing to compact/i.test(errorMessage(error))) throw new Error(short);
+      // Even with the smaller window the conversation is a single exchange.
+      if (NOTHING_TO_COMPACT.test(errorMessage(error))) throw new Error(short);
       throw error;
     }
     emit({ type: "sessions_changed" });
@@ -687,6 +704,9 @@ class AgentHost {
 
   private onSessionEvent(event: AgentSessionEvent): void {
     switch (event.type) {
+      case "compaction_end":
+        if (event.result && !event.aborted) this.transcript.addCompaction();
+        break;
       case "agent_start":
         this.running = true;
         this.refreshStatus();
@@ -775,6 +795,8 @@ class AgentHost {
    */
   private readonly agentExtension: ExtensionFactory = (pi) => {
     this.requireServices().mcpServers.attach(pi);
+    // Old tool output is replaced by a note in what the model reads; the chat keeps showing it.
+    pi.on("context", (event) => ({ messages: pruneToolOutputs(event.messages) }));
     pi.on("before_agent_start", (event) => {
       const { sections } = event.systemPromptOptions;
       const agentSection = agentPromptSection(this.currentAgent());
@@ -1439,12 +1461,14 @@ class AgentHost {
 
 /**
  * Every message on the conversation's branch, including those a compaction summarized away
- * (`session.messages` holds only what the model still sees), so the chat shows its full history.
+ * (`session.messages` holds only what the model still sees), so the chat shows its full history,
+ * with a marker where each compaction happened.
  */
-function branchMessages(session: AgentSession): AgentMessage[] {
-  return session.sessionManager
-    .getBranch()
-    .flatMap((entry) => (entry.type === "message" ? [entry.message] : []));
+function branchMessages(session: AgentSession): TranscriptItem[] {
+  return session.sessionManager.getBranch().flatMap((entry): TranscriptItem[] => {
+    if (entry.type === "message") return [entry.message];
+    return entry.type === "compaction" ? [{ role: "compaction" }] : [];
+  });
 }
 
 function appSettings(store: SettingsStore): AppSettings {

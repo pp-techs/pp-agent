@@ -21,7 +21,8 @@
     "thinking": "Thinking",
     "thought": "Thought",
     "skill": "Skill: {{name}}",
-    "attachedImage": "Attached image"
+    "attachedImage": "Attached image",
+    "compacted": "Earlier messages summarized"
   },
   "sidebar": {
     "relativeTime": {
