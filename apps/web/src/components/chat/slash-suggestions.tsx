@@ -1,5 +1,6 @@
 import { cn } from "@workspace/ui/lib/utils";
 import { SparklesIcon, TerminalIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import type { SlashItem } from "@/lib/slash-commands";
 import { slashText } from "@/lib/slash-commands";
@@ -19,11 +20,12 @@ export function SlashSuggestions({
   onHover: (index: number) => void;
   onPick: (item: SlashItem) => void;
 }) {
+  const { t } = useTranslation("chat");
   return (
     <div
       id="slash-suggestions"
       role="listbox"
-      aria-label="Commands and skills"
+      aria-label={t("slash.ariaLabel")}
       className="absolute inset-x-6 bottom-full z-20 mb-2 max-h-72 overflow-y-auto rounded-2xl bg-popover p-1 text-popover-foreground shadow-lg ring-1 ring-foreground/10"
     >
       {items.map((item, index) => {

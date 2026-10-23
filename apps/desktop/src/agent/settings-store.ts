@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import {
   DEFAULT_AGENT_ID,
   GATEWAY_APIS,
+  LANGUAGE_SETTINGS,
   type SettingsFile,
   THINKING_LEVELS,
   type ThinkingLevel,
@@ -49,12 +50,14 @@ function parse(raw: unknown): SettingsFile {
     workspaces: readWorkspaces(null, readAgents(null), null),
     activeAgentId: DEFAULT_AGENT_ID,
     thinkingLevel: "off",
+    language: "system",
     webSearch: emptyWebSearchConfig(),
   };
   if (typeof raw !== "object" || raw === null) return settings;
   const value = raw as Partial<Record<keyof SettingsFile, unknown>>;
   if (Value.Check(ModelRefSchema, value.defaultModel)) settings.defaultModel = value.defaultModel;
   settings.shellEnabled = value.shellEnabled === true;
+  settings.language = LANGUAGE_SETTINGS.find((language) => language === value.language) ?? "system";
   if (typeof value.toolPolicies === "object" && value.toolPolicies !== null) {
     for (const [name, policy] of Object.entries(value.toolPolicies)) {
       if (Value.Check(PolicySchema, policy)) settings.toolPolicies[name] = policy;

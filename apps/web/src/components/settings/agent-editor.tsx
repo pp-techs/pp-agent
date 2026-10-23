@@ -30,6 +30,7 @@ import { Spinner } from "@workspace/ui/components/spinner";
 import { Textarea } from "@workspace/ui/components/textarea";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeftIcon, PlusIcon, TriangleAlertIcon, XIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { OptionGroup, SubOptions, SwitchRow } from "@/components/settings/option-group";
@@ -54,10 +55,26 @@ const ICON_PICKS = ["🤖", "📊", "📝", "💼", "📈", "🧾", "🧑‍💼
 /** Select value for "no model of its own". */
 const KEEP_MODEL = "keep";
 
-const INSTRUCTIONS_PLACEHOLDER = `You help the finance team close the month.
-- Answer in short bullet points.
-- Always say which file a number comes from.
-- Never change the original spreadsheets; save results as new files.`;
+/** Agent tools whose label and description are translated in the `agents` namespace. */
+const TOOL_OPTION_NAMES = [
+  "read",
+  "ls",
+  "find",
+  "grep",
+  "read_document",
+  "current_datetime",
+  "web_search",
+  "web_fetch",
+  "write",
+  "edit",
+  "bash",
+  "powershell",
+] as const;
+type ToolOptionName = (typeof TOOL_OPTION_NAMES)[number];
+
+/** Unknown tools (not in the list) keep the backend's English text. */
+const isToolOptionName = (name: string): name is ToolOptionName =>
+  (TOOL_OPTION_NAMES as readonly string[]).includes(name);
 
 interface ChecklistOption {
   name: string;
@@ -97,12 +114,13 @@ function ChecklistField({
   selected: string[] | null;
   onChange: (selected: string[] | null) => void;
 }) {
+  const { t } = useTranslation("agents");
   const known = new Set(options.map((option) => option.name));
   const rows: ChecklistOption[] = [
     ...options,
     ...(selected ?? [])
       .filter((name) => !known.has(name))
-      .map((name) => ({ name, label: name, hint: "Not installed" })),
+      .map((name) => ({ name, label: name, hint: t("agentEditor.checklist.notInstalled") })),
   ];
   const chosen = new Set(selected ?? []);
 
@@ -170,14 +188,17 @@ function ModelField({
   value: ModelRef | null;
   onChange: (model: ModelRef | null) => void;
 }) {
+  const { t } = useTranslation("agents");
   const models = useQuery(modelsQuery(bridge));
   const available = models.data ?? [];
   const label = modelLabeler(available);
   const currentKey = value ? modelKey(value) : KEEP_MODEL;
   const missing = value !== null && !available.some((model) => modelKey(model) === currentKey);
   const items = [
-    { value: KEEP_MODEL, label: "Keep the chat's model" },
-    ...(missing && value ? [{ value: currentKey, label: `${value.modelId} (not available)` }] : []),
+    { value: KEEP_MODEL, label: t("agentEditor.model.keep") },
+    ...(missing && value
+      ? [{ value: currentKey, label: t("shared.modelUnavailable", { modelId: value.modelId }) }]
+      : []),
     ...available.map((model) => ({
       value: modelKey(model),
       label: `${label(model)} · ${model.providerName}`,
@@ -191,19 +212,20 @@ function ModelField({
   }
 
   return (
-    <OptionGroup
-      legend="Model"
-      description="When you pick this agent, the chat switches to this model. New chats with it start on it."
-    >
+    <OptionGroup legend={t("shared.model")} description={t("agentEditor.model.description")}>
       <Select items={items} value={currentKey} onValueChange={onSelect}>
-        <SelectTrigger className="w-full" aria-label="Model" disabled={models.isPending}>
+        <SelectTrigger
+          className="w-full"
+          aria-label={t("shared.model")}
+          disabled={models.isPending}
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={KEEP_MODEL}>Keep the chat's model</SelectItem>
+          <SelectItem value={KEEP_MODEL}>{t("agentEditor.model.keep")}</SelectItem>
           {missing && value && (
             <SelectItem value={currentKey} disabled>
-              {value.modelId} (not available)
+              {t("shared.modelUnavailable", { modelId: value.modelId })}
             </SelectItem>
           )}
           {groupByProvider(available).map(([provider, group]) => (
@@ -229,18 +251,19 @@ function StarterPromptsField({
   value: string[];
   onChange: (prompts: string[]) => void;
 }) {
+  const { t } = useTranslation("agents");
   return (
     <OptionGroup
-      legend="Starter prompts"
-      description="Buttons shown on a new chat with this agent. Clicking one sends it right away."
+      legend={t("agentEditor.starterPrompts.legend")}
+      description={t("agentEditor.starterPrompts.description")}
     >
       {value.map((prompt, index) => (
         <div key={index} className="flex items-center gap-2">
           <Input
-            aria-label={`Starter prompt ${index + 1}`}
+            aria-label={t("agentEditor.starterPrompts.inputLabel", { number: index + 1 })}
             value={prompt}
             maxLength={STARTER_MAX}
-            placeholder="Summarise this month's expenses by team"
+            placeholder={t("agentEditor.starterPrompts.placeholder")}
             onChange={(event) =>
               onChange(value.map((item, at) => (at === index ? event.target.value : item)))
             }
@@ -249,7 +272,7 @@ function StarterPromptsField({
             type="button"
             variant="ghost"
             size="icon-sm"
-            aria-label={`Remove starter prompt ${index + 1}`}
+            aria-label={t("agentEditor.starterPrompts.remove", { number: index + 1 })}
             onClick={() => onChange(value.filter((_, at) => at !== index))}
           >
             <XIcon />
@@ -265,7 +288,7 @@ function StarterPromptsField({
           onClick={() => onChange([...value, ""])}
         >
           <PlusIcon data-icon="inline-start" />
-          Add starter prompt
+          {t("agentEditor.starterPrompts.add")}
         </Button>
       </div>
     </OptionGroup>
@@ -294,6 +317,7 @@ function AgentForm({
   const [skills, setSkills] = React.useState(agent?.skills ?? null);
   const [starterPrompts, setStarterPrompts] = React.useState(agent?.starterPrompts ?? []);
   const [touched, setTouched] = React.useState(false);
+  const { t, i18n } = useTranslation(["agents", "common"]);
   const save = useSaveAgent(bridge);
   const toolOptions = useQuery(agentToolOptionsQuery(bridge));
   const mcp = useQuery(mcpQuery(bridge));
@@ -305,15 +329,15 @@ function AgentForm({
   );
   const errors = {
     name: !trimmedName
-      ? "Give the agent a name."
+      ? t("agentEditor.errors.nameRequired")
       : trimmedName.length > NAME_MAX
-        ? `Use at most ${NAME_MAX} characters.`
+        ? t("shared.maxChars", { max: NAME_MAX })
         : nameTaken
-          ? "Another agent already has this name."
+          ? t("agentEditor.errors.nameTaken")
           : null,
     instructions:
       instructions.length > INSTRUCTIONS_MAX
-        ? `Use at most ${INSTRUCTIONS_MAX.toLocaleString()} characters.`
+        ? t("shared.maxChars", { max: INSTRUCTIONS_MAX.toLocaleString(i18n.language) })
         : null,
   };
   const valid = !errors.name && !errors.instructions;
@@ -337,7 +361,7 @@ function AgentForm({
       },
       {
         onSuccess: (saved) => {
-          toast.success(`Agent “${saved.name}” saved`);
+          toast.success(t("agentEditor.saved", { name: saved.name }));
           onDone();
         },
       },
@@ -349,7 +373,7 @@ function AgentForm({
       <FieldGroup>
         <div className="flex items-start gap-3">
           <Field className="w-20 shrink-0">
-            <FieldLabel htmlFor="agent-icon">Icon</FieldLabel>
+            <FieldLabel htmlFor="agent-icon">{t("shared.icon")}</FieldLabel>
             <Input
               id="agent-icon"
               value={icon}
@@ -360,12 +384,12 @@ function AgentForm({
             />
           </Field>
           <Field data-invalid={touched && Boolean(errors.name)}>
-            <FieldLabel htmlFor="agent-name">Name</FieldLabel>
+            <FieldLabel htmlFor="agent-name">{t("shared.name")}</FieldLabel>
             <Input
               id="agent-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Finance helper"
+              placeholder={t("agentEditor.fields.namePlaceholder")}
               maxLength={NAME_MAX}
               autoComplete="off"
               aria-invalid={touched && Boolean(errors.name)}
@@ -373,14 +397,18 @@ function AgentForm({
             {touched && errors.name && <FieldError>{errors.name}</FieldError>}
           </Field>
         </div>
-        <div className="-mt-4 flex flex-wrap gap-1" role="group" aria-label="Quick icon picks">
+        <div
+          className="-mt-4 flex flex-wrap gap-1"
+          role="group"
+          aria-label={t("shared.quickIconPicks")}
+        >
           {ICON_PICKS.map((pick) => (
             <Button
               key={pick}
               type="button"
               variant={icon === pick ? "secondary" : "ghost"}
               size="icon-sm"
-              aria-label={`Use ${pick} as the icon`}
+              aria-label={t("shared.useAsIcon", { icon: pick })}
               aria-pressed={icon === pick}
               className="text-base"
               onClick={() => setIcon(pick)}
@@ -390,88 +418,88 @@ function AgentForm({
           ))}
         </div>
         <Field>
-          <FieldLabel htmlFor="agent-description">Description</FieldLabel>
+          <FieldLabel htmlFor="agent-description">
+            {t("agentEditor.fields.description.label")}
+          </FieldLabel>
           <Textarea
             id="agent-description"
             value={description}
             onChange={(event) => setDescription(event.target.value)}
-            placeholder="Helps the finance team with month-end reports and expense questions."
+            placeholder={t("agentEditor.fields.description.placeholder")}
             className="min-h-16"
           />
-          <FieldDescription>
-            Shown in the agent list and at the start of a new chat.
-          </FieldDescription>
+          <FieldDescription>{t("agentEditor.fields.description.help")}</FieldDescription>
         </Field>
         <Field data-invalid={touched && Boolean(errors.instructions)}>
-          <FieldLabel htmlFor="agent-instructions">Instructions</FieldLabel>
+          <FieldLabel htmlFor="agent-instructions">{t("shared.instructions")}</FieldLabel>
           <Textarea
             id="agent-instructions"
             value={instructions}
             onChange={(event) => setInstructions(event.target.value)}
-            placeholder={INSTRUCTIONS_PLACEHOLDER}
+            placeholder={t("agentEditor.fields.instructions.placeholder")}
             aria-invalid={touched && Boolean(errors.instructions)}
             className="min-h-60 resize-y"
           />
           {touched && errors.instructions ? (
             <FieldError>{errors.instructions}</FieldError>
           ) : (
-            <FieldDescription>
-              Rules the agent always follows, e.g. tone, format, what to avoid.
-            </FieldDescription>
+            <FieldDescription>{t("agentEditor.fields.instructions.help")}</FieldDescription>
           )}
         </Field>
         <ModelField bridge={bridge} value={model} onChange={setModel} />
         <ChecklistField
           id="agent-tools"
-          legend="Tools"
-          description="What the agent can do on this computer. Settings › Tools still decides what needs your approval."
-          allLabel="All tools"
-          allDescription="Includes tools turned on later."
+          legend={t("agentEditor.tools.legend")}
+          description={t("agentEditor.tools.description")}
+          allLabel={t("agentEditor.tools.allLabel")}
+          allDescription={t("agentEditor.tools.allDescription")}
           options={(toolOptions.data ?? []).map((tool) => ({
             name: tool.name,
-            label: tool.label,
-            description: tool.description,
-            hint: tool.globallyOff ? "Off in Settings › Tools" : undefined,
+            label: isToolOptionName(tool.name) ? t(`toolOptions.${tool.name}.label`) : tool.label,
+            description: isToolOptionName(tool.name)
+              ? t(`toolOptions.${tool.name}.description`)
+              : tool.description,
+            hint: tool.globallyOff ? t("agentEditor.tools.off") : undefined,
           }))}
           loading={toolOptions.isPending}
           error={toolOptions.error?.message ?? null}
-          emptyText="No tools to choose from."
+          emptyText={t("agentEditor.tools.empty")}
           selected={tools}
           onChange={setTools}
         />
         <ChecklistField
           id="agent-mcp"
-          legend="MCP servers"
-          description="Connected services this agent can use."
-          allLabel="All servers"
-          allDescription="Every server that is turned on, including ones added later."
+          legend={t("agentEditor.mcp.legend")}
+          description={t("agentEditor.mcp.description")}
+          allLabel={t("agentEditor.mcp.allLabel")}
+          allDescription={t("agentEditor.mcp.allDescription")}
           options={(mcp.data?.servers ?? []).map((server) => ({
             name: server.settings.name,
             label: server.settings.name,
             description: server.settings.description,
-            hint: server.settings.enabled ? undefined : "Off in Settings › MCP servers",
+            hint: server.settings.enabled ? undefined : t("agentEditor.mcp.off"),
           }))}
           loading={mcp.isPending}
           error={mcp.error?.message ?? null}
-          emptyText="No MCP servers yet. Add them in Settings › MCP servers."
+          emptyText={t("agentEditor.mcp.empty")}
           selected={mcpServers}
           onChange={setMcpServers}
         />
         <ChecklistField
           id="agent-skills"
-          legend="Skills"
-          description="Ready-made instructions this agent can follow."
-          allLabel="All skills"
-          allDescription="Every skill that is turned on, including ones added later."
+          legend={t("agentEditor.skills.legend")}
+          description={t("agentEditor.skills.description")}
+          allLabel={t("agentEditor.skills.allLabel")}
+          allDescription={t("agentEditor.skills.allDescription")}
           options={(skillList.data ?? []).map((skill) => ({
             name: skill.name,
             label: skill.name,
             description: skill.description,
-            hint: skill.enabled ? undefined : "Off in Settings › Skills",
+            hint: skill.enabled ? undefined : t("agentEditor.skills.off"),
           }))}
           loading={skillList.isPending}
           error={skillList.error?.message ?? null}
-          emptyText="No skills yet. Add them in Settings › Skills."
+          emptyText={t("agentEditor.skills.empty")}
           selected={skills}
           onChange={setSkills}
         />
@@ -480,11 +508,11 @@ function AgentForm({
       {save.isError && <FieldError>{save.error.message}</FieldError>}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onDone}>
-          Cancel
+          {t("common:actions.cancel")}
         </Button>
         <Button type="submit" disabled={save.isPending || (touched && !valid)}>
           {save.isPending && <Spinner />}
-          {agent ? "Save changes" : "Create agent"}
+          {agent ? t("shared.saveChanges") : t("agentEditor.create")}
         </Button>
       </div>
     </form>
@@ -501,24 +529,34 @@ export function AgentEditor({
   id?: string;
   onDone: () => void;
 }) {
+  const { t } = useTranslation("agents");
   const agents = useQuery(agentsQuery(bridge));
   const agent = agents.data?.find((item) => item.id === id);
-  useSettingsSubPage(id === undefined ? "New agent" : (agent?.name ?? "Edit agent"));
+  useSettingsSubPage(
+    id === undefined ? t("agentEditor.newTitle") : (agent?.name ?? t("agentEditor.editTitle")),
+  );
 
   return (
     <div className="flex flex-col gap-6">
       <header className="flex items-start gap-2">
-        <Button variant="ghost" size="icon-sm" aria-label="Back to agents" onClick={onDone}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={t("agentEditor.backToAgents")}
+          onClick={onDone}
+        >
           <ArrowLeftIcon />
         </Button>
         <div className="flex min-w-0 flex-col gap-1">
           <h2 className="font-heading text-base font-medium">
-            {id === undefined ? "New agent" : agent ? `Edit “${agent.name}”` : "Edit agent"}
+            {id === undefined
+              ? t("agentEditor.newTitle")
+              : agent
+                ? t("agentEditor.editNamed", { name: agent.name })
+                : t("agentEditor.editTitle")}
           </h2>
           <p className="text-sm text-muted-foreground">
-            {id === DEFAULT_AGENT_ID
-              ? "The built-in agent. You can change it, but not delete it."
-              : "An agent is an assistant set up for one kind of work."}
+            {id === DEFAULT_AGENT_ID ? t("agentEditor.subtitleDefault") : t("agentEditor.subtitle")}
           </p>
         </div>
       </header>
@@ -527,14 +565,14 @@ export function AgentEditor({
       ) : agents.isError ? (
         <Alert variant="destructive">
           <TriangleAlertIcon />
-          <AlertTitle>Couldn't open this agent</AlertTitle>
+          <AlertTitle>{t("agentEditor.openError")}</AlertTitle>
           <AlertDescription>{agents.error.message}</AlertDescription>
         </Alert>
       ) : id !== undefined && !agent ? (
         <Alert variant="destructive">
           <TriangleAlertIcon />
-          <AlertTitle>This agent no longer exists</AlertTitle>
-          <AlertDescription>It may have been deleted. Go back to see your agents.</AlertDescription>
+          <AlertTitle>{t("agentEditor.notFound.title")}</AlertTitle>
+          <AlertDescription>{t("agentEditor.notFound.description")}</AlertDescription>
         </Alert>
       ) : (
         <AgentForm

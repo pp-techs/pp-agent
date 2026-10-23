@@ -10,6 +10,7 @@ import {
 import { cn } from "cn";
 
 import { Button } from "@workspace/ui/components/button";
+import { useUiLabels } from "@workspace/ui/components/ui-labels";
 import { ArrowDownIcon } from "lucide-react";
 
 function MessageScrollerProvider(
@@ -88,9 +89,14 @@ function MessageScrollerButton({
   render,
   variant = "secondary",
   size = "icon-sm",
+  label,
   ...props
 }: React.ComponentProps<typeof MessageScrollerPrimitive.Button> &
-  Pick<React.ComponentProps<typeof Button>, "variant" | "size">) {
+  Pick<React.ComponentProps<typeof Button>, "variant" | "size"> & {
+    /** Screen-reader text of the default button; overrides the provided labels. */
+    label?: string;
+  }) {
+  const labels = useUiLabels();
   return (
     <MessageScrollerPrimitive.Button
       data-slot="message-scroller-button"
@@ -109,7 +115,7 @@ function MessageScrollerButton({
         <>
           <ArrowDownIcon />
           <span className="sr-only">
-            {direction === "end" ? "Scroll to end" : "Scroll to start"}
+            {label ?? (direction === "end" ? labels.scrollToEnd : labels.scrollToStart)}
           </span>
         </>
       )}

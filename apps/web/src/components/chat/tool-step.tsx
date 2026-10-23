@@ -31,6 +31,8 @@ import {
   ShieldQuestionIcon,
   WrenchIcon,
 } from "lucide-react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 
 type ToolPart = Extract<ChatPart, { type: "tool" }>;
 
@@ -51,52 +53,50 @@ function stringArg(args: Record<string, unknown>, key: string) {
   return typeof value === "string" ? value : undefined;
 }
 
-/** Verb forms per tool: in progress, finished, and not done (declined or failed). */
-const VERBS: Record<string, [string, string, string]> = {
-  read: ["Reading", "Read", "Read"],
-  read_document: ["Reading", "Read", "Read"],
-  ls: ["Looking in", "Looked in", "Look in"],
-  find: ["Finding files matching", "Found files matching", "Find files matching"],
-  grep: ["Searching for", "Searched for", "Search for"],
-  write: ["Saving", "Saved", "Save"],
-  current_datetime: ["Checking", "Checked", "Check"],
-  codemode: ["Running", "Ran", "Run"],
-  tool_search: ["Looking for", "Looked for", "Look for"],
-};
+type StepState = "active" | "done" | "notDone";
 
 /** Plain-language step titles for people who do not know what `grep` is. */
-function stepTitle(part: ToolPart) {
-  const [active, done, notDone] = VERBS[part.name] ?? ["Using", "Used", "Use"];
-  const verb =
+function stepTitle(part: ToolPart, t: TFunction<"chat">) {
+  // In progress, finished, or not done (declined or failed).
+  const state: StepState =
     part.status === "running" || part.status === "awaiting-approval"
-      ? active
+      ? "active"
       : part.status === "done"
-        ? done
-        : notDone;
+        ? "done"
+        : "notDone";
   // Attached files are stored as attachments/<timestamp>-<name>; show the name the person picked.
   const path = stringArg(part.args, "path")?.replace(/\b(attachments\/)\d{8}-\d{6}-\d{3}-/, "$1");
   const pattern = stringArg(part.args, "pattern");
   switch (part.name) {
     case "read":
     case "read_document":
+      return t(`toolStep.titles.read.${state}`, { target: path ?? t("toolStep.fallbacks.file") });
     case "write":
-      return `${verb} ${path ?? "a file"}`;
+      return t(`toolStep.titles.write.${state}`, { target: path ?? t("toolStep.fallbacks.file") });
     case "ls":
-      return `${verb} ${path ?? "the workspace"}`;
+      return t(`toolStep.titles.ls.${state}`, {
+        target: path ?? t("toolStep.fallbacks.workspace"),
+      });
     case "find":
-      return `${verb} ${pattern ?? "a pattern"}`;
+      return t(`toolStep.titles.find.${state}`, {
+        target: pattern ?? t("toolStep.fallbacks.pattern"),
+      });
     case "grep":
-      return `${verb} “${pattern ?? "text"}”`;
+      return t(`toolStep.titles.grep.${state}`, {
+        target: pattern ?? t("toolStep.fallbacks.text"),
+      });
     case "current_datetime":
-      return `${verb} the date and time`;
+      return t(`toolStep.titles.currentDatetime.${state}`);
     case "codemode":
-      return `${verb} a script`;
+      return t(`toolStep.titles.codemode.${state}`);
     case "tool_search":
-      return `${verb} the right tool`;
+      return t(`toolStep.titles.toolSearch.${state}`);
   }
   // MCP tools are named mcp__<server>__<tool>.
   const mcp = /^mcp__(.+?)__(.+)$/.exec(part.name);
-  return mcp ? `${verb} “${mcp[2]}” in ${mcp[1]}` : `${verb} ${part.name}`;
+  return mcp
+    ? t(`toolStep.titles.mcp.${state}`, { tool: mcp[2], server: mcp[1] })
+    : t(`toolStep.titles.other.${state}`, { name: part.name });
 }
 
 function ApprovalCard({
@@ -108,16 +108,15 @@ function ApprovalCard({
   onRespond: (requestId: string, approved: boolean) => void;
   responding: boolean;
 }) {
+  const { t } = useTranslation("chat");
   return (
     <Item variant="outline" size="sm" className="w-full">
       <ItemMedia variant="icon">
         <ShieldQuestionIcon />
       </ItemMedia>
       <ItemContent className="min-w-0">
-        <ItemTitle>{approval.title}?</ItemTitle>
-        <ItemDescription>
-          The agent wants to make a change. Review it before it happens.
-        </ItemDescription>
+        <ItemTitle>{t("toolStep.approval.question", { title: approval.title })}</ItemTitle>
+        <ItemDescription>{t("toolStep.approval.description")}</ItemDescription>
         {approval.detail && (
           <CodeBlock size="sm" className="mt-2">
             <CodeBlockContent wrap className="max-h-48">
@@ -133,10 +132,10 @@ function ApprovalCard({
           disabled={responding}
           onClick={() => onRespond(approval.requestId, false)}
         >
-          Deny
+          {t("toolStep.approval.deny")}
         </Button>
         <Button size="sm" disabled={responding} onClick={() => onRespond(approval.requestId, true)}>
-          Approve
+          {t("toolStep.approval.approve")}
         </Button>
       </ItemActions>
     </Item>
@@ -155,6 +154,7 @@ export function ToolStep({
   onRespond: (requestId: string, approved: boolean) => void;
   responding: boolean;
 }) {
+  const { t } = useTranslation("chat");
   const Icon = ICONS[part.name] ?? (part.name.startsWith("mcp__") ? BlocksIcon : WrenchIcon);
   const cards = approvals.map((approval) => (
     <ApprovalCard
@@ -173,9 +173,9 @@ export function ToolStep({
   const line = (
     <TraceLine status={status}>
       <TraceIcon>{part.status === "denied" ? <BanIcon /> : <Icon />}</TraceIcon>
-      <TraceTitle>{stepTitle(part)}</TraceTitle>
-      {part.status === "denied" && <TraceDescription>Declined</TraceDescription>}
-      {part.status === "error" && <TraceDescription>Failed</TraceDescription>}
+      <TraceTitle>{stepTitle(part, t)}</TraceTitle>
+      {part.status === "denied" && <TraceDescription>{t("toolStep.declined")}</TraceDescription>}
+      {part.status === "error" && <TraceDescription>{t("toolStep.failed")}</TraceDescription>}
     </TraceLine>
   );
 

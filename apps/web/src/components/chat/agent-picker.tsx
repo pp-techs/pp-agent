@@ -13,6 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@workspace/ui/component
 import { Spinner } from "@workspace/ui/components/spinner";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDownIcon, SettingsIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { SettingsModal } from "@/components/modals/settings-modal";
@@ -26,6 +27,7 @@ export function AgentPicker({ bridge, disabled }: { bridge: DesktopBridge; disab
   const agents = useQuery(agentsQuery(bridge));
   const { setAgent } = useAgentCommands(bridge);
   const [open, setOpen] = React.useState(false);
+  const { t } = useTranslation("chat");
   const currentId = current?.id ?? DEFAULT_AGENT_ID;
 
   const openSettings = () => {
@@ -42,7 +44,7 @@ export function AgentPicker({ bridge, disabled }: { bridge: DesktopBridge; disab
             variant="ghost"
             className="max-w-72 min-w-0 font-heading font-medium"
             disabled={disabled || running}
-            title={running ? "Wait for the answer to finish" : "Change agent"}
+            title={running ? t("waitForAnswer") : t("agentPicker.change")}
           />
         }
       >
@@ -56,7 +58,7 @@ export function AgentPicker({ bridge, disabled }: { bridge: DesktopBridge; disab
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 gap-0 p-0">
         <Command>
-          <CommandInput placeholder="Search agents" />
+          <CommandInput placeholder={t("agentPicker.search")} />
           <CommandList>
             {agents.isPending ? (
               <div className="flex justify-center py-6">
@@ -64,7 +66,7 @@ export function AgentPicker({ bridge, disabled }: { bridge: DesktopBridge; disab
               </div>
             ) : (
               <CommandEmpty>
-                {agents.isError ? agents.error.message : "No agents match."}
+                {agents.isError ? agents.error.message : t("agentPicker.noMatch")}
               </CommandEmpty>
             )}
             {agents.data?.map((agent) => (
@@ -97,7 +99,7 @@ export function AgentPicker({ bridge, disabled }: { bridge: DesktopBridge; disab
         <div className="border-t p-1">
           <Button variant="ghost" size="sm" className="w-full justify-start" onClick={openSettings}>
             <SettingsIcon data-icon="inline-start" />
-            Manage agents…
+            {t("agentPicker.manage")}
           </Button>
         </div>
       </PopoverContent>

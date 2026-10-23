@@ -118,6 +118,7 @@ describe("shell policy", () => {
     disabledSkills: [],
     activeAgentId: "default",
     thinkingLevel: "off",
+    language: "system",
     ...overrides,
   });
 

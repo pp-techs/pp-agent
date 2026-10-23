@@ -13,6 +13,7 @@ import {
 } from "@workspace/ui/components/dropdown-menu";
 import { InputGroupButton } from "@workspace/ui/components/input-group";
 import { PaperclipIcon, PlusIcon, SettingsIcon, SparklesIcon, TerminalIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { SettingsModal } from "@/components/modals/settings-modal";
 import { type SlashItem, slashText } from "@/lib/slash-commands";
@@ -33,15 +34,17 @@ export function ComposerMenu({
   onAttach: () => void;
   onPick: (item: SlashItem) => void;
 }) {
+  const { t } = useTranslation("chat");
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
           <InputGroupButton
             type="button"
-            variant="outline"
+            variant="ghost"
             size="icon-sm"
-            aria-label="Add files, skills, and commands"
+            className="size-9 rounded-full text-foreground outline-none focus-visible:ring-0 [&_svg:not([class*='size-'])]:size-5"
+            aria-label={t("composerMenu.add")}
             disabled={disabled}
           />
         }
@@ -51,19 +54,19 @@ export function ComposerMenu({
       <DropdownMenuContent align="start" side="top" className="w-60">
         <DropdownMenuItem onClick={onAttach}>
           <PaperclipIcon />
-          Attach files…
+          {t("composerMenu.attach")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <SparklesIcon />
-            Skills
+            {t("composerMenu.skills")}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="max-h-80 w-72 overflow-y-auto">
             <DropdownMenuGroup>
-              <DropdownMenuLabel>Use a skill in this message</DropdownMenuLabel>
+              <DropdownMenuLabel>{t("composerMenu.skillsHeading")}</DropdownMenuLabel>
               {skills.length === 0 && (
-                <DropdownMenuItem disabled>No skills for this agent</DropdownMenuItem>
+                <DropdownMenuItem disabled>{t("composerMenu.noSkills")}</DropdownMenuItem>
               )}
               {skills.map((skill) => (
                 <DropdownMenuItem key={skill.name} onClick={() => onPick(skill)}>
@@ -81,14 +84,14 @@ export function ComposerMenu({
               onClick={() => void SettingsModal.show({ bridge, section: "skills" })}
             >
               <SettingsIcon />
-              Manage skills…
+              {t("composerMenu.manageSkills")}
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <TerminalIcon />
-            Commands
+            {t("composerMenu.commands")}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-72">
             {commands.map((command) => (

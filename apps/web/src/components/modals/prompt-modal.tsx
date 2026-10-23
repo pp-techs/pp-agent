@@ -1,5 +1,6 @@
 import * as React from "react";
 import { createModal } from "@buiducnhat/better-modal";
+import { useTranslation } from "react-i18next";
 import { Button } from "@workspace/ui/components/button";
 import {
   Dialog,
@@ -24,6 +25,7 @@ function PromptForm({
   confirmLabel,
   onDone,
 }: PromptModalProps & { onDone: (value: string | null) => void }) {
+  const { t } = useTranslation("common");
   const [value, setValue] = React.useState(initialValue);
   return (
     <form
@@ -44,7 +46,7 @@ function PromptForm({
       />
       <DialogFooter>
         <Button type="button" variant="outline" onClick={() => onDone(null)}>
-          Cancel
+          {t("actions.cancel")}
         </Button>
         <Button type="submit" disabled={!value.trim()}>
           {confirmLabel}

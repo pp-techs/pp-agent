@@ -85,7 +85,7 @@ export const workspacesQuery = (bridge: DesktopBridge) =>
 export function useUpdateSettings(bridge: DesktopBridge) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (patch: Partial<Pick<AppSettings, "defaultModel" | "shellEnabled">>) =>
+    mutationFn: (patch: Partial<Pick<AppSettings, "defaultModel" | "shellEnabled" | "language">>) =>
       bridge.agent.command({ type: "update_settings", patch }),
     onSuccess: (settings) => queryClient.setQueryData(queryKeys.settings, settings),
   });

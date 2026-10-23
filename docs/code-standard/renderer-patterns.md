@@ -56,4 +56,4 @@ Define with `createModal<Props, Result>("id", ({ modal, … }) => <Dialog open={
 
 ## UI copy
 
-Users are non-developers. Write plain English: "Choose the workspace folder", "Wait for the answer to finish." Avoid jargon (JSON, IPC, token, stack trace) in labels and errors; explain what the person can do next.
+Users are non-developers. Write plain English: "Choose the workspace folder", "Wait for the answer to finish." Avoid jargon (JSON, IPC, token, stack trace) in labels and errors; explain what the person can do next. Every text goes through i18next (see [i18n.md](i18n.md)): add the key to the English and Vietnamese files, never hard-code a string.

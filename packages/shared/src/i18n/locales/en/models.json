@@ -1,0 +1,115 @@
+{
+  "section": {
+    "title": "Models",
+    "description": "Connect AI providers with an API key, or add your team's own gateway.",
+    "connected": {
+      "heading": "Connected",
+      "emptyTitle": "No providers connected",
+      "emptyDescription": "Connect one below, or add a custom gateway, to start chatting."
+    },
+    "gateways": {
+      "heading": "Custom gateways",
+      "add": "Add gateway",
+      "hint": "A gateway is an OpenAI- or Anthropic-compatible address your team runs or buys."
+    },
+    "available": {
+      "heading": "Available providers",
+      "search": "Search providers",
+      "noMatch": "No providers match.",
+      "allConnected": "Every provider is connected."
+    }
+  },
+  "modelCount_one": "{{count}} model",
+  "modelCount_other": "{{count}} models",
+  "apiTypes": {
+    "openaiCompletions": "OpenAI-compatible (Chat Completions)",
+    "openaiResponses": "OpenAI Responses",
+    "anthropicMessages": "Anthropic Messages"
+  },
+  "providerRow": {
+    "gatewayBadge": "Gateway",
+    "connect": "Connect",
+    "changeKey": "Change key",
+    "disconnect": "Disconnect",
+    "connectedToast": "{{name}} connected",
+    "disconnectedToast": "{{name}} disconnected",
+    "disconnectTitle": "Disconnect {{name}}?",
+    "disconnectDescription": "Its saved key is removed from this computer. Chats that use its models will switch to another model.",
+    "authSource": {
+      "connected": "Connected",
+      "savedKey": "Saved key",
+      "environmentVariable": "Environment variable"
+    }
+  },
+  "modelRow": {
+    "displayName": {
+      "label": "Display name of {{id}}",
+      "hint": "Display name. Blank: the name the gateway or Pi knows, else a tidied id."
+    },
+    "contextWindow": {
+      "label": "Context window of {{id}}, in tokens",
+      "hint": "Context window in tokens. Blank: the model's known size, else 128000.",
+      "placeholder": "auto"
+    },
+    "images": "Accepts images",
+    "reasoning": {
+      "label": "Reasoning model",
+      "hint": "Reasoning model (thinks before answering)"
+    },
+    "remove": "Remove {{id}}"
+  },
+  "fetchedModels": {
+    "selectedCount": "{{selected}} of {{total}} selected",
+    "selectedCountShown": "{{selected}} of {{total}} selected · {{shown}} shown",
+    "selectAll": "Select all",
+    "selectAllShown": "Select all shown",
+    "clear": "Clear",
+    "clearShown": "Clear shown",
+    "search": "Search the gateway's models",
+    "noMatch": "No models match."
+  },
+  "gatewayForm": {
+    "titleAdd": "Add a gateway",
+    "titleEdit": "Edit {{name}}",
+    "saved": "{{name}} saved",
+    "noModelsListed": "The gateway didn't list any models. Add them by name.",
+    "name": {
+      "label": "Name",
+      "placeholder": "Company gateway",
+      "description": "Shown in the model list."
+    },
+    "apiType": {
+      "label": "API type",
+      "description": "Most gateways are OpenAI-compatible. Ask your tech team."
+    },
+    "url": {
+      "label": "Gateway URL",
+      "invalid": "Enter a web address starting with https:// or http://",
+      "description": "The address your team uses for AI requests."
+    },
+    "apiKey": {
+      "label": "API key",
+      "placeholderSaved": "Saved. Leave blank to keep it.",
+      "placeholderNew": "Paste your key",
+      "description": "Stored encrypted in your system keychain."
+    },
+    "models": {
+      "legend": "Models",
+      "description": "Load the gateway's list, or add models by name.",
+      "load": "Load from gateway",
+      "loadError": "Couldn't load models: {{message}}",
+      "manualLabel": "Model name",
+      "manualPlaceholder": "Or type a model name, like gpt-4o",
+      "atLeastOne": "Add at least one model.",
+      "duplicateNames": "Several models share the name {{names}}. The model list adds the model id to tell them apart; give them different names to avoid that."
+    }
+  },
+  "gatewayRow": {
+    "keySaved": "Key saved",
+    "noKey": "No key",
+    "delete": "Delete {{name}}",
+    "deleteTitle": "Delete {{name}}?",
+    "deleteDescription": "The gateway and its saved key are removed from this computer. Chats that use its models will switch to another model.",
+    "deleted": "{{name}} deleted"
+  }
+}

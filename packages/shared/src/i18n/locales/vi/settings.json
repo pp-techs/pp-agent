@@ -1,0 +1,54 @@
+{
+  "modal": {
+    "title": "Cài đặt",
+    "description": "Các mô hình, Agent, công cụ, kỹ năng và kết nối mà PP Agent sử dụng.",
+    "sidebarLabel": "Các mục Cài đặt",
+    "breadcrumbLabel": "Đường dẫn",
+    "breadcrumbRoot": "Cài đặt",
+    "sections": {
+      "general": "Chung",
+      "models": "Mô hình",
+      "workspaces": "Không gian làm việc",
+      "agents": "Agent",
+      "tools": "Công cụ",
+      "skills": "Kỹ năng",
+      "mcp": "Máy chủ MCP"
+    }
+  },
+  "general": {
+    "title": "Chung",
+    "description": "Ngôn ngữ, không gian làm việc, giao diện, mô hình mặc định và cập nhật.",
+    "language": {
+      "title": "Ngôn ngữ",
+      "description": "Ngôn ngữ được dùng trong toàn bộ ứng dụng.",
+      "options": {
+        "system": "Theo hệ thống"
+      }
+    },
+    "workspaceFolder": {
+      "title": "Thư mục không gian làm việc (Agent hiện tại)",
+      "unavailable": "Chưa có",
+      "open": "Mở thư mục"
+    },
+    "theme": {
+      "title": "Giao diện",
+      "description": "Theo hệ thống, hoặc luôn dùng giao diện sáng hoặc tối.",
+      "options": {
+        "system": "Hệ thống",
+        "light": "Sáng",
+        "dark": "Tối"
+      }
+    },
+    "defaultModel": {
+      "label": "Mô hình mặc định",
+      "firstAvailable": "Mô hình khả dụng đầu tiên",
+      "notAvailable": "{{modelId}} (không khả dụng)",
+      "emptyHint": "Hãy kết nối một nhà cung cấp trong mục Mô hình để chọn mô hình mặc định.",
+      "hint": "Dùng cho các cuộc trò chuyện mới. Bạn có thể đổi mô hình trong bất kỳ cuộc trò chuyện nào ở bên dưới ô nhập tin nhắn."
+    },
+    "updates": {
+      "title": "Cập nhật",
+      "check": "Kiểm tra cập nhật"
+    }
+  }
+}

@@ -2,6 +2,7 @@ import { copyFile, mkdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { resizeImage } from "@earendil-works/pi-coding-agent";
 import { ATTACHMENTS_DIR, type Attachment } from "@workspace/shared";
+import { t } from "./i18n.ts";
 
 interface ImageContent {
   type: "image";
@@ -58,7 +59,8 @@ export async function buildPrompt(
       });
       continue;
     }
-    if (!attachment.path) throw new Error(`${attachment.name} has no file to copy.`);
+    if (!attachment.path)
+      throw new Error(t("conversations.attachmentNoFile", { name: attachment.name }));
     const relative = `${ATTACHMENTS_DIR}/${stamp}-${basename(attachment.name)}`;
     await mkdir(join(workspaceDir, ATTACHMENTS_DIR), { recursive: true });
     await copyFile(attachment.path, join(workspaceDir, relative));

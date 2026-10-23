@@ -19,6 +19,7 @@ import {
   TraceTitle,
 } from "@workspace/ui/components/trace";
 import { BrainIcon, CircleAlertIcon, FileTextIcon, SparklesIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Markdown } from "@/components/markdown";
 import { ToolStep } from "@/components/chat/tool-step";
@@ -43,6 +44,7 @@ function toBlocks(parts: ChatPart[]): Block[] {
 
 function ThinkingStep({ text, running }: { text: string; running: boolean }) {
   const [open, setOpen] = React.useState<boolean>();
+  const { t } = useTranslation("chat");
   return (
     <TraceCollapsible open={open ?? running} onOpenChange={setOpen}>
       <TraceCollapsibleTrigger>
@@ -50,7 +52,7 @@ function ThinkingStep({ text, running }: { text: string; running: boolean }) {
           <TraceIcon>
             <BrainIcon />
           </TraceIcon>
-          <TraceTitle>{running ? "Thinking" : "Thought"}</TraceTitle>
+          <TraceTitle>{running ? t("message.thinking") : t("message.thought")}</TraceTitle>
         </TraceLine>
       </TraceCollapsibleTrigger>
       <TraceCollapsibleContent className="whitespace-pre-wrap">{text}</TraceCollapsibleContent>
@@ -66,6 +68,7 @@ function UserMessage({ parts }: { parts: ChatPart[] }) {
   const images = parts.filter((part) => part.type === "image");
   const files = parts.filter((part) => part.type === "file");
   const skills = parts.filter((part) => part.type === "skill");
+  const { t } = useTranslation("chat");
   return (
     <Message align="end">
       <MessageContent>
@@ -74,7 +77,7 @@ function UserMessage({ parts }: { parts: ChatPart[] }) {
             {skills.map((skill, index) => (
               <Badge key={index} variant="secondary">
                 <SparklesIcon data-icon="inline-start" />
-                Skill: {skill.name}
+                {t("message.skill", { name: skill.name })}
               </Badge>
             ))}
           </div>
@@ -85,7 +88,7 @@ function UserMessage({ parts }: { parts: ChatPart[] }) {
               <img
                 key={index}
                 src={`data:${image.mimeType};base64,${image.data}`}
-                alt="Attached image"
+                alt={t("message.attachedImage")}
                 className="max-h-48 max-w-64 rounded-xl border object-cover"
               />
             ))}

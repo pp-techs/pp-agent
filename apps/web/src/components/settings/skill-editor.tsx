@@ -16,6 +16,8 @@ import { Spinner } from "@workspace/ui/components/spinner";
 import { Switch } from "@workspace/ui/components/switch";
 import { Textarea } from "@workspace/ui/components/textarea";
 import { useQuery } from "@tanstack/react-query";
+import type { TFunction } from "i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { ArrowLeftIcon, FileIcon, FolderOpenIcon, TriangleAlertIcon } from "lucide-react";
 import { toast } from "sonner";
 
@@ -25,22 +27,18 @@ import { skillQuery, useSaveSkill } from "@/lib/extension-queries";
 const NAME_MAX = 64;
 const DESCRIPTION_MAX = 1024;
 
-const BODY_PLACEHOLDER = `# Weekly sales summary
-
-1. Read the sales export the person points to.
-2. Group the totals by region and by product.
-3. Write a short summary with the three biggest changes since last week.`;
-
-function nameError(name: string) {
-  if (!name) return "Give the skill a name.";
-  if (name.length > NAME_MAX) return `Use at most ${NAME_MAX} characters.`;
-  if (!/^[a-z0-9-]+$/.test(name)) return "Use only lowercase letters, digits, and hyphens (-).";
+function nameError(name: string, t: TFunction<"extensions">) {
+  if (!name) return t("skillEditor.validation.nameRequired");
+  if (name.length > NAME_MAX) return t("skillEditor.validation.tooLong", { max: NAME_MAX });
+  if (!/^[a-z0-9-]+$/.test(name)) return t("skillEditor.validation.nameFormat");
   return null;
 }
 
-function descriptionError(description: string) {
-  if (!description) return "Describe what the skill does and when to use it.";
-  if (description.length > DESCRIPTION_MAX) return `Use at most ${DESCRIPTION_MAX} characters.`;
+function descriptionError(description: string, t: TFunction<"extensions">) {
+  if (!description) return t("skillEditor.validation.descriptionRequired");
+  if (description.length > DESCRIPTION_MAX) {
+    return t("skillEditor.validation.tooLong", { max: DESCRIPTION_MAX });
+  }
   return null;
 }
 
@@ -53,6 +51,7 @@ function SkillForm({
   detail?: SkillDetail;
   onDone: () => void;
 }) {
+  const { t } = useTranslation(["extensions", "common"]);
   const [name, setName] = React.useState(detail?.name ?? "");
   const [description, setDescription] = React.useState(detail?.description ?? "");
   const [modelInvocable, setModelInvocable] = React.useState(detail?.modelInvocable ?? true);
@@ -63,8 +62,8 @@ function SkillForm({
   const trimmedName = name.trim();
   const trimmedDescription = description.trim();
   const errors = {
-    name: nameError(trimmedName),
-    description: descriptionError(trimmedDescription),
+    name: nameError(trimmedName, t),
+    description: descriptionError(trimmedDescription, t),
   };
   const valid = !errors.name && !errors.description;
 
@@ -82,7 +81,7 @@ function SkillForm({
       },
       {
         onSuccess: (skill) => {
-          toast.success(`Skill “${skill.name}” saved`);
+          toast.success(t("skillEditor.saved", { name: skill.name }));
           onDone();
         },
       },
@@ -93,13 +92,13 @@ function SkillForm({
     <form onSubmit={onSubmit} className="flex flex-col gap-6">
       <FieldGroup>
         <Field data-invalid={touched && Boolean(errors.name)}>
-          <FieldLabel htmlFor="skill-name">Name</FieldLabel>
+          <FieldLabel htmlFor="skill-name">{t("skillEditor.fields.name.label")}</FieldLabel>
           <Input
             id="skill-name"
             value={name}
             // Lowercase and hyphenate as people type ("Sales Report" → "sales-report").
             onChange={(event) => setName(event.target.value.toLowerCase().replace(/\s+/g, "-"))}
-            placeholder="weekly-sales-summary"
+            placeholder={t("skillEditor.fields.name.placeholder")}
             maxLength={NAME_MAX}
             autoComplete="off"
             spellCheck={false}
@@ -110,18 +109,24 @@ function SkillForm({
             <FieldError>{errors.name}</FieldError>
           ) : (
             <FieldDescription>
-              Lowercase letters, digits, and hyphens. Use it in a chat by typing{" "}
-              <Kbd className="font-mono">/skill:{trimmedName || "name"}</Kbd>.
+              <Trans
+                t={t}
+                i18nKey="skillEditor.fields.name.hint"
+                values={{ name: trimmedName || t("skillEditor.nameFallback") }}
+                components={{ kbd: <Kbd className="font-mono" /> }}
+              />
             </FieldDescription>
           )}
         </Field>
         <Field data-invalid={touched && Boolean(errors.description)}>
-          <FieldLabel htmlFor="skill-description">Description</FieldLabel>
+          <FieldLabel htmlFor="skill-description">
+            {t("skillEditor.fields.description.label")}
+          </FieldLabel>
           <Textarea
             id="skill-description"
             value={description}
             onChange={(event) => setDescription(event.target.value)}
-            placeholder="Summarises a weekly sales export by region and product. Use when someone asks for a sales summary or weekly numbers."
+            placeholder={t("skillEditor.fields.description.placeholder")}
             maxLength={DESCRIPTION_MAX}
             aria-invalid={touched && Boolean(errors.description)}
             className="min-h-20"
@@ -130,37 +135,39 @@ function SkillForm({
             <FieldError>{errors.description}</FieldError>
           ) : (
             <FieldDescription>
-              Say what it does and when to use it. The agent reads this to decide when the skill
-              fits. {description.length}/{DESCRIPTION_MAX}
+              {t("skillEditor.fields.description.hint", {
+                current: description.length,
+                max: DESCRIPTION_MAX,
+              })}
             </FieldDescription>
           )}
         </Field>
         <Field orientation="horizontal">
           <FieldContent>
-            <FieldLabel htmlFor="skill-auto">Let the agent use this automatically</FieldLabel>
+            <FieldLabel htmlFor="skill-auto">{t("skillEditor.fields.auto.label")}</FieldLabel>
             <FieldDescription>
-              When off, the skill only runs when someone types /skill:{trimmedName || "name"}.
+              {t("skillEditor.fields.auto.description", {
+                name: trimmedName || t("skillEditor.nameFallback"),
+              })}
             </FieldDescription>
           </FieldContent>
           <Switch id="skill-auto" checked={modelInvocable} onCheckedChange={setModelInvocable} />
         </Field>
         <Field>
-          <FieldLabel htmlFor="skill-body">Instructions</FieldLabel>
+          <FieldLabel htmlFor="skill-body">{t("skillEditor.fields.body.label")}</FieldLabel>
           <Textarea
             id="skill-body"
             value={body}
             onChange={(event) => setBody(event.target.value)}
-            placeholder={BODY_PLACEHOLDER}
+            placeholder={t("skillEditor.fields.body.placeholder")}
             spellCheck={false}
             className="min-h-80 resize-y font-mono text-xs md:text-xs"
           />
-          <FieldDescription>
-            Step-by-step instructions for the agent, written in Markdown.
-          </FieldDescription>
+          <FieldDescription>{t("skillEditor.fields.body.hint")}</FieldDescription>
         </Field>
         {detail && detail.files.length > 0 && (
           <Field>
-            <FieldLabel>Other files in this skill</FieldLabel>
+            <FieldLabel>{t("skillEditor.fields.files.label")}</FieldLabel>
             <ul className="flex flex-col gap-1 rounded-xl bg-muted/50 p-3">
               {detail.files.map((file) => (
                 <li key={file} className="flex items-center gap-2 font-mono text-xs">
@@ -170,8 +177,7 @@ function SkillForm({
               ))}
             </ul>
             <FieldDescription className="flex flex-wrap items-center gap-2">
-              The agent can open these when it follows the instructions. Change them in the skill
-              folder.
+              {t("skillEditor.fields.files.hint")}
               <Button
                 type="button"
                 variant="outline"
@@ -183,7 +189,7 @@ function SkillForm({
                 }
               >
                 <FolderOpenIcon />
-                Show in folder
+                {t("showInFolder")}
               </Button>
             </FieldDescription>
           </Field>
@@ -191,11 +197,11 @@ function SkillForm({
       </FieldGroup>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onDone}>
-          Cancel
+          {t("common:actions.cancel")}
         </Button>
         <Button type="submit" disabled={save.isPending || (touched && !valid)}>
           {save.isPending && <Spinner />}
-          {detail ? "Save changes" : "Create skill"}
+          {detail ? t("saveChanges") : t("skillEditor.createSkill")}
         </Button>
       </div>
     </form>
@@ -212,22 +218,21 @@ export function SkillEditor({
   name?: string;
   onDone: () => void;
 }) {
+  const { t } = useTranslation(["extensions", "common"]);
   const detail = useQuery({ ...skillQuery(bridge, name ?? ""), enabled: name !== undefined });
-  useSettingsSubPage(name ?? "New skill");
+  useSettingsSubPage(name ?? t("skills.newSkill"));
 
   return (
     <div className="flex flex-col gap-6">
       <header className="flex items-start gap-2">
-        <Button variant="ghost" size="icon-sm" aria-label="Back to skills" onClick={onDone}>
+        <Button variant="ghost" size="icon-sm" aria-label={t("skillEditor.back")} onClick={onDone}>
           <ArrowLeftIcon />
         </Button>
         <div className="flex min-w-0 flex-col gap-1">
           <h2 className="font-heading text-base font-medium">
-            {name ? `Edit “${name}”` : "New skill"}
+            {name ? t("skillEditor.editTitle", { name }) : t("skills.newSkill")}
           </h2>
-          <p className="text-sm text-muted-foreground">
-            A skill is a set of instructions the agent follows for a specific kind of task.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("skillEditor.intro")}</p>
         </div>
       </header>
       {name === undefined ? (
@@ -237,7 +242,7 @@ export function SkillEditor({
       ) : detail.isError ? (
         <Alert variant="destructive">
           <TriangleAlertIcon />
-          <AlertTitle>Couldn't open this skill</AlertTitle>
+          <AlertTitle>{t("skillEditor.openError")}</AlertTitle>
           <AlertDescription>{detail.error.message}</AlertDescription>
         </Alert>
       ) : (

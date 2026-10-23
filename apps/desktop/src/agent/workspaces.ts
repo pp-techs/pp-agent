@@ -16,6 +16,7 @@ import {
   type WorkspaceSummary,
 } from "@workspace/shared";
 import { modelRef } from "./agents.ts";
+import { t } from "./i18n.ts";
 
 const MAX_NAME_LENGTH = 60;
 const MAX_ICON_LENGTH = 8;
@@ -100,14 +101,14 @@ function thinkingLevel(value: unknown): ThinkingLevel | null {
  */
 function editableFields(value: Loose, strict: boolean): EditableFields {
   const name = text(value.name);
-  if (!name) throw new Error("Enter a name for the workspace.");
+  if (!name) throw new Error(t("workspaces.nameRequired"));
   if (strict && name.length > MAX_NAME_LENGTH)
-    throw new Error(`The name can be at most ${MAX_NAME_LENGTH} characters.`);
+    throw new Error(t("limits.nameTooLong", { max: MAX_NAME_LENGTH }));
   const icon = text(value.icon);
-  if (strict && icon.length > MAX_ICON_LENGTH) throw new Error("Use a single emoji as the icon.");
+  if (strict && icon.length > MAX_ICON_LENGTH) throw new Error(t("limits.iconNotEmoji"));
   const instructions = text(value.instructions);
   if (strict && instructions.length > MAX_INSTRUCTIONS_LENGTH)
-    throw new Error(`The instructions can be at most ${MAX_INSTRUCTIONS_LENGTH} characters.`);
+    throw new Error(t("limits.instructionsTooLong", { max: MAX_INSTRUCTIONS_LENGTH }));
   const agentId = text(value.agentId);
   return {
     name: name.slice(0, MAX_NAME_LENGTH),
@@ -200,7 +201,7 @@ export function assertUniqueName(
 ): void {
   const key = name.toLocaleLowerCase();
   if (workspaces.some((item) => item.id !== exceptId && item.name.toLocaleLowerCase() === key))
-    throw new Error(`A workspace named ${name} already exists.`);
+    throw new Error(t("workspaces.nameTaken", { name }));
 }
 
 function uniqueName(workspaces: readonly WorkspaceProfile[], name: string): string {
@@ -237,18 +238,18 @@ export async function prepareFolder(
   defaultDir: string,
 ): Promise<string> {
   const trimmed = dir?.trim() ?? "";
-  if (!trimmed) throw new Error("Choose the workspace folder with “Choose…”.");
-  if (!isAbsolute(trimmed)) throw new Error("Choose the workspace folder with “Choose…”.");
+  if (!trimmed) throw new Error(t("workspaces.chooseFolder"));
+  if (!isAbsolute(trimmed)) throw new Error(t("workspaces.chooseFolder"));
   const path = resolve(trimmed);
   const owner = workspaces.find(
     (workspace) => resolve(workspaceFolder(workspace, defaultDir)) === path,
   );
-  if (owner) throw new Error(`This folder already belongs to the workspace ${owner.name}.`);
+  if (owner) throw new Error(t("workspaces.folderTaken", { name: owner.name }));
   const info = await stat(path).catch((error: NodeJS.ErrnoException) => {
     if (error.code === "ENOENT") return null;
     throw error;
   });
-  if (info && !info.isDirectory()) throw new Error("The workspace must be a folder, not a file.");
+  if (info && !info.isDirectory()) throw new Error(t("workspaces.mustBeFolder"));
   if (!info) await mkdir(path, { recursive: true });
   return path;
 }

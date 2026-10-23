@@ -2,6 +2,7 @@ import { readFile, stat, writeFile } from "node:fs/promises";
 import { basename, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import type { Attachment } from "@workspace/shared";
 import { type BrowserWindow, dialog, shell } from "electron";
+import { translator } from "./i18n.ts";
 
 /** Types the agent can use; anything else is attached as a generic file. */
 const MIME_TYPES: Record<string, string> = {
@@ -21,8 +22,9 @@ const MIME_TYPES: Record<string, string> = {
 };
 
 export async function pickFiles(window: BrowserWindow | null): Promise<Attachment[]> {
+  const t = translator();
   const options: Electron.OpenDialogOptions = {
-    title: "Attach files",
+    title: t("files.attachTitle"),
     properties: ["openFile", "multiSelections"],
   };
   const result = window
@@ -36,27 +38,26 @@ export async function pickFiles(window: BrowserWindow | null): Promise<Attachmen
   }));
 }
 
-const SKILL_ARCHIVES: Electron.FileFilter = {
-  name: "Skill archives",
-  extensions: ["zip", "skill"],
-};
+function skillArchives(): Electron.FileFilter {
+  return { name: translator()("files.skillArchives"), extensions: ["zip", "skill"] };
+}
 
 /**
  * Picks a skill folder or a .zip/.skill archive. macOS has one dialog that allows both; Windows and
  * Linux cannot mix folders and files in one dialog, so the person first chooses which to import.
  */
 export async function pickSkill(window: BrowserWindow | null): Promise<string | null> {
+  const t = translator();
   let properties: Electron.OpenDialogOptions["properties"];
   if (process.platform === "darwin") {
     properties = ["openFile", "openDirectory"];
   } else {
     const choiceOptions: Electron.MessageBoxOptions = {
       type: "question",
-      title: "Import a skill",
-      message: "What would you like to import?",
-      detail:
-        "A skill is a folder with a SKILL.md file, or a .zip or .skill file that contains one.",
-      buttons: ["Folder…", "Archive file…", "Cancel"],
+      title: t("files.importSkillTitle"),
+      message: t("files.importSkillQuestion"),
+      detail: t("files.importSkillDetail"),
+      buttons: [t("files.folderButton"), t("files.archiveButton"), t("files.cancelButton")],
       defaultId: 0,
       cancelId: 2,
     };
@@ -67,10 +68,10 @@ export async function pickSkill(window: BrowserWindow | null): Promise<string | 
     properties = response === 0 ? ["openDirectory"] : ["openFile"];
   }
   const options: Electron.OpenDialogOptions = {
-    title: "Import a skill",
-    buttonLabel: "Import",
+    title: t("files.importSkillTitle"),
+    buttonLabel: t("files.importButton"),
     properties,
-    filters: properties.includes("openFile") ? [SKILL_ARCHIVES] : undefined,
+    filters: properties.includes("openFile") ? [skillArchives()] : undefined,
   };
   const result = window
     ? await dialog.showOpenDialog(window, options)
@@ -80,9 +81,10 @@ export async function pickSkill(window: BrowserWindow | null): Promise<string | 
 
 /** Picks a folder, for an agent's workspace; the dialog can create one. */
 export async function pickFolder(window: BrowserWindow | null): Promise<string | null> {
+  const t = translator();
   const options: Electron.OpenDialogOptions = {
-    title: "Choose a workspace folder",
-    buttonLabel: "Choose",
+    title: t("files.chooseFolderTitle"),
+    buttonLabel: t("files.chooseButton"),
     properties: ["openDirectory", "createDirectory"],
   };
   const result = window
@@ -91,25 +93,28 @@ export async function pickFolder(window: BrowserWindow | null): Promise<string |
   return result.canceled ? null : (result.filePaths[0] ?? null);
 }
 
-const AGENT_FILES: Electron.FileFilter = { name: "Agent files", extensions: ["json"] };
+function agentFiles(): Electron.FileFilter {
+  return { name: translator()("files.agentFiles"), extensions: ["json"] };
+}
+
 /** Exported agents are small; anything bigger is not one. */
 const MAX_AGENT_FILE_BYTES = 1024 * 1024;
 
 /** Picks an exported agent and returns its text. */
 export async function openAgentFile(window: BrowserWindow | null): Promise<string | null> {
+  const t = translator();
   const options: Electron.OpenDialogOptions = {
-    title: "Import an agent",
-    buttonLabel: "Import",
+    title: t("files.importAgentTitle"),
+    buttonLabel: t("files.importButton"),
     properties: ["openFile"],
-    filters: [AGENT_FILES],
+    filters: [agentFiles()],
   };
   const result = window
     ? await dialog.showOpenDialog(window, options)
     : await dialog.showOpenDialog(options);
   const path = result.canceled ? undefined : result.filePaths[0];
   if (!path) return null;
-  if ((await stat(path)).size > MAX_AGENT_FILE_BYTES)
-    throw new Error("This file is too large to be an exported agent.");
+  if ((await stat(path)).size > MAX_AGENT_FILE_BYTES) throw new Error(t("files.agentTooLarge"));
   return readFile(path, "utf8");
 }
 
@@ -121,11 +126,12 @@ export async function saveAgentFile(
 ): Promise<boolean> {
   // Characters that are not allowed in file names on some systems are replaced.
   const name = suggestedName.replace(/[\\/:*?"<>|]/g, "-").trim() || "agent";
+  const t = translator();
   const options: Electron.SaveDialogOptions = {
-    title: "Export agent",
-    buttonLabel: "Export",
+    title: t("files.exportAgentTitle"),
+    buttonLabel: t("files.exportButton"),
     defaultPath: `${name}.json`,
-    filters: [AGENT_FILES],
+    filters: [agentFiles()],
   };
   const result = window
     ? await dialog.showSaveDialog(window, options)
@@ -138,7 +144,7 @@ export async function saveAgentFile(
 /** Opens an existing folder in Finder / Explorer. */
 export async function openFolder(dir: string): Promise<void> {
   const info = await stat(dir).catch(() => null);
-  if (!info?.isDirectory()) throw new Error("That folder does not exist.");
+  if (!info?.isDirectory()) throw new Error(translator()("app.folderMissing"));
   const error = await shell.openPath(dir);
   if (error) throw new Error(error);
 }

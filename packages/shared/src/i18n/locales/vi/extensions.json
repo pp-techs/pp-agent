@@ -1,0 +1,313 @@
+{
+  "showInFolder": "Hiện trong thư mục",
+  "saveChanges": "Lưu thay đổi",
+  "tools": {
+    "heading": {
+      "title": "Công cụ",
+      "description": "Chọn những việc Agent được tự làm và những việc Agent phải hỏi bạn trước."
+    },
+    "policyHelp": "<strong>Tự động</strong> cho phép các công cụ chỉ xem thông tin chạy tự do và hỏi trước khi có điều gì bị thay đổi. <strong>Tắt</strong> ẩn hoàn toàn công cụ khỏi Agent.",
+    "policy": {
+      "auto": "Tự động",
+      "ask": "Luôn hỏi",
+      "allow": "Luôn cho phép",
+      "off": "Tắt",
+      "runWithoutAsking": "Chạy không cần hỏi"
+    },
+    "policyLabel": "Khi Agent muốn dùng “{{name}}”",
+    "lockedReason": {
+      "shell": "Hãy bật “Cho phép lệnh shell” ở trên để dùng công cụ này.",
+      "default": "Luôn bật. Mỗi công cụ mà nó gọi tới sẽ được kiểm tra riêng."
+    },
+    "warnings": {
+      "shellUnrestricted": {
+        "title": "Lệnh shell chạy không cần hỏi",
+        "message": "Lệnh được chạy mà không hỏi bạn. Agent có thể thay đổi hoặc xóa tệp và gửi dữ liệu ra khỏi máy tính này."
+      }
+    },
+    "names": {
+      "read": "Đọc tệp",
+      "write": "Tạo và lưu tệp",
+      "edit": "Chỉnh sửa một phần của tệp",
+      "ls": "Liệt kê thư mục",
+      "find": "Tìm tệp theo tên",
+      "grep": "Tìm kiếm trong tệp",
+      "bash": "Chạy lệnh shell",
+      "powershell": "Chạy lệnh PowerShell",
+      "read_document": "Đọc tài liệu (Word, Excel, PDF…)",
+      "current_datetime": "Ngày và giờ hiện tại",
+      "web_search": "Tìm kiếm web",
+      "web_fetch": "Mở trang web",
+      "codemode": "Chạy tập lệnh với các công cụ đã kết nối",
+      "tool_search": "Tra cứu các công cụ đã kết nối",
+      "list_mcp_resources": "Liệt kê tài nguyên của máy chủ",
+      "list_mcp_resource_templates": "Liệt kê mẫu tài nguyên của máy chủ",
+      "read_mcp_resource": "Đọc tài nguyên của máy chủ"
+    },
+    "shell": {
+      "legend": "Lệnh shell",
+      "description": "Cho phép Agent chạy lệnh trên máy tính của bạn (Terminal trên Mac, PowerShell trên Windows).",
+      "enable": {
+        "label": "Cho phép lệnh shell",
+        "description": "Agent sẽ hỏi bạn trước mỗi lệnh, trừ khi bạn chọn “Chạy không cần hỏi” trong danh sách bên dưới. Lệnh có thể thay đổi hoặc xóa tệp, vì vậy chỉ duyệt những lệnh bạn hiểu rõ."
+      },
+      "confirm": {
+        "title": "Chạy lệnh shell không cần hỏi?",
+        "description": "Agent sẽ chạy mọi lệnh ngay lập tức mà không cho bạn xem trước. Lệnh có thể thay đổi hoặc xóa tệp và gửi dữ liệu ra khỏi máy tính này. Chỉ bật tùy chọn này nếu bạn tin tưởng Agent, mô hình và nội dung mà Agent đọc."
+      }
+    },
+    "loadError": "Không thể tải danh sách công cụ",
+    "empty": {
+      "title": "Chưa có công cụ nào",
+      "description": "Công cụ sẽ xuất hiện ở đây sau khi Agent khởi động. Hãy kết nối các hệ thống nghiệp vụ trong mục Máy chủ MCP."
+    },
+    "search": {
+      "placeholder": "Tìm công cụ",
+      "label": "Tìm công cụ"
+    },
+    "noMatch": "Không có công cụ nào khớp với “{{query}}”.",
+    "builtIn": "Có sẵn"
+  },
+  "webSearch": {
+    "legend": "Tìm kiếm web",
+    "description": "Chọn các dịch vụ tìm kiếm mà Agent có thể dùng. Agent thử lần lượt theo thứ tự và chuyển sang dịch vụ tiếp theo khi một dịch vụ lỗi. Khóa API được mã hóa và lưu trên máy tính này.",
+    "needsSetup": "Cần thiết lập",
+    "tryEarlier": "Thử {{provider}} sớm hơn",
+    "tryLater": "Thử {{provider}} muộn hơn",
+    "use": "Dùng {{provider}}",
+    "endpoint": {
+      "label": "Địa chỉ máy chủ {{provider}}",
+      "searxngPlaceholder": "Địa chỉ máy chủ, ví dụ https://search.example.com",
+      "webclawPlaceholder": "Địa chỉ máy chủ (để trống để dùng webclaw cloud)"
+    },
+    "key": {
+      "label": "Khóa API {{provider}}",
+      "saved": "Đã lưu khóa. Nhập để thay thế.",
+      "required": "Khóa API",
+      "optional": "Mã truy cập (không bắt buộc)",
+      "remove": "Xóa khóa"
+    },
+    "test": {
+      "button": "Kiểm tra",
+      "testing": "Đang kiểm tra…",
+      "saveFirst": "Hãy lưu thay đổi để kiểm tra."
+    },
+    "save": "Lưu tìm kiếm web"
+  },
+  "skills": {
+    "heading": {
+      "title": "Kỹ năng",
+      "description": "Các hướng dẫn dựng sẵn mà Agent làm theo cho từng loại công việc cụ thể."
+    },
+    "newSkill": "Kỹ năng mới",
+    "onlyWhenAsked": "Chỉ khi được yêu cầu",
+    "loadError": "Không thể tải danh sách kỹ năng",
+    "empty": {
+      "title": "Chưa có kỹ năng nào",
+      "description": "Hãy tự viết kỹ năng, hoặc nhập kỹ năng người khác chia sẻ với bạn (thư mục, tệp .zip hoặc tệp .skill)."
+    },
+    "usageHint": "Agent tự chọn kỹ năng phù hợp. Để tự dùng một kỹ năng, hãy gõ <kbd>/skill:name</kbd> trong cuộc trò chuyện, ví dụ <kbd>/skill:{{example}}</kbd>.",
+    "toast": {
+      "none": "Không tìm thấy kỹ năng nào ở đó.",
+      "added": "Đã thêm kỹ năng “{{name}}”",
+      "addedMany": "Đã thêm {{count}} kỹ năng",
+      "deleted": "Đã xóa kỹ năng “{{name}}”"
+    },
+    "row": {
+      "turnOff": "Tắt {{name}}",
+      "turnOn": "Bật {{name}}",
+      "actionsFor": "Thao tác cho {{name}}"
+    },
+    "deleteConfirm": {
+      "title": "Xóa kỹ năng này?",
+      "description": "“{{name}}” và mọi tệp trong thư mục của kỹ năng sẽ bị xóa. Bạn không thể hoàn tác thao tác này."
+    }
+  },
+  "skillEditor": {
+    "back": "Quay lại kỹ năng",
+    "editTitle": "Chỉnh sửa “{{name}}”",
+    "intro": "Kỹ năng là một bộ hướng dẫn mà Agent làm theo cho một loại công việc cụ thể.",
+    "openError": "Không thể mở kỹ năng này",
+    "nameFallback": "tên",
+    "validation": {
+      "nameRequired": "Hãy đặt tên cho kỹ năng.",
+      "tooLong": "Dùng tối đa {{max}} ký tự.",
+      "nameFormat": "Chỉ dùng chữ cái thường không dấu, chữ số và dấu gạch ngang (-).",
+      "descriptionRequired": "Hãy mô tả kỹ năng làm gì và khi nào nên dùng."
+    },
+    "fields": {
+      "name": {
+        "label": "Tên",
+        "placeholder": "tom-tat-doanh-so-tuan",
+        "hint": "Chữ cái thường không dấu, chữ số và dấu gạch ngang. Để dùng trong cuộc trò chuyện, hãy gõ <kbd>/skill:{{name}}</kbd>."
+      },
+      "description": {
+        "label": "Mô tả",
+        "placeholder": "Tóm tắt báo cáo doanh số hằng tuần theo khu vực và sản phẩm. Dùng khi ai đó cần bản tóm tắt doanh số hoặc số liệu hằng tuần.",
+        "hint": "Nêu kỹ năng làm gì và khi nào nên dùng. Agent đọc phần này để quyết định khi nào kỹ năng phù hợp. {{current}}/{{max}}"
+      },
+      "auto": {
+        "label": "Cho phép Agent tự động dùng kỹ năng này",
+        "description": "Khi tắt, kỹ năng chỉ chạy khi ai đó gõ /skill:{{name}}."
+      },
+      "body": {
+        "label": "Hướng dẫn",
+        "placeholder": "# Tóm tắt doanh số hằng tuần\n\n1. Đọc tệp doanh số mà người dùng chỉ định.\n2. Nhóm tổng số liệu theo khu vực và theo sản phẩm.\n3. Viết bản tóm tắt ngắn về ba thay đổi lớn nhất so với tuần trước.",
+        "hint": "Hướng dẫn từng bước cho Agent, viết bằng Markdown."
+      },
+      "files": {
+        "label": "Các tệp khác trong kỹ năng này",
+        "hint": "Agent có thể mở các tệp này khi làm theo hướng dẫn. Hãy thay đổi chúng trong thư mục của kỹ năng."
+      }
+    },
+    "createSkill": "Tạo kỹ năng",
+    "saved": "Đã lưu kỹ năng “{{name}}”"
+  },
+  "mcp": {
+    "heading": {
+      "title": "Máy chủ MCP",
+      "description": "Kết nối Agent với các hệ thống nghiệp vụ như CRM, hệ thống phiếu hỗ trợ hoặc cơ sở dữ liệu."
+    },
+    "states": {
+      "connected": "Đã kết nối",
+      "connecting": "Đang kết nối…",
+      "failed": "Không thể kết nối",
+      "needsAuth": "Cần đăng nhập",
+      "disabled": "Đã tắt",
+      "disconnected": "Chưa kết nối"
+    },
+    "toolCount_other": "{{count}} công cụ",
+    "checking": "Đang kiểm tra kết nối… việc này có thể mất vài giây.",
+    "checkAgain": "Kiểm tra lại kết nối",
+    "editJson": "Chỉnh sửa mcp.json",
+    "addServer": "Thêm máy chủ",
+    "backToServers": "Quay lại máy chủ MCP",
+    "configErrors": "Không thể tải một số máy chủ trong mcp.json",
+    "loadError": "Không thể tải danh sách máy chủ MCP",
+    "empty": {
+      "title": "Chưa có máy chủ nào",
+      "description": "Máy chủ MCP cung cấp cho Agent các công cụ để làm việc với hệ thống nghiệp vụ của bạn. Hãy thêm một máy chủ bằng thông tin trong hướng dẫn cài đặt của máy chủ đó, hoặc dán cấu hình từ Claude Desktop hay Cursor.",
+      "paste": "Dán cấu hình"
+    },
+    "savedIn": "Đã lưu tại",
+    "row": {
+      "signIn": "Đăng nhập",
+      "signOut": "Đăng xuất",
+      "reconnect": "Kết nối lại",
+      "turnOff": "Tắt",
+      "turnOn": "Bật",
+      "turnOffNamed": "Tắt {{name}}",
+      "turnOnNamed": "Bật {{name}}",
+      "actionsFor": "Thao tác cho {{name}}"
+    },
+    "toast": {
+      "reconnected": "Đã kết nối lại với “{{name}}”",
+      "signedIn": "Đã đăng nhập vào “{{name}}”",
+      "signedOut": "Đã đăng xuất khỏi “{{name}}”",
+      "removed": "Đã xóa “{{name}}”"
+    },
+    "signOutConfirm": {
+      "title": "Đăng xuất khỏi “{{name}}”?",
+      "description": "Agent sẽ không thể dùng máy chủ này cho đến khi bạn đăng nhập lại."
+    },
+    "removeConfirm": {
+      "title": "Xóa máy chủ này?",
+      "description": "“{{name}}” và các công cụ của máy chủ sẽ không còn khả dụng với Agent."
+    }
+  },
+  "mcpJson": {
+    "saved": "Đã lưu mcp.json",
+    "invalid": "JSON chưa hợp lệ: {{error}}",
+    "hint": "Bạn có thể dán cấu hình từ Claude Desktop hoặc Cursor vào đây: các máy chủ trong khối <code>\"mcpServers\"</code> hoạt động nguyên trạng.",
+    "intro": "Tệp liệt kê các máy chủ MCP của bạn. Dành cho thiết lập nâng cao.",
+    "openError": "Không thể mở mcp.json"
+  },
+  "mcpForm": {
+    "addTitle": "Thêm máy chủ MCP",
+    "editTitle": "Chỉnh sửa “{{name}}”",
+    "intro": "Hãy sao chép các thông tin này từ hướng dẫn cài đặt của máy chủ, hoặc hỏi nhóm kỹ thuật của bạn.",
+    "toast": {
+      "saved": "Đã lưu “{{name}}”",
+      "added": "Đã thêm “{{name}}”"
+    },
+    "validation": {
+      "nameRequired": "Hãy đặt tên cho máy chủ.",
+      "nameFormat": "Chỉ dùng chữ cái, chữ số, dấu gạch dưới (_) và dấu gạch ngang (-).",
+      "nameTaken": "Đã có máy chủ khác dùng tên này.",
+      "commandRequired": "Nhập lệnh cần chạy.",
+      "urlInvalid": "Nhập địa chỉ web bắt đầu bằng https:// hoặc http://.",
+      "timeoutInvalid": "Nhập số giây, hoặc để trống."
+    },
+    "keyValue": {
+      "name": "Tên",
+      "value": "Giá trị"
+    },
+    "fields": {
+      "name": {
+        "label": "Tên",
+        "hint": "Một tên ngắn, hiển thị bên cạnh các công cụ của máy chủ. Gồm chữ cái, chữ số, _ và -."
+      },
+      "description": {
+        "label": "Mô tả (không bắt buộc)",
+        "placeholder": "Hồ sơ khách hàng và các giao dịch",
+        "hint": "Giúp Agent hiểu máy chủ này dùng để làm gì."
+      },
+      "command": {
+        "label": "Lệnh",
+        "hint": "Chương trình khởi động máy chủ trên máy tính này."
+      },
+      "args": {
+        "label": "Tham số",
+        "hint": "Mỗi tham số một dòng."
+      },
+      "env": {
+        "label": "Biến môi trường",
+        "add": "Thêm biến",
+        "hint": "Các thiết lập mà máy chủ đọc khi khởi động, chẳng hạn mã truy cập."
+      },
+      "cwd": {
+        "label": "Thư mục làm việc (không bắt buộc)"
+      },
+      "url": {
+        "label": "URL máy chủ",
+        "hint": "Nếu máy chủ yêu cầu bạn đăng nhập, hãy để trống phần tiêu đề và dùng “Đăng nhập” sau khi lưu."
+      },
+      "headers": {
+        "label": "Tiêu đề (header)",
+        "add": "Thêm tiêu đề",
+        "hint": "Được gửi kèm mọi yêu cầu, ví dụ khóa API."
+      },
+      "exposure": {
+        "label": "Cách Agent nhìn thấy các công cụ"
+      },
+      "timeout": {
+        "label": "Thời gian chờ tối đa cho mỗi yêu cầu (giây)",
+        "placeholder": "Mặc định",
+        "hint": "Để trống trừ khi máy chủ phản hồi chậm."
+      }
+    },
+    "connect": {
+      "legend": "Cách kết nối",
+      "local": "Lệnh cục bộ",
+      "remote": "URL từ xa"
+    },
+    "exposure": {
+      "codemode": {
+        "label": "Qua tập lệnh (khuyến nghị)",
+        "description": "Agent kết hợp các công cụ của máy chủ này trong những tập lệnh nhỏ. Hiệu quả ngay cả khi có nhiều công cụ."
+      },
+      "deferred": {
+        "label": "Khi cần",
+        "description": "Agent tra cứu các công cụ của máy chủ này khi cần dùng."
+      },
+      "direct": {
+        "label": "Luôn sẵn sàng",
+        "description": "Mọi công cụ luôn được đưa cho Agent. Phù hợp nhất với máy chủ có ít công cụ."
+      },
+      "hidden": {
+        "label": "Ẩn",
+        "description": "Máy chủ vẫn được kết nối, nhưng Agent không nhìn thấy các công cụ của nó."
+      }
+    }
+  }
+}

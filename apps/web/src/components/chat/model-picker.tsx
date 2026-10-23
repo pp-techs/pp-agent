@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@workspace/ui/component
 import { Spinner } from "@workspace/ui/components/spinner";
 import { useQuery } from "@tanstack/react-query";
 import { BrainIcon, ChevronDownIcon, ImageIcon, SettingsIcon, SparklesIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { SettingsModal } from "@/components/modals/settings-modal";
@@ -29,6 +30,7 @@ export function ModelPicker({ bridge }: { bridge: DesktopBridge }) {
   const label = modelLabeler(models.data ?? []);
   const { setModel } = useAgentCommands(bridge);
   const [open, setOpen] = React.useState(false);
+  const { t } = useTranslation("chat");
 
   const openSettings = () => {
     setOpen(false);
@@ -40,7 +42,7 @@ export function ModelPicker({ bridge }: { bridge: DesktopBridge }) {
     return (
       <InputGroupButton type="button" variant="outline" size="sm" onClick={openSettings}>
         <SparklesIcon data-icon="inline-start" />
-        Choose a model
+        {t("modelPicker.choose")}
       </InputGroupButton>
     );
   }
@@ -54,12 +56,12 @@ export function ModelPicker({ bridge }: { bridge: DesktopBridge }) {
             type="button"
             variant="ghost"
             size="sm"
-            className="max-w-56 min-w-0"
+            className="h-9 max-w-56 min-w-0 rounded-full px-3 font-normal text-muted-foreground outline-none focus-visible:ring-0"
             disabled={status === "running"}
             title={
               status === "running"
-                ? "Wait for the answer to finish"
-                : `Change model · ${current.modelId}`
+                ? t("waitForAnswer")
+                : t("modelPicker.change", { modelId: current.modelId })
             }
           />
         }
@@ -73,7 +75,7 @@ export function ModelPicker({ bridge }: { bridge: DesktopBridge }) {
       </PopoverTrigger>
       <PopoverContent align="start" side="top" className="w-80 gap-0 p-0">
         <Command>
-          <CommandInput placeholder="Search models" />
+          <CommandInput placeholder={t("modelPicker.search")} />
           <CommandList>
             {models.isPending ? (
               <div className="flex justify-center py-6">
@@ -81,7 +83,7 @@ export function ModelPicker({ bridge }: { bridge: DesktopBridge }) {
               </div>
             ) : (
               <CommandEmpty>
-                {models.data?.length ? "No models match." : "No models yet."}
+                {models.data?.length ? t("modelPicker.noMatch") : t("modelPicker.none")}
               </CommandEmpty>
             )}
             {groupByProvider(models.data ?? []).map(([provider, group]) => (
@@ -107,9 +109,11 @@ export function ModelPicker({ bridge }: { bridge: DesktopBridge }) {
                         {label(model)}
                       </span>
                       <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
-                        {model.images && <ImageIcon className="size-3.5" aria-label="Images" />}
+                        {model.images && (
+                          <ImageIcon className="size-3.5" aria-label={t("modelPicker.images")} />
+                        )}
                         {model.reasoning && (
-                          <BrainIcon className="size-3.5" aria-label="Reasoning" />
+                          <BrainIcon className="size-3.5" aria-label={t("modelPicker.reasoning")} />
                         )}
                       </span>
                     </CommandItem>
@@ -122,7 +126,7 @@ export function ModelPicker({ bridge }: { bridge: DesktopBridge }) {
         <div className="border-t p-1">
           <Button variant="ghost" size="sm" className="w-full justify-start" onClick={openSettings}>
             <SettingsIcon data-icon="inline-start" />
-            Manage models…
+            {t("modelPicker.manage")}
           </Button>
         </div>
       </PopoverContent>

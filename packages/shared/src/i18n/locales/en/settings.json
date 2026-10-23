@@ -1,0 +1,54 @@
+{
+  "modal": {
+    "title": "Settings",
+    "description": "Models, agents, tools, skills, and connections used by PP Agent.",
+    "sidebarLabel": "Settings sections",
+    "breadcrumbLabel": "Breadcrumb",
+    "breadcrumbRoot": "Settings",
+    "sections": {
+      "general": "General",
+      "models": "Models",
+      "workspaces": "Workspaces",
+      "agents": "Agents",
+      "tools": "Tools",
+      "skills": "Skills",
+      "mcp": "MCP servers"
+    }
+  },
+  "general": {
+    "title": "General",
+    "description": "Your language, workspace, appearance, default model, and updates.",
+    "language": {
+      "title": "Language",
+      "description": "The language used across the app.",
+      "options": {
+        "system": "System"
+      }
+    },
+    "workspaceFolder": {
+      "title": "Workspace folder (current agent)",
+      "unavailable": "Not available yet",
+      "open": "Open folder"
+    },
+    "theme": {
+      "title": "Theme",
+      "description": "Follow your system, or always use light or dark.",
+      "options": {
+        "system": "System",
+        "light": "Light",
+        "dark": "Dark"
+      }
+    },
+    "defaultModel": {
+      "label": "Default model",
+      "firstAvailable": "First available model",
+      "notAvailable": "{{modelId}} (not available)",
+      "emptyHint": "Connect a provider in Models to choose a default.",
+      "hint": "Used for new chats. You can switch models in any chat from below the message box."
+    },
+    "updates": {
+      "title": "Updates",
+      "check": "Check for updates"
+    }
+  }
+}

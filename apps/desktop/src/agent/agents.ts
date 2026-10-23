@@ -13,6 +13,7 @@ import {
   type ModelRef,
   type SaveAgentInput,
 } from "@workspace/shared";
+import { t } from "./i18n.ts";
 import { AGENT_TOOLS, toolRule, toolTier } from "./tools.ts";
 
 const MAX_NAME_LENGTH = 60;
@@ -110,23 +111,23 @@ function portableAgent(value: Loose, strict: boolean): PortableAgent {
     throw new Error(message);
   };
   const name = text(value.name);
-  if (!name) fail("Enter a name for the agent.");
+  if (!name) fail(t("agents.nameRequired"));
   if (name.length > MAX_NAME_LENGTH && strict)
-    fail(`The name can be at most ${MAX_NAME_LENGTH} characters.`);
+    fail(t("limits.nameTooLong", { max: MAX_NAME_LENGTH }));
   const icon = text(value.icon);
-  if (icon.length > MAX_ICON_LENGTH && strict) fail("Use a single emoji as the icon.");
+  if (icon.length > MAX_ICON_LENGTH && strict) fail(t("limits.iconNotEmoji"));
   const description = text(value.description);
   if (description.length > MAX_DESCRIPTION_LENGTH && strict)
-    fail(`The description can be at most ${MAX_DESCRIPTION_LENGTH} characters.`);
+    fail(t("limits.descriptionTooLong", { max: MAX_DESCRIPTION_LENGTH }));
   const instructions = text(value.instructions);
   if (instructions.length > MAX_INSTRUCTIONS_LENGTH && strict)
-    fail(`The instructions can be at most ${MAX_INSTRUCTIONS_LENGTH} characters.`);
+    fail(t("limits.instructionsTooLong", { max: MAX_INSTRUCTIONS_LENGTH }));
   const prompts = (nameList(value.starterPrompts) ?? []).map((prompt) => prompt.trim());
   if (strict) {
     if (prompts.length > MAX_STARTER_PROMPTS)
-      fail(`Add at most ${MAX_STARTER_PROMPTS} starter prompts.`);
+      fail(t("agents.tooManyStarterPrompts", { max: MAX_STARTER_PROMPTS }));
     if (prompts.some((prompt) => prompt.length > MAX_STARTER_PROMPT_LENGTH))
-      fail(`Each starter prompt can be at most ${MAX_STARTER_PROMPT_LENGTH} characters.`);
+      fail(t("agents.starterPromptTooLong", { max: MAX_STARTER_PROMPT_LENGTH }));
   }
   return {
     name: name.slice(0, MAX_NAME_LENGTH),
@@ -178,7 +179,7 @@ export function assertUniqueName(
 ): void {
   const key = name.toLocaleLowerCase();
   if (agents.some((agent) => agent.id !== exceptId && agent.name.toLocaleLowerCase() === key))
-    throw new Error(`An agent named ${name} already exists.`);
+    throw new Error(t("agents.nameTaken", { name }));
 }
 
 /** `name`, or `name (2)`, `name (3)` … when another agent already uses it. */
@@ -237,11 +238,11 @@ export function parseAgentExport(json: string): PortableAgent {
   try {
     parsed = JSON.parse(json.replace(/^\uFEFF/, ""));
   } catch {
-    throw new Error("This file is not an exported agent (it is not valid JSON).");
+    throw new Error(t("agents.notExportedJson"));
   }
   const file = asLoose(parsed) as { ppAgentExport?: unknown; agent?: unknown } | null;
   const agent = asLoose(file?.agent);
-  if (file?.ppAgentExport !== 1 || !agent) throw new Error("This file is not an exported agent.");
+  if (file?.ppAgentExport !== 1 || !agent) throw new Error(t("agents.notExported"));
   return portableAgent(agent, false);
 }
 

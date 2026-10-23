@@ -1,0 +1,218 @@
+{
+  "shared": {
+    "icon": "Biểu tượng",
+    "name": "Tên",
+    "instructions": "Hướng dẫn",
+    "model": "Mô hình",
+    "quickIconPicks": "Chọn nhanh biểu tượng",
+    "useAsIcon": "Dùng {{icon}} làm biểu tượng",
+    "maxChars": "Tối đa {{max}} ký tự.",
+    "modelUnavailable": "{{modelId}} (không khả dụng)",
+    "saveChanges": "Lưu thay đổi"
+  },
+  "toolOptions": {
+    "read": {
+      "label": "Đọc tệp",
+      "description": "Mở các tệp văn bản trong không gian làm việc."
+    },
+    "ls": {
+      "label": "Liệt kê thư mục",
+      "description": "Xem một thư mục chứa những tệp nào."
+    },
+    "find": {
+      "label": "Tìm tệp theo tên",
+      "description": "Tìm các tệp có tên khớp."
+    },
+    "grep": {
+      "label": "Tìm trong tệp",
+      "description": "Tìm văn bản bên trong các tệp."
+    },
+    "read_document": {
+      "label": "Đọc tài liệu (Word, Excel, PDF…)",
+      "description": "Đọc tài liệu văn phòng và tệp PDF."
+    },
+    "current_datetime": {
+      "label": "Ngày và giờ hiện tại",
+      "description": "Xem ngày hôm nay, giờ và múi giờ."
+    },
+    "web_search": {
+      "label": "Tìm kiếm web",
+      "description": "Tra cứu thông tin trên internet."
+    },
+    "web_fetch": {
+      "label": "Mở trang web",
+      "description": "Đọc nội dung của một địa chỉ web."
+    },
+    "write": {
+      "label": "Tạo và lưu tệp",
+      "description": "Lưu tệp mới; sẽ hỏi bạn trước."
+    },
+    "edit": {
+      "label": "Chỉnh sửa một phần tệp",
+      "description": "Thay đổi một phần của các tệp có sẵn."
+    },
+    "bash": {
+      "label": "Chạy lệnh shell",
+      "description": "Chạy lệnh trên máy tính này; sẽ hỏi bạn trước, trừ khi được đặt để chạy tự do."
+    },
+    "powershell": {
+      "label": "Chạy lệnh PowerShell",
+      "description": "Chạy lệnh trên máy tính này; sẽ hỏi bạn trước, trừ khi được đặt để chạy tự do."
+    }
+  },
+  "agentsSection": {
+    "title": "Agent",
+    "description": "Các trợ lý được thiết lập cho từng loại công việc: có quy tắc, công cụ, kỹ năng, mô hình và thư mục riêng. Chọn một Agent cho mỗi cuộc trò chuyện từ khung nhập tin nhắn.",
+    "newAgent": "Agent mới",
+    "loadError": "Không thể tải danh sách Agent của bạn",
+    "copyName": "{{name}} (bản sao)",
+    "defaultBadge": "Mặc định",
+    "modelBadgeTitle": "Chuyển cuộc trò chuyện sang mô hình này",
+    "actionsFor": "Thao tác cho {{name}}",
+    "duplicate": "Nhân bản",
+    "added": "Đã thêm Agent “{{name}}”",
+    "exported": "Đã xuất Agent “{{name}}”",
+    "deleted": "Đã xóa Agent “{{name}}”",
+    "deleteConfirm": {
+      "title": "Xóa Agent này?",
+      "description": "“{{name}}” sẽ bị xóa. Các cuộc trò chuyện từng dùng Agent này sẽ chuyển sang {{fallback}}. Các tệp trong không gian làm việc của Agent vẫn được giữ nguyên.",
+      "fallback": "Agent mặc định"
+    }
+  },
+  "agentEditor": {
+    "newTitle": "Agent mới",
+    "editTitle": "Chỉnh sửa Agent",
+    "editNamed": "Chỉnh sửa “{{name}}”",
+    "backToAgents": "Quay lại danh sách Agent",
+    "subtitleDefault": "Agent có sẵn. Bạn có thể chỉnh sửa nhưng không thể xóa.",
+    "subtitle": "Agent là một trợ lý được thiết lập cho một loại công việc.",
+    "openError": "Không thể mở Agent này",
+    "notFound": {
+      "title": "Agent này không còn tồn tại",
+      "description": "Có thể Agent đã bị xóa. Hãy quay lại để xem danh sách Agent của bạn."
+    },
+    "saved": "Đã lưu Agent “{{name}}”",
+    "create": "Tạo Agent",
+    "fields": {
+      "namePlaceholder": "Trợ lý tài chính",
+      "description": {
+        "label": "Mô tả",
+        "placeholder": "Hỗ trợ bộ phận tài chính với báo cáo cuối tháng và các câu hỏi về chi phí.",
+        "help": "Hiển thị trong danh sách Agent và ở đầu cuộc trò chuyện mới."
+      },
+      "instructions": {
+        "placeholder": "Bạn hỗ trợ bộ phận tài chính chốt sổ cuối tháng.\n- Trả lời bằng các gạch đầu dòng ngắn gọn.\n- Luôn nói rõ một con số lấy từ tệp nào.\n- Không sửa các bảng tính gốc; hãy lưu kết quả thành tệp mới.",
+        "help": "Các quy tắc Agent luôn tuân theo, ví dụ: giọng điệu, định dạng, những điều cần tránh."
+      }
+    },
+    "errors": {
+      "nameRequired": "Hãy đặt tên cho Agent.",
+      "nameTaken": "Đã có Agent khác dùng tên này."
+    },
+    "model": {
+      "description": "Khi bạn chọn Agent này, cuộc trò chuyện sẽ chuyển sang mô hình này. Các cuộc trò chuyện mới với Agent này cũng bắt đầu bằng mô hình đó.",
+      "keep": "Giữ mô hình của cuộc trò chuyện"
+    },
+    "checklist": {
+      "notInstalled": "Chưa cài đặt"
+    },
+    "tools": {
+      "legend": "Công cụ",
+      "description": "Những việc Agent có thể làm trên máy tính này. Mục Cài đặt › Công cụ vẫn quyết định việc nào cần bạn duyệt.",
+      "allLabel": "Tất cả công cụ",
+      "allDescription": "Bao gồm cả các công cụ được bật sau này.",
+      "empty": "Không có công cụ nào để chọn.",
+      "off": "Đang tắt trong Cài đặt › Công cụ"
+    },
+    "mcp": {
+      "legend": "Máy chủ MCP",
+      "description": "Các dịch vụ đã kết nối mà Agent này có thể dùng.",
+      "allLabel": "Tất cả máy chủ",
+      "allDescription": "Mọi máy chủ đang bật, bao gồm cả những máy chủ được thêm sau này.",
+      "empty": "Chưa có máy chủ MCP nào. Hãy thêm trong Cài đặt › Máy chủ MCP.",
+      "off": "Đang tắt trong Cài đặt › Máy chủ MCP"
+    },
+    "skills": {
+      "legend": "Kỹ năng",
+      "description": "Các hướng dẫn soạn sẵn mà Agent này có thể làm theo.",
+      "allLabel": "Tất cả kỹ năng",
+      "allDescription": "Mọi kỹ năng đang bật, bao gồm cả những kỹ năng được thêm sau này.",
+      "empty": "Chưa có kỹ năng nào. Hãy thêm trong Cài đặt › Kỹ năng.",
+      "off": "Đang tắt trong Cài đặt › Kỹ năng"
+    },
+    "starterPrompts": {
+      "legend": "Gợi ý khởi đầu",
+      "description": "Các nút hiển thị trong cuộc trò chuyện mới với Agent này. Nhấp vào một nút để gửi ngay.",
+      "inputLabel": "Gợi ý khởi đầu {{number}}",
+      "placeholder": "Tổng hợp chi phí tháng này theo từng nhóm",
+      "remove": "Xóa gợi ý khởi đầu {{number}}",
+      "add": "Thêm gợi ý khởi đầu"
+    }
+  },
+  "workspacesSection": {
+    "title": "Không gian làm việc",
+    "description": "Nhóm các cuộc trò chuyện theo dự án hoặc nhóm làm việc. Mỗi không gian làm việc có thư mục, quy tắc và mặc định riêng cho các cuộc trò chuyện mới.",
+    "newWorkspace": "Không gian làm việc mới",
+    "loadError": "Không thể tải danh sách không gian làm việc của bạn",
+    "builtInBadge": "Có sẵn",
+    "defaultFolder": "Thư mục không gian làm việc mặc định của ứng dụng",
+    "deleteLabel": "Xóa {{name}}",
+    "deleted": "Đã xóa không gian làm việc “{{name}}”",
+    "deleteConfirm": {
+      "title": "Xóa không gian làm việc này?",
+      "description": "“{{name}}” sẽ bị xóa. Các cuộc trò chuyện của nó sẽ chuyển sang không gian làm việc có sẵn, còn các tệp vẫn nằm trong thư mục."
+    }
+  },
+  "workspaceEditor": {
+    "newTitle": "Không gian làm việc mới",
+    "editTitle": "Chỉnh sửa không gian làm việc",
+    "editNamed": "Chỉnh sửa “{{name}}”",
+    "backToWorkspaces": "Quay lại danh sách không gian làm việc",
+    "subtitleBuiltIn": "Không gian làm việc có sẵn. Bạn có thể chỉnh sửa nhưng không thể xóa.",
+    "subtitle": "Không gian làm việc nhóm các cuộc trò chuyện quanh một thư mục, với quy tắc và mặc định riêng.",
+    "openError": "Không thể mở không gian làm việc này",
+    "notFound": {
+      "title": "Không gian làm việc này không còn tồn tại",
+      "description": "Có thể nó đã bị xóa. Hãy quay lại để xem danh sách không gian làm việc của bạn."
+    },
+    "saved": "Đã lưu không gian làm việc “{{name}}”",
+    "create": "Tạo không gian làm việc",
+    "builtInSrOnly": "Không gian làm việc có sẵn",
+    "namePlaceholder": "Nhóm tài chính",
+    "errors": {
+      "nameRequired": "Hãy đặt tên cho không gian làm việc.",
+      "nameTaken": "Đã có không gian làm việc khác dùng tên này."
+    },
+    "folder": {
+      "legend": "Thư mục",
+      "descriptionFixed": "Nơi các cuộc trò chuyện trong không gian làm việc này làm việc và lưu tệp. Không thể thay đổi sau khi không gian làm việc được tạo.",
+      "descriptionNew": "Nơi các cuộc trò chuyện trong không gian làm việc này làm việc và lưu tệp. Chỉ chọn một lần; không thể thay đổi sau này.",
+      "none": "Chưa chọn thư mục",
+      "choose": "Chọn…",
+      "required": "Hãy chọn một thư mục cho không gian làm việc."
+    },
+    "instructions": {
+      "placeholder": "Các tệp ở đây là báo cáo hàng tháng. Đặt tên tệp mới theo dạng YYYY-MM-<chủ đề>.\nTrả lời bằng tiếng Việt.",
+      "help": "Quy tắc áp dụng cho mọi cuộc trò chuyện trong không gian làm việc này, dù dùng Agent nào."
+    },
+    "defaults": {
+      "legend": "Mặc định cho cuộc trò chuyện mới",
+      "description": "Những gì một cuộc trò chuyện mới trong không gian làm việc này bắt đầu với. Bạn vẫn có thể thay đổi ngay trong cuộc trò chuyện.",
+      "agent": "Agent",
+      "agentInherit": "Agent bạn chọn gần nhất",
+      "modelInherit": "Mô hình mặc định",
+      "modelHelp": "Nếu Agent có mô hình riêng thì mô hình đó được ưu tiên.",
+      "thinking": "Mức suy luận",
+      "thinkingInherit": "Mức bạn chọn gần nhất"
+    },
+    "thinkingLevels": {
+      "off": "Tắt",
+      "minimal": "Tối thiểu",
+      "low": "Thấp",
+      "medium": "Trung bình",
+      "high": "Cao",
+      "xhigh": "Rất cao",
+      "max": "Tối đa"
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "actions": {
+    "add": "Add",
+    "back": "Back",
+    "cancel": "Cancel",
+    "close": "Close",
+    "copy": "Copy",
+    "create": "Create",
+    "delete": "Delete",
+    "edit": "Edit",
+    "import": "Import",
+    "export": "Export",
+    "ok": "OK",
+    "open": "Open",
+    "remove": "Remove",
+    "retry": "Try again",
+    "save": "Save",
+    "search": "Search",
+    "send": "Send",
+    "stop": "Stop"
+  },
+  "states": {
+    "loading": "Loading…",
+    "saving": "Saving…",
+    "none": "None",
+    "on": "On",
+    "off": "Off",
+    "optional": "Optional",
+    "required": "Required"
+  },
+  "unknownError": "Something went wrong."
+}

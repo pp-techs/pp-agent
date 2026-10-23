@@ -3,6 +3,7 @@ import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
 import { cn } from "cn";
 
 import { Button } from "@workspace/ui/components/button";
+import { useUiLabels } from "@workspace/ui/components/ui-labels";
 import { XIcon } from "lucide-react";
 
 function Sheet({ ...props }: SheetPrimitive.Root.Props) {
@@ -39,11 +40,15 @@ function SheetContent({
   children,
   side = "right",
   showCloseButton = true,
+  closeLabel,
   ...props
 }: SheetPrimitive.Popup.Props & {
   side?: "top" | "right" | "bottom" | "left";
   showCloseButton?: boolean;
+  /** Accessible name of the corner close button. */
+  closeLabel?: string;
 }) {
+  const labels = useUiLabels();
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -69,7 +74,7 @@ function SheetContent({
             }
           >
             <XIcon />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">{closeLabel ?? labels.close}</span>
           </SheetPrimitive.Close>
         )}
       </SheetPrimitive.Popup>

@@ -1,6 +1,8 @@
 import type { Attachment, DesktopBridge } from "@workspace/shared";
 import { create } from "zustand";
 
+import { i18n } from "@/lib/i18n";
+
 export interface DraftAttachment extends Attachment {
   id: string;
 }
@@ -56,7 +58,9 @@ export async function toAttachments(bridge: DesktopBridge, files: File[]): Promi
       const path = bridge.files.pathFor(file);
       const mimeType = file.type || "application/octet-stream";
       if (path) return { name: file.name, mimeType, path };
-      if (!mimeType.startsWith("image/")) throw new Error(`Can't attach ${file.name}.`);
+      if (!mimeType.startsWith("image/")) {
+        throw new Error(i18n.t("chat:composer.cantAttach", { name: file.name }));
+      }
       const extension = mimeType.split("/")[1] ?? "png";
       return {
         name: file.name || `pasted-image.${extension}`,

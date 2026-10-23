@@ -6,6 +6,7 @@ import type {
   WebSearchView,
 } from "@workspace/shared";
 import type { VaultCredentialStore } from "../credentials.ts";
+import { t } from "../i18n.ts";
 import type { SettingsStore } from "../settings-store.ts";
 import { isSearchProviderId, normalizeEndpoint } from "./config.ts";
 import { WEB_KEY_PREFIX } from "./names.ts";
@@ -34,6 +35,15 @@ function describeFailure(error: unknown): string {
     return error.message;
   }
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Why a search service failed, in the person's language, for the Test button in Settings. */
+function describeFailureForPerson(error: unknown): string {
+  if (error instanceof SearchProviderError) {
+    if (error.status === 401 || error.status === 403) return t("webSearch.keyRejected");
+    if (error.status === 429) return t("webSearch.limitReached");
+  }
+  return describeFailure(error);
 }
 
 /** Search configuration (settings.json) plus the keys (encrypted vault), and the search itself. */
@@ -83,14 +93,13 @@ export class WebSearchService {
 
   async save(input: SaveWebSearchInput): Promise<WebSearchView> {
     const providers = [...new Set(input.providers)];
-    if (!providers.every(isSearchProviderId)) throw new Error("Unknown search provider.");
+    if (!providers.every(isSearchProviderId)) throw new Error(t("webSearch.unknownProvider"));
     const endpoints: Partial<Record<SearchProviderId, string>> = {};
     for (const def of SEARCH_PROVIDER_DEFS) {
       const raw = input.endpoints[def.id]?.trim();
       if (!raw || !def.usesEndpoint) continue;
       const endpoint = normalizeEndpoint(raw);
-      if (!endpoint)
-        throw new Error(`${def.label}: the server address must start with http:// or https://.`);
+      if (!endpoint) throw new Error(t("webSearch.endpointInvalid", { provider: def.label }));
       endpoints[def.id] = endpoint;
     }
     for (const [id, key] of Object.entries(input.keys)) {
@@ -140,17 +149,17 @@ export class WebSearchService {
   async test(id: SearchProviderId): Promise<WebSearchTestResult> {
     const def = providerDef(id);
     const setup = await this.setupOf(id);
-    if (def.keyRequired && !setup.key) return { ok: false, message: "Save an API key first." };
+    if (def.keyRequired && !setup.key) return { ok: false, message: t("webSearch.saveKeyFirst") };
     if (def.endpointRequired && !setup.endpoint)
-      return { ok: false, message: "Save the server address first." };
+      return { ok: false, message: t("webSearch.saveAddressFirst") };
     try {
       const hits = await def.search({ query: "weather today", limit: 1 }, setup);
       return {
         ok: true,
-        message: hits.length > 0 ? "Working." : "Connected, but the search returned no results.",
+        message: hits.length > 0 ? t("webSearch.working") : t("webSearch.noResults"),
       };
     } catch (error) {
-      return { ok: false, message: describeFailure(error) };
+      return { ok: false, message: describeFailureForPerson(error) };
     }
   }
 }

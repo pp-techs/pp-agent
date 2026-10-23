@@ -2,6 +2,7 @@ import { app } from "electron";
 import electronUpdater from "electron-updater";
 import type { UpdateInfo } from "electron-updater";
 import type { UpdateState } from "@workspace/shared";
+import { translator } from "./i18n.ts";
 
 const { autoUpdater } = electronUpdater;
 
@@ -9,7 +10,6 @@ const REPO = "pp-techs/pp-agent";
 const FIRST_CHECK_DELAY_MS = 10_000;
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1_000;
 const REQUEST_TIMEOUT_MS = 15_000;
-const CHECK_FAILED = "Could not check for updates. Check your internet connection and try again.";
 
 type Available = Extract<UpdateState, { status: "available" }>;
 type Install = Available["install"];
@@ -86,7 +86,8 @@ export function createUpdater(onState: (state: UpdateState) => void): Updater {
 
   function fail(error: unknown): void {
     console.error("[updates]", error);
-    if (manualCheck) set({ currentVersion, status: "error", message: CHECK_FAILED });
+    if (manualCheck)
+      set({ currentVersion, status: "error", message: translator()("updates.checkFailed") });
     else set(settled);
   }
 
@@ -124,7 +125,7 @@ export function createUpdater(onState: (state: UpdateState) => void): Updater {
         set({
           currentVersion,
           status: "error",
-          message: "The update could not be downloaded. Try again later.",
+          message: translator()("updates.downloadFailed"),
         });
       } else {
         fail(error);

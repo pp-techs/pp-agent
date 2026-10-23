@@ -1,0 +1,168 @@
+{
+  "app": {
+    "starting": "Agent vẫn đang khởi động.",
+    "notRunning": "Agent chưa chạy.",
+    "stoppedUnexpectedly": "Agent đã dừng đột ngột.",
+    "stoppedRestarting": "Agent đã dừng (mã thoát {{code}}). Đang khởi động lại…",
+    "couldNotStart": "Không thể khởi động Agent: {{error}}",
+    "unknownCommand": "Lệnh không xác định: {{command}}",
+    "settingsNotApplied": "Không thể áp dụng Cài đặt: {{error}}",
+    "signInsUnreadable": "Không thể đọc thông tin đăng nhập đã lưu: {{error}}",
+    "secureStorage": "Kho khóa của hệ điều hành: {{error}}",
+    "secureStorageUnavailable": "Kho khóa của hệ điều hành không khả dụng trên máy tính này.",
+    "onlyWebLinks": "Chỉ có thể mở các liên kết web (http hoặc https).",
+    "folderCannotOpen": "Không thể mở thư mục đó.",
+    "folderMissing": "Thư mục đó không tồn tại.",
+    "locationCannotShow": "Không thể hiển thị vị trí đó.",
+    "agentCannotExport": "Không thể xuất Agent."
+  },
+  "limits": {
+    "nameTooLong": "Tên chỉ được dài tối đa {{max}} ký tự.",
+    "descriptionTooLong": "Mô tả chỉ được dài tối đa {{max}} ký tự.",
+    "instructionsTooLong": "Hướng dẫn chỉ được dài tối đa {{max}} ký tự.",
+    "iconNotEmoji": "Hãy dùng một emoji duy nhất làm biểu tượng."
+  },
+  "agents": {
+    "nameRequired": "Hãy nhập tên cho Agent.",
+    "nameTaken": "Đã có một Agent tên {{name}}.",
+    "tooManyStarterPrompts": "Chỉ có thể thêm tối đa {{max}} gợi ý khởi đầu.",
+    "starterPromptTooLong": "Mỗi gợi ý khởi đầu chỉ được dài tối đa {{max}} ký tự.",
+    "notExportedJson": "Tệp này không phải là Agent đã xuất (không phải JSON hợp lệ).",
+    "notExported": "Tệp này không phải là Agent đã xuất.",
+    "builtinCannotDelete": "Không thể xóa Agent có sẵn.",
+    "notFound": "Agent này không còn tồn tại.",
+    "notUsingServer": "{{agent}} không sử dụng {{server}}. Hãy thêm máy chủ này vào Agent trong Cài đặt › Agent, hoặc chuyển sang một Agent có dùng nó."
+  },
+  "workspaces": {
+    "nameRequired": "Hãy nhập tên cho không gian làm việc.",
+    "nameTaken": "Đã có một không gian làm việc tên {{name}}.",
+    "chooseFolder": "Hãy chọn thư mục của không gian làm việc bằng nút “Chọn…”.",
+    "folderTaken": "Thư mục này đã thuộc về không gian làm việc {{name}}.",
+    "mustBeFolder": "Không gian làm việc phải là một thư mục, không phải một tệp.",
+    "folderUnusable": "Không thể dùng thư mục của không gian làm việc {{name}} ({{error}}). Đang dùng thư mục mặc định thay thế.",
+    "agentMissing": "Agent được chọn cho không gian làm việc này không còn tồn tại.",
+    "builtinCannotDelete": "Không thể xóa không gian làm việc có sẵn.",
+    "notFound": "Không gian làm việc này không còn tồn tại."
+  },
+  "skills": {
+    "nameRequired": "Hãy nhập tên cho kỹ năng.",
+    "nameFormat": "Tên chỉ gồm chữ thường, chữ số và dấu gạch ngang đơn (ví dụ weekly-report).",
+    "descriptionRequired": "Hãy mô tả kỹ năng này làm gì và khi nào nên dùng.",
+    "noSkillFile": "Không tìm thấy SKILL.md trong mục bạn đã chọn.",
+    "missingDescription": "Kỹ năng “{{name}}” chưa có mô tả trong SKILL.md.",
+    "duplicateInImport": "Kỹ năng “{{name}}” xuất hiện hai lần.",
+    "notFound": "Không có kỹ năng nào tên {{name}}.",
+    "nameTaken": "Đã có một kỹ năng tên {{name}}.",
+    "unsafeArchive": "Tệp nén này chứa đường dẫn tệp không an toàn nên không được nhập.",
+    "archiveTooLarge": "Tệp nén này quá lớn để nhập."
+  },
+  "mcp": {
+    "serverNotFound": "Không có máy chủ MCP nào tên {{name}}.",
+    "serverNameFormat": "Tên máy chủ chỉ gồm chữ cái, chữ số, dấu gạch ngang và dấu gạch dưới.",
+    "serverNameTaken": "Đã có một máy chủ MCP tên {{name}}.",
+    "invalidJson": "Đây không phải JSON hợp lệ: {{error}}",
+    "mustBeObject": "mcp.json phải chứa một đối tượng JSON.",
+    "serversMustBeObject": "“mcpServers” phải là một đối tượng.",
+    "serversMissing": "Hãy đặt các máy chủ của bạn trong “mcpServers”, giống các ứng dụng MCP khác.",
+    "fileInvalidJson": "mcp.json không phải JSON hợp lệ. Hãy sửa trong trình soạn thảo JSON trước.",
+    "fileMustBeObject": "mcp.json phải chứa một đối tượng JSON. Hãy sửa trong trình soạn thảo JSON trước.",
+    "commandRequired": "Hãy nhập lệnh khởi động máy chủ.",
+    "addressRequired": "Hãy nhập địa chỉ của máy chủ, bắt đầu bằng https://.",
+    "notUsedBy": "{{agent}} không dùng máy chủ này",
+    "unavailable": "Máy chủ MCP hiện không khả dụng.",
+    "flow": {
+      "server": "Máy chủ MCP",
+      "status": "Máy chủ MCP",
+      "reconnect": "Kết nối lại {{name}}",
+      "signIn": "Đăng nhập vào {{name}}",
+      "signOut": "Đăng xuất khỏi {{name}}"
+    }
+  },
+  "gateways": {
+    "nameRequired": "Hãy nhập tên cho Gateway.",
+    "unsupportedApi": "API không được hỗ trợ: {{api}}",
+    "notFound": "Gateway này không còn tồn tại.",
+    "notSaved": "Không thể lưu Gateway.",
+    "addressInvalid": "Hãy nhập địa chỉ đầy đủ của Gateway, bắt đầu bằng https://.",
+    "addressProtocol": "URL của Gateway phải dùng http hoặc https.",
+    "unreachable": "Không thể kết nối tới Gateway: {{error}}",
+    "badResponse": "Gateway phản hồi {{status}}.",
+    "modelRequired": "Hãy thêm ít nhất một mô hình."
+  },
+  "providers": {
+    "unknown": "Nhà cung cấp không xác định: {{id}}",
+    "connect": "Kết nối {{name}}",
+    "savedKey": "Khóa đã lưu",
+    "environmentVariable": "Biến môi trường",
+    "continueInBrowser": "Hãy tiếp tục trong trình duyệt của bạn.",
+    "enterCode": "Hãy nhập mã {{code}} trên trang vừa mở."
+  },
+  "models": {
+    "notAvailableConnect": "Mô hình đó chưa khả dụng. Hãy kết nối nhà cung cấp của nó trước.",
+    "notAvailableInSettings": "Mô hình đó chưa khả dụng. Hãy kết nối nhà cung cấp của nó trong Cài đặt › Mô hình.",
+    "notAvailableKeeping": "{{model}} chưa khả dụng; vẫn giữ {{current}}.",
+    "currentModel": "mô hình hiện tại",
+    "noneChosen": "Hãy chọn một mô hình trong Cài đặt › Mô hình trước khi bắt đầu cuộc trò chuyện."
+  },
+  "settings": {
+    "unknownThinkingLevel": "Mức suy luận không xác định: {{level}}",
+    "unknownPolicy": "Chính sách không xác định: {{policy}}",
+    "shellPolicy": "Lệnh shell chỉ có thể hỏi trước hoặc chạy tự do.",
+    "toolLocked": "Không thể thay đổi cài đặt của công cụ này tại đây."
+  },
+  "conversations": {
+    "notInHistory": "Cuộc trò chuyện đó không có trong lịch sử của ứng dụng này.",
+    "enterName": "Hãy nhập tên.",
+    "waitForAnswer": "Hãy đợi câu trả lời hoàn tất.",
+    "tooShort": "Cuộc trò chuyện này còn ngắn nên chưa có gì để tóm tắt.",
+    "attachmentNoFile": "{{name}} không có tệp nào để sao chép.",
+    "skillTitle": "Kỹ năng: {{name}}",
+    "untitled": "Cuộc trò chuyện chưa đặt tên",
+    "interrupted": "Bị gián đoạn trước khi hoàn tất.",
+    "modelError": "Mô hình trả về lỗi.",
+    "stopped": "Đã dừng."
+  },
+  "approvals": {
+    "runCommand": "Chạy một lệnh",
+    "save": "Lưu {{path}}",
+    "edit": "Chỉnh sửa {{path}}",
+    "aFile": "một tệp",
+    "aWebPage": "một trang web",
+    "open": "Mở {{url}}",
+    "searchWeb": "Tìm kiếm web",
+    "useTool": "Dùng “{{tool}}” trong {{server}}",
+    "run": "Chạy {{tool}}"
+  },
+  "webSearch": {
+    "unknownProvider": "Nhà cung cấp tìm kiếm không xác định.",
+    "endpointInvalid": "{{provider}}: địa chỉ máy chủ phải bắt đầu bằng http:// hoặc https://.",
+    "keyRejected": "Khóa hoặc thông tin đăng nhập bị từ chối. Hãy kiểm tra lại trong Cài đặt.",
+    "limitReached": "Đã đạt giới hạn sử dụng.",
+    "saveKeyFirst": "Hãy lưu khóa API trước.",
+    "saveAddressFirst": "Hãy lưu địa chỉ máy chủ trước.",
+    "working": "Hoạt động tốt.",
+    "noResults": "Đã kết nối, nhưng tìm kiếm không trả về kết quả nào."
+  },
+  "files": {
+    "attachTitle": "Đính kèm tệp",
+    "importSkillTitle": "Nhập một kỹ năng",
+    "importSkillQuestion": "Bạn muốn nhập gì?",
+    "importSkillDetail": "Một kỹ năng là một thư mục có tệp SKILL.md, hoặc một tệp .zip hay .skill chứa tệp đó.",
+    "folderButton": "Thư mục…",
+    "archiveButton": "Tệp nén…",
+    "cancelButton": "Hủy",
+    "importButton": "Nhập",
+    "skillArchives": "Tệp nén kỹ năng",
+    "chooseFolderTitle": "Chọn thư mục cho không gian làm việc",
+    "chooseButton": "Chọn",
+    "agentFiles": "Tệp Agent",
+    "importAgentTitle": "Nhập một Agent",
+    "agentTooLarge": "Tệp này quá lớn để là một Agent đã xuất.",
+    "exportAgentTitle": "Xuất Agent",
+    "exportButton": "Xuất"
+  },
+  "updates": {
+    "checkFailed": "Không thể kiểm tra cập nhật. Hãy kiểm tra kết nối internet và thử lại.",
+    "downloadFailed": "Không thể tải bản cập nhật. Hãy thử lại sau."
+  }
+}

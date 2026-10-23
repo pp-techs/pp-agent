@@ -13,6 +13,7 @@ import { Item, ItemContent, ItemGroup, ItemTitle } from "@workspace/ui/component
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { Switch } from "@workspace/ui/components/switch";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
 
 import { OptionGroup } from "@/components/settings/option-group";
@@ -66,6 +67,7 @@ function ProviderRow({
   onMove: (direction: -1 | 1) => void;
   bridge: DesktopBridge;
 }) {
+  const { t } = useTranslation(["extensions", "common"]);
   const test = useTestWebSearch(bridge);
   const [result, setResult] = React.useState<WebSearchTestResult | null>(null);
   const enabled = position !== -1;
@@ -82,7 +84,7 @@ function ProviderRow({
           <ItemTitle>
             {provider.label}
             {enabled && <Badge variant="secondary">#{position + 1}</Badge>}
-            {enabled && !ready && <Badge variant="destructive">Needs setup</Badge>}
+            {enabled && !ready && <Badge variant="destructive">{t("webSearch.needsSetup")}</Badge>}
           </ItemTitle>
         </ItemContent>
         {enabled && (
@@ -90,7 +92,7 @@ function ProviderRow({
             <Button
               variant="ghost"
               size="icon-xs"
-              aria-label={`Try ${provider.label} earlier`}
+              aria-label={t("webSearch.tryEarlier", { provider: provider.label })}
               disabled={position === 0}
               onClick={() => onMove(-1)}
             >
@@ -99,7 +101,7 @@ function ProviderRow({
             <Button
               variant="ghost"
               size="icon-xs"
-              aria-label={`Try ${provider.label} later`}
+              aria-label={t("webSearch.tryLater", { provider: provider.label })}
               disabled={position === lastPosition}
               onClick={() => onMove(1)}
             >
@@ -109,7 +111,7 @@ function ProviderRow({
         )}
         <Switch
           size="sm"
-          aria-label={`Use ${provider.label}`}
+          aria-label={t("webSearch.use", { provider: provider.label })}
           checked={enabled}
           onCheckedChange={(checked) =>
             onChange((current) => ({
@@ -128,10 +130,10 @@ function ProviderRow({
               value={draft.endpoints[provider.id] ?? ""}
               placeholder={
                 provider.id === "searxng"
-                  ? "Server address, e.g. https://search.example.com"
-                  : "Server address (leave empty for webclaw cloud)"
+                  ? t("webSearch.endpoint.searxngPlaceholder")
+                  : t("webSearch.endpoint.webclawPlaceholder")
               }
-              aria-label={`${provider.label} server address`}
+              aria-label={t("webSearch.endpoint.label", { provider: provider.label })}
               onChange={(event) => {
                 const value = event.target.value;
                 onChange((current) => ({
@@ -149,12 +151,12 @@ function ProviderRow({
                 value={typeof pendingKey === "string" ? pendingKey : ""}
                 placeholder={
                   hasKey
-                    ? "Key saved. Type to replace it."
+                    ? t("webSearch.key.saved")
                     : provider.keyRequired
-                      ? "API key"
-                      : "Access token (optional)"
+                      ? t("webSearch.key.required")
+                      : t("webSearch.key.optional")
                 }
-                aria-label={`${provider.label} API key`}
+                aria-label={t("webSearch.key.label", { provider: provider.label })}
                 onChange={(event) => {
                   const value = event.target.value;
                   onChange((current) => {
@@ -174,7 +176,7 @@ function ProviderRow({
                     }))
                   }
                 >
-                  Remove key
+                  {t("webSearch.key.remove")}
                 </Button>
               )}
             </div>
@@ -188,20 +190,21 @@ function ProviderRow({
           disabled={!canTest || test.isPending}
           onClick={() => test.mutate(provider.id, { onSuccess: setResult })}
         >
-          {test.isPending ? "Testing…" : "Test"}
+          {test.isPending ? t("webSearch.test.testing") : t("webSearch.test.button")}
         </Button>
         {result && (
           <span className={result.ok ? "text-foreground" : "text-destructive"}>
             {result.message}
           </span>
         )}
-        {!result && !canTest && <span>Save your changes to test.</span>}
+        {!result && !canTest && <span>{t("webSearch.test.saveFirst")}</span>}
       </div>
     </Item>
   );
 }
 
 function WebSearchForm({ bridge, view }: { bridge: DesktopBridge; view: WebSearchView }) {
+  const { t } = useTranslation(["extensions", "common"]);
   const save = useSaveWebSearch(bridge);
   const [draft, setDraft] = React.useState(() => initialDraft(view));
   const [saves, setSaves] = React.useState(0);
@@ -258,7 +261,7 @@ function WebSearchForm({ bridge, view }: { bridge: DesktopBridge; view: WebSearc
             )
           }
         >
-          {save.isPending ? "Saving…" : "Save web search"}
+          {save.isPending ? t("common:states.saving") : t("webSearch.save")}
         </Button>
       </div>
     </div>
@@ -266,12 +269,10 @@ function WebSearchForm({ bridge, view }: { bridge: DesktopBridge; view: WebSearc
 }
 
 export function WebSearchGroup({ bridge }: { bridge: DesktopBridge }) {
+  const { t } = useTranslation(["extensions", "common"]);
   const query = useQuery(webSearchQuery(bridge));
   return (
-    <OptionGroup
-      legend="Web search"
-      description="Pick the search services the agent can use. It tries them in order and moves on to the next when one fails. Keys stay encrypted on this computer."
-    >
+    <OptionGroup legend={t("webSearch.legend")} description={t("webSearch.description")}>
       {query.isPending ? (
         <Skeleton className="h-24 w-full rounded-2xl" />
       ) : query.isError ? (

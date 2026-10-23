@@ -1,0 +1,168 @@
+{
+  "app": {
+    "starting": "The agent is still starting.",
+    "notRunning": "The agent is not running.",
+    "stoppedUnexpectedly": "The agent stopped unexpectedly.",
+    "stoppedRestarting": "The agent stopped (exit code {{code}}). Restarting…",
+    "couldNotStart": "The agent could not start: {{error}}",
+    "unknownCommand": "Unknown command: {{command}}",
+    "settingsNotApplied": "Settings could not be applied: {{error}}",
+    "signInsUnreadable": "Saved sign-ins could not be read: {{error}}",
+    "secureStorage": "Secure storage: {{error}}",
+    "secureStorageUnavailable": "Secure storage is not available on this computer.",
+    "onlyWebLinks": "Only web links (http or https) can be opened.",
+    "folderCannotOpen": "That folder cannot be opened.",
+    "folderMissing": "That folder does not exist.",
+    "locationCannotShow": "That location cannot be shown.",
+    "agentCannotExport": "The agent could not be exported."
+  },
+  "limits": {
+    "nameTooLong": "The name can be at most {{max}} characters.",
+    "descriptionTooLong": "The description can be at most {{max}} characters.",
+    "instructionsTooLong": "The instructions can be at most {{max}} characters.",
+    "iconNotEmoji": "Use a single emoji as the icon."
+  },
+  "agents": {
+    "nameRequired": "Enter a name for the agent.",
+    "nameTaken": "An agent named {{name}} already exists.",
+    "tooManyStarterPrompts": "Add at most {{max}} starter prompts.",
+    "starterPromptTooLong": "Each starter prompt can be at most {{max}} characters.",
+    "notExportedJson": "This file is not an exported agent (it is not valid JSON).",
+    "notExported": "This file is not an exported agent.",
+    "builtinCannotDelete": "The built-in agent cannot be deleted.",
+    "notFound": "This agent no longer exists.",
+    "notUsingServer": "{{agent}} does not use {{server}}. Add it to the agent in Settings › Agents, or switch to an agent that uses it."
+  },
+  "workspaces": {
+    "nameRequired": "Enter a name for the workspace.",
+    "nameTaken": "A workspace named {{name}} already exists.",
+    "chooseFolder": "Choose the workspace folder with “Choose…”.",
+    "folderTaken": "This folder already belongs to the workspace {{name}}.",
+    "mustBeFolder": "The workspace must be a folder, not a file.",
+    "folderUnusable": "The folder of workspace {{name}} cannot be used ({{error}}). Using the default folder instead.",
+    "agentMissing": "The agent chosen for this workspace no longer exists.",
+    "builtinCannotDelete": "The built-in workspace cannot be deleted.",
+    "notFound": "This workspace no longer exists."
+  },
+  "skills": {
+    "nameRequired": "Enter a name for the skill.",
+    "nameFormat": "Use lowercase letters, digits, and single hyphens for the name (for example weekly-report).",
+    "descriptionRequired": "Describe what the skill does and when to use it.",
+    "noSkillFile": "No SKILL.md was found in what you picked.",
+    "missingDescription": "The skill “{{name}}” has no description in its SKILL.md.",
+    "duplicateInImport": "The skill “{{name}}” is included twice.",
+    "notFound": "There is no skill named {{name}}.",
+    "nameTaken": "A skill named {{name}} already exists.",
+    "unsafeArchive": "This archive contains unsafe file paths and was not imported.",
+    "archiveTooLarge": "This archive is too large to import."
+  },
+  "mcp": {
+    "serverNotFound": "There is no MCP server named {{name}}.",
+    "serverNameFormat": "Use letters, digits, hyphens, and underscores for the server name.",
+    "serverNameTaken": "An MCP server named {{name}} already exists.",
+    "invalidJson": "This is not valid JSON: {{error}}",
+    "mustBeObject": "mcp.json must contain a JSON object.",
+    "serversMustBeObject": "“mcpServers” must be an object.",
+    "serversMissing": "Add your servers under “mcpServers”, as in other MCP apps.",
+    "fileInvalidJson": "mcp.json is not valid JSON. Fix it in the JSON editor first.",
+    "fileMustBeObject": "mcp.json must contain a JSON object. Fix it in the JSON editor first.",
+    "commandRequired": "Enter the command that starts the server.",
+    "addressRequired": "Enter the server's address, starting with https://.",
+    "notUsedBy": "Not used by {{agent}}",
+    "unavailable": "MCP servers are not available right now.",
+    "flow": {
+      "server": "MCP server",
+      "status": "MCP servers",
+      "reconnect": "Reconnect {{name}}",
+      "signIn": "Sign in to {{name}}",
+      "signOut": "Sign out of {{name}}"
+    }
+  },
+  "gateways": {
+    "nameRequired": "Enter a name for the gateway.",
+    "unsupportedApi": "Unsupported API: {{api}}",
+    "notFound": "This gateway no longer exists.",
+    "notSaved": "The gateway could not be saved.",
+    "addressInvalid": "Enter the gateway's full address, starting with https://.",
+    "addressProtocol": "The gateway URL must use http or https.",
+    "unreachable": "The gateway could not be reached: {{error}}",
+    "badResponse": "The gateway answered {{status}}.",
+    "modelRequired": "Add at least one model."
+  },
+  "providers": {
+    "unknown": "Unknown provider: {{id}}",
+    "connect": "Connect {{name}}",
+    "savedKey": "Saved key",
+    "environmentVariable": "Environment variable",
+    "continueInBrowser": "Continue in your browser.",
+    "enterCode": "Enter the code {{code}} on the page that opens."
+  },
+  "models": {
+    "notAvailableConnect": "That model is not available. Connect its provider first.",
+    "notAvailableInSettings": "That model is not available. Connect its provider in Settings › Models.",
+    "notAvailableKeeping": "{{model}} is not available; keeping {{current}}.",
+    "currentModel": "the current model",
+    "noneChosen": "Choose a model in Settings › Models before starting a chat."
+  },
+  "settings": {
+    "unknownThinkingLevel": "Unknown thinking level: {{level}}",
+    "unknownPolicy": "Unknown policy: {{policy}}",
+    "shellPolicy": "Shell commands either ask first or run freely.",
+    "toolLocked": "This tool's setting cannot be changed here."
+  },
+  "conversations": {
+    "notInHistory": "That conversation is not in this app's history.",
+    "enterName": "Enter a name.",
+    "waitForAnswer": "Wait for the answer to finish.",
+    "tooShort": "This conversation is still short, so there is nothing to summarize yet.",
+    "attachmentNoFile": "{{name}} has no file to copy.",
+    "skillTitle": "Skill: {{name}}",
+    "untitled": "Untitled chat",
+    "interrupted": "Interrupted before it finished.",
+    "modelError": "The model returned an error.",
+    "stopped": "Stopped."
+  },
+  "approvals": {
+    "runCommand": "Run a command",
+    "save": "Save {{path}}",
+    "edit": "Edit {{path}}",
+    "aFile": "a file",
+    "aWebPage": "a web page",
+    "open": "Open {{url}}",
+    "searchWeb": "Search the web",
+    "useTool": "Use “{{tool}}” in {{server}}",
+    "run": "Run {{tool}}"
+  },
+  "webSearch": {
+    "unknownProvider": "Unknown search provider.",
+    "endpointInvalid": "{{provider}}: the server address must start with http:// or https://.",
+    "keyRejected": "The key or sign-in was rejected. Check it in Settings.",
+    "limitReached": "The usage limit was reached.",
+    "saveKeyFirst": "Save an API key first.",
+    "saveAddressFirst": "Save the server address first.",
+    "working": "Working.",
+    "noResults": "Connected, but the search returned no results."
+  },
+  "files": {
+    "attachTitle": "Attach files",
+    "importSkillTitle": "Import a skill",
+    "importSkillQuestion": "What would you like to import?",
+    "importSkillDetail": "A skill is a folder with a SKILL.md file, or a .zip or .skill file that contains one.",
+    "folderButton": "Folder…",
+    "archiveButton": "Archive file…",
+    "cancelButton": "Cancel",
+    "importButton": "Import",
+    "skillArchives": "Skill archives",
+    "chooseFolderTitle": "Choose a workspace folder",
+    "chooseButton": "Choose",
+    "agentFiles": "Agent files",
+    "importAgentTitle": "Import an agent",
+    "agentTooLarge": "This file is too large to be an exported agent.",
+    "exportAgentTitle": "Export agent",
+    "exportButton": "Export"
+  },
+  "updates": {
+    "checkFailed": "Could not check for updates. Check your internet connection and try again.",
+    "downloadFailed": "The update could not be downloaded. Try again later."
+  }
+}

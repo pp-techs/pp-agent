@@ -4,6 +4,7 @@ import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { useAuthPromptStore } from "@/components/modals/auth-prompt-modal";
+import { i18n } from "@/lib/i18n";
 import { queryKeys } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
 
@@ -18,6 +19,7 @@ const SCOPE_KEYS: Record<SettingsScope, QueryKey[]> = {
   mcp: [queryKeys.mcp, queryKeys.mcpJson],
   agents: [queryKeys.agents, queryKeys.agentToolOptions],
   workspaces: [queryKeys.workspaces, queryKeys.agents],
+  sessions: [queryKeys.sessions],
 };
 
 /** Mirrors the agent process into the chat store: live events first, then a snapshot to catch up. */
@@ -54,7 +56,7 @@ export function useAgentConnection(bridge: DesktopBridge) {
             description: event.message,
             action: url
               ? {
-                  label: "Open",
+                  label: i18n.t("common:actions.open"),
                   onClick: () => {
                     bridge.openExternal(url).catch((error: unknown) => toast.error(String(error)));
                   },

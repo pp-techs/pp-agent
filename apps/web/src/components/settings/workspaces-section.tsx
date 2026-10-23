@@ -16,6 +16,7 @@ import { Skeleton } from "@workspace/ui/components/skeleton";
 import { Spinner } from "@workspace/ui/components/spinner";
 import { useQuery } from "@tanstack/react-query";
 import { PencilIcon, PlusIcon, Trash2Icon, TriangleAlertIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { ConfirmModal } from "@/components/modals/confirm-modal";
@@ -37,16 +38,17 @@ function WorkspaceRow({
 }) {
   const remove = useDeleteWorkspace(bridge);
   const isDefault = workspace.id === DEFAULT_WORKSPACE_ID;
+  const { t } = useTranslation(["agents", "common"]);
 
   async function onDelete() {
     const confirmed = await ConfirmModal.show({
-      title: "Delete this workspace?",
-      description: `“${workspace.name}” will be removed. Its chats move to the built-in workspace, and its files stay in the folder.`,
-      confirmLabel: "Delete",
+      title: t("workspacesSection.deleteConfirm.title"),
+      description: t("workspacesSection.deleteConfirm.description", { name: workspace.name }),
+      confirmLabel: t("common:actions.delete"),
     });
     if (!confirmed) return;
     remove.mutate(workspace.id, {
-      onSuccess: () => toast.success(`Workspace “${workspace.name}” deleted`),
+      onSuccess: () => toast.success(t("workspacesSection.deleted", { name: workspace.name })),
     });
   }
 
@@ -58,23 +60,23 @@ function WorkspaceRow({
       <ItemContent className="min-w-0">
         <ItemTitle className="flex-wrap">
           {workspace.name}
-          {isDefault && <Badge variant="secondary">Built-in</Badge>}
+          {isDefault && <Badge variant="secondary">{t("workspacesSection.builtInBadge")}</Badge>}
         </ItemTitle>
         <ItemDescription className="truncate font-mono text-xs" title={workspace.dir ?? undefined}>
-          {workspace.dir ?? "The app's default workspace folder"}
+          {workspace.dir ?? t("workspacesSection.defaultFolder")}
         </ItemDescription>
       </ItemContent>
       <ItemActions>
         {remove.isPending && <Spinner />}
         <Button variant="outline" size="sm" onClick={onEdit}>
           <PencilIcon data-icon="inline-start" />
-          Edit
+          {t("common:actions.edit")}
         </Button>
         {!isDefault && (
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label={`Delete ${workspace.name}`}
+            aria-label={t("workspacesSection.deleteLabel", { name: workspace.name })}
             disabled={remove.isPending}
             onClick={() => void onDelete()}
           >
@@ -89,6 +91,7 @@ function WorkspaceRow({
 export function WorkspacesSection({ bridge }: { bridge: DesktopBridge }) {
   const workspaces = useQuery(workspacesQuery(bridge));
   const [view, setView] = React.useState<View>({ kind: "list" });
+  const { t } = useTranslation("agents");
 
   if (view.kind === "edit") {
     return (
@@ -99,12 +102,12 @@ export function WorkspacesSection({ bridge }: { bridge: DesktopBridge }) {
   return (
     <div className="flex flex-col gap-6">
       <SectionHeading
-        title="Workspaces"
-        description="Group chats by project or team. Each workspace has its own folder, rules, and defaults for new chats."
+        title={t("workspacesSection.title")}
+        description={t("workspacesSection.description")}
       >
         <Button onClick={() => setView({ kind: "edit" })}>
           <PlusIcon />
-          New workspace
+          {t("workspacesSection.newWorkspace")}
         </Button>
       </SectionHeading>
 
@@ -117,7 +120,7 @@ export function WorkspacesSection({ bridge }: { bridge: DesktopBridge }) {
       ) : workspaces.isError ? (
         <Alert variant="destructive">
           <TriangleAlertIcon />
-          <AlertTitle>Couldn't load your workspaces</AlertTitle>
+          <AlertTitle>{t("workspacesSection.loadError")}</AlertTitle>
           <AlertDescription>{workspaces.error.message}</AlertDescription>
         </Alert>
       ) : (

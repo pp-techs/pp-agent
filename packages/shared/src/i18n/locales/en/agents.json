@@ -1,0 +1,218 @@
+{
+  "shared": {
+    "icon": "Icon",
+    "name": "Name",
+    "instructions": "Instructions",
+    "model": "Model",
+    "quickIconPicks": "Quick icon picks",
+    "useAsIcon": "Use {{icon}} as the icon",
+    "maxChars": "Use at most {{max}} characters.",
+    "modelUnavailable": "{{modelId}} (not available)",
+    "saveChanges": "Save changes"
+  },
+  "toolOptions": {
+    "read": {
+      "label": "Read files",
+      "description": "Open text files in the workspace."
+    },
+    "ls": {
+      "label": "List folders",
+      "description": "See which files a folder contains."
+    },
+    "find": {
+      "label": "Find files by name",
+      "description": "Look for files whose names match."
+    },
+    "grep": {
+      "label": "Search inside files",
+      "description": "Find text inside files."
+    },
+    "read_document": {
+      "label": "Read documents (Word, Excel, PDF…)",
+      "description": "Read office documents and PDFs."
+    },
+    "current_datetime": {
+      "label": "Current date and time",
+      "description": "Check today's date, the time, and the time zone."
+    },
+    "web_search": {
+      "label": "Search the web",
+      "description": "Look things up on the internet."
+    },
+    "web_fetch": {
+      "label": "Open web pages",
+      "description": "Read the content of a web address."
+    },
+    "write": {
+      "label": "Create and save files",
+      "description": "Save new files; asks first."
+    },
+    "edit": {
+      "label": "Edit parts of files",
+      "description": "Change parts of existing files."
+    },
+    "bash": {
+      "label": "Run shell commands",
+      "description": "Run commands on this computer; asks first unless set to run freely."
+    },
+    "powershell": {
+      "label": "Run PowerShell commands",
+      "description": "Run commands on this computer; asks first unless set to run freely."
+    }
+  },
+  "agentsSection": {
+    "title": "Agents",
+    "description": "Assistants set up for a kind of work: their own rules, tools, skills, model, and folder. Pick one for each chat from the message box.",
+    "newAgent": "New agent",
+    "loadError": "Couldn't load your agents",
+    "copyName": "{{name}} copy",
+    "defaultBadge": "Default",
+    "modelBadgeTitle": "Switches the chat to this model",
+    "actionsFor": "Actions for {{name}}",
+    "duplicate": "Duplicate",
+    "added": "Agent “{{name}}” added",
+    "exported": "Agent “{{name}}” exported",
+    "deleted": "Agent “{{name}}” deleted",
+    "deleteConfirm": {
+      "title": "Delete this agent?",
+      "description": "“{{name}}” will be removed. Chats that used it switch to {{fallback}}. Files in its workspace stay where they are.",
+      "fallback": "the default agent"
+    }
+  },
+  "agentEditor": {
+    "newTitle": "New agent",
+    "editTitle": "Edit agent",
+    "editNamed": "Edit “{{name}}”",
+    "backToAgents": "Back to agents",
+    "subtitleDefault": "The built-in agent. You can change it, but not delete it.",
+    "subtitle": "An agent is an assistant set up for one kind of work.",
+    "openError": "Couldn't open this agent",
+    "notFound": {
+      "title": "This agent no longer exists",
+      "description": "It may have been deleted. Go back to see your agents."
+    },
+    "saved": "Agent “{{name}}” saved",
+    "create": "Create agent",
+    "fields": {
+      "namePlaceholder": "Finance helper",
+      "description": {
+        "label": "Description",
+        "placeholder": "Helps the finance team with month-end reports and expense questions.",
+        "help": "Shown in the agent list and at the start of a new chat."
+      },
+      "instructions": {
+        "placeholder": "You help the finance team close the month.\n- Answer in short bullet points.\n- Always say which file a number comes from.\n- Never change the original spreadsheets; save results as new files.",
+        "help": "Rules the agent always follows, e.g. tone, format, what to avoid."
+      }
+    },
+    "errors": {
+      "nameRequired": "Give the agent a name.",
+      "nameTaken": "Another agent already has this name."
+    },
+    "model": {
+      "description": "When you pick this agent, the chat switches to this model. New chats with it start on it.",
+      "keep": "Keep the chat's model"
+    },
+    "checklist": {
+      "notInstalled": "Not installed"
+    },
+    "tools": {
+      "legend": "Tools",
+      "description": "What the agent can do on this computer. Settings › Tools still decides what needs your approval.",
+      "allLabel": "All tools",
+      "allDescription": "Includes tools turned on later.",
+      "empty": "No tools to choose from.",
+      "off": "Off in Settings › Tools"
+    },
+    "mcp": {
+      "legend": "MCP servers",
+      "description": "Connected services this agent can use.",
+      "allLabel": "All servers",
+      "allDescription": "Every server that is turned on, including ones added later.",
+      "empty": "No MCP servers yet. Add them in Settings › MCP servers.",
+      "off": "Off in Settings › MCP servers"
+    },
+    "skills": {
+      "legend": "Skills",
+      "description": "Ready-made instructions this agent can follow.",
+      "allLabel": "All skills",
+      "allDescription": "Every skill that is turned on, including ones added later.",
+      "empty": "No skills yet. Add them in Settings › Skills.",
+      "off": "Off in Settings › Skills"
+    },
+    "starterPrompts": {
+      "legend": "Starter prompts",
+      "description": "Buttons shown on a new chat with this agent. Clicking one sends it right away.",
+      "inputLabel": "Starter prompt {{number}}",
+      "placeholder": "Summarise this month's expenses by team",
+      "remove": "Remove starter prompt {{number}}",
+      "add": "Add starter prompt"
+    }
+  },
+  "workspacesSection": {
+    "title": "Workspaces",
+    "description": "Group chats by project or team. Each workspace has its own folder, rules, and defaults for new chats.",
+    "newWorkspace": "New workspace",
+    "loadError": "Couldn't load your workspaces",
+    "builtInBadge": "Built-in",
+    "defaultFolder": "The app's default workspace folder",
+    "deleteLabel": "Delete {{name}}",
+    "deleted": "Workspace “{{name}}” deleted",
+    "deleteConfirm": {
+      "title": "Delete this workspace?",
+      "description": "“{{name}}” will be removed. Its chats move to the built-in workspace, and its files stay in the folder."
+    }
+  },
+  "workspaceEditor": {
+    "newTitle": "New workspace",
+    "editTitle": "Edit workspace",
+    "editNamed": "Edit “{{name}}”",
+    "backToWorkspaces": "Back to workspaces",
+    "subtitleBuiltIn": "The built-in workspace. You can change it, but not delete it.",
+    "subtitle": "A workspace groups chats around one folder, with its own rules and defaults.",
+    "openError": "Couldn't open this workspace",
+    "notFound": {
+      "title": "This workspace no longer exists",
+      "description": "It may have been deleted. Go back to see your workspaces."
+    },
+    "saved": "Workspace “{{name}}” saved",
+    "create": "Create workspace",
+    "builtInSrOnly": "Built-in workspace",
+    "namePlaceholder": "Finance team",
+    "errors": {
+      "nameRequired": "Give the workspace a name.",
+      "nameTaken": "Another workspace already has this name."
+    },
+    "folder": {
+      "legend": "Folder",
+      "descriptionFixed": "Where chats in this workspace work and save files. It cannot be changed after the workspace is created.",
+      "descriptionNew": "Where chats in this workspace work and save files. Chosen once; it cannot be changed later.",
+      "none": "No folder chosen",
+      "choose": "Choose…",
+      "required": "Choose a folder for the workspace."
+    },
+    "instructions": {
+      "placeholder": "Files here are monthly reports. Name new files YYYY-MM-<topic>.\nAnswer in Vietnamese.",
+      "help": "Rules for every chat in this workspace, whichever agent it uses."
+    },
+    "defaults": {
+      "legend": "Defaults for new chats",
+      "description": "What a new chat in this workspace starts with. You can still change them in the chat.",
+      "agent": "Agent",
+      "agentInherit": "The agent picked last",
+      "modelInherit": "The default model",
+      "modelHelp": "The agent's own model, when it has one, comes first.",
+      "thinking": "Thinking",
+      "thinkingInherit": "The level picked last"
+    },
+    "thinkingLevels": {
+      "off": "Off",
+      "minimal": "Minimal",
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "xhigh": "Extra high",
+      "max": "Max"
+    }
+  }
+}

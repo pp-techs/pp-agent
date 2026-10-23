@@ -31,6 +31,7 @@ import { Skeleton } from "@workspace/ui/components/skeleton";
 import { Spinner } from "@workspace/ui/components/spinner";
 import { Switch } from "@workspace/ui/components/switch";
 import { useQuery } from "@tanstack/react-query";
+import { Trans, useTranslation } from "react-i18next";
 import {
   DownloadIcon,
   FolderOpenIcon,
@@ -64,19 +65,20 @@ function SkillRow({
   skill: SkillSummary;
   onEdit: () => void;
 }) {
+  const { t } = useTranslation(["extensions", "common"]);
   const setEnabled = useSetSkillEnabled(bridge);
   const remove = useDeleteSkill(bridge);
   const enabled = setEnabled.isPending ? setEnabled.variables.enabled : skill.enabled;
 
   async function onDelete() {
     const confirmed = await ConfirmModal.show({
-      title: "Delete this skill?",
-      description: `“${skill.name}” and every file in its folder will be removed. This can't be undone.`,
-      confirmLabel: "Delete",
+      title: t("skills.deleteConfirm.title"),
+      description: t("skills.deleteConfirm.description", { name: skill.name }),
+      confirmLabel: t("common:actions.delete"),
     });
     if (!confirmed) return;
     remove.mutate(skill.name, {
-      onSuccess: () => toast.success(`Skill “${skill.name}” deleted`),
+      onSuccess: () => toast.success(t("skills.toast.deleted", { name: skill.name })),
     });
   }
 
@@ -85,7 +87,7 @@ function SkillRow({
       <ItemContent className="min-w-0">
         <ItemTitle className="flex-wrap">
           <span className="font-mono">{skill.name}</span>
-          {!skill.modelInvocable && <Badge variant="secondary">Only when asked</Badge>}
+          {!skill.modelInvocable && <Badge variant="secondary">{t("skills.onlyWhenAsked")}</Badge>}
         </ItemTitle>
         <ItemDescription className="line-clamp-2">{skill.description}</ItemDescription>
       </ItemContent>
@@ -95,12 +97,20 @@ function SkillRow({
           checked={enabled}
           disabled={setEnabled.isPending || remove.isPending}
           onCheckedChange={(value) => setEnabled.mutate({ name: skill.name, enabled: value })}
-          aria-label={enabled ? `Turn off ${skill.name}` : `Turn on ${skill.name}`}
+          aria-label={
+            enabled
+              ? t("skills.row.turnOff", { name: skill.name })
+              : t("skills.row.turnOn", { name: skill.name })
+          }
         />
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
-              <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${skill.name}`} />
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t("skills.row.actionsFor", { name: skill.name })}
+              />
             }
           >
             <MoreHorizontalIcon />
@@ -108,7 +118,7 @@ function SkillRow({
           <DropdownMenuContent align="end" className="w-44">
             <DropdownMenuItem onClick={onEdit}>
               <PencilIcon />
-              Edit
+              {t("common:actions.edit")}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() =>
@@ -116,12 +126,12 @@ function SkillRow({
               }
             >
               <FolderOpenIcon />
-              Show in folder
+              {t("showInFolder")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={() => void onDelete()}>
               <Trash2Icon />
-              Delete
+              {t("common:actions.delete")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -131,6 +141,7 @@ function SkillRow({
 }
 
 export function SkillsSection({ bridge }: { bridge: DesktopBridge }) {
+  const { t } = useTranslation(["extensions", "common"]);
   const skills = useQuery(skillsQuery(bridge));
   const importSkill = useImportSkill(bridge);
   const [view, setView] = React.useState<View>({ kind: "list" });
@@ -153,9 +164,10 @@ export function SkillsSection({ bridge }: { bridge: DesktopBridge }) {
     importSkill.mutate(path, {
       onSuccess: (imported) => {
         const first = imported[0];
-        if (!first) toast.info("No skills were found there.");
-        else if (imported.length === 1) toast.success(`Skill “${first.name}” added`);
-        else toast.success(`${imported.length} skills added`);
+        if (!first) toast.info(t("skills.toast.none"));
+        else if (imported.length === 1)
+          toast.success(t("skills.toast.added", { name: first.name }));
+        else toast.success(t("skills.toast.addedMany", { count: imported.length }));
       },
     });
   }
@@ -164,11 +176,11 @@ export function SkillsSection({ bridge }: { bridge: DesktopBridge }) {
     <>
       <Button variant="outline" disabled={importSkill.isPending} onClick={() => void onImport()}>
         {importSkill.isPending ? <Spinner /> : <DownloadIcon />}
-        Import
+        {t("common:actions.import")}
       </Button>
       <Button onClick={() => setView({ kind: "edit" })}>
         <PlusIcon />
-        New skill
+        {t("skills.newSkill")}
       </Button>
     </>
   );
@@ -178,8 +190,8 @@ export function SkillsSection({ bridge }: { bridge: DesktopBridge }) {
   return (
     <div className="flex flex-col gap-6">
       <SectionHeading
-        title="Skills"
-        description="Ready-made instructions the agent follows for specific tasks."
+        title={t("skills.heading.title")}
+        description={t("skills.heading.description")}
       >
         {list.length > 0 && actions}
       </SectionHeading>
@@ -193,7 +205,7 @@ export function SkillsSection({ bridge }: { bridge: DesktopBridge }) {
       ) : skills.isError ? (
         <Alert variant="destructive">
           <TriangleAlertIcon />
-          <AlertTitle>Couldn't load your skills</AlertTitle>
+          <AlertTitle>{t("skills.loadError")}</AlertTitle>
           <AlertDescription>{skills.error.message}</AlertDescription>
         </Alert>
       ) : list.length === 0 ? (
@@ -202,20 +214,20 @@ export function SkillsSection({ bridge }: { bridge: DesktopBridge }) {
             <EmptyMedia variant="icon">
               <SparklesIcon />
             </EmptyMedia>
-            <EmptyTitle>No skills yet</EmptyTitle>
-            <EmptyDescription>
-              Write your own, or import one someone shared with you (a folder, .zip, or .skill
-              file).
-            </EmptyDescription>
+            <EmptyTitle>{t("skills.empty.title")}</EmptyTitle>
+            <EmptyDescription>{t("skills.empty.description")}</EmptyDescription>
           </EmptyHeader>
           <EmptyContent className="flex-row justify-center">{actions}</EmptyContent>
         </Empty>
       ) : (
         <>
           <p className="text-sm text-muted-foreground">
-            The agent picks a matching skill on its own. To use one yourself, type{" "}
-            <Kbd className="font-mono">/skill:name</Kbd> in the chat, for example{" "}
-            <Kbd className="font-mono">/skill:{list[0]?.name}</Kbd>.
+            <Trans
+              t={t}
+              i18nKey="skills.usageHint"
+              values={{ example: list[0]?.name }}
+              components={{ kbd: <Kbd className="font-mono" /> }}
+            />
           </p>
           <ItemGroup>
             {list.map((skill) => (
