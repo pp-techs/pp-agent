@@ -18,7 +18,7 @@ There is no separate "chat mode"; agents are profiles (rules, tools/MCP/skills s
 
 ## Approval based on tool tier and readOnlyHint
 
-Approval follows a tool tier: built-ins have fixed tiers, MCP tools are `read` only when the server marks them `readOnlyHint`, everything unknown is `exec`. Under `auto`, read runs and everything else asks, so business users confirm any change by default while lookups stay friction-free. The shell is off by default and always asks when on; `edit` is off because non-developers use `write`.
+Approval follows a tool tier: built-ins have fixed tiers, MCP tools are `read` only when the server marks them `readOnlyHint`, everything unknown is `exec`. Under `auto`, read runs and everything else asks, so business users confirm any change by default while lookups stay friction-free. The shell is off by default and asks when on, unless its policy is explicitly set to `allow` after a warning (confirmation dialog plus a standing alert in Settings); `edit` is off because non-developers use `write`.
 
 ## Everyone may edit Settings
 

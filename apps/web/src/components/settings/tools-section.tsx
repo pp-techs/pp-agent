@@ -29,8 +29,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/component
 import { useQuery } from "@tanstack/react-query";
 import { SearchIcon, TriangleAlertIcon, WrenchIcon } from "lucide-react";
 
+import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { OptionGroup, SwitchRow } from "@/components/settings/option-group";
 import { SectionHeading } from "@/components/settings/section-heading";
+import { WebSearchGroup } from "@/components/settings/web-search-group";
 import { toolsQuery, useSetShellEnabled, useSetToolPolicy } from "@/lib/extension-queries";
 import { settingsQuery } from "@/lib/queries";
 
@@ -39,6 +41,12 @@ const POLICY_ITEMS: { value: ToolPolicy; label: string }[] = [
   { value: "ask", label: "Always ask" },
   { value: "allow", label: "Always allow" },
   { value: "off", label: "Off" },
+];
+
+/** The shell never runs on `auto` or `off`: it asks, or runs freely after a warning. */
+const SHELL_POLICY_ITEMS: { value: ToolPolicy; label: string }[] = [
+  { value: "ask", label: "Always ask" },
+  { value: "allow", label: "Run without asking" },
 ];
 
 const EFFECTIVE_ITEMS: { value: ToolSummary["effective"]; label: string }[] = [
@@ -61,6 +69,8 @@ const FRIENDLY_NAMES: Record<string, string> = {
   powershell: "Run PowerShell commands",
   read_document: "Read documents (Word, Excel, PDF…)",
   current_datetime: "Current date and time",
+  web_search: "Search the web",
+  web_fetch: "Open web pages",
   codemode: "Run scripts with connected tools",
   tool_search: "Look up connected tools",
   list_mcp_resources: "List server resources",
@@ -84,11 +94,7 @@ function friendlyName(tool: ToolSummary) {
 }
 
 function lockedReason(tool: ToolSummary) {
-  if (SHELL_TOOLS[tool.name]) {
-    return tool.effective === "off"
-      ? "Turn on “Allow shell commands” above to use this."
-      : "Follows “Allow shell commands” above. Every command asks you first.";
-  }
+  if (SHELL_TOOLS[tool.name]) return "Turn on “Allow shell commands” above to use this.";
   return "Always on. Each tool it reaches is checked on its own.";
 }
 
@@ -109,10 +115,12 @@ function groupBySource(tools: ToolSummary[]) {
 
 function ShellGroup({ bridge }: { bridge: DesktopBridge }) {
   const settings = useQuery(settingsQuery(bridge));
+  const tools = useQuery(toolsQuery(bridge));
   const setShell = useSetShellEnabled(bridge);
   const checked = setShell.isPending
     ? (setShell.variables ?? false)
     : (settings.data?.shellEnabled ?? false);
+  const warning = tools.data?.find((tool) => SHELL_TOOLS[tool.name] && tool.warning)?.warning;
   return (
     <OptionGroup
       legend="Shell commands"
@@ -121,11 +129,18 @@ function ShellGroup({ bridge }: { bridge: DesktopBridge }) {
       <SwitchRow
         id="shell-enabled"
         label="Allow shell commands"
-        description="It still asks you before every command. Commands can change or delete files, so only approve ones you understand."
+        description="It asks you before every command unless you choose “Run without asking” in the list below. Commands can change or delete files, so only approve ones you understand."
         checked={checked}
         disabled={settings.isPending || setShell.isPending}
         onCheckedChange={(value) => setShell.mutate(value)}
       />
+      {warning && (
+        <Alert variant="destructive">
+          <TriangleAlertIcon />
+          <AlertTitle>Shell commands run without asking</AlertTitle>
+          <AlertDescription>{warning}</AlertDescription>
+        </Alert>
+      )}
     </OptionGroup>
   );
 }
@@ -156,17 +171,33 @@ function PolicyControl({ bridge, tool }: { bridge: DesktopBridge; tool: ToolSumm
     );
   }
 
+  const isShell = SHELL_TOOLS[tool.name] === true;
+  const items = isShell ? SHELL_POLICY_ITEMS : POLICY_ITEMS;
+
+  async function onChange(policy: ToolPolicy) {
+    if (isShell && policy === "allow") {
+      const confirmed = await ConfirmModal.show({
+        title: "Run shell commands without asking?",
+        description:
+          "The agent will run every command right away, without showing it to you first. Commands can change or delete files and send data out of this computer. Only turn this on if you trust the agent, the model and the content it reads.",
+        confirmLabel: "Run without asking",
+      });
+      if (!confirmed) return;
+    }
+    setPolicy.mutate({ name: tool.name, policy });
+  }
+
   return (
     <Select
-      items={POLICY_ITEMS}
+      items={items}
       value={tool.policy}
-      onValueChange={(policy) => policy && setPolicy.mutate({ name: tool.name, policy })}
+      onValueChange={(policy) => policy && void onChange(policy)}
     >
-      <SelectTrigger size="sm" className="w-36" aria-label={label}>
+      <SelectTrigger size="sm" className="w-40" aria-label={label}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {POLICY_ITEMS.map((item) => (
+        {items.map((item) => (
           <SelectItem key={item.value} value={item.value}>
             {item.label}
           </SelectItem>
@@ -191,6 +222,12 @@ function ToolRow({ bridge, tool }: { bridge: DesktopBridge; tool: ToolSummary })
           <ItemDescription className="line-clamp-2 text-xs">{tool.description}</ItemDescription>
         )}
         {tool.locked && <ItemDescription className="text-xs">{lockedReason(tool)}</ItemDescription>}
+        {tool.warning && (
+          <ItemDescription className="flex items-center gap-1 text-xs text-destructive">
+            <TriangleAlertIcon className="size-3 shrink-0" />
+            {tool.warning}
+          </ItemDescription>
+        )}
       </ItemContent>
       <ItemActions>
         <PolicyControl bridge={bridge} tool={tool} />
@@ -231,6 +268,8 @@ export function ToolsSection({ bridge }: { bridge: DesktopBridge }) {
       />
 
       <ShellGroup bridge={bridge} />
+
+      <WebSearchGroup bridge={bridge} />
 
       <p className="text-sm text-muted-foreground">
         <strong className="font-medium text-foreground">Automatic</strong> lets tools that only look

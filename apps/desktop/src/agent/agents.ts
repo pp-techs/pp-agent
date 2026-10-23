@@ -273,12 +273,17 @@ const TOOL_TEXT: Record<string, { label: string; description: string }> = {
     label: "Current date and time",
     description: "Check today's date, the time, and the time zone.",
   },
+  web_search: { label: "Search the web", description: "Look things up on the internet." },
+  web_fetch: { label: "Open web pages", description: "Read the content of a web address." },
   write: { label: "Create and save files", description: "Save new files; asks first." },
   edit: { label: "Edit parts of files", description: "Change parts of existing files." },
-  bash: { label: "Run shell commands", description: "Run commands on this computer; asks first." },
+  bash: {
+    label: "Run shell commands",
+    description: "Run commands on this computer; asks first unless set to run freely.",
+  },
   powershell: {
     label: "Run PowerShell commands",
-    description: "Run commands on this computer; asks first.",
+    description: "Run commands on this computer; asks first unless set to run freely.",
   },
 };
 

@@ -1,6 +1,7 @@
 import type { Credential, CredentialInfo, CredentialStore } from "@earendil-works/pi-ai";
 import type { MainToAgentMessage, StoredCredential, VaultRequest } from "@workspace/shared";
 import { send } from "./ipc.ts";
+import { WEB_KEY_PREFIX } from "./web/names.ts";
 
 type VaultResult = Extract<MainToAgentMessage, { kind: "vault_result" }>;
 
@@ -35,6 +36,8 @@ export class VaultCredentialStore implements CredentialStore {
     const ids = await this.ids();
     const infos: CredentialInfo[] = [];
     for (const providerId of ids) {
+      // Search keys share the vault but are not providers.
+      if (providerId.startsWith(WEB_KEY_PREFIX)) continue;
       const credential = await this.load(providerId);
       if (credential) infos.push({ providerId, type: credential.type });
     }

@@ -247,7 +247,10 @@ export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 export interface AppSettings {
   /** Model for new conversations. */
   defaultModel: ModelRef | null;
-  /** Lets the agent run shell commands (bash, or PowerShell on Windows). Each command still asks. */
+  /**
+   * Lets the agent run shell commands (bash, or PowerShell on Windows). Each command asks unless
+   * the shell's own policy is `allow`.
+   */
   shellEnabled: boolean;
   /** Tool name → policy; tools not listed use their default. */
   toolPolicies: Record<string, ToolPolicy>;
@@ -351,8 +354,10 @@ export interface ToolSummary {
   policy: ToolPolicy;
   /** What actually happens when the agent calls the tool. */
   effective: "allow" | "ask" | "off";
-  /** Policy cannot be changed here (shell tools follow `shellEnabled`; discovery tools stay on). */
+  /** Policy cannot be changed here (shell tools while shell commands are off; discovery tools stay on). */
   locked: boolean;
+  /** Risk the person should know about while the tool is set up this way; shown beside the tool. */
+  warning?: string;
 }
 
 /** Contents of `AgentPaths.settingsFile`. */
@@ -362,6 +367,61 @@ export interface SettingsFile extends AppSettings {
   agents: AgentProfile[];
   /** Always contains the workspace with id `DEFAULT_WORKSPACE_ID`. */
   workspaces: WorkspaceProfile[];
+  webSearch: WebSearchConfig;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Web search
+// ---------------------------------------------------------------------------------------------
+
+/** Search services `web_search` can use. */
+export const SEARCH_PROVIDERS = ["searxng", "serper", "tavily", "brave", "exa", "webclaw"] as const;
+export type SearchProviderId = (typeof SEARCH_PROVIDERS)[number];
+
+/** Stored in settings.json. Keys are not here: they live in the encrypted vault. */
+export interface WebSearchConfig {
+  /** Providers in the order `web_search` tries them; the first that answers wins. */
+  providers: SearchProviderId[];
+  /** Base URL per provider that has one (SearXNG: required; webclaw: optional, self-hosted). */
+  endpoints: Partial<Record<SearchProviderId, string>>;
+}
+
+export interface SearchProviderView {
+  id: SearchProviderId;
+  label: string;
+  /** Takes an API key (SearXNG: optional bearer token). */
+  usesKey: boolean;
+  keyRequired: boolean;
+  /** A key is stored in the vault. The key itself never reaches the renderer. */
+  hasKey: boolean;
+  /** Takes a base URL. */
+  usesEndpoint: boolean;
+  endpointRequired: boolean;
+  endpoint: string;
+  /** In the list `web_search` tries. */
+  enabled: boolean;
+  /** Has what it needs to run (a key and/or a URL). */
+  configured: boolean;
+  /** Where to get a key or set one up. */
+  helpUrl: string;
+}
+
+/** Enabled providers first, in the order they are tried; then the rest. */
+export interface WebSearchView {
+  providers: SearchProviderView[];
+}
+
+export interface SaveWebSearchInput {
+  /** Enabled providers in the order they are tried. */
+  providers: SearchProviderId[];
+  endpoints: Partial<Record<SearchProviderId, string>>;
+  /** Provider → new key; `null` removes the stored key; a provider left out keeps its key. */
+  keys: Partial<Record<SearchProviderId, string | null>>;
+}
+
+export interface WebSearchTestResult {
+  ok: boolean;
+  message: string;
 }
 
 export interface SkillSummary {
@@ -478,6 +538,10 @@ export interface AgentCommandMap {
 
   list_tools: { params: NoParams; result: ToolSummary[] };
   set_tool_policy: { params: { name: string; policy: ToolPolicy }; result: void };
+  list_web_search: { params: NoParams; result: WebSearchView };
+  save_web_search: { params: { config: SaveWebSearchInput }; result: WebSearchView };
+  /** Runs one search against a saved provider to check its key and URL. */
+  test_web_search: { params: { provider: SearchProviderId }; result: WebSearchTestResult };
 
   list_skills: { params: NoParams; result: SkillSummary[] };
   get_skill: { params: { name: string }; result: SkillDetail };
