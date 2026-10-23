@@ -264,7 +264,15 @@ function FetchedModels({
 }) {
   const [search, setSearch] = React.useState("");
   const query = search.trim().toLowerCase();
-  const visible = query ? models.filter((model) => model.id.toLowerCase().includes(query)) : models;
+  const visible = query
+    ? models.filter((model) =>
+        [
+          model.id,
+          model.name ?? "",
+          modelLabel({ name: model.name ?? "", modelId: model.id }),
+        ].some((text) => text.toLowerCase().includes(query)),
+      )
+    : models;
   const selectedCount = models.filter((model) => included.has(model.id)).length;
   const visibleSelected = visible.filter((model) => included.has(model.id)).length;
 

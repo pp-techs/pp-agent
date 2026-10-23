@@ -92,7 +92,7 @@ export function ModelPicker({ bridge }: { bridge: DesktopBridge }) {
                     <CommandItem
                       key={key}
                       value={key}
-                      keywords={[model.name, model.modelId, model.providerName]}
+                      keywords={[label(model), model.name, model.modelId, model.providerName]}
                       data-checked={key === currentKey}
                       onSelect={() => {
                         setOpen(false);

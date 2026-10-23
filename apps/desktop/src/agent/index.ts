@@ -466,9 +466,11 @@ class AgentHost {
     const { paths, settings } = this.requireServices();
     const { agents, workspaces, activeAgentId } = settings.get();
     const workspace = findWorkspace(workspaces, workspaceId ?? this.workspaceId);
-    this.workspaceId = workspace.id;
     this.agentId = findAgent(agents, workspace.agentId ?? activeAgentId).id;
-    const manager = SessionManager.create(this.workspaceFor(workspace), paths.sessionDir);
+    const cwd = this.workspaceFor(workspace);
+    // The folder may have fallen back to the default one, so name the workspace it belongs to.
+    this.workspaceId = workspaceForCwd(workspaces, cwd, paths.workspaceDir).id;
+    const manager = SessionManager.create(cwd, paths.sessionDir);
     manager.appendCustomEntry(AGENT_ENTRY_TYPE, { agentId: this.agentId });
     return manager;
   }
@@ -483,8 +485,9 @@ class AgentHost {
     const manager = SessionManager.open(path, paths.sessionDir);
     this.agentId = findAgent(agents, conversationAgentId(manager)).id;
     const workspace = workspaceForCwd(workspaces, manager.getCwd(), paths.workspaceDir);
-    this.workspaceId = workspace.id;
     const cwd = this.workspaceFor(workspace);
+    // The folder may have fallen back to the default one, so name the workspace it belongs to.
+    this.workspaceId = workspaceForCwd(workspaces, cwd, paths.workspaceDir).id;
     return cwd === manager.getCwd() ? manager : SessionManager.open(path, paths.sessionDir, cwd);
   }
 

@@ -302,7 +302,11 @@ export function ChatSidebar({ bridge }: { bridge: DesktopBridge }) {
         <SidebarGroup>
           <SidebarGroupLabel>Workspaces</SidebarGroupLabel>
           <SidebarGroupContent className="flex flex-col gap-1">
-            {sessions.isPending || workspaces.isPending ? (
+            {(sessions.isError && !sessions.data) || (workspaces.isError && !workspaces.data) ? (
+              <p className="px-3 py-1.5 text-xs text-destructive">
+                Couldn't load your chats. Reopen the app to try again.
+              </p>
+            ) : sessions.isPending || workspaces.isPending ? (
               <SidebarMenu>
                 {Array.from({ length: 5 }, (_, index) => (
                   <SidebarMenuItem key={index}>
