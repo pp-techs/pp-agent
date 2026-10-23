@@ -1,6 +1,7 @@
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { Api, AuthEvent, AuthInteraction, Model } from "@earendil-works/pi-ai";
 import type {
+  FetchedGatewayModel,
   GatewayApi,
   GatewayConfig,
   ModelRef,
@@ -14,6 +15,8 @@ type ProviderConfigInput = Parameters<ModelRuntime["registerProvider"]>[1];
 
 const GATEWAY_PREFIX = "gw-";
 const FETCH_TIMEOUT_MS = 15_000;
+const DEFAULT_CONTEXT_WINDOW = 128_000;
+const DEFAULT_MAX_TOKENS = 16_384;
 
 /**
  * Trims and validates a gateway URL. Anthropic clients append `/v1/messages` themselves, so a
@@ -43,21 +46,54 @@ export function newGatewayId(name: string, taken: ReadonlySet<string>): string {
   return id;
 }
 
-function gatewayProvider(gateway: GatewayConfig): ProviderConfigInput {
+/** Pi's built-in provider whose models a gateway of this API most likely serves. */
+const PREFERRED_PROVIDER: Record<GatewayApi, string> = {
+  "openai-completions": "openai",
+  "openai-responses": "openai",
+  "anthropic-messages": "anthropic",
+};
+
+/**
+ * Looks a model up by id in Pi's built-in catalog (offline), for limits the gateway does not
+ * report. Gateways that prefix ids with the vendor (`anthropic/claude-…`) match on the bare id.
+ * The same model can appear under several providers with different limits, so the provider
+ * matching the gateway's API wins.
+ */
+function catalogLookup(
+  runtime: ModelRuntime,
+  api: GatewayApi,
+): (id: string) => Model<Api> | undefined {
+  const preferred = PREFERRED_PROVIDER[api];
+  const builtin = runtime
+    .getModels()
+    .filter((model) => !model.provider.startsWith(GATEWAY_PREFIX))
+    .sort((a, b) => Number(b.provider === preferred) - Number(a.provider === preferred));
+  const byId = new Map<string, Model<Api>>();
+  for (const model of builtin) if (!byId.has(model.id)) byId.set(model.id, model);
+  return (id) => byId.get(id) ?? byId.get(id.slice(id.lastIndexOf("/") + 1));
+}
+
+function gatewayProvider(
+  gateway: GatewayConfig,
+  lookup: (id: string) => Model<Api> | undefined,
+): ProviderConfigInput {
   return {
     name: gateway.name,
     baseUrl: gateway.baseUrl,
     api: gateway.api,
-    models: gateway.models.map((model) => ({
-      id: model.id,
-      name: model.name?.trim() || model.id,
-      api: gateway.api,
-      reasoning: model.reasoning ?? false,
-      input: model.images === false ? ["text"] : ["text", "image"],
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: model.contextWindow ?? 128_000,
-      maxTokens: model.maxTokens ?? 16_384,
-    })),
+    models: gateway.models.map((model) => {
+      const known = lookup(model.id);
+      return {
+        id: model.id,
+        name: model.name?.trim() || known?.name || model.id,
+        api: gateway.api,
+        reasoning: model.reasoning ?? false,
+        input: model.images === false ? ["text"] : ["text", "image"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: model.contextWindow ?? known?.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
+        maxTokens: model.maxTokens ?? known?.maxTokens ?? DEFAULT_MAX_TOKENS,
+      };
+    }),
   };
 }
 
@@ -78,7 +114,10 @@ export async function syncGateways(
   for (const gateway of gateways) {
     if (registered.has(gateway.id)) runtime.unregisterProvider(gateway.id);
     try {
-      runtime.registerProvider(gateway.id, gatewayProvider(gateway));
+      runtime.registerProvider(
+        gateway.id,
+        gatewayProvider(gateway, catalogLookup(runtime, gateway.api)),
+      );
     } catch (error) {
       next.delete(gateway.id);
       console.error(`Gateway ${gateway.name} could not be registered:`, error);
@@ -92,16 +131,27 @@ export async function syncGateways(
   return next;
 }
 
+/** A positive whole number, or undefined. */
+function tokens(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.round(value)
+    : undefined;
+}
+
 /**
- * Lists model ids a gateway offers. OpenAI-compatible: `GET {base}/models` with a Bearer key.
- * Anthropic: `GET {base}/v1/models` with `x-api-key`. Runs here because the renderer has no network
+ * Lists the models a gateway offers, with their context window and reply limit. OpenAI-compatible:
+ * `GET {base}/models` with a Bearer key. Anthropic: `GET {base}/v1/models` with `x-api-key`
+ * (`limit=1000`; the default page holds 20). Gateways report limits under different names
+ * (Anthropic `max_input_tokens`, OpenRouter `context_length`, vLLM `max_model_len`, …); what a
+ * gateway leaves out comes from Pi's catalog. Runs here because the renderer has no network
  * access to the gateway.
  */
 export async function fetchGatewayModels(
+  runtime: ModelRuntime,
   api: GatewayApi,
   baseUrl: string,
   apiKey: string,
-): Promise<string[]> {
+): Promise<FetchedGatewayModel[]> {
   const anthropic = api === "anthropic-messages";
   const headers: Record<string, string> = anthropic
     ? { "anthropic-version": "2023-06-01", ...(apiKey ? { "x-api-key": apiKey } : {}) }
@@ -110,7 +160,7 @@ export async function fetchGatewayModels(
       : {};
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}${anthropic ? "/v1/models" : "/models"}`, {
+    response = await fetch(`${baseUrl}${anthropic ? "/v1/models?limit=1000" : "/models"}`, {
       headers,
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
@@ -121,11 +171,39 @@ export async function fetchGatewayModels(
   }
   if (!response.ok)
     throw new Error(`The gateway answered ${response.status} ${response.statusText}.`.trim());
-  const body = (await response.json()) as { data?: Array<{ id?: unknown }> };
-  const ids = (body.data ?? [])
-    .map((model) => model.id)
-    .filter((id): id is string => typeof id === "string");
-  return [...new Set(ids)].sort((a, b) => a.localeCompare(b));
+  const body = (await response.json()) as { data?: Array<Record<string, unknown>> };
+  const lookup = catalogLookup(runtime, api);
+  const models = new Map<string, FetchedGatewayModel>();
+  for (const entry of body.data ?? []) {
+    const id = entry.id;
+    if (typeof id !== "string" || models.has(id)) continue;
+    const known = lookup(id);
+    const top = entry.top_provider as { max_completion_tokens?: unknown } | undefined;
+    const model: FetchedGatewayModel = { id };
+    const contextWindow =
+      tokens(entry.max_input_tokens) ??
+      tokens(entry.context_length) ??
+      tokens(entry.context_window) ??
+      tokens(entry.max_model_len) ??
+      tokens(entry.max_context_length) ??
+      tokens(entry.inputTokenLimit) ??
+      tokens(known?.contextWindow);
+    const maxTokens =
+      tokens(entry.max_tokens) ??
+      tokens(entry.max_output_tokens) ??
+      tokens(entry.max_completion_tokens) ??
+      tokens(top?.max_completion_tokens) ??
+      tokens(known?.maxTokens);
+    if (contextWindow) model.contextWindow = contextWindow;
+    if (maxTokens) model.maxTokens = maxTokens;
+    // Anthropic sends `display_name`, OpenRouter `name`. Gemini's `models/<id>` is an id, not a name.
+    const name = [entry.display_name, entry.name]
+      .map((value) => (typeof value === "string" ? value.trim() : ""))
+      .find((value) => value && value !== id && !(value.includes("/") && !/\s/.test(value)));
+    if (name) model.name = name;
+    models.set(id, model);
+  }
+  return [...models.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
 export function summarizeModel(runtime: ModelRuntime, model: Model<Api>): ModelSummary {

@@ -38,7 +38,7 @@ import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { AgentEditor } from "@/components/settings/agent-editor";
 import { SectionHeading } from "@/components/settings/section-heading";
 import { useDeleteAgent, useImportAgent, useSaveAgent } from "@/lib/extension-queries";
-import { modelKey } from "@/lib/models";
+import { modelKey, modelLabeler } from "@/lib/models";
 import { agentsQuery, modelsQuery } from "@/lib/queries";
 
 type View = { kind: "list" } | { kind: "edit"; id?: string };
@@ -69,6 +69,7 @@ function AgentRow({
   onEdit: () => void;
 }) {
   const models = useQuery(modelsQuery(bridge));
+  const label = modelLabeler(models.data ?? []);
   const save = useSaveAgent(bridge);
   const remove = useDeleteAgent(bridge);
   const [exporting, setExporting] = React.useState(false);
@@ -126,7 +127,7 @@ function AgentRow({
           {isDefault && <Badge variant="secondary">Default</Badge>}
           {agentModel && (
             <Badge variant="outline" title="Switches the chat to this model">
-              {model?.name ?? `${agentModel.modelId} (not available)`}
+              {model ? label(model) : `${agentModel.modelId} (not available)`}
             </Badge>
           )}
         </ItemTitle>

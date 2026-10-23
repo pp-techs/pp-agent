@@ -34,7 +34,10 @@ export async function migrateLegacyProvider(settingsFile: string): Promise<void>
   const api: GatewayApi = GATEWAY_APIS.includes(legacy.api) ? legacy.api : "openai-completions";
   if (!existsSync(settingsFile) && legacy.baseUrl && legacy.modelId) {
     // The agent process adds the default agent and the remaining defaults when it loads the file.
-    const settings: Omit<SettingsFile, "agents" | "activeAgentId" | "thinkingLevel"> = {
+    const settings: Omit<
+      SettingsFile,
+      "agents" | "workspaces" | "activeAgentId" | "thinkingLevel"
+    > = {
       defaultModel: { provider: GATEWAY_ID, modelId: legacy.modelId },
       shellEnabled: false,
       toolPolicies: {},

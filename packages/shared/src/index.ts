@@ -50,6 +50,14 @@ export interface ApprovalRequest {
 /** `unconfigured`: no model is available yet (no provider connected or no model chosen). */
 export type AgentStatus = "starting" | "unconfigured" | "idle" | "running";
 
+/** How full the open conversation's context window is. */
+export interface ContextUsage {
+  /** Estimated tokens in context; null right after a compaction, until the next reply. */
+  tokens: number | null;
+  /** Context window of the conversation's model, in tokens. */
+  window: number;
+}
+
 export interface AgentSnapshot {
   status: AgentStatus;
   messages: ChatMessage[];
@@ -60,10 +68,14 @@ export interface AgentSnapshot {
   agent: AgentSummary | null;
   /** Thinking (reasoning effort) of the open conversation; `available` is empty when its model can't think. */
   thinking: { level: ThinkingLevel; available: ThinkingLevel[] };
-  /** Workspace of the open conversation (its agent's folder). */
+  /** Workspace of the open conversation. */
+  workspace: WorkspaceSummary | null;
+  /** Folder the open conversation works in (its workspace's folder). */
   workspaceDir: string | null;
   /** Session file of the open conversation. */
   sessionPath: string | null;
+  /** Context window usage of the open conversation; null while it has no model. */
+  context: ContextUsage | null;
 }
 
 /** Which settings area changed; the renderer refetches the matching query (`[scope]`). */
@@ -74,7 +86,8 @@ export type SettingsScope =
   | "tools"
   | "skills"
   | "mcp"
-  | "agents";
+  | "agents"
+  | "workspaces";
 
 export type AgentEvent =
   | { type: "status"; status: AgentStatus }
@@ -85,6 +98,8 @@ export type AgentEvent =
   | { type: "approval_resolved"; requestId: string }
   /** The saved conversation list changed (new, renamed, deleted, or a turn finished). */
   | { type: "sessions_changed" }
+  /** The open conversation's context usage changed (a reply finished, or it was compacted). */
+  | { type: "context"; context: ContextUsage | null }
   | { type: "settings_changed"; scopes: SettingsScope[] }
   /** A sign-in flow (provider or MCP server) needs input from the person. */
   | { type: "auth_prompt"; prompt: AuthPrompt }
@@ -106,6 +121,8 @@ export interface Attachment {
 
 export interface SessionSummary {
   path: string;
+  /** Workspace the conversation belongs to. */
+  workspaceId: string;
   title: string;
   /** Last change, epoch milliseconds. */
   modified: number;
@@ -157,9 +174,9 @@ export interface GatewayModel {
   reasoning?: boolean;
   /** Accepts image input. Default true. */
   images?: boolean;
-  /** Default 128000. */
+  /** Context window in tokens. Default: the model's value in Pi's catalog, else 128000. */
   contextWindow?: number;
-  /** Default 16384. */
+  /** Largest reply in tokens. Default: the model's value in Pi's catalog, else 16384. */
   maxTokens?: number;
 }
 
@@ -186,6 +203,9 @@ export interface SaveGatewayInput {
   /** Omit to keep the stored key; empty string removes it. */
   apiKey?: string;
 }
+
+/** A model a gateway listed, with the name and limits the gateway (or Pi's catalog) reports. */
+export type FetchedGatewayModel = Pick<GatewayModel, "id" | "name" | "contextWindow" | "maxTokens">;
 
 export interface FetchGatewayModelsInput {
   api: GatewayApi;
@@ -271,18 +291,46 @@ export interface AgentProfile extends AgentSummary {
   model: ModelRef | null;
   /** Suggestions shown on an empty chat. */
   starterPrompts: string[];
-  /** Absolute workspace folder; null = the app's default workspace (~/Documents/PP Agent). */
-  workspaceDir: string | null;
 }
 
 /** Omit `id` to create an agent. */
 export type SaveAgentInput = Omit<AgentProfile, "id"> & { id?: string };
 
-/** File written by "Export agent". Machine-specific fields (id, workspaceDir) are left out. */
+/** File written by "Export agent". Machine-specific field (id) is left out. */
 export interface AgentExportFile {
   ppAgentExport: 1;
-  agent: Omit<AgentProfile, "id" | "workspaceDir">;
+  agent: Omit<AgentProfile, "id">;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Workspaces (a folder plus the defaults and rules for conversations started in it)
+// ---------------------------------------------------------------------------------------------
+
+/** Id of the built-in workspace (the app's default folder). It can be edited but not deleted. */
+export const DEFAULT_WORKSPACE_ID = "default";
+
+export interface WorkspaceSummary {
+  id: string;
+  name: string;
+  /** One emoji. */
+  icon: string;
+}
+
+export interface WorkspaceProfile extends WorkspaceSummary {
+  /** Absolute folder conversations work in. Null only for the built-in workspace: the app's folder. */
+  dir: string | null;
+  /** Rules added to the system prompt in every conversation of this workspace. */
+  instructions: string;
+  /** Agent for new conversations here; null = the agent picked last. */
+  agentId: string | null;
+  /** Model for new conversations here (after the agent's own model); null = the default model. */
+  model: ModelRef | null;
+  /** Thinking level for new conversations here; null = the level picked last. */
+  thinkingLevel: ThinkingLevel | null;
+}
+
+/** Omit `id` to create a workspace. */
+export type SaveWorkspaceInput = Omit<WorkspaceProfile, "id"> & { id?: string };
 
 /** Tools an agent can pick from in its editor (MCP tools are chosen per server). */
 export interface AgentToolOption {
@@ -312,6 +360,8 @@ export interface SettingsFile extends AppSettings {
   gateways: GatewayConfig[];
   /** Always contains the agent with id `DEFAULT_AGENT_ID`. */
   agents: AgentProfile[];
+  /** Always contains the workspace with id `DEFAULT_WORKSPACE_ID`. */
+  workspaces: WorkspaceProfile[];
 }
 
 export interface SkillSummary {
@@ -395,7 +445,8 @@ export interface AgentCommandMap {
   get_snapshot: { params: NoParams; result: AgentSnapshot };
   prompt: { params: { text: string; attachments: Attachment[] }; result: void };
   abort: { params: NoParams; result: void };
-  new_chat: { params: NoParams; result: void };
+  /** Without `workspaceId`: in the workspace of the open conversation. */
+  new_chat: { params: { workspaceId?: string }; result: void };
   respond_approval: { params: { requestId: string; approved: boolean }; result: void };
   list_sessions: { params: NoParams; result: SessionSummary[] };
   /** Summarizes earlier messages of the open conversation to free up the model's context. */
@@ -419,7 +470,7 @@ export interface AgentCommandMap {
   list_gateways: { params: NoParams; result: GatewayView[] };
   save_gateway: { params: { gateway: SaveGatewayInput }; result: GatewayView };
   delete_gateway: { params: { id: string }; result: void };
-  fetch_gateway_models: { params: FetchGatewayModelsInput; result: string[] };
+  fetch_gateway_models: { params: FetchGatewayModelsInput; result: FetchedGatewayModel[] };
   /** Models of every configured provider. */
   list_models: { params: NoParams; result: ModelSummary[] };
   /** Model for the open conversation (saved with it). */
@@ -463,6 +514,12 @@ export interface AgentCommandMap {
   export_agent: { params: { id: string }; result: string };
   /** Creates an agent from `AgentExportFile` JSON; a taken name gets a " (2)" suffix. */
   import_agent: { params: { json: string }; result: AgentProfile };
+
+  /** Default workspace first, then by name. */
+  list_workspaces: { params: NoParams; result: WorkspaceProfile[] };
+  save_workspace: { params: { workspace: SaveWorkspaceInput }; result: WorkspaceProfile };
+  /** The default workspace cannot be deleted. Its conversations move to the default workspace. */
+  delete_workspace: { params: { id: string }; result: void };
 }
 
 export type AgentCommandType = keyof AgentCommandMap;
@@ -512,7 +569,7 @@ export interface DesktopBridge {
     openWorkspace(dir: string): Promise<void>;
     /** Shows a file or folder (a skill, mcp.json) in Finder / Explorer. */
     reveal(path: string): Promise<void>;
-    /** Picks a folder (an agent's workspace); null when cancelled. */
+    /** Picks a folder (a new workspace's folder); null when cancelled. */
     pickFolder(): Promise<string | null>;
     /** Picks an exported agent file and returns its text; null when cancelled. */
     openAgentFile(): Promise<string | null>;
@@ -556,7 +613,7 @@ export const IPC = {
 // ---------------------------------------------------------------------------------------------
 
 export interface AgentPaths {
-  /** Default workspace; agents may use their own folder instead. */
+  /** Folder of the built-in workspace; other workspaces use their own folder. */
   workspaceDir: string;
   agentDir: string;
   sessionDir: string;

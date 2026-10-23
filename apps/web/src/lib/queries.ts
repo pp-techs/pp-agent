@@ -3,6 +3,7 @@ import type {
   Attachment,
   DesktopBridge,
   FetchGatewayModelsInput,
+  FetchedGatewayModel,
   GatewayView,
   ModelRef,
   ProviderSummary,
@@ -29,6 +30,7 @@ export const queryKeys = {
   mcpJson: ["mcp-json"] as const,
   sessions: ["sessions"] as const,
   agents: ["agents"] as const,
+  workspaces: ["workspaces"] as const,
   agentToolOptions: ["agent-tool-options"] as const,
 };
 
@@ -72,6 +74,13 @@ export const agentsQuery = (bridge: DesktopBridge) =>
     queryFn: () => bridge.agent.command({ type: "list_agents" }),
   });
 
+/** Workspaces, the default one first. */
+export const workspacesQuery = (bridge: DesktopBridge) =>
+  queryOptions({
+    queryKey: queryKeys.workspaces,
+    queryFn: () => bridge.agent.command({ type: "list_workspaces" }),
+  });
+
 export function useUpdateSettings(bridge: DesktopBridge) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -99,8 +108,8 @@ export interface ProviderCommands {
   disconnect: UseMutationResult<void, Error, string>;
   saveGateway: UseMutationResult<GatewayView, Error, SaveGatewayInput>;
   deleteGateway: UseMutationResult<void, Error, string>;
-  /** Model ids the gateway lists; does not change anything. */
-  fetchGatewayModels: UseMutationResult<string[], Error, FetchGatewayModelsInput>;
+  /** Models the gateway lists, with the limits it reports; does not change anything. */
+  fetchGatewayModels: UseMutationResult<FetchedGatewayModel[], Error, FetchGatewayModelsInput>;
 }
 
 export function useProviderCommands(bridge: DesktopBridge): ProviderCommands {
@@ -148,7 +157,8 @@ export function useAgentCommands(bridge: DesktopBridge) {
     mutationFn: () => bridge.agent.command({ type: "abort" }),
   });
   const newChat = useMutation({
-    mutationFn: () => bridge.agent.command({ type: "new_chat" }),
+    /** Without a workspace id: in the workspace of the open conversation. */
+    mutationFn: (workspaceId?: string) => bridge.agent.command({ type: "new_chat", workspaceId }),
   });
   const respondApproval = useMutation({
     mutationFn: (input: { requestId: string; approved: boolean }) =>

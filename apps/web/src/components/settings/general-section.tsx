@@ -25,7 +25,7 @@ import { toast } from "sonner";
 
 import { useTheme } from "@/components/theme-provider";
 import { SectionHeading } from "@/components/settings/section-heading";
-import { groupByProvider, modelKey } from "@/lib/models";
+import { groupByProvider, modelKey, modelLabeler } from "@/lib/models";
 import { modelsQuery, settingsQuery, useUpdateSettings } from "@/lib/queries";
 import { describeUpdate, updateAction } from "@/components/update-actions";
 import { useChatStore } from "@/stores/chat-store";
@@ -52,6 +52,7 @@ function DefaultModelField({ bridge }: { bridge: DesktopBridge }) {
   if (settings.isPending || models.isPending) return <Spinner />;
 
   const available = models.data ?? [];
+  const label = modelLabeler(available);
   const current = settings.data?.defaultModel ?? null;
   const currentKey = current ? modelKey(current) : AUTOMATIC;
   const missing = current !== null && !available.some((model) => modelKey(model) === currentKey);
@@ -62,7 +63,7 @@ function DefaultModelField({ bridge }: { bridge: DesktopBridge }) {
       : []),
     ...available.map((model) => ({
       value: modelKey(model),
-      label: `${model.name} · ${model.providerName}`,
+      label: `${label(model)} · ${model.providerName}`,
     })),
   ];
 
@@ -94,7 +95,7 @@ function DefaultModelField({ bridge }: { bridge: DesktopBridge }) {
               <SelectLabel>{group.name}</SelectLabel>
               {group.models.map((model) => (
                 <SelectItem key={modelKey(model)} value={modelKey(model)}>
-                  {model.name}
+                  {label(model)}
                 </SelectItem>
               ))}
             </SelectGroup>

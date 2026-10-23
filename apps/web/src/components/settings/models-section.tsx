@@ -3,6 +3,7 @@ import {
   GATEWAY_APIS,
   type DesktopBridge,
   type GatewayApi,
+  type FetchedGatewayModel,
   type GatewayModel,
   type GatewayView,
   type ProviderSummary,
@@ -53,6 +54,7 @@ import { toast } from "sonner";
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { OptionGroup, SubOptions } from "@/components/settings/option-group";
 import { SectionHeading } from "@/components/settings/section-heading";
+import { modelLabel } from "@/lib/models";
 import {
   gatewaysQuery,
   providersQuery,
@@ -172,6 +174,13 @@ function ProviderRow({
   );
 }
 
+/** 128000 → "128k", 1000000 → "1M": how model cards print a context window. */
+function formatTokens(value: number) {
+  if (value >= 1_000_000) return `${+(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1000) return `${Math.round(value / 1000)}k`;
+  return String(value);
+}
+
 function ModelRow({
   model,
   onChange,
@@ -183,9 +192,41 @@ function ModelRow({
 }) {
   return (
     <div className="flex items-center gap-1 rounded-xl px-2 py-1 hover:bg-muted/50">
-      <span className="min-w-0 flex-1 truncate font-mono text-xs" title={model.id}>
-        {model.id}
-      </span>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <Input
+          aria-label={`Display name of ${model.id}`}
+          title="Display name. Blank: the name the gateway or Pi knows, else a tidied id."
+          placeholder={modelLabel({ name: "", modelId: model.id })}
+          className="h-7 border-transparent bg-transparent px-1.5 text-sm shadow-none hover:border-input focus-visible:border-ring"
+          value={model.name ?? ""}
+          onChange={(event) => {
+            const { name: _old, ...rest } = model;
+            onChange(event.target.value.trim() ? { ...rest, name: event.target.value } : rest);
+          }}
+        />
+        <span
+          className="truncate px-1.5 font-mono text-[11px] text-muted-foreground"
+          title={model.id}
+        >
+          {model.id}
+        </span>
+      </div>
+      <Input
+        type="number"
+        min={1000}
+        step={1000}
+        inputMode="numeric"
+        aria-label={`Context window of ${model.id}, in tokens`}
+        title="Context window in tokens. Blank: the model's known size, else 128000."
+        placeholder="auto"
+        className="h-7 w-24 text-xs tabular-nums"
+        value={model.contextWindow ?? ""}
+        onChange={(event) => {
+          const value = Math.round(Number(event.target.value));
+          const { contextWindow: _old, ...rest } = model;
+          onChange(value > 0 ? { ...rest, contextWindow: value } : rest);
+        }}
+      />
       <Toggle
         size="sm"
         aria-label="Accepts images"
@@ -213,25 +254,33 @@ function ModelRow({
 
 /** Models the gateway listed, as a searchable checklist; ticked ones are added to the gateway. */
 function FetchedModels({
-  ids,
+  models,
   included,
   onInclude,
 }: {
-  ids: string[];
+  models: FetchedGatewayModel[];
   included: Set<string>;
-  onInclude: (ids: string[], include: boolean) => void;
+  onInclude: (models: FetchedGatewayModel[], include: boolean) => void;
 }) {
   const [search, setSearch] = React.useState("");
   const query = search.trim().toLowerCase();
-  const visible = query ? ids.filter((id) => id.toLowerCase().includes(query)) : ids;
-  const selectedCount = ids.filter((id) => included.has(id)).length;
-  const visibleSelected = visible.filter((id) => included.has(id)).length;
+  const visible = query
+    ? models.filter((model) =>
+        [
+          model.id,
+          model.name ?? "",
+          modelLabel({ name: model.name ?? "", modelId: model.id }),
+        ].some((text) => text.toLowerCase().includes(query)),
+      )
+    : models;
+  const selectedCount = models.filter((model) => included.has(model.id)).length;
+  const visibleSelected = visible.filter((model) => included.has(model.id)).length;
 
   return (
     <div className="flex flex-col gap-2 rounded-xl bg-muted/50 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-muted-foreground" aria-live="polite">
-          {selectedCount} of {ids.length} selected
+          {selectedCount} of {models.length} selected
           {query && ` · ${visible.length} shown`}
         </span>
         <div className="ml-auto flex gap-1">
@@ -271,18 +320,28 @@ function FetchedModels({
         <p className="px-2 py-1 text-sm text-muted-foreground">No models match.</p>
       ) : (
         <div className="flex max-h-60 flex-col overflow-y-auto">
-          {visible.map((id) => (
+          {visible.map((model) => (
             <label
-              key={id}
+              key={model.id}
               className="flex cursor-pointer items-center gap-2.5 rounded-xl px-2 py-1.5 hover:bg-muted/50"
             >
               <Checkbox
-                checked={included.has(id)}
-                onCheckedChange={(checked) => onInclude([id], checked)}
+                checked={included.has(model.id)}
+                onCheckedChange={(checked) => onInclude([model], checked)}
               />
-              <span className="min-w-0 truncate font-mono text-xs" title={id}>
-                {id}
+              <span className="flex min-w-0 flex-1 flex-col" title={model.id}>
+                <span className="truncate text-sm">
+                  {model.name ?? modelLabel({ name: "", modelId: model.id })}
+                </span>
+                <span className="truncate font-mono text-[11px] text-muted-foreground">
+                  {model.id}
+                </span>
               </span>
+              {model.contextWindow && (
+                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                  {formatTokens(model.contextWindow)}
+                </span>
+              )}
             </label>
           ))}
         </div>
@@ -308,13 +367,22 @@ function GatewayForm({
   const [apiKey, setApiKey] = React.useState("");
   const [models, setModels] = React.useState<GatewayModel[]>(gateway?.models ?? []);
   const [manualId, setManualId] = React.useState("");
-  const [fetched, setFetched] = React.useState<string[] | null>(null);
+  const [fetched, setFetched] = React.useState<FetchedGatewayModel[] | null>(null);
 
   const url = baseUrl.trim();
   const urlInvalid = url !== "" && !isHttpUrl(url);
   const hasKey = apiKey.trim() !== "" || Boolean(gateway?.hasApiKey);
   const canSave = name.trim() !== "" && isHttpUrl(url) && models.length > 0;
   const included = new Set(models.map((model) => model.id));
+  // Names the person typed, or the tidied ids, that more than one model of this gateway shows.
+  const duplicateNames = (() => {
+    const seen = new Map<string, number>();
+    for (const model of models) {
+      const shown = model.name?.trim() || modelLabel({ name: "", modelId: model.id });
+      seen.set(shown, (seen.get(shown) ?? 0) + 1);
+    }
+    return new Set([...seen].filter(([, count]) => count > 1).map(([shown]) => shown));
+  })();
 
   function addModel(id: string) {
     const trimmed = id.trim();
@@ -323,11 +391,14 @@ function GatewayForm({
   }
 
   /** Adds or removes several fetched models at once, keeping the settings of those kept. */
-  function includeModels(ids: string[], include: boolean) {
+  function includeModels(picked: FetchedGatewayModel[], include: boolean) {
     setModels((list) => {
-      if (!include) return list.filter((model) => !ids.includes(model.id));
+      if (!include) {
+        const drop = new Set(picked.map((model) => model.id));
+        return list.filter((model) => !drop.has(model.id));
+      }
       const present = new Set(list.map((model) => model.id));
-      return [...list, ...ids.filter((id) => !present.has(id)).map((id) => ({ id }))];
+      return [...list, ...picked.filter((model) => !present.has(model.id))];
     });
   }
 
@@ -335,9 +406,24 @@ function GatewayForm({
     fetchGatewayModels.mutate(
       { api, baseUrl: url, apiKey: apiKey.trim() || undefined, gatewayId: gateway?.id },
       {
-        onSuccess: (ids) => {
-          setFetched(ids);
-          if (ids.length === 0) toast.info("The gateway didn't list any models. Add them by name.");
+        onSuccess: (found) => {
+          setFetched(found);
+          // Models already added get the limits the gateway reports, unless the person set them.
+          setModels((list) =>
+            list.map((model) => {
+              const reported = found.find((item) => item.id === model.id);
+              return reported
+                ? {
+                    ...model,
+                    name: model.name ?? reported.name,
+                    contextWindow: model.contextWindow ?? reported.contextWindow,
+                    maxTokens: model.maxTokens ?? reported.maxTokens,
+                  }
+                : model;
+            }),
+          );
+          if (found.length === 0)
+            toast.info("The gateway didn't list any models. Add them by name.");
         },
       },
     );
@@ -450,7 +536,7 @@ function GatewayForm({
             <FieldError>Couldn't load models: {fetchGatewayModels.error.message}</FieldError>
           )}
           {fetched && fetched.length > 0 && (
-            <FetchedModels ids={fetched} included={included} onInclude={includeModels} />
+            <FetchedModels models={fetched} included={included} onInclude={includeModels} />
           )}
           <InputGroup>
             <InputGroupInput
@@ -486,6 +572,13 @@ function GatewayForm({
             <FieldDescription className="text-xs">Add at least one model.</FieldDescription>
           ) : (
             <SubOptions>
+              {duplicateNames.size > 0 && (
+                <FieldDescription className="text-xs">
+                  Several models share the name{" "}
+                  {[...duplicateNames].map((n) => `“${n}”`).join(", ")}. The model list adds the
+                  model id to tell them apart; give them different names to avoid that.
+                </FieldDescription>
+              )}
               <div className="flex flex-col">
                 {models.map((model) => (
                   <ModelRow

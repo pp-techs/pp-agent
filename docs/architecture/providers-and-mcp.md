@@ -52,9 +52,9 @@ sequenceDiagram
 A gateway is a custom endpoint speaking one of `GATEWAY_APIS` (OpenAI- or Anthropic-compatible). It is stored in `settings.json` (`GatewayConfig`, id `gw-<slug>`) and its API key in the vault under the same id.
 
 - `syncGateways` registers every gateway with `runtime.registerProvider` (unregistering first, because re-registration merges with the old config), drops deleted ones, then refreshes availability without network access. It runs at `init` and after each `save_gateway` / `delete_gateway`.
-- Gateway model defaults: name = id, `reasoning` false, image input on, 128,000-token context, 16,384 max tokens, zero cost.
+- Gateway model defaults: name = the name set on the model, else the name in Pi's catalog, else the id; `reasoning` false, image input on, zero cost. Context window and max tokens come from the model's own setting, else from Pi's built-in catalog (matched by id, also without a `vendor/` prefix, preferring the provider that matches the gateway's API), else 128,000 and 16,384.
 - `normalizeBaseUrl` drops a trailing `/v1` for Anthropic gateways (the client appends `/v1/messages`) and keeps it for OpenAI-compatible ones.
-- `fetch_gateway_models` lists model ids from the gateway (`GET {base}/models` with a Bearer key, or `GET {base}/v1/models` with `x-api-key` for Anthropic) in the agent process, with a 15 s timeout. It uses the key typed in the form or, if omitted, the stored key.
+- `fetch_gateway_models` lists the gateway's models (`GET {base}/models` with a Bearer key, or `GET {base}/v1/models?limit=1000` with `x-api-key` for Anthropic) in the agent process, with a 15 s timeout, and returns each model's display name (`display_name` from Anthropic, `name` from OpenRouter; an id-like name such as `models/x` is ignored) and limits. The response is read for `max_input_tokens`, `context_length`, `context_window`, `max_model_len`, `max_context_length` or `inputTokenLimit` (context) and `max_tokens`, `max_output_tokens`, `max_completion_tokens` or `top_provider.max_completion_tokens` (reply); what the gateway omits is filled from Pi's catalog. It uses the key typed in the form or, if omitted, the stored key.
 - Deleting a gateway also clears `defaultModel` when it pointed at that gateway.
 
 ## MCP servers

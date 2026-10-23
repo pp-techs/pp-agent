@@ -16,6 +16,7 @@ import { FileUpIcon, PlugIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { AgentPicker } from "@/components/chat/agent-picker";
+import { ChatHeaderActions } from "@/components/chat/chat-header-actions";
 import { ChatSidebar } from "@/components/chat/chat-sidebar";
 import { ChatThread } from "@/components/chat/chat-thread";
 import { EmptyChat } from "@/components/chat/empty-chat";
@@ -28,13 +29,14 @@ import { useChatStore } from "@/stores/chat-store";
 import { toAttachments, useComposerStore } from "@/stores/composer-store";
 import { connectUpdates } from "@/stores/update-store";
 
-/** Top bar: the sidebar toggle and the agent of the open conversation. */
+/** Top bar: the sidebar toggle and the agent on the left; context window and folder on the right. */
 function Header({ bridge }: { bridge: DesktopBridge }) {
   const status = useChatStore((state) => state.status);
   return (
     <header className="flex h-12 shrink-0 items-center gap-1 px-3">
       <SidebarTrigger />
       <AgentPicker bridge={bridge} disabled={status === "starting"} />
+      <ChatHeaderActions bridge={bridge} />
     </header>
   );
 }

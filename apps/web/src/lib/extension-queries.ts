@@ -3,6 +3,7 @@ import type {
   McpServerSettings,
   SaveAgentInput,
   SaveSkillInput,
+  SaveWorkspaceInput,
   ToolPolicy,
   ToolSummary,
 } from "@workspace/shared";
@@ -251,6 +252,38 @@ export function useImportAgent(bridge: DesktopBridge) {
   const invalidate = useInvalidateAgents();
   return useMutation({
     mutationFn: (json: string) => bridge.agent.command({ type: "import_agent", json }),
+    onSuccess: invalidate,
+    onError: showError,
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Workspaces
+// ---------------------------------------------------------------------------------------------
+
+/** The conversation list groups by workspace, so it is refetched with them. */
+function useInvalidateWorkspaces() {
+  const queryClient = useQueryClient();
+  return () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.sessions }),
+    ]);
+}
+
+export function useSaveWorkspace(bridge: DesktopBridge) {
+  const invalidate = useInvalidateWorkspaces();
+  return useMutation({
+    mutationFn: (workspace: SaveWorkspaceInput) =>
+      bridge.agent.command({ type: "save_workspace", workspace }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDeleteWorkspace(bridge: DesktopBridge) {
+  const invalidate = useInvalidateWorkspaces();
+  return useMutation({
+    mutationFn: (id: string) => bridge.agent.command({ type: "delete_workspace", id }),
     onSuccess: invalidate,
     onError: showError,
   });
