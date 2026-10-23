@@ -115,7 +115,6 @@
     "enterName": "Hãy nhập tên.",
     "waitForAnswer": "Hãy đợi câu trả lời hoàn tất.",
     "tooShort": "Cuộc trò chuyện này còn ngắn nên chưa có gì để tóm tắt.",
-    "attachmentsPrompt": "Vui lòng xem các tệp đính kèm.",
     "attachmentNoFile": "{{name}} không có tệp nào để sao chép.",
     "skillTitle": "Kỹ năng: {{name}}",
     "untitled": "Cuộc trò chuyện chưa đặt tên",

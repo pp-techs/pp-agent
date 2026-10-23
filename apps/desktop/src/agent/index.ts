@@ -122,6 +122,8 @@ import { createWebFetchTool, createWebSearchTool } from "./web/tools.ts";
 import { WebSearchService } from "./web/search.ts";
 
 const TITLE_LENGTH = 80;
+/** Sent to the model when a message has attachments but no text. The model reads English. */
+const ATTACHMENTS_ONLY_PROMPT = "Please take a look at the attached files.";
 
 /** Changes to apply to the open conversation once no run is active. */
 interface PendingChanges {
@@ -424,7 +426,7 @@ class AgentHost {
     if (!this.currentModel()) throw new Error(t("models.noneChosen"));
     // Copy files and encode images before acknowledging, so a bad attachment fails the send.
     const message = await buildPrompt(
-      trimmed || t("conversations.attachmentsPrompt"),
+      trimmed || ATTACHMENTS_ONLY_PROMPT,
       attachments,
       session.sessionManager.getCwd(),
     );
@@ -977,7 +979,11 @@ class AgentHost {
       if (typeof patch.shellEnabled === "boolean") draft.shellEnabled = patch.shellEnabled;
       if (patch.language !== undefined) draft.language = patch.language;
     });
-    if (after.language !== before.language) configureLanguage(after.language);
+    if (after.language !== before.language) {
+      configureLanguage(after.language);
+      // Provider sign-in sources and untitled-chat names are worded by the agent process.
+      scopes.push("providers", "sessions");
+    }
     if (after.shellEnabled !== before.shellEnabled) {
       scopes.push("tools");
       apply.tools = true;

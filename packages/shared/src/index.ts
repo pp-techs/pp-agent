@@ -87,7 +87,8 @@ export type SettingsScope =
   | "skills"
   | "mcp"
   | "agents"
-  | "workspaces";
+  | "workspaces"
+  | "sessions";
 
 export type AgentEvent =
   | { type: "status"; status: AgentStatus }

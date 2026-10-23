@@ -115,7 +115,6 @@
     "enterName": "Enter a name.",
     "waitForAnswer": "Wait for the answer to finish.",
     "tooShort": "This conversation is still short, so there is nothing to summarize yet.",
-    "attachmentsPrompt": "Please take a look at the attached files.",
     "attachmentNoFile": "{{name}} has no file to copy.",
     "skillTitle": "Skill: {{name}}",
     "untitled": "Untitled chat",

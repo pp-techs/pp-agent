@@ -44,10 +44,16 @@ import { agentsQuery, modelsQuery } from "@/lib/queries";
 
 type View = { kind: "list" } | { kind: "edit"; id?: string };
 
-/** "Sales copy", then "Sales copy 2", "Sales copy 3"… until the name is free. */
-function copyName(copyOfName: string, agents: AgentProfile[]) {
+/**
+ * "Sales copy", then "Sales copy 2", "Sales copy 3"… until the name is free. Names are at most 60
+ * characters: the original name is shortened (never the "copy" wording) to leave room for the
+ * wording and a number.
+ */
+function copyName(name: string, wording: (name: string) => string, agents: AgentProfile[]) {
   const taken = new Set(agents.map((agent) => agent.name.toLowerCase()));
-  const base = copyOfName.slice(0, 54);
+  const limit = 54;
+  const overflow = Math.max(0, wording(name).length - limit);
+  const base = wording(name.slice(0, Math.max(1, name.length - overflow)));
   let candidate = base;
   for (let index = 2; taken.has(candidate.toLowerCase()); index++) {
     candidate = `${base} ${index}`;
@@ -85,7 +91,10 @@ function AgentRow({
   function onDuplicate() {
     const { id: _id, ...rest } = agent;
     save.mutate(
-      { ...rest, name: copyName(t("agentsSection.copyName", { name: agent.name }), agents) },
+      {
+        ...rest,
+        name: copyName(agent.name, (name) => t("agentsSection.copyName", { name }), agents),
+      },
       {
         onSuccess: (copy) => toast.success(t("agentsSection.added", { name: copy.name })),
         onError: (error) => toast.error(error.message),

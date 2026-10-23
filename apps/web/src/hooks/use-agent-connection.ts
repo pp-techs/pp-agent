@@ -19,6 +19,7 @@ const SCOPE_KEYS: Record<SettingsScope, QueryKey[]> = {
   mcp: [queryKeys.mcp, queryKeys.mcpJson],
   agents: [queryKeys.agents, queryKeys.agentToolOptions],
   workspaces: [queryKeys.workspaces, queryKeys.agents],
+  sessions: [queryKeys.sessions],
 };
 
 /** Mirrors the agent process into the chat store: live events first, then a snapshot to catch up. */

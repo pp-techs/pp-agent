@@ -80,7 +80,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
     event.preventDefault();
     const command = attachments.length === 0 ? findTypedCommand(commands, draft) : undefined;
     if (command) pickItem(command);
-    else if (canSend) send(draft);
+    else if (canSend && !running) send(draft);
   }
 
   async function pick() {
