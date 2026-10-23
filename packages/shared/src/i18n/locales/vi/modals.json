@@ -1,0 +1,46 @@
+{
+  "app": {
+    "starting": "Đang khởi động Agent…",
+    "unconfigured": {
+      "title": "Chọn mô hình để bắt đầu",
+      "description": "Kết nối nhà cung cấp AI bằng khóa API của bạn, hoặc thêm Gateway của nhóm bạn, trong Cài đặt › Mô hình.",
+      "action": "Thiết lập mô hình"
+    },
+    "dropFiles": "Thả tệp để đính kèm",
+    "desktopOnly": {
+      "title": "Hãy mở PP Agent từ ứng dụng máy tính",
+      "description": "Trang này là giao diện của ứng dụng và cần ứng dụng máy tính để chạy."
+    }
+  },
+  "authPrompt": {
+    "continue": "Tiếp tục"
+  },
+  "update": {
+    "status": {
+      "disabled": "Chỉ kiểm tra cập nhật trong ứng dụng đã cài đặt.",
+      "idle": "Phiên bản {{current}}",
+      "checking": "Đang kiểm tra cập nhật…",
+      "upToDate": "Phiên bản {{current}}. Bạn đang dùng phiên bản mới nhất.",
+      "available": "Đã có phiên bản {{version}}. Bạn đang dùng {{current}}.",
+      "downloading": "Đang tải phiên bản {{version}}… {{percent}}%",
+      "ready": "Phiên bản {{version}} đã sẵn sàng. Hãy khởi động lại ứng dụng để hoàn tất cập nhật."
+    },
+    "actions": {
+      "check": "Kiểm tra cập nhật",
+      "download": "Tải bản cập nhật",
+      "getNewVersion": "Lấy phiên bản mới",
+      "restart": "Khởi động lại để cập nhật"
+    }
+  },
+  "ui": {
+    "close": "Đóng",
+    "toggleSidebar": "Bật/tắt thanh bên",
+    "sidebarMobileTitle": "Thanh bên",
+    "sidebarMobileDescription": "Hiển thị thanh bên trên màn hình nhỏ.",
+    "loading": "Đang tải",
+    "copy": "Sao chép",
+    "copied": "Đã sao chép",
+    "scrollToEnd": "Cuộn xuống cuối",
+    "scrollToStart": "Cuộn lên đầu"
+  }
+}

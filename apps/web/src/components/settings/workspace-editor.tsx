@@ -30,6 +30,7 @@ import { Spinner } from "@workspace/ui/components/spinner";
 import { Textarea } from "@workspace/ui/components/textarea";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeftIcon, FolderOpenIcon, TriangleAlertIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { OptionGroup } from "@/components/settings/option-group";
@@ -47,16 +48,6 @@ const ICON_PICKS = ["📁", "💼", "📊", "📝", "🧾", "📈", "🧑‍💼
 /** Select value for "nothing set here: use the usual default". */
 const INHERIT = "inherit";
 
-const THINKING_LABELS: Record<ThinkingLevel, string> = {
-  off: "Off",
-  minimal: "Minimal",
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  xhigh: "Extra high",
-  max: "Max",
-};
-
 function FolderField({
   bridge,
   value,
@@ -71,6 +62,8 @@ function FolderField({
   invalid: boolean;
   onChange: (dir: string) => void;
 }) {
+  const { t } = useTranslation("agents");
+
   async function onChoose() {
     try {
       const dir = await bridge.files.pickFolder();
@@ -82,11 +75,11 @@ function FolderField({
 
   return (
     <OptionGroup
-      legend="Folder"
+      legend={t("workspaceEditor.folder.legend")}
       description={
         fixed
-          ? "Where chats in this workspace work and save files. It cannot be changed after the workspace is created."
-          : "Where chats in this workspace work and save files. Chosen once; it cannot be changed later."
+          ? t("workspaceEditor.folder.descriptionFixed")
+          : t("workspaceEditor.folder.descriptionNew")
       }
     >
       <div className="flex items-center gap-3 rounded-xl bg-muted/50 py-1.5 pr-1.5 pl-3">
@@ -95,15 +88,16 @@ function FolderField({
           className={`min-w-0 flex-1 truncate ${value ? "font-mono text-xs" : "text-sm text-muted-foreground"}`}
           title={value ?? undefined}
         >
-          {value ?? (fixed ? "The app's default workspace folder" : "No folder chosen")}
+          {value ??
+            (fixed ? t("workspacesSection.defaultFolder") : t("workspaceEditor.folder.none"))}
         </span>
         {!fixed && (
           <Button type="button" variant="outline" size="sm" onClick={() => void onChoose()}>
-            Choose…
+            {t("workspaceEditor.folder.choose")}
           </Button>
         )}
       </div>
-      {invalid && <FieldError>Choose a folder for the workspace.</FieldError>}
+      {invalid && <FieldError>{t("workspaceEditor.folder.required")}</FieldError>}
     </OptionGroup>
   );
 }
@@ -128,6 +122,7 @@ function WorkspaceForm({
   const [model, setModel] = React.useState<ModelRef | null>(workspace?.model ?? null);
   const [thinkingLevel, setThinkingLevel] = React.useState(workspace?.thinkingLevel ?? null);
   const [touched, setTouched] = React.useState(false);
+  const { t, i18n } = useTranslation(["agents", "common"]);
   const save = useSaveWorkspace(bridge);
   const agents = useQuery(agentsQuery(bridge));
   const models = useQuery(modelsQuery(bridge));
@@ -140,22 +135,22 @@ function WorkspaceForm({
   );
   const errors = {
     name: !trimmedName
-      ? "Give the workspace a name."
+      ? t("workspaceEditor.errors.nameRequired")
       : trimmedName.length > NAME_MAX
-        ? `Use at most ${NAME_MAX} characters.`
+        ? t("shared.maxChars", { max: NAME_MAX })
         : nameTaken
-          ? "Another workspace already has this name."
+          ? t("workspaceEditor.errors.nameTaken")
           : null,
     dir: !fixedFolder && !dir,
     instructions:
       instructions.length > INSTRUCTIONS_MAX
-        ? `Use at most ${INSTRUCTIONS_MAX.toLocaleString()} characters.`
+        ? t("shared.maxChars", { max: INSTRUCTIONS_MAX.toLocaleString(i18n.language) })
         : null,
   };
   const valid = !errors.name && !errors.dir && !errors.instructions;
 
   const agentItems = [
-    { value: INHERIT, label: "The agent picked last" },
+    { value: INHERIT, label: t("workspaceEditor.defaults.agentInherit") },
     ...(agents.data ?? []).map((agent) => ({
       value: agent.id,
       label: `${agent.icon} ${agent.name}`,
@@ -166,9 +161,9 @@ function WorkspaceForm({
   const modelValue = model ? modelKey(model) : INHERIT;
   const modelMissing = model !== null && !available.some((item) => modelKey(item) === modelValue);
   const modelItems = [
-    { value: INHERIT, label: "The default model" },
+    { value: INHERIT, label: t("workspaceEditor.defaults.modelInherit") },
     ...(modelMissing && model
-      ? [{ value: modelValue, label: `${model.modelId} (not available)` }]
+      ? [{ value: modelValue, label: t("shared.modelUnavailable", { modelId: model.modelId }) }]
       : []),
     ...available.map((item) => ({
       value: modelKey(item),
@@ -176,8 +171,11 @@ function WorkspaceForm({
     })),
   ];
   const thinkingItems = [
-    { value: INHERIT, label: "The level picked last" },
-    ...THINKING_LEVELS.map((level) => ({ value: level, label: THINKING_LABELS[level] })),
+    { value: INHERIT, label: t("workspaceEditor.defaults.thinkingInherit") },
+    ...THINKING_LEVELS.map((level) => ({
+      value: level,
+      label: t(`workspaceEditor.thinkingLevels.${level}`),
+    })),
   ];
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -197,7 +195,7 @@ function WorkspaceForm({
       },
       {
         onSuccess: (saved) => {
-          toast.success(`Workspace “${saved.name}” saved`);
+          toast.success(t("workspaceEditor.saved", { name: saved.name }));
           onDone();
         },
       },
@@ -209,7 +207,7 @@ function WorkspaceForm({
       <FieldGroup>
         <div className="flex items-start gap-3">
           <Field className="w-20 shrink-0">
-            <FieldLabel htmlFor="workspace-icon">Icon</FieldLabel>
+            <FieldLabel htmlFor="workspace-icon">{t("shared.icon")}</FieldLabel>
             <Input
               id="workspace-icon"
               value={icon}
@@ -220,12 +218,12 @@ function WorkspaceForm({
             />
           </Field>
           <Field data-invalid={touched && Boolean(errors.name)}>
-            <FieldLabel htmlFor="workspace-name">Name</FieldLabel>
+            <FieldLabel htmlFor="workspace-name">{t("shared.name")}</FieldLabel>
             <Input
               id="workspace-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Finance team"
+              placeholder={t("workspaceEditor.namePlaceholder")}
               maxLength={NAME_MAX}
               autoComplete="off"
               aria-invalid={touched && Boolean(errors.name)}
@@ -233,14 +231,18 @@ function WorkspaceForm({
             {touched && errors.name && <FieldError>{errors.name}</FieldError>}
           </Field>
         </div>
-        <div className="-mt-4 flex flex-wrap gap-1" role="group" aria-label="Quick icon picks">
+        <div
+          className="-mt-4 flex flex-wrap gap-1"
+          role="group"
+          aria-label={t("shared.quickIconPicks")}
+        >
           {ICON_PICKS.map((pick) => (
             <Button
               key={pick}
               type="button"
               variant={icon === pick ? "secondary" : "ghost"}
               size="icon-sm"
-              aria-label={`Use ${pick} as the icon`}
+              aria-label={t("shared.useAsIcon", { icon: pick })}
               aria-pressed={icon === pick}
               className="text-base"
               onClick={() => setIcon(pick)}
@@ -257,31 +259,27 @@ function WorkspaceForm({
           onChange={setDir}
         />
         <Field data-invalid={touched && Boolean(errors.instructions)}>
-          <FieldLabel htmlFor="workspace-instructions">Instructions</FieldLabel>
+          <FieldLabel htmlFor="workspace-instructions">{t("shared.instructions")}</FieldLabel>
           <Textarea
             id="workspace-instructions"
             value={instructions}
             onChange={(event) => setInstructions(event.target.value)}
-            placeholder={
-              "Files here are monthly reports. Name new files YYYY-MM-<topic>.\nAnswer in Vietnamese."
-            }
+            placeholder={t("workspaceEditor.instructions.placeholder")}
             aria-invalid={touched && Boolean(errors.instructions)}
             className="min-h-40 resize-y"
           />
           {touched && errors.instructions ? (
             <FieldError>{errors.instructions}</FieldError>
           ) : (
-            <FieldDescription>
-              Rules for every chat in this workspace, whichever agent it uses.
-            </FieldDescription>
+            <FieldDescription>{t("workspaceEditor.instructions.help")}</FieldDescription>
           )}
         </Field>
         <OptionGroup
-          legend="Defaults for new chats"
-          description="What a new chat in this workspace starts with. You can still change them in the chat."
+          legend={t("workspaceEditor.defaults.legend")}
+          description={t("workspaceEditor.defaults.description")}
         >
           <Field>
-            <FieldLabel htmlFor="workspace-agent">Agent</FieldLabel>
+            <FieldLabel htmlFor="workspace-agent">{t("workspaceEditor.defaults.agent")}</FieldLabel>
             <Select
               items={agentItems}
               value={agentId ?? INHERIT}
@@ -300,7 +298,7 @@ function WorkspaceForm({
             </Select>
           </Field>
           <Field>
-            <FieldLabel htmlFor="workspace-model">Model</FieldLabel>
+            <FieldLabel htmlFor="workspace-model">{t("shared.model")}</FieldLabel>
             <Select
               items={modelItems}
               value={modelValue}
@@ -314,10 +312,12 @@ function WorkspaceForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={INHERIT}>The default model</SelectItem>
+                <SelectItem value={INHERIT}>
+                  {t("workspaceEditor.defaults.modelInherit")}
+                </SelectItem>
                 {modelMissing && model && (
                   <SelectItem value={modelValue} disabled>
-                    {model.modelId} (not available)
+                    {t("shared.modelUnavailable", { modelId: model.modelId })}
                   </SelectItem>
                 )}
                 {groupByProvider(available).map(([provider, group]) => (
@@ -332,12 +332,12 @@ function WorkspaceForm({
                 ))}
               </SelectContent>
             </Select>
-            <FieldDescription>
-              The agent's own model, when it has one, comes first.
-            </FieldDescription>
+            <FieldDescription>{t("workspaceEditor.defaults.modelHelp")}</FieldDescription>
           </Field>
           <Field>
-            <FieldLabel htmlFor="workspace-thinking">Thinking</FieldLabel>
+            <FieldLabel htmlFor="workspace-thinking">
+              {t("workspaceEditor.defaults.thinking")}
+            </FieldLabel>
             <Select
               items={thinkingItems}
               value={thinkingLevel ?? INHERIT}
@@ -362,14 +362,14 @@ function WorkspaceForm({
       {save.isError && <FieldError>{save.error.message}</FieldError>}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onDone}>
-          Cancel
+          {t("common:actions.cancel")}
         </Button>
         <Button type="submit" disabled={save.isPending || (touched && !valid)}>
           {save.isPending && <Spinner />}
-          {workspace ? "Save changes" : "Create workspace"}
+          {workspace ? t("shared.saveChanges") : t("workspaceEditor.create")}
         </Button>
       </div>
-      {isDefault && <span className="sr-only">Built-in workspace</span>}
+      {isDefault && <span className="sr-only">{t("workspaceEditor.builtInSrOnly")}</span>}
     </form>
   );
 }
@@ -384,28 +384,38 @@ export function WorkspaceEditor({
   id?: string;
   onDone: () => void;
 }) {
+  const { t } = useTranslation("agents");
   const workspaces = useQuery(workspacesQuery(bridge));
   const workspace = workspaces.data?.find((item) => item.id === id);
-  useSettingsSubPage(id === undefined ? "New workspace" : (workspace?.name ?? "Edit workspace"));
+  useSettingsSubPage(
+    id === undefined
+      ? t("workspaceEditor.newTitle")
+      : (workspace?.name ?? t("workspaceEditor.editTitle")),
+  );
 
   return (
     <div className="flex flex-col gap-6">
       <header className="flex items-start gap-2">
-        <Button variant="ghost" size="icon-sm" aria-label="Back to workspaces" onClick={onDone}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={t("workspaceEditor.backToWorkspaces")}
+          onClick={onDone}
+        >
           <ArrowLeftIcon />
         </Button>
         <div className="flex min-w-0 flex-col gap-1">
           <h2 className="font-heading text-base font-medium">
             {id === undefined
-              ? "New workspace"
+              ? t("workspaceEditor.newTitle")
               : workspace
-                ? `Edit “${workspace.name}”`
-                : "Edit workspace"}
+                ? t("workspaceEditor.editNamed", { name: workspace.name })
+                : t("workspaceEditor.editTitle")}
           </h2>
           <p className="text-sm text-muted-foreground">
             {id === DEFAULT_WORKSPACE_ID
-              ? "The built-in workspace. You can change it, but not delete it."
-              : "A workspace groups chats around one folder, with its own rules and defaults."}
+              ? t("workspaceEditor.subtitleBuiltIn")
+              : t("workspaceEditor.subtitle")}
           </p>
         </div>
       </header>
@@ -414,16 +424,14 @@ export function WorkspaceEditor({
       ) : workspaces.isError ? (
         <Alert variant="destructive">
           <TriangleAlertIcon />
-          <AlertTitle>Couldn't open this workspace</AlertTitle>
+          <AlertTitle>{t("workspaceEditor.openError")}</AlertTitle>
           <AlertDescription>{workspaces.error.message}</AlertDescription>
         </Alert>
       ) : id !== undefined && !workspace ? (
         <Alert variant="destructive">
           <TriangleAlertIcon />
-          <AlertTitle>This workspace no longer exists</AlertTitle>
-          <AlertDescription>
-            It may have been deleted. Go back to see your workspaces.
-          </AlertDescription>
+          <AlertTitle>{t("workspaceEditor.notFound.title")}</AlertTitle>
+          <AlertDescription>{t("workspaceEditor.notFound.description")}</AlertDescription>
         </Alert>
       ) : (
         <WorkspaceForm

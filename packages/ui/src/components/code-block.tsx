@@ -3,6 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 
 import { Button } from "@workspace/ui/components/button";
+import { useUiLabels } from "@workspace/ui/components/ui-labels";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
 const codeBlockVariants = cva(
@@ -84,8 +85,19 @@ function CodeBlockCopyButton({
   size = "icon-xs",
   className,
   onClick,
+  label,
+  copiedLabel,
   ...props
-}: React.ComponentProps<typeof Button> & { value: string }) {
+}: React.ComponentProps<typeof Button> & {
+  value: string;
+  /** Accessible name of the idle button. */
+  label?: string;
+  /** Accessible name and live announcement after copying. */
+  copiedLabel?: string;
+}) {
+  const labels = useUiLabels();
+  const idleText = label ?? labels.copy;
+  const copiedText = copiedLabel ?? labels.copied;
   const [copied, setCopied] = React.useState(false);
 
   React.useEffect(() => {
@@ -104,7 +116,7 @@ function CodeBlockCopyButton({
         data-copied={copied || undefined}
         variant={variant}
         size={size}
-        aria-label={copied ? "Copied" : "Copy"}
+        aria-label={copied ? copiedText : idleText}
         className={cn("hover:bg-foreground/5 dark:hover:bg-foreground/10", className)}
         onClick={(event) => {
           onClick?.(event);
@@ -118,7 +130,7 @@ function CodeBlockCopyButton({
         {copied ? <CheckIcon /> : <CopyIcon />}
       </Button>
       <span aria-live="polite" className="sr-only">
-        {copied ? "Copied" : ""}
+        {copied ? copiedText : ""}
       </span>
     </>
   );

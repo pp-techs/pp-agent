@@ -15,6 +15,7 @@ import {
   type McpServerView,
 } from "@workspace/shared";
 import type { AuthPrompts } from "./auth-prompts.ts";
+import { t } from "./i18n.ts";
 import { emit } from "./ipc.ts";
 
 /** A JSON object as read from mcp.json; keys this app does not edit are kept as they are. */
@@ -76,11 +77,10 @@ export class McpConfigFile {
     const file = this.read();
     const servers = asObject(file.mcpServers) ?? {};
     if (originalName !== undefined && !(originalName in servers))
-      throw new Error(`There is no MCP server named ${originalName}.`);
+      throw new Error(t("mcp.serverNotFound", { name: originalName }));
     if (name !== originalName) {
-      if (!SERVER_NAME.test(name))
-        throw new Error("Use letters, digits, hyphens, and underscores for the server name.");
-      if (name in servers) throw new Error(`An MCP server named ${name} already exists.`);
+      if (!SERVER_NAME.test(name)) throw new Error(t("mcp.serverNameFormat"));
+      if (name in servers) throw new Error(t("mcp.serverNameTaken", { name }));
     }
     const entry = applySettings(
       originalName === undefined ? {} : (asObject(servers[originalName]) ?? {}),
@@ -104,7 +104,7 @@ export class McpConfigFile {
   deleteServer(name: string): void {
     const file = this.read();
     const servers = { ...asObject(file.mcpServers) };
-    if (!(name in servers)) throw new Error(`There is no MCP server named ${name}.`);
+    if (!(name in servers)) throw new Error(t("mcp.serverNotFound", { name }));
     delete servers[name];
     this.write({ ...file, mcpServers: servers });
   }
@@ -119,13 +119,13 @@ export class McpConfigFile {
       parsed = JSON.parse(text);
     } catch (error) {
       throw new Error(
-        `This is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+        t("mcp.invalidJson", { error: error instanceof Error ? error.message : String(error) }),
       );
     }
     const object = asObject(parsed);
-    if (!object) throw new Error("mcp.json must contain a JSON object.");
+    if (!object) throw new Error(t("mcp.mustBeObject"));
     if ("mcpServers" in object) {
-      if (!asObject(object.mcpServers)) throw new Error("“mcpServers” must be an object.");
+      if (!asObject(object.mcpServers)) throw new Error(t("mcp.serversMustBeObject"));
       this.write(object);
       return;
     }
@@ -133,8 +133,7 @@ export class McpConfigFile {
       const entry = asObject(value);
       return entry !== null && ("command" in entry || "url" in entry);
     });
-    if (!looksLikeServers)
-      throw new Error("Add your servers under “mcpServers”, as in other MCP apps.");
+    if (!looksLikeServers) throw new Error(t("mcp.serversMissing"));
     this.write({ mcpServers: object });
   }
 
@@ -144,11 +143,10 @@ export class McpConfigFile {
     try {
       parsed = JSON.parse(text.replace(/^\uFEFF/, ""));
     } catch {
-      throw new Error("mcp.json is not valid JSON. Fix it in the JSON editor first.");
+      throw new Error(t("mcp.fileInvalidJson"));
     }
     const object = asObject(parsed);
-    if (!object)
-      throw new Error("mcp.json must contain a JSON object. Fix it in the JSON editor first.");
+    if (!object) throw new Error(t("mcp.fileMustBeObject"));
     return object;
   }
 
@@ -207,7 +205,7 @@ function applySettings(existing: JsonObject, server: McpServerSettings): JsonObj
 
   if (server.transport === "stdio") {
     const command = text(server.command);
-    if (!command) throw new Error("Enter the command that starts the server.");
+    if (!command) throw new Error(t("mcp.commandRequired"));
     for (const key of HTTP_KEYS) delete entry[key];
     if (entry.type !== undefined) entry.type = "stdio";
     set("command", command);
@@ -219,7 +217,7 @@ function applySettings(existing: JsonObject, server: McpServerSettings): JsonObj
     const url = text(server.url);
     const protocol = url && URL.canParse(url) ? new URL(url).protocol : "";
     if (!url || (protocol !== "https:" && protocol !== "http:"))
-      throw new Error("Enter the server's address, starting with https://.");
+      throw new Error(t("mcp.addressRequired"));
     for (const key of STDIO_KEYS) delete entry[key];
     if (entry.type === "stdio") delete entry.type;
     set("url", url);
@@ -324,7 +322,7 @@ export function buildOverview(
     const status: ServerStatus = !settings.enabled
       ? { state: "disabled", toolCount: 0 }
       : !registrations.uses(settings.name)
-        ? { state: "disabled", toolCount: 0, error: `Not used by ${agentName}` }
+        ? { state: "disabled", toolCount: 0, error: t("mcp.notUsedBy", { agent: agentName }) }
         : (servers.get(settings.name) ??
           (failure
             ? { state: "failed", toolCount: 0, error: failure }
@@ -475,7 +473,7 @@ export class McpCommands {
         const run = this.runs.getStore();
         const value = await this.prompts.ask(
           {
-            flowTitle: run?.flowTitle ?? "MCP server",
+            flowTitle: run?.flowTitle ?? t("mcp.flow.server"),
             kind: "manual_code",
             message: title,
             ...(placeholder ? { placeholder } : {}),
@@ -489,23 +487,25 @@ export class McpCommands {
 
   /** Status text of every server; waits for connections still starting. */
   async status(session: AgentSession): Promise<string> {
-    const notices = await this.run(session, "", "MCP servers", false);
+    const notices = await this.run(session, "", t("mcp.flow.status"), false);
     return notices.map((notice) => notice.message).join("\n");
   }
 
   async reconnect(session: AgentSession, name: string): Promise<void> {
-    throwOnError(await this.run(session, `reconnect ${name}`, `Reconnect ${name}`, false));
+    throwOnError(
+      await this.run(session, `reconnect ${name}`, t("mcp.flow.reconnect", { name }), false),
+    );
   }
 
   async signIn(session: AgentSession, name: string): Promise<void> {
-    const notices = await this.run(session, `login ${name}`, `Sign in to ${name}`, true);
+    const notices = await this.run(session, `login ${name}`, t("mcp.flow.signIn", { name }), true);
     if (notices.some((notice) => notice.message === "Sign-in cancelled."))
       throw new Error("Cancelled");
     throwOnError(notices);
   }
 
   async signOut(session: AgentSession, name: string): Promise<void> {
-    throwOnError(await this.run(session, `logout ${name}`, `Sign out of ${name}`, false));
+    throwOnError(await this.run(session, `logout ${name}`, t("mcp.flow.signOut", { name }), false));
   }
 
   private async run(
@@ -516,7 +516,7 @@ export class McpCommands {
   ): Promise<Notice[]> {
     const runner = session.extensionRunner;
     const command = runner.getCommand("mcp");
-    if (!command) throw new Error("MCP servers are not available right now.");
+    if (!command) throw new Error(t("mcp.unavailable"));
     const run: CommandRun = { flowTitle, notices: [], forward };
     await this.runs.run(run, () => command.handler(args, runner.createCommandContext()));
     return run.notices;

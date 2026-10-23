@@ -21,6 +21,7 @@
     "@earendil-works/pi-coding-agent": "catalog:",
     "electron-updater": "^6.8.9",
     "fflate": "catalog:",
+    "i18next": "catalog:",
     "officeparser": "catalog:",
     "typebox": "catalog:",
     "yaml": "catalog:"

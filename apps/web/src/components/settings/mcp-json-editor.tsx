@@ -6,6 +6,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "@workspace/ui/c
 import { Spinner } from "@workspace/ui/components/spinner";
 import { Textarea } from "@workspace/ui/components/textarea";
 import { useQuery } from "@tanstack/react-query";
+import { Trans, useTranslation } from "react-i18next";
 import { ArrowLeftIcon, TriangleAlertIcon } from "lucide-react";
 import { toast } from "sonner";
 
@@ -31,6 +32,7 @@ function JsonForm({
   initialText: string;
   onDone: () => void;
 }) {
+  const { t } = useTranslation(["extensions", "common"]);
   const [text, setText] = React.useState(initialText);
   const save = useSaveMcpJson(bridge);
   const error = parseError(text);
@@ -40,7 +42,7 @@ function JsonForm({
     if (error) return;
     save.mutate(text, {
       onSuccess: () => {
-        toast.success("mcp.json saved");
+        toast.success(t("mcpJson.saved"));
         onDone();
       },
     });
@@ -62,21 +64,20 @@ function JsonForm({
           className="min-h-96 resize-y font-mono text-xs md:text-xs"
         />
         {error ? (
-          <FieldError>This isn't valid JSON yet: {error}</FieldError>
+          <FieldError>{t("mcpJson.invalid", { error })}</FieldError>
         ) : (
           <FieldDescription>
-            You can paste a configuration from Claude Desktop or Cursor here: the servers inside its{" "}
-            <code>"mcpServers"</code> block work as they are.
+            <Trans t={t} i18nKey="mcpJson.hint" components={{ code: <code /> }} />
           </FieldDescription>
         )}
       </Field>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onDone}>
-          Cancel
+          {t("common:actions.cancel")}
         </Button>
         <Button type="submit" disabled={Boolean(error) || save.isPending}>
           {save.isPending && <Spinner />}
-          Save
+          {t("common:actions.save")}
         </Button>
       </div>
     </form>
@@ -85,20 +86,19 @@ function JsonForm({
 
 /** Raw mcp.json editor for people who have a config to paste. */
 export function McpJsonEditor({ bridge, onDone }: { bridge: DesktopBridge; onDone: () => void }) {
+  const { t } = useTranslation(["extensions", "common"]);
   const json = useQuery(mcpJsonQuery(bridge));
   useSettingsSubPage("mcp.json");
 
   return (
     <div className="flex flex-col gap-6">
       <header className="flex items-start gap-2">
-        <Button variant="ghost" size="icon-sm" aria-label="Back to MCP servers" onClick={onDone}>
+        <Button variant="ghost" size="icon-sm" aria-label={t("mcp.backToServers")} onClick={onDone}>
           <ArrowLeftIcon />
         </Button>
         <div className="flex min-w-0 flex-col gap-1">
-          <h2 className="font-heading text-base font-medium">Edit mcp.json</h2>
-          <p className="text-sm text-muted-foreground">
-            The file that lists your MCP servers. For advanced setups.
-          </p>
+          <h2 className="font-heading text-base font-medium">{t("mcp.editJson")}</h2>
+          <p className="text-sm text-muted-foreground">{t("mcpJson.intro")}</p>
         </div>
       </header>
       {json.isPending ? (
@@ -106,7 +106,7 @@ export function McpJsonEditor({ bridge, onDone }: { bridge: DesktopBridge; onDon
       ) : json.isError ? (
         <Alert variant="destructive">
           <TriangleAlertIcon />
-          <AlertTitle>Couldn't open mcp.json</AlertTitle>
+          <AlertTitle>{t("mcpJson.openError")}</AlertTitle>
           <AlertDescription>{json.error.message}</AlertDescription>
         </Alert>
       ) : (

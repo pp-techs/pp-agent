@@ -1,0 +1,187 @@
+{
+  "waitForAnswer": "Wait for the answer to finish",
+  "agentPicker": {
+    "change": "Change agent",
+    "search": "Search agents",
+    "noMatch": "No agents match.",
+    "manage": "Manage agents…"
+  },
+  "header": {
+    "context": {
+      "title": "Context window",
+      "usedLabel": "Context window, {{percent}}% used",
+      "unknown": "Unknown until the next reply · {{window}} available",
+      "used": "{{used}} of {{window}} tokens used ({{percent}}%)",
+      "hint": "When the window fills up, older messages are summarized automatically. You can do it now to free up room.",
+      "compact": "Compact conversation"
+    },
+    "openFolder": "Open workspace folder"
+  },
+  "message": {
+    "thinking": "Thinking",
+    "thought": "Thought",
+    "skill": "Skill: {{name}}",
+    "attachedImage": "Attached image"
+  },
+  "sidebar": {
+    "relativeTime": {
+      "now": "now",
+      "minutes": "{{value}}m",
+      "hours": "{{value}}h",
+      "days": "{{value}}d",
+      "weeks": "{{value}}w"
+    },
+    "newWorkspace": "New workspace",
+    "workspaceName": "Workspace name",
+    "workspaces": "Workspaces",
+    "settings": "Settings",
+    "loadError": "Couldn't load your chats. Reopen the app to try again.",
+    "noChats": "No chats yet",
+    "showLess": "Show less",
+    "showMore": "Show {{hidden}} more",
+    "workspace": {
+      "newChat": "New chat in {{name}}",
+      "actions": "Actions for {{name}}",
+      "editInSettings": "Edit in Settings",
+      "delete": "Delete workspace",
+      "deleteTitle": "Delete this workspace?",
+      "deleteDescription": "“{{name}}” will be removed. Its chats move to the built-in workspace, and its files stay in the folder."
+    },
+    "session": {
+      "actions": "Chat actions",
+      "rename": "Rename",
+      "renameTitle": "Rename chat",
+      "name": "Chat name",
+      "deleteTitle": "Delete this chat?",
+      "deleteDescription": "“{{title}}” will be removed from your history. Files it saved stay in your workspace."
+    }
+  },
+  "composer": {
+    "placeholder": "Ask the agent, or type / for more",
+    "placeholderDisconnected": "Connect a model in Settings to start",
+    "ariaLabel": "Message",
+    "removeAttachment": "Remove {{name}}",
+    "cantAttach": "Can't attach {{name}}."
+  },
+  "composerMenu": {
+    "add": "Add files, skills, and commands",
+    "attach": "Attach files…",
+    "skills": "Skills",
+    "skillsHeading": "Use a skill in this message",
+    "noSkills": "No skills for this agent",
+    "manageSkills": "Manage skills…",
+    "commands": "Commands"
+  },
+  "slash": {
+    "ariaLabel": "Commands and skills",
+    "commands": {
+      "new": {
+        "label": "New chat",
+        "description": "Start a fresh conversation."
+      },
+      "compact": {
+        "label": "Summarize the chat so far",
+        "description": "Frees up room in long conversations; the agent keeps a summary.",
+        "loading": "Summarizing the conversation…",
+        "success": "Conversation summarized"
+      }
+    }
+  },
+  "emptyChat": {
+    "title": "What can I help with?",
+    "description": "I can read and search the files in {{location}}, including PDF, Word, Excel, and PowerPoint. Attach files or images to a message, and I'll save new files after you approve.",
+    "yourWorkspace": "your workspace"
+  },
+  "modelPicker": {
+    "choose": "Choose a model",
+    "change": "Change model · {{modelId}}",
+    "search": "Search models",
+    "noMatch": "No models match.",
+    "none": "No models yet.",
+    "images": "Images",
+    "reasoning": "Reasoning",
+    "manage": "Manage models…"
+  },
+  "thinking": {
+    "title": "Thinking",
+    "off": "Thinking off",
+    "description": "How much the model thinks first",
+    "levels": {
+      "off": { "label": "Off", "hint": "Answers right away" },
+      "minimal": { "label": "Minimal", "hint": "A quick look before answering" },
+      "low": { "label": "Low", "hint": "Some thought for simple tasks" },
+      "medium": { "label": "Medium", "hint": "Balanced for most work" },
+      "high": { "label": "High", "hint": "Careful reasoning, slower" },
+      "xhigh": { "label": "Extra high", "hint": "Very thorough, slower and costlier" },
+      "max": { "label": "Max", "hint": "Deepest reasoning, slowest" }
+    }
+  },
+  "toolStep": {
+    "declined": "Declined",
+    "failed": "Failed",
+    "fallbacks": {
+      "file": "a file",
+      "workspace": "the workspace",
+      "pattern": "a pattern",
+      "text": "text"
+    },
+    "titles": {
+      "read": {
+        "active": "Reading {{target}}",
+        "done": "Read {{target}}",
+        "notDone": "Read {{target}}"
+      },
+      "write": {
+        "active": "Saving {{target}}",
+        "done": "Saved {{target}}",
+        "notDone": "Save {{target}}"
+      },
+      "ls": {
+        "active": "Looking in {{target}}",
+        "done": "Looked in {{target}}",
+        "notDone": "Look in {{target}}"
+      },
+      "find": {
+        "active": "Finding files matching {{target}}",
+        "done": "Found files matching {{target}}",
+        "notDone": "Find files matching {{target}}"
+      },
+      "grep": {
+        "active": "Searching for “{{target}}”",
+        "done": "Searched for “{{target}}”",
+        "notDone": "Search for “{{target}}”"
+      },
+      "currentDatetime": {
+        "active": "Checking the date and time",
+        "done": "Checked the date and time",
+        "notDone": "Check the date and time"
+      },
+      "codemode": {
+        "active": "Running a script",
+        "done": "Ran a script",
+        "notDone": "Run a script"
+      },
+      "toolSearch": {
+        "active": "Looking for the right tool",
+        "done": "Looked for the right tool",
+        "notDone": "Look for the right tool"
+      },
+      "mcp": {
+        "active": "Using “{{tool}}” in {{server}}",
+        "done": "Used “{{tool}}” in {{server}}",
+        "notDone": "Use “{{tool}}” in {{server}}"
+      },
+      "other": {
+        "active": "Using {{name}}",
+        "done": "Used {{name}}",
+        "notDone": "Use {{name}}"
+      }
+    },
+    "approval": {
+      "question": "{{title}}?",
+      "description": "The agent wants to make a change. Review it before it happens.",
+      "deny": "Deny",
+      "approve": "Approve"
+    }
+  }
+}

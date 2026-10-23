@@ -1,0 +1,187 @@
+{
+  "waitForAnswer": "Vui lòng chờ câu trả lời hoàn tất",
+  "agentPicker": {
+    "change": "Đổi Agent",
+    "search": "Tìm Agent",
+    "noMatch": "Không có Agent nào khớp.",
+    "manage": "Quản lý Agent…"
+  },
+  "header": {
+    "context": {
+      "title": "Cửa sổ ngữ cảnh",
+      "usedLabel": "Cửa sổ ngữ cảnh, đã dùng {{percent}}%",
+      "unknown": "Chưa xác định cho đến lần phản hồi tiếp theo · còn {{window}}",
+      "used": "Đã dùng {{used}} trên {{window}} token ({{percent}}%)",
+      "hint": "Khi cửa sổ đầy, các tin nhắn cũ sẽ được tự động tóm tắt. Bạn có thể tóm tắt ngay bây giờ để giải phóng dung lượng.",
+      "compact": "Thu gọn cuộc trò chuyện"
+    },
+    "openFolder": "Mở thư mục không gian làm việc"
+  },
+  "message": {
+    "thinking": "Đang suy luận",
+    "thought": "Đã suy luận",
+    "skill": "Kỹ năng: {{name}}",
+    "attachedImage": "Hình ảnh đính kèm"
+  },
+  "sidebar": {
+    "relativeTime": {
+      "now": "vừa xong",
+      "minutes": "{{value}} phút",
+      "hours": "{{value}} giờ",
+      "days": "{{value}} ngày",
+      "weeks": "{{value}} tuần"
+    },
+    "newWorkspace": "Không gian làm việc mới",
+    "workspaceName": "Tên không gian làm việc",
+    "workspaces": "Không gian làm việc",
+    "settings": "Cài đặt",
+    "loadError": "Không thể tải các cuộc trò chuyện của bạn. Hãy mở lại ứng dụng để thử lại.",
+    "noChats": "Chưa có cuộc trò chuyện nào",
+    "showLess": "Thu gọn",
+    "showMore": "Xem thêm {{hidden}}",
+    "workspace": {
+      "newChat": "Cuộc trò chuyện mới trong {{name}}",
+      "actions": "Thao tác cho {{name}}",
+      "editInSettings": "Chỉnh sửa trong Cài đặt",
+      "delete": "Xóa không gian làm việc",
+      "deleteTitle": "Xóa không gian làm việc này?",
+      "deleteDescription": "“{{name}}” sẽ bị xóa. Các cuộc trò chuyện của nó sẽ chuyển sang không gian làm việc mặc định, còn các tệp vẫn nằm trong thư mục."
+    },
+    "session": {
+      "actions": "Thao tác với cuộc trò chuyện",
+      "rename": "Đổi tên",
+      "renameTitle": "Đổi tên cuộc trò chuyện",
+      "name": "Tên cuộc trò chuyện",
+      "deleteTitle": "Xóa cuộc trò chuyện này?",
+      "deleteDescription": "“{{title}}” sẽ bị xóa khỏi lịch sử của bạn. Các tệp nó đã lưu vẫn nằm trong không gian làm việc của bạn."
+    }
+  },
+  "composer": {
+    "placeholder": "Hỏi Agent, hoặc gõ / để xem thêm",
+    "placeholderDisconnected": "Hãy kết nối một mô hình trong Cài đặt để bắt đầu",
+    "ariaLabel": "Tin nhắn",
+    "removeAttachment": "Xóa {{name}}",
+    "cantAttach": "Không thể đính kèm {{name}}."
+  },
+  "composerMenu": {
+    "add": "Thêm tệp, kỹ năng và lệnh",
+    "attach": "Đính kèm tệp…",
+    "skills": "Kỹ năng",
+    "skillsHeading": "Dùng một kỹ năng trong tin nhắn này",
+    "noSkills": "Agent này chưa có kỹ năng nào",
+    "manageSkills": "Quản lý kỹ năng…",
+    "commands": "Lệnh"
+  },
+  "slash": {
+    "ariaLabel": "Lệnh và kỹ năng",
+    "commands": {
+      "new": {
+        "label": "Cuộc trò chuyện mới",
+        "description": "Bắt đầu một cuộc trò chuyện mới."
+      },
+      "compact": {
+        "label": "Tóm tắt cuộc trò chuyện đến lúc này",
+        "description": "Giải phóng dung lượng trong các cuộc trò chuyện dài; Agent sẽ giữ lại bản tóm tắt.",
+        "loading": "Đang tóm tắt cuộc trò chuyện…",
+        "success": "Đã tóm tắt cuộc trò chuyện"
+      }
+    }
+  },
+  "emptyChat": {
+    "title": "Tôi có thể giúp gì cho bạn?",
+    "description": "Tôi có thể đọc và tìm kiếm các tệp trong {{location}}, kể cả PDF, Word, Excel và PowerPoint. Hãy đính kèm tệp hoặc hình ảnh vào tin nhắn, tôi sẽ lưu tệp mới sau khi bạn duyệt.",
+    "yourWorkspace": "không gian làm việc của bạn"
+  },
+  "modelPicker": {
+    "choose": "Chọn một mô hình",
+    "change": "Đổi mô hình · {{modelId}}",
+    "search": "Tìm mô hình",
+    "noMatch": "Không có mô hình nào khớp.",
+    "none": "Chưa có mô hình nào.",
+    "images": "Hình ảnh",
+    "reasoning": "Suy luận",
+    "manage": "Quản lý mô hình…"
+  },
+  "thinking": {
+    "title": "Mức suy luận",
+    "off": "Tắt suy luận",
+    "description": "Mức độ mô hình suy nghĩ trước khi trả lời",
+    "levels": {
+      "off": { "label": "Tắt", "hint": "Trả lời ngay" },
+      "minimal": { "label": "Tối thiểu", "hint": "Xem nhanh trước khi trả lời" },
+      "low": { "label": "Thấp", "hint": "Suy nghĩ đôi chút cho việc đơn giản" },
+      "medium": { "label": "Trung bình", "hint": "Cân bằng cho hầu hết công việc" },
+      "high": { "label": "Cao", "hint": "Suy luận cẩn thận, chậm hơn" },
+      "xhigh": { "label": "Rất cao", "hint": "Rất kỹ lưỡng, chậm hơn và tốn kém hơn" },
+      "max": { "label": "Tối đa", "hint": "Suy luận sâu nhất, chậm nhất" }
+    }
+  },
+  "toolStep": {
+    "declined": "Đã từ chối",
+    "failed": "Không thành công",
+    "fallbacks": {
+      "file": "một tệp",
+      "workspace": "không gian làm việc",
+      "pattern": "một mẫu",
+      "text": "văn bản"
+    },
+    "titles": {
+      "read": {
+        "active": "Đang đọc {{target}}",
+        "done": "Đã đọc {{target}}",
+        "notDone": "Đọc {{target}}"
+      },
+      "write": {
+        "active": "Đang lưu {{target}}",
+        "done": "Đã lưu {{target}}",
+        "notDone": "Lưu {{target}}"
+      },
+      "ls": {
+        "active": "Đang xem trong {{target}}",
+        "done": "Đã xem trong {{target}}",
+        "notDone": "Xem trong {{target}}"
+      },
+      "find": {
+        "active": "Đang tìm các tệp khớp {{target}}",
+        "done": "Đã tìm các tệp khớp {{target}}",
+        "notDone": "Tìm các tệp khớp {{target}}"
+      },
+      "grep": {
+        "active": "Đang tìm “{{target}}”",
+        "done": "Đã tìm “{{target}}”",
+        "notDone": "Tìm “{{target}}”"
+      },
+      "currentDatetime": {
+        "active": "Đang kiểm tra ngày và giờ",
+        "done": "Đã kiểm tra ngày và giờ",
+        "notDone": "Kiểm tra ngày và giờ"
+      },
+      "codemode": {
+        "active": "Đang chạy một tập lệnh",
+        "done": "Đã chạy một tập lệnh",
+        "notDone": "Chạy một tập lệnh"
+      },
+      "toolSearch": {
+        "active": "Đang tìm công cụ phù hợp",
+        "done": "Đã tìm công cụ phù hợp",
+        "notDone": "Tìm công cụ phù hợp"
+      },
+      "mcp": {
+        "active": "Đang dùng “{{tool}}” trong {{server}}",
+        "done": "Đã dùng “{{tool}}” trong {{server}}",
+        "notDone": "Dùng “{{tool}}” trong {{server}}"
+      },
+      "other": {
+        "active": "Đang dùng {{name}}",
+        "done": "Đã dùng {{name}}",
+        "notDone": "Dùng {{name}}"
+      }
+    },
+    "approval": {
+      "question": "{{title}}?",
+      "description": "Agent muốn thực hiện một thay đổi. Hãy xem lại trước khi thay đổi được áp dụng.",
+      "deny": "Từ chối",
+      "approve": "Duyệt"
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import type { Credential, CredentialInfo, CredentialStore } from "@earendil-works/pi-ai";
 import type { MainToAgentMessage, StoredCredential, VaultRequest } from "@workspace/shared";
+import { t } from "./i18n.ts";
 import { send } from "./ipc.ts";
 import { WEB_KEY_PREFIX } from "./web/names.ts";
 
@@ -25,7 +26,7 @@ export class VaultCredentialStore implements CredentialStore {
     if (!request) return;
     this.pending.delete(message.id);
     if (message.ok) request.resolve(message.data);
-    else request.reject(new Error(`Secure storage: ${message.error}`));
+    else request.reject(new Error(t("app.secureStorage", { error: message.error })));
   }
 
   async read(providerId: string): Promise<Credential | undefined> {

@@ -50,6 +50,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { OptionGroup, SubOptions } from "@/components/settings/option-group";
@@ -62,12 +63,11 @@ import {
   type ProviderCommands,
 } from "@/lib/queries";
 
-const API_LABELS: Record<GatewayApi, string> = {
-  "openai-completions": "OpenAI-compatible (Chat Completions)",
-  "openai-responses": "OpenAI Responses",
-  "anthropic-messages": "Anthropic Messages",
-};
-const API_ITEMS = GATEWAY_APIS.map((value) => ({ value, label: API_LABELS[value] }));
+const API_LABEL_KEYS = {
+  "openai-completions": "apiTypes.openaiCompletions",
+  "openai-responses": "apiTypes.openaiResponses",
+  "anthropic-messages": "apiTypes.anthropicMessages",
+} as const satisfies Record<GatewayApi, string>;
 
 function isHttpUrl(value: string) {
   try {
@@ -80,8 +80,6 @@ function isHttpUrl(value: string) {
 
 /** Closing the key prompt rejects `connect_provider` with "Cancelled"; that is not an error. */
 const isCancelled = (error: Error) => /cancel/i.test(error.message);
-
-const modelCount = (count: number) => (count === 1 ? "1 model" : `${count} models`);
 
 function GroupHeading({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
@@ -101,13 +99,22 @@ function ProviderRow({
   commands: ProviderCommands;
   onEditGateway: (id: string) => void;
 }) {
+  const { t } = useTranslation(["models", "common"]);
   const { connect, disconnect } = commands;
+
+  /** The backend names the credential source in English ("Saved key", "Environment variable"). */
+  function authSourceLabel(source: string | undefined) {
+    if (source === "Saved key") return t("providerRow.authSource.savedKey");
+    if (source === "Environment variable") return t("providerRow.authSource.environmentVariable");
+    return source ?? t("providerRow.authSource.connected");
+  }
+
   const connecting = connect.isPending && connect.variables === provider.id;
   const disconnecting = disconnect.isPending && disconnect.variables === provider.id;
 
   function onConnect() {
     connect.mutate(provider.id, {
-      onSuccess: (result) => toast.success(`${result.name} connected`),
+      onSuccess: (result) => toast.success(t("providerRow.connectedToast", { name: result.name })),
       onError: (error) => {
         if (!isCancelled(error)) toast.error(error.message);
       },
@@ -116,28 +123,29 @@ function ProviderRow({
 
   async function onDisconnect() {
     const confirmed = await ConfirmModal.show({
-      title: `Disconnect ${provider.name}?`,
-      description:
-        "Its saved key is removed from this computer. Chats that use its models will switch to another model.",
-      confirmLabel: "Disconnect",
+      title: t("providerRow.disconnectTitle", { name: provider.name }),
+      description: t("providerRow.disconnectDescription"),
+      confirmLabel: t("providerRow.disconnect"),
     });
     if (!confirmed) return;
     disconnect.mutate(provider.id, {
-      onSuccess: () => toast.success(`${provider.name} disconnected`),
+      onSuccess: () => toast.success(t("providerRow.disconnectedToast", { name: provider.name })),
       onError: (error) => toast.error(error.message),
     });
   }
 
   const details = provider.configured
-    ? [provider.authSource ?? "Connected", modelCount(provider.modelCount)]
-    : [modelCount(provider.modelCount)];
+    ? [authSourceLabel(provider.authSource), t("modelCount", { count: provider.modelCount })]
+    : [t("modelCount", { count: provider.modelCount })];
 
   return (
     <Item variant="outline" size="xs">
       <ItemContent className="min-w-0">
         <ItemTitle>
           {provider.name}
-          {provider.kind === "gateway" && <Badge variant="secondary">Gateway</Badge>}
+          {provider.kind === "gateway" && (
+            <Badge variant="secondary">{t("providerRow.gatewayBadge")}</Badge>
+          )}
         </ItemTitle>
         <ItemDescription className="line-clamp-1 text-xs">{details.join(" · ")}</ItemDescription>
       </ItemContent>
@@ -145,13 +153,13 @@ function ProviderRow({
         {provider.kind === "gateway" ? (
           <Button variant="outline" size="sm" onClick={() => onEditGateway(provider.id)}>
             <PencilIcon data-icon="inline-start" />
-            Edit
+            {t("common:actions.edit")}
           </Button>
         ) : provider.configured ? (
           <>
             <Button variant="ghost" size="sm" disabled={connect.isPending} onClick={onConnect}>
               {connecting && <Spinner data-icon="inline-start" />}
-              Change key
+              {t("providerRow.changeKey")}
             </Button>
             <Button
               variant="outline"
@@ -160,13 +168,13 @@ function ProviderRow({
               onClick={() => void onDisconnect()}
             >
               {disconnecting && <Spinner data-icon="inline-start" />}
-              Disconnect
+              {t("providerRow.disconnect")}
             </Button>
           </>
         ) : (
           <Button size="sm" disabled={connect.isPending} onClick={onConnect}>
             {connecting && <Spinner data-icon="inline-start" />}
-            Connect
+            {t("providerRow.connect")}
           </Button>
         )}
       </ItemActions>
@@ -190,12 +198,13 @@ function ModelRow({
   onChange: (model: GatewayModel) => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation("models");
   return (
     <div className="flex items-center gap-1 rounded-xl px-2 py-1 hover:bg-muted/50">
       <div className="flex min-w-0 flex-1 flex-col">
         <Input
-          aria-label={`Display name of ${model.id}`}
-          title="Display name. Blank: the name the gateway or Pi knows, else a tidied id."
+          aria-label={t("modelRow.displayName.label", { id: model.id })}
+          title={t("modelRow.displayName.hint")}
           placeholder={modelLabel({ name: "", modelId: model.id })}
           className="h-7 border-transparent bg-transparent px-1.5 text-sm shadow-none hover:border-input focus-visible:border-ring"
           value={model.name ?? ""}
@@ -216,9 +225,9 @@ function ModelRow({
         min={1000}
         step={1000}
         inputMode="numeric"
-        aria-label={`Context window of ${model.id}, in tokens`}
-        title="Context window in tokens. Blank: the model's known size, else 128000."
-        placeholder="auto"
+        aria-label={t("modelRow.contextWindow.label", { id: model.id })}
+        title={t("modelRow.contextWindow.hint")}
+        placeholder={t("modelRow.contextWindow.placeholder")}
         className="h-7 w-24 text-xs tabular-nums"
         value={model.contextWindow ?? ""}
         onChange={(event) => {
@@ -229,8 +238,8 @@ function ModelRow({
       />
       <Toggle
         size="sm"
-        aria-label="Accepts images"
-        title="Accepts images"
+        aria-label={t("modelRow.images")}
+        title={t("modelRow.images")}
         pressed={model.images ?? true}
         onPressedChange={(images) => onChange({ ...model, images })}
       >
@@ -238,14 +247,19 @@ function ModelRow({
       </Toggle>
       <Toggle
         size="sm"
-        aria-label="Reasoning model"
-        title="Reasoning model (thinks before answering)"
+        aria-label={t("modelRow.reasoning.label")}
+        title={t("modelRow.reasoning.hint")}
         pressed={model.reasoning ?? false}
         onPressedChange={(reasoning) => onChange({ ...model, reasoning })}
       >
         <BrainIcon />
       </Toggle>
-      <Button variant="ghost" size="icon-sm" aria-label={`Remove ${model.id}`} onClick={onRemove}>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label={t("modelRow.remove", { id: model.id })}
+        onClick={onRemove}
+      >
         <XIcon />
       </Button>
     </div>
@@ -262,6 +276,7 @@ function FetchedModels({
   included: Set<string>;
   onInclude: (models: FetchedGatewayModel[], include: boolean) => void;
 }) {
+  const { t } = useTranslation("models");
   const [search, setSearch] = React.useState("");
   const query = search.trim().toLowerCase();
   const visible = query
@@ -280,8 +295,13 @@ function FetchedModels({
     <div className="flex flex-col gap-2 rounded-xl bg-muted/50 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-muted-foreground" aria-live="polite">
-          {selectedCount} of {models.length} selected
-          {query && ` · ${visible.length} shown`}
+          {query
+            ? t("fetchedModels.selectedCountShown", {
+                selected: selectedCount,
+                total: models.length,
+                shown: visible.length,
+              })
+            : t("fetchedModels.selectedCount", { selected: selectedCount, total: models.length })}
         </span>
         <div className="ml-auto flex gap-1">
           <Button
@@ -291,7 +311,7 @@ function FetchedModels({
             disabled={visibleSelected === visible.length}
             onClick={() => onInclude(visible, true)}
           >
-            {query ? "Select all shown" : "Select all"}
+            {query ? t("fetchedModels.selectAllShown") : t("fetchedModels.selectAll")}
           </Button>
           <Button
             type="button"
@@ -300,16 +320,16 @@ function FetchedModels({
             disabled={visibleSelected === 0}
             onClick={() => onInclude(visible, false)}
           >
-            {query ? "Clear shown" : "Clear"}
+            {query ? t("fetchedModels.clearShown") : t("fetchedModels.clear")}
           </Button>
         </div>
       </div>
       <InputGroup>
         <InputGroupInput
-          aria-label="Search the gateway's models"
+          aria-label={t("fetchedModels.search")}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search the gateway's models"
+          placeholder={t("fetchedModels.search")}
           autoComplete="off"
         />
         <InputGroupAddon>
@@ -317,7 +337,7 @@ function FetchedModels({
         </InputGroupAddon>
       </InputGroup>
       {visible.length === 0 ? (
-        <p className="px-2 py-1 text-sm text-muted-foreground">No models match.</p>
+        <p className="px-2 py-1 text-sm text-muted-foreground">{t("fetchedModels.noMatch")}</p>
       ) : (
         <div className="flex max-h-60 flex-col overflow-y-auto">
           {visible.map((model) => (
@@ -360,6 +380,8 @@ function GatewayForm({
   commands: ProviderCommands;
   onDone: () => void;
 }) {
+  const { t } = useTranslation(["models", "common"]);
+  const apiItems = GATEWAY_APIS.map((value) => ({ value, label: t(API_LABEL_KEYS[value]) }));
   const { saveGateway, fetchGatewayModels } = commands;
   const [name, setName] = React.useState(gateway?.name ?? "");
   const [api, setApi] = React.useState<GatewayApi>(gateway?.api ?? "openai-completions");
@@ -422,8 +444,7 @@ function GatewayForm({
                 : model;
             }),
           );
-          if (found.length === 0)
-            toast.info("The gateway didn't list any models. Add them by name.");
+          if (found.length === 0) toast.info(t("gatewayForm.noModelsListed"));
         },
       },
     );
@@ -443,7 +464,7 @@ function GatewayForm({
       },
       {
         onSuccess: (saved) => {
-          toast.success(`${saved.name} saved`);
+          toast.success(t("gatewayForm.saved", { name: saved.name }));
           onDone();
         },
       },
@@ -452,40 +473,40 @@ function GatewayForm({
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-6 rounded-2xl border p-4">
-      <h4 className="font-medium">{gateway ? `Edit ${gateway.name}` : "Add a gateway"}</h4>
+      <h4 className="font-medium">
+        {gateway ? t("gatewayForm.titleEdit", { name: gateway.name }) : t("gatewayForm.titleAdd")}
+      </h4>
       <FieldGroup>
         <Field>
-          <FieldLabel htmlFor="gateway-name">Name</FieldLabel>
+          <FieldLabel htmlFor="gateway-name">{t("gatewayForm.name.label")}</FieldLabel>
           <Input
             id="gateway-name"
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Company gateway"
+            placeholder={t("gatewayForm.name.placeholder")}
             autoComplete="off"
             autoFocus
           />
-          <FieldDescription>Shown in the model list.</FieldDescription>
+          <FieldDescription>{t("gatewayForm.name.description")}</FieldDescription>
         </Field>
         <Field>
-          <FieldLabel>API type</FieldLabel>
-          <Select items={API_ITEMS} value={api} onValueChange={(value) => value && setApi(value)}>
+          <FieldLabel>{t("gatewayForm.apiType.label")}</FieldLabel>
+          <Select items={apiItems} value={api} onValueChange={(value) => value && setApi(value)}>
             <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {API_ITEMS.map((item) => (
+              {apiItems.map((item) => (
                 <SelectItem key={item.value} value={item.value}>
                   {item.label}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <FieldDescription>
-            Most gateways are OpenAI-compatible. Ask your tech team.
-          </FieldDescription>
+          <FieldDescription>{t("gatewayForm.apiType.description")}</FieldDescription>
         </Field>
         <Field data-invalid={urlInvalid || undefined}>
-          <FieldLabel htmlFor="gateway-url">Gateway URL</FieldLabel>
+          <FieldLabel htmlFor="gateway-url">{t("gatewayForm.url.label")}</FieldLabel>
           <Input
             id="gateway-url"
             value={baseUrl}
@@ -495,26 +516,30 @@ function GatewayForm({
             autoComplete="off"
           />
           {urlInvalid ? (
-            <FieldError>Enter a web address starting with https:// or http://</FieldError>
+            <FieldError>{t("gatewayForm.url.invalid")}</FieldError>
           ) : (
-            <FieldDescription>The address your team uses for AI requests.</FieldDescription>
+            <FieldDescription>{t("gatewayForm.url.description")}</FieldDescription>
           )}
         </Field>
         <Field>
-          <FieldLabel htmlFor="gateway-key">API key</FieldLabel>
+          <FieldLabel htmlFor="gateway-key">{t("gatewayForm.apiKey.label")}</FieldLabel>
           <Input
             id="gateway-key"
             type="password"
             value={apiKey}
             onChange={(event) => setApiKey(event.target.value)}
-            placeholder={gateway?.hasApiKey ? "Saved. Leave blank to keep it." : "Paste your key"}
+            placeholder={
+              gateway?.hasApiKey
+                ? t("gatewayForm.apiKey.placeholderSaved")
+                : t("gatewayForm.apiKey.placeholderNew")
+            }
             autoComplete="off"
           />
-          <FieldDescription>Stored encrypted in your system keychain.</FieldDescription>
+          <FieldDescription>{t("gatewayForm.apiKey.description")}</FieldDescription>
         </Field>
         <OptionGroup
-          legend="Models"
-          description="Load the gateway's list, or add models by name."
+          legend={t("gatewayForm.models.legend")}
+          description={t("gatewayForm.models.description")}
           action={
             <Button
               type="button"
@@ -528,19 +553,21 @@ function GatewayForm({
               ) : (
                 <DownloadIcon data-icon="inline-start" />
               )}
-              Load from gateway
+              {t("gatewayForm.models.load")}
             </Button>
           }
         >
           {fetchGatewayModels.isError && (
-            <FieldError>Couldn't load models: {fetchGatewayModels.error.message}</FieldError>
+            <FieldError>
+              {t("gatewayForm.models.loadError", { message: fetchGatewayModels.error.message })}
+            </FieldError>
           )}
           {fetched && fetched.length > 0 && (
             <FetchedModels models={fetched} included={included} onInclude={includeModels} />
           )}
           <InputGroup>
             <InputGroupInput
-              aria-label="Model name"
+              aria-label={t("gatewayForm.models.manualLabel")}
               value={manualId}
               onChange={(event) => setManualId(event.target.value)}
               onKeyDown={(event) => {
@@ -549,7 +576,7 @@ function GatewayForm({
                 addModel(manualId);
                 setManualId("");
               }}
-              placeholder="Or type a model name, like gpt-4o"
+              placeholder={t("gatewayForm.models.manualPlaceholder")}
               autoComplete="off"
             />
             <InputGroupAddon align="inline-end">
@@ -564,19 +591,21 @@ function GatewayForm({
                 }}
               >
                 <PlusIcon data-icon="inline-start" />
-                Add
+                {t("common:actions.add")}
               </Button>
             </InputGroupAddon>
           </InputGroup>
           {models.length === 0 ? (
-            <FieldDescription className="text-xs">Add at least one model.</FieldDescription>
+            <FieldDescription className="text-xs">
+              {t("gatewayForm.models.atLeastOne")}
+            </FieldDescription>
           ) : (
             <SubOptions>
               {duplicateNames.size > 0 && (
                 <FieldDescription className="text-xs">
-                  Several models share the name{" "}
-                  {[...duplicateNames].map((n) => `“${n}”`).join(", ")}. The model list adds the
-                  model id to tell them apart; give them different names to avoid that.
+                  {t("gatewayForm.models.duplicateNames", {
+                    names: [...duplicateNames].map((n) => `“${n}”`).join(", "),
+                  })}
                 </FieldDescription>
               )}
               <div className="flex flex-col">
@@ -600,11 +629,11 @@ function GatewayForm({
       {saveGateway.isError && <FieldError>{saveGateway.error.message}</FieldError>}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onDone}>
-          Cancel
+          {t("common:actions.cancel")}
         </Button>
         <Button type="submit" disabled={!canSave || saveGateway.isPending}>
           {saveGateway.isPending && <Spinner data-icon="inline-start" />}
-          Save
+          {t("common:actions.save")}
         </Button>
       </div>
     </form>
@@ -620,19 +649,19 @@ function GatewayRow({
   commands: ProviderCommands;
   onEdit: () => void;
 }) {
+  const { t } = useTranslation(["models", "common"]);
   const { deleteGateway } = commands;
   const deleting = deleteGateway.isPending && deleteGateway.variables === gateway.id;
 
   async function onDelete() {
     const confirmed = await ConfirmModal.show({
-      title: `Delete ${gateway.name}?`,
-      description:
-        "The gateway and its saved key are removed from this computer. Chats that use its models will switch to another model.",
-      confirmLabel: "Delete",
+      title: t("gatewayRow.deleteTitle", { name: gateway.name }),
+      description: t("gatewayRow.deleteDescription"),
+      confirmLabel: t("common:actions.delete"),
     });
     if (!confirmed) return;
     deleteGateway.mutate(gateway.id, {
-      onSuccess: () => toast.success(`${gateway.name} deleted`),
+      onSuccess: () => toast.success(t("gatewayRow.deleted", { name: gateway.name })),
       onError: (error) => toast.error(error.message),
     });
   }
@@ -644,20 +673,20 @@ function GatewayRow({
         <ItemDescription className="line-clamp-1 text-xs">
           {[
             gateway.baseUrl,
-            modelCount(gateway.models.length),
-            gateway.hasApiKey ? "Key saved" : "No key",
+            t("modelCount", { count: gateway.models.length }),
+            gateway.hasApiKey ? t("gatewayRow.keySaved") : t("gatewayRow.noKey"),
           ].join(" · ")}
         </ItemDescription>
       </ItemContent>
       <ItemActions>
         <Button variant="outline" size="sm" onClick={onEdit}>
           <PencilIcon data-icon="inline-start" />
-          Edit
+          {t("common:actions.edit")}
         </Button>
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label={`Delete ${gateway.name}`}
+          aria-label={t("gatewayRow.delete", { name: gateway.name })}
           disabled={deleting}
           onClick={() => void onDelete()}
         >
@@ -669,6 +698,7 @@ function GatewayRow({
 }
 
 export function ModelsSection({ bridge }: { bridge: DesktopBridge }) {
+  const { t } = useTranslation("models");
   const providers = useQuery(providersQuery(bridge));
   const gateways = useQuery(gatewaysQuery(bridge));
   const commands = useProviderCommands(bridge);
@@ -700,20 +730,15 @@ export function ModelsSection({ bridge }: { bridge: DesktopBridge }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <SectionHeading
-        title="Models"
-        description="Connect AI providers with an API key, or add your team's own gateway."
-      />
+      <SectionHeading title={t("section.title")} description={t("section.description")} />
 
       <section className="flex flex-col gap-2">
-        <GroupHeading title="Connected" />
+        <GroupHeading title={t("section.connected.heading")} />
         {connected.length === 0 ? (
           <Empty className="border border-dashed p-6">
             <EmptyHeader>
-              <EmptyTitle>No providers connected</EmptyTitle>
-              <EmptyDescription>
-                Connect one below, or add a custom gateway, to start chatting.
-              </EmptyDescription>
+              <EmptyTitle>{t("section.connected.emptyTitle")}</EmptyTitle>
+              <EmptyDescription>{t("section.connected.emptyDescription")}</EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : (
@@ -731,10 +756,10 @@ export function ModelsSection({ bridge }: { bridge: DesktopBridge }) {
       </section>
 
       <section className="flex flex-col gap-2">
-        <GroupHeading title="Custom gateways">
+        <GroupHeading title={t("section.gateways.heading")}>
           <Button variant="outline" size="sm" onClick={() => editGateway("new")}>
             <PlusIcon data-icon="inline-start" />
-            Add gateway
+            {t("section.gateways.add")}
           </Button>
         </GroupHeading>
         <div ref={formRef}>
@@ -748,9 +773,7 @@ export function ModelsSection({ bridge }: { bridge: DesktopBridge }) {
           )}
         </div>
         {gatewayList.length === 0 && editing === null ? (
-          <p className="text-sm text-muted-foreground">
-            A gateway is an OpenAI- or Anthropic-compatible address your team runs or buys.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("section.gateways.hint")}</p>
         ) : (
           <ItemGroup>
             {gatewayList
@@ -768,13 +791,13 @@ export function ModelsSection({ bridge }: { bridge: DesktopBridge }) {
       </section>
 
       <section className="flex flex-col gap-2">
-        <GroupHeading title="Available providers" />
+        <GroupHeading title={t("section.available.heading")} />
         <InputGroup>
           <InputGroupInput
-            aria-label="Search providers"
+            aria-label={t("section.available.search")}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search providers"
+            placeholder={t("section.available.search")}
           />
           <InputGroupAddon>
             <SearchIcon />
@@ -782,7 +805,7 @@ export function ModelsSection({ bridge }: { bridge: DesktopBridge }) {
         </InputGroup>
         {available.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            {query ? "No providers match." : "Every provider is connected."}
+            {query ? t("section.available.noMatch") : t("section.available.allConnected")}
           </p>
         ) : (
           <ItemGroup>

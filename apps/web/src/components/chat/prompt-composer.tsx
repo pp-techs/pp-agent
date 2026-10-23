@@ -15,6 +15,8 @@ import {
   InputGroupTextarea,
 } from "@workspace/ui/components/input-group";
 import { ArrowUpIcon, FileTextIcon, SquareIcon, XIcon } from "lucide-react";
+import { cn } from "@workspace/ui/lib/utils";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { ComposerMenu } from "@/components/chat/composer-menu";
@@ -36,6 +38,9 @@ import { useChatStore } from "@/stores/chat-store";
 import { toAttachments, useComposerStore } from "@/stores/composer-store";
 
 export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; disabled: boolean }) {
+  // Like ChatGPT: one row while the text fits a line, then the text on top and the controls below.
+  // Collapses again only once the draft is empty, so the wider layout can't flip back and forth.
+  const [expanded, setExpanded] = React.useState(false);
   const formRef = React.useRef<HTMLFormElement>(null);
   const running = useChatStore((state) => state.status === "running");
   const draft = useComposerStore((state) => state.draft);
@@ -43,6 +48,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
   const { setDraft, add, remove } = useComposerStore.getState();
   const { abort } = useAgentCommands(bridge);
   const send = useSendMessage(bridge);
+  const { t } = useTranslation(["chat", "common"]);
   const { commands, skills } = useSlashItems(bridge);
   const canSend = !disabled && (draft.trim().length > 0 || attachments.length > 0);
 
@@ -56,6 +62,8 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
   );
   const showSuggestions = !disabled && suggestions.length > 0 && dismissedFor !== draft;
   const active = Math.min(activeIndex, Math.max(suggestions.length - 1, 0));
+
+  const isExpanded = expanded && draft.length > 0;
 
   function pickItem(item: SlashItem) {
     setActiveIndex(0);
@@ -135,7 +143,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
           onPick={pickItem}
         />
       )}
-      <InputGroup>
+      <InputGroup className="h-auto flex-col rounded-[28px] bg-muted/60 has-[[data-slot=input-group-control]:focus-visible]:border-transparent has-[[data-slot=input-group-control]:focus-visible]:ring-0 dark:bg-input/40">
         {attachments.length > 0 && (
           <InputGroupAddon align="block-start" className="flex-wrap gap-2">
             {attachments.map((attachment) => (
@@ -152,7 +160,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
                 </AttachmentContent>
                 <AttachmentActions>
                   <AttachmentAction
-                    aria-label={`Remove ${attachment.name}`}
+                    aria-label={t("composer.removeAttachment", { name: attachment.name })}
                     onClick={() => remove(attachment.id)}
                   >
                     <XIcon />
@@ -162,24 +170,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
             ))}
           </InputGroupAddon>
         )}
-        <InputGroupTextarea
-          value={draft}
-          onChange={(event) => {
-            setDraft(event.target.value);
-            setActiveIndex(0);
-          }}
-          onPaste={(event) => void onPaste(event)}
-          placeholder={
-            disabled ? "Connect a model in Settings to start" : "Ask the agent, or type / for more"
-          }
-          aria-label="Message"
-          aria-controls={showSuggestions ? "slash-suggestions" : undefined}
-          aria-activedescendant={showSuggestions ? `slash-option-${active}` : undefined}
-          className="min-h-14"
-          disabled={disabled}
-          onKeyDown={onKeyDown}
-        />
-        <InputGroupAddon align="block-end" className="gap-1 pt-1">
+        <div className="flex w-full flex-wrap items-end gap-1 p-2">
           <ComposerMenu
             bridge={bridge}
             disabled={disabled}
@@ -188,33 +179,60 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
             onAttach={() => void pick()}
             onPick={pickItem}
           />
+          <InputGroupTextarea
+            value={draft}
+            onChange={(event) => {
+              const { value, scrollHeight } = event.target;
+              setDraft(value);
+              setActiveIndex(0);
+              setExpanded(
+                (was) => value.length > 0 && (was || value.includes("\n") || scrollHeight > 44),
+              );
+            }}
+            onPaste={(event) => void onPaste(event)}
+            placeholder={
+              disabled ? t("composer.placeholderDisconnected") : t("composer.placeholder")
+            }
+            aria-label={t("composer.ariaLabel")}
+            data-composer-input
+            aria-controls={showSuggestions ? "slash-suggestions" : undefined}
+            aria-activedescendant={showSuggestions ? `slash-option-${active}` : undefined}
+            className={cn(
+              "max-h-52 min-h-9 px-2 py-2",
+              isExpanded && "order-first basis-full px-3",
+            )}
+            disabled={disabled}
+            onKeyDown={onKeyDown}
+          />
+          {isExpanded && <div className="flex-1" />}
           <ModelPicker bridge={bridge} />
           <ThinkingPicker bridge={bridge} disabled={disabled} />
-          {running && (
+          {running ? (
             <InputGroupButton
               type="button"
-              variant="outline"
+              variant="default"
               size="icon-sm"
-              className="ml-auto"
-              aria-label="Stop"
+              className="size-9 rounded-full"
+              aria-label={t("common:actions.stop")}
               onClick={() =>
                 abort.mutate(undefined, { onError: (error) => toast.error(error.message) })
               }
             >
-              <SquareIcon />
+              <SquareIcon className="fill-current" />
+            </InputGroupButton>
+          ) : (
+            <InputGroupButton
+              type="submit"
+              variant="default"
+              size="icon-sm"
+              disabled={!canSend}
+              className="size-9 rounded-full"
+              aria-label={t("common:actions.send")}
+            >
+              <ArrowUpIcon />
             </InputGroupButton>
           )}
-          <InputGroupButton
-            type="submit"
-            variant="default"
-            size="icon-sm"
-            disabled={!canSend}
-            className={running ? undefined : "ml-auto"}
-            aria-label="Send"
-          >
-            <ArrowUpIcon />
-          </InputGroupButton>
-        </InputGroupAddon>
+        </div>
       </InputGroup>
     </form>
   );

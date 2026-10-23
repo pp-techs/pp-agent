@@ -2,6 +2,7 @@ import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { StoredCredential, VaultRequest } from "@workspace/shared";
 import { app, safeStorage } from "electron";
+import { translator } from "./i18n.ts";
 
 /**
  * Credentials of every model provider, encrypted with the OS keychain (safeStorage). Only the main
@@ -47,7 +48,7 @@ async function writeVault(vault: VaultFile): Promise<void> {
 
 async function encrypt(credential: StoredCredential): Promise<string> {
   if (!(await safeStorage.isAsyncEncryptionAvailable()))
-    throw new Error("Secure storage is not available on this computer.");
+    throw new Error(translator()("app.secureStorageUnavailable"));
   return (await safeStorage.encryptStringAsync(JSON.stringify(credential))).toString("base64");
 }
 

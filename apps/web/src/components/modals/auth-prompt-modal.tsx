@@ -12,6 +12,7 @@ import {
 import { Field, FieldContent, FieldDescription, FieldLabel } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
 import { RadioGroup, RadioGroupItem } from "@workspace/ui/components/radio-group";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { create } from "zustand";
 
@@ -43,6 +44,7 @@ function PromptForm({
   onSubmit: (value: string) => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation(["modals", "common"]);
   const options = prompt.options ?? [];
   const [value, setValue] = React.useState(prompt.kind === "select" ? (options[0]?.id ?? "") : "");
   const canSubmit = prompt.kind === "select" ? value !== "" : value.trim() !== "";
@@ -90,10 +92,10 @@ function PromptForm({
       )}
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
+          {t("common:actions.cancel")}
         </Button>
         <Button type="submit" disabled={!canSubmit}>
-          Continue
+          {t("modals:authPrompt.continue")}
         </Button>
       </DialogFooter>
     </form>

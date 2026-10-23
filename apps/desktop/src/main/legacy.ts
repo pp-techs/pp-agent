@@ -36,7 +36,7 @@ export async function migrateLegacyProvider(settingsFile: string): Promise<void>
     // The agent process adds the default agent and the remaining defaults when it loads the file.
     const settings: Omit<
       SettingsFile,
-      "agents" | "workspaces" | "activeAgentId" | "thinkingLevel" | "webSearch"
+      "agents" | "workspaces" | "activeAgentId" | "thinkingLevel" | "webSearch" | "language"
     > = {
       defaultModel: { provider: GATEWAY_ID, modelId: legacy.modelId },
       shellEnabled: false,

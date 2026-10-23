@@ -10,7 +10,8 @@
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "isolatedModules": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "resolveJsonModule": true
   },
   "include": ["src"]
 }

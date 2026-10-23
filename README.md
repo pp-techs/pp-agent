@@ -22,12 +22,14 @@ Coding agents are powerful but built for developers. PP Agent puts the same engi
 ## Features
 
 - **Chat with documents.** Attach or drop files and paste images. The agent reads PDF, Word, Excel, PowerPoint, OpenDocument, RTF, EPUB, HTML, and CSV.
+- **Web search.** The agent can search the web and read pages, PDFs, and Office files from the internet. Pick and order the search services in **Settings › Tools**: SearXNG (self-hosted), Serper, Tavily, Brave Search, Exa, or webclaw; it falls back to the next one when a service fails. Pages on private networks are never opened.
 - **Agents.** Profiles with their own rules, icon, tools, MCP servers, skills, model, starter prompts, and workspace folder. Switch mid-conversation; share them as `.json` files.
 - **Any model.** Sign in to Pi's built-in providers (Anthropic, OpenAI, Google, OpenRouter, Mistral, Groq, and more) with an API key, or add your own OpenAI- or Anthropic-compatible gateways. Choose the model and thinking level per conversation.
 - **Business systems through MCP.** Add, edit, and monitor [MCP](https://modelcontextprotocol.io) servers in Settings, including OAuth sign-in. Paste configurations from Claude Desktop or Cursor.
-- **Approvals you control.** Read-only actions run freely; saving files, shell commands, and actions that change data in your systems ask first. Each tool can be set to automatic, always ask, always allow, or off.
+- **Approvals you control.** Read-only actions run freely; saving files, shell commands, and actions that change data in your systems ask first. Each tool can be set to automatic, always ask, always allow, or off. Shell commands are off by default and can be set to run without asking, after a confirmation and with a standing warning in Settings.
+- **Languages.** English and Tiếng Việt, chosen in **Settings › General** or following your system language. Errors, approvals, and dialogs are translated too.
 - **Skills.** Import [Agent Skills](https://agentskills.io), write your own in the app, and invoke them with `/skill:<name>`. Slash commands `/new` and `/compact` keep long chats manageable.
-- **Private by design.** API keys are encrypted with your operating system's keychain; conversations and files stay on your computer except what you send to the providers and MCP servers you configure.
+- **Private by design.** API keys (model providers and search services) are encrypted with your operating system's keychain; conversations and files stay on your computer except what you send to the providers, search services, and MCP servers you configure. Search queries go to the search service you choose.
 
 ## Install
 
@@ -63,7 +65,7 @@ The agent works in `~/Documents/PP Agent` unless an agent has its own folder. Se
 flowchart LR
   R[Renderer<br/>React UI] -- "preload bridge" --> M[Main process<br/>windows, dialogs, key vault]
   M -- messages --> A[Agent process<br/>Pi SDK session]
-  A --> T[Tools<br/>files, documents, shell]
+  A --> T[Tools<br/>files, documents, web, shell]
   A --> X[MCP servers]
   A --> P[Model providers<br/>and gateways]
 ```

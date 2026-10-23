@@ -1,0 +1,314 @@
+{
+  "showInFolder": "Show in folder",
+  "saveChanges": "Save changes",
+  "tools": {
+    "heading": {
+      "title": "Tools",
+      "description": "Choose what the agent may do on its own and what it must ask you about first."
+    },
+    "policyHelp": "<strong>Automatic</strong> lets tools that only look at things run freely and asks before anything that changes something. <strong>Off</strong> hides the tool from the agent completely.",
+    "policy": {
+      "auto": "Automatic",
+      "ask": "Always ask",
+      "allow": "Always allow",
+      "off": "Off",
+      "runWithoutAsking": "Run without asking"
+    },
+    "policyLabel": "When the agent wants to use “{{name}}”",
+    "lockedReason": {
+      "shell": "Turn on “Allow shell commands” above to use this.",
+      "default": "Always on. Each tool it reaches is checked on its own."
+    },
+    "warnings": {
+      "shellUnrestricted": {
+        "title": "Shell commands run without asking",
+        "message": "Commands run without asking. The agent can change or delete files and send data out of this computer."
+      }
+    },
+    "names": {
+      "read": "Read files",
+      "write": "Create and save files",
+      "edit": "Edit parts of files",
+      "ls": "List folders",
+      "find": "Find files by name",
+      "grep": "Search inside files",
+      "bash": "Run shell commands",
+      "powershell": "Run PowerShell commands",
+      "read_document": "Read documents (Word, Excel, PDF…)",
+      "current_datetime": "Current date and time",
+      "web_search": "Search the web",
+      "web_fetch": "Open web pages",
+      "codemode": "Run scripts with connected tools",
+      "tool_search": "Look up connected tools",
+      "list_mcp_resources": "List server resources",
+      "list_mcp_resource_templates": "List server resource templates",
+      "read_mcp_resource": "Read server resources"
+    },
+    "shell": {
+      "legend": "Shell commands",
+      "description": "Lets the agent run commands on your computer (Terminal on Mac, PowerShell on Windows).",
+      "enable": {
+        "label": "Allow shell commands",
+        "description": "It asks you before every command unless you choose “Run without asking” in the list below. Commands can change or delete files, so only approve ones you understand."
+      },
+      "confirm": {
+        "title": "Run shell commands without asking?",
+        "description": "The agent will run every command right away, without showing it to you first. Commands can change or delete files and send data out of this computer. Only turn this on if you trust the agent, the model and the content it reads."
+      }
+    },
+    "loadError": "Couldn't load the tools",
+    "empty": {
+      "title": "No tools yet",
+      "description": "Tools appear here once the agent has started. Connect business systems under MCP servers."
+    },
+    "search": {
+      "placeholder": "Search tools",
+      "label": "Search tools"
+    },
+    "noMatch": "No tools match “{{query}}”.",
+    "builtIn": "Built-in"
+  },
+  "webSearch": {
+    "legend": "Web search",
+    "description": "Pick the search services the agent can use. It tries them in order and moves on to the next when one fails. Keys stay encrypted on this computer.",
+    "needsSetup": "Needs setup",
+    "tryEarlier": "Try {{provider}} earlier",
+    "tryLater": "Try {{provider}} later",
+    "use": "Use {{provider}}",
+    "endpoint": {
+      "label": "{{provider}} server address",
+      "searxngPlaceholder": "Server address, e.g. https://search.example.com",
+      "webclawPlaceholder": "Server address (leave empty for webclaw cloud)"
+    },
+    "key": {
+      "label": "{{provider}} API key",
+      "saved": "Key saved. Type to replace it.",
+      "required": "API key",
+      "optional": "Access token (optional)",
+      "remove": "Remove key"
+    },
+    "test": {
+      "button": "Test",
+      "testing": "Testing…",
+      "saveFirst": "Save your changes to test."
+    },
+    "save": "Save web search"
+  },
+  "skills": {
+    "heading": {
+      "title": "Skills",
+      "description": "Ready-made instructions the agent follows for specific tasks."
+    },
+    "newSkill": "New skill",
+    "onlyWhenAsked": "Only when asked",
+    "loadError": "Couldn't load your skills",
+    "empty": {
+      "title": "No skills yet",
+      "description": "Write your own, or import one someone shared with you (a folder, .zip, or .skill file)."
+    },
+    "usageHint": "The agent picks a matching skill on its own. To use one yourself, type <kbd>/skill:name</kbd> in the chat, for example <kbd>/skill:{{example}}</kbd>.",
+    "toast": {
+      "none": "No skills were found there.",
+      "added": "Skill “{{name}}” added",
+      "addedMany": "{{count}} skills added",
+      "deleted": "Skill “{{name}}” deleted"
+    },
+    "row": {
+      "turnOff": "Turn off {{name}}",
+      "turnOn": "Turn on {{name}}",
+      "actionsFor": "Actions for {{name}}"
+    },
+    "deleteConfirm": {
+      "title": "Delete this skill?",
+      "description": "“{{name}}” and every file in its folder will be removed. This can't be undone."
+    }
+  },
+  "skillEditor": {
+    "back": "Back to skills",
+    "editTitle": "Edit “{{name}}”",
+    "intro": "A skill is a set of instructions the agent follows for a specific kind of task.",
+    "openError": "Couldn't open this skill",
+    "nameFallback": "name",
+    "validation": {
+      "nameRequired": "Give the skill a name.",
+      "tooLong": "Use at most {{max}} characters.",
+      "nameFormat": "Use only lowercase letters, digits, and hyphens (-).",
+      "descriptionRequired": "Describe what the skill does and when to use it."
+    },
+    "fields": {
+      "name": {
+        "label": "Name",
+        "placeholder": "weekly-sales-summary",
+        "hint": "Lowercase letters, digits, and hyphens. Use it in a chat by typing <kbd>/skill:{{name}}</kbd>."
+      },
+      "description": {
+        "label": "Description",
+        "placeholder": "Summarises a weekly sales export by region and product. Use when someone asks for a sales summary or weekly numbers.",
+        "hint": "Say what it does and when to use it. The agent reads this to decide when the skill fits. {{current}}/{{max}}"
+      },
+      "auto": {
+        "label": "Let the agent use this automatically",
+        "description": "When off, the skill only runs when someone types /skill:{{name}}."
+      },
+      "body": {
+        "label": "Instructions",
+        "placeholder": "# Weekly sales summary\n\n1. Read the sales export the person points to.\n2. Group the totals by region and by product.\n3. Write a short summary with the three biggest changes since last week.",
+        "hint": "Step-by-step instructions for the agent, written in Markdown."
+      },
+      "files": {
+        "label": "Other files in this skill",
+        "hint": "The agent can open these when it follows the instructions. Change them in the skill folder."
+      }
+    },
+    "createSkill": "Create skill",
+    "saved": "Skill “{{name}}” saved"
+  },
+  "mcp": {
+    "heading": {
+      "title": "MCP servers",
+      "description": "Connect the agent to business systems such as a CRM, ticketing, or a database."
+    },
+    "states": {
+      "connected": "Connected",
+      "connecting": "Connecting…",
+      "failed": "Couldn't connect",
+      "needsAuth": "Needs sign-in",
+      "disabled": "Turned off",
+      "disconnected": "Not connected"
+    },
+    "toolCount_one": "{{count}} tool",
+    "toolCount_other": "{{count}} tools",
+    "checking": "Checking connections… this can take a few seconds.",
+    "checkAgain": "Check connections again",
+    "editJson": "Edit mcp.json",
+    "addServer": "Add server",
+    "backToServers": "Back to MCP servers",
+    "configErrors": "Some servers in mcp.json couldn't be loaded",
+    "loadError": "Couldn't load your MCP servers",
+    "empty": {
+      "title": "No servers yet",
+      "description": "MCP servers give the agent tools for your business systems. Add one with the details from its setup guide, or paste a configuration from Claude Desktop or Cursor.",
+      "paste": "Paste a configuration"
+    },
+    "savedIn": "Saved in",
+    "row": {
+      "signIn": "Sign in",
+      "signOut": "Sign out",
+      "reconnect": "Reconnect",
+      "turnOff": "Turn off",
+      "turnOn": "Turn on",
+      "turnOffNamed": "Turn off {{name}}",
+      "turnOnNamed": "Turn on {{name}}",
+      "actionsFor": "Actions for {{name}}"
+    },
+    "toast": {
+      "reconnected": "Reconnected to “{{name}}”",
+      "signedIn": "Signed in to “{{name}}”",
+      "signedOut": "Signed out of “{{name}}”",
+      "removed": "“{{name}}” removed"
+    },
+    "signOutConfirm": {
+      "title": "Sign out of “{{name}}”?",
+      "description": "The agent won't be able to use this server until you sign in again."
+    },
+    "removeConfirm": {
+      "title": "Remove this server?",
+      "description": "“{{name}}” and its tools will no longer be available to the agent."
+    }
+  },
+  "mcpJson": {
+    "saved": "mcp.json saved",
+    "invalid": "This isn't valid JSON yet: {{error}}",
+    "hint": "You can paste a configuration from Claude Desktop or Cursor here: the servers inside its <code>\"mcpServers\"</code> block work as they are.",
+    "intro": "The file that lists your MCP servers. For advanced setups.",
+    "openError": "Couldn't open mcp.json"
+  },
+  "mcpForm": {
+    "addTitle": "Add MCP server",
+    "editTitle": "Edit “{{name}}”",
+    "intro": "Copy these details from the server's setup guide, or ask your tech team.",
+    "toast": {
+      "saved": "“{{name}}” saved",
+      "added": "“{{name}}” added"
+    },
+    "validation": {
+      "nameRequired": "Give the server a name.",
+      "nameFormat": "Use only letters, digits, underscores (_), and hyphens (-).",
+      "nameTaken": "Another server already uses this name.",
+      "commandRequired": "Enter the command to run.",
+      "urlInvalid": "Enter a web address starting with https:// or http://.",
+      "timeoutInvalid": "Enter a number of seconds, or leave it empty."
+    },
+    "keyValue": {
+      "name": "Name",
+      "value": "Value"
+    },
+    "fields": {
+      "name": {
+        "label": "Name",
+        "hint": "A short name, shown next to the server's tools. Letters, digits, _ and -."
+      },
+      "description": {
+        "label": "Description (optional)",
+        "placeholder": "Customer records and deals",
+        "hint": "Helps the agent understand what this server is for."
+      },
+      "command": {
+        "label": "Command",
+        "hint": "The program that starts the server on this computer."
+      },
+      "args": {
+        "label": "Arguments",
+        "hint": "One per line."
+      },
+      "env": {
+        "label": "Environment variables",
+        "add": "Add variable",
+        "hint": "Settings the server reads when it starts, such as access tokens."
+      },
+      "cwd": {
+        "label": "Working folder (optional)"
+      },
+      "url": {
+        "label": "Server URL",
+        "hint": "If the server needs you to sign in, leave the headers empty and use “Sign in” after saving."
+      },
+      "headers": {
+        "label": "Headers",
+        "add": "Add header",
+        "hint": "Sent with every request, for example an API key."
+      },
+      "exposure": {
+        "label": "How the agent sees its tools"
+      },
+      "timeout": {
+        "label": "Time limit per request (seconds)",
+        "placeholder": "Default",
+        "hint": "Leave empty unless the server is slow to answer."
+      }
+    },
+    "connect": {
+      "legend": "How to connect",
+      "local": "Local command",
+      "remote": "Remote URL"
+    },
+    "exposure": {
+      "codemode": {
+        "label": "Through scripts (recommended)",
+        "description": "The agent combines this server's tools in small scripts. Works well even with many tools."
+      },
+      "deferred": {
+        "label": "On demand",
+        "description": "The agent looks up this server's tools when it needs them."
+      },
+      "direct": {
+        "label": "Always available",
+        "description": "Every tool is offered to the agent all the time. Best for servers with few tools."
+      },
+      "hidden": {
+        "label": "Hidden",
+        "description": "The server stays connected, but the agent can't see its tools."
+      }
+    }
+  }
+}

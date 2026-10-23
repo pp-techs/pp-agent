@@ -9,6 +9,7 @@ import type {
   ProviderSummary,
 } from "@workspace/shared";
 import type { AuthPrompts } from "./auth-prompts.ts";
+import { t } from "./i18n.ts";
 import { emit, send } from "./ipc.ts";
 
 type ProviderConfigInput = Parameters<ModelRuntime["registerProvider"]>[1];
@@ -24,11 +25,10 @@ const DEFAULT_MAX_TOKENS = 16_384;
  */
 export function normalizeBaseUrl(api: GatewayApi, raw: string): string {
   const trimmed = raw.trim();
-  if (!URL.canParse(trimmed))
-    throw new Error("Enter the gateway's full address, starting with https://.");
+  if (!URL.canParse(trimmed)) throw new Error(t("gateways.addressInvalid"));
   const url = new URL(trimmed);
   if (url.protocol !== "https:" && url.protocol !== "http:")
-    throw new Error("The gateway URL must use http or https.");
+    throw new Error(t("gateways.addressProtocol"));
   const base = url.toString().replace(/\/+$/, "");
   return api === "anthropic-messages" ? base.replace(/\/v1$/, "") : base;
 }
@@ -166,11 +166,13 @@ export async function fetchGatewayModels(
     });
   } catch (error) {
     throw new Error(
-      `The gateway could not be reached: ${error instanceof Error ? error.message : String(error)}`,
+      t("gateways.unreachable", { error: error instanceof Error ? error.message : String(error) }),
     );
   }
   if (!response.ok)
-    throw new Error(`The gateway answered ${response.status} ${response.statusText}.`.trim());
+    throw new Error(
+      t("gateways.badResponse", { status: `${response.status} ${response.statusText}`.trim() }),
+    );
   const body = (await response.json()) as { data?: Array<Record<string, unknown>> };
   const lookup = catalogLookup(runtime, api);
   const models = new Map<string, FetchedGatewayModel>();
@@ -240,9 +242,9 @@ function authSource(runtime: ModelRuntime, providerId: string): string | undefin
   switch (status.source) {
     case "stored":
     case "runtime":
-      return "Saved key";
+      return t("providers.savedKey");
     case "environment":
-      return status.label ?? "Environment variable";
+      return status.label ?? t("providers.environmentVariable");
     default:
       return status.label;
   }
@@ -311,10 +313,10 @@ export function authInteraction(prompts: AuthPrompts, flowTitle: string): AuthIn
           break;
         case "auth_url":
           send({ kind: "open_url", url: event.url });
-          info(event.instructions ?? "Continue in your browser.", event.url);
+          info(event.instructions ?? t("providers.continueInBrowser"), event.url);
           break;
         case "device_code":
-          info(`Enter the code ${event.userCode} on the page that opens.`, event.verificationUri);
+          info(t("providers.enterCode", { code: event.userCode }), event.verificationUri);
           break;
       }
     },

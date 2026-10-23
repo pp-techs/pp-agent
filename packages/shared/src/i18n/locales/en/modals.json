@@ -1,0 +1,46 @@
+{
+  "app": {
+    "starting": "Starting the agent…",
+    "unconfigured": {
+      "title": "Choose a model to start",
+      "description": "Connect an AI provider with your API key, or add your team's gateway, in Settings › Models.",
+      "action": "Set up models"
+    },
+    "dropFiles": "Drop files to attach them",
+    "desktopOnly": {
+      "title": "Open PP Agent from the desktop app",
+      "description": "This page is the app's interface and needs the desktop shell to run."
+    }
+  },
+  "authPrompt": {
+    "continue": "Continue"
+  },
+  "update": {
+    "status": {
+      "disabled": "Updates are only checked in the installed app.",
+      "idle": "Version {{current}}",
+      "checking": "Checking for updates…",
+      "upToDate": "Version {{current}}. You have the latest version.",
+      "available": "Version {{version}} is available. You have {{current}}.",
+      "downloading": "Downloading version {{version}}… {{percent}}%",
+      "ready": "Version {{version}} is ready. Restart the app to finish updating."
+    },
+    "actions": {
+      "check": "Check for updates",
+      "download": "Download update",
+      "getNewVersion": "Get the new version",
+      "restart": "Restart to update"
+    }
+  },
+  "ui": {
+    "close": "Close",
+    "toggleSidebar": "Toggle sidebar",
+    "sidebarMobileTitle": "Sidebar",
+    "sidebarMobileDescription": "Shows the sidebar on small screens.",
+    "loading": "Loading",
+    "copy": "Copy",
+    "copied": "Copied",
+    "scrollToEnd": "Scroll to end",
+    "scrollToStart": "Scroll to start"
+  }
+}

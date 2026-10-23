@@ -32,6 +32,7 @@ import {
   Trash2Icon,
   TriangleAlertIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { ConfirmModal } from "@/components/modals/confirm-modal";
@@ -44,9 +45,9 @@ import { agentsQuery, modelsQuery } from "@/lib/queries";
 type View = { kind: "list" } | { kind: "edit"; id?: string };
 
 /** "Sales copy", then "Sales copy 2", "Sales copy 3"… until the name is free. */
-function copyName(name: string, agents: AgentProfile[]) {
+function copyName(copyOfName: string, agents: AgentProfile[]) {
   const taken = new Set(agents.map((agent) => agent.name.toLowerCase()));
-  const base = `${name} copy`.slice(0, 54);
+  const base = copyOfName.slice(0, 54);
   let candidate = base;
   for (let index = 2; taken.has(candidate.toLowerCase()); index++) {
     candidate = `${base} ${index}`;
@@ -79,13 +80,14 @@ function AgentRow({
     ? models.data?.find((item) => modelKey(item) === modelKey(agentModel))
     : undefined;
   const busy = save.isPending || remove.isPending || exporting;
+  const { t } = useTranslation(["agents", "common"]);
 
   function onDuplicate() {
     const { id: _id, ...rest } = agent;
     save.mutate(
-      { ...rest, name: copyName(agent.name, agents) },
+      { ...rest, name: copyName(t("agentsSection.copyName", { name: agent.name }), agents) },
       {
-        onSuccess: (copy) => toast.success(`Agent “${copy.name}” added`),
+        onSuccess: (copy) => toast.success(t("agentsSection.added", { name: copy.name })),
         onError: (error) => toast.error(error.message),
       },
     );
@@ -96,7 +98,7 @@ function AgentRow({
     try {
       const json = await bridge.agent.command({ type: "export_agent", id: agent.id });
       const saved = await bridge.files.saveAgentFile(exportFileName(agent.name), json);
-      if (saved) toast.success(`Agent “${agent.name}” exported`);
+      if (saved) toast.success(t("agentsSection.exported", { name: agent.name }));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
@@ -106,13 +108,16 @@ function AgentRow({
 
   async function onDelete() {
     const confirmed = await ConfirmModal.show({
-      title: "Delete this agent?",
-      description: `“${agent.name}” will be removed. Chats that used it switch to ${agents[0]?.name ?? "the default agent"}. Files in its workspace stay where they are.`,
-      confirmLabel: "Delete",
+      title: t("agentsSection.deleteConfirm.title"),
+      description: t("agentsSection.deleteConfirm.description", {
+        name: agent.name,
+        fallback: agents[0]?.name ?? t("agentsSection.deleteConfirm.fallback"),
+      }),
+      confirmLabel: t("common:actions.delete"),
     });
     if (!confirmed) return;
     remove.mutate(agent.id, {
-      onSuccess: () => toast.success(`Agent “${agent.name}” deleted`),
+      onSuccess: () => toast.success(t("agentsSection.deleted", { name: agent.name })),
     });
   }
 
@@ -124,10 +129,10 @@ function AgentRow({
       <ItemContent className="min-w-0">
         <ItemTitle className="flex-wrap">
           {agent.name}
-          {isDefault && <Badge variant="secondary">Default</Badge>}
+          {isDefault && <Badge variant="secondary">{t("agentsSection.defaultBadge")}</Badge>}
           {agentModel && (
-            <Badge variant="outline" title="Switches the chat to this model">
-              {model ? label(model) : `${agentModel.modelId} (not available)`}
+            <Badge variant="outline" title={t("agentsSection.modelBadgeTitle")}>
+              {model ? label(model) : t("shared.modelUnavailable", { modelId: agentModel.modelId })}
             </Badge>
           )}
         </ItemTitle>
@@ -139,12 +144,16 @@ function AgentRow({
         {busy && <Spinner />}
         <Button variant="outline" size="sm" onClick={onEdit}>
           <PencilIcon data-icon="inline-start" />
-          Edit
+          {t("common:actions.edit")}
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
-              <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${agent.name}`} />
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t("agentsSection.actionsFor", { name: agent.name })}
+              />
             }
           >
             <MoreHorizontalIcon />
@@ -152,11 +161,11 @@ function AgentRow({
           <DropdownMenuContent align="end" className="w-44">
             <DropdownMenuItem disabled={busy} onClick={onDuplicate}>
               <CopyIcon />
-              Duplicate
+              {t("agentsSection.duplicate")}
             </DropdownMenuItem>
             <DropdownMenuItem disabled={busy} onClick={() => void onExport()}>
               <ShareIcon />
-              Export
+              {t("common:actions.export")}
             </DropdownMenuItem>
             {!isDefault && (
               <>
@@ -167,7 +176,7 @@ function AgentRow({
                   onClick={() => void onDelete()}
                 >
                   <Trash2Icon />
-                  Delete
+                  {t("common:actions.delete")}
                 </DropdownMenuItem>
               </>
             )}
@@ -182,6 +191,7 @@ export function AgentsSection({ bridge }: { bridge: DesktopBridge }) {
   const agents = useQuery(agentsQuery(bridge));
   const importAgent = useImportAgent(bridge);
   const [view, setView] = React.useState<View>({ kind: "list" });
+  const { t } = useTranslation(["agents", "common"]);
 
   if (view.kind === "edit") {
     return <AgentEditor bridge={bridge} id={view.id} onDone={() => setView({ kind: "list" })} />;
@@ -197,7 +207,7 @@ export function AgentsSection({ bridge }: { bridge: DesktopBridge }) {
     }
     if (json === null) return;
     importAgent.mutate(json, {
-      onSuccess: (agent) => toast.success(`Agent “${agent.name}” added`),
+      onSuccess: (agent) => toast.success(t("agentsSection.added", { name: agent.name })),
     });
   }
 
@@ -205,17 +215,14 @@ export function AgentsSection({ bridge }: { bridge: DesktopBridge }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <SectionHeading
-        title="Agents"
-        description="Assistants set up for a kind of work: their own rules, tools, skills, model, and folder. Pick one for each chat from the message box."
-      >
+      <SectionHeading title={t("agentsSection.title")} description={t("agentsSection.description")}>
         <Button variant="outline" disabled={importAgent.isPending} onClick={() => void onImport()}>
           {importAgent.isPending ? <Spinner /> : <DownloadIcon />}
-          Import
+          {t("common:actions.import")}
         </Button>
         <Button onClick={() => setView({ kind: "edit" })}>
           <PlusIcon />
-          New agent
+          {t("agentsSection.newAgent")}
         </Button>
       </SectionHeading>
 
@@ -228,7 +235,7 @@ export function AgentsSection({ bridge }: { bridge: DesktopBridge }) {
       ) : agents.isError ? (
         <Alert variant="destructive">
           <TriangleAlertIcon />
-          <AlertTitle>Couldn't load your agents</AlertTitle>
+          <AlertTitle>{t("agentsSection.loadError")}</AlertTitle>
           <AlertDescription>{agents.error.message}</AlertDescription>
         </Alert>
       ) : (

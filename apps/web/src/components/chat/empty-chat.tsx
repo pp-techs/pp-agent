@@ -10,6 +10,7 @@ import {
 } from "@workspace/ui/components/empty";
 import { useQuery } from "@tanstack/react-query";
 import { MessageCircleDashedIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { useSendMessage } from "@/hooks/use-send-message";
 import { agentsQuery } from "@/lib/queries";
@@ -25,6 +26,7 @@ export function EmptyChat({ bridge }: { bridge: DesktopBridge }) {
   // The built-in agent introduces itself with the general copy until someone describes it.
   const generic = !summary || (summary.id === DEFAULT_AGENT_ID && !agent?.description);
   const starters = agent?.starterPrompts ?? [];
+  const { t } = useTranslation("chat");
 
   return (
     <Empty className="h-full">
@@ -34,11 +36,11 @@ export function EmptyChat({ bridge }: { bridge: DesktopBridge }) {
             <EmptyMedia variant="icon">
               <MessageCircleDashedIcon />
             </EmptyMedia>
-            <EmptyTitle>What can I help with?</EmptyTitle>
+            <EmptyTitle>{t("emptyChat.title")}</EmptyTitle>
             <EmptyDescription>
-              I can read and search the files in {workspaceDir ?? "your workspace"}, including PDF,
-              Word, Excel, and PowerPoint. Attach files or images to a message, and I'll save new
-              files after you approve.
+              {t("emptyChat.description", {
+                location: workspaceDir ?? t("emptyChat.yourWorkspace"),
+              })}
             </EmptyDescription>
           </>
         ) : (
@@ -48,7 +50,7 @@ export function EmptyChat({ bridge }: { bridge: DesktopBridge }) {
             </EmptyMedia>
             <EmptyTitle>{summary.name}</EmptyTitle>
             <EmptyDescription className="whitespace-pre-line">
-              {agent?.description || "What can I help with?"}
+              {agent?.description || t("emptyChat.title")}
             </EmptyDescription>
           </>
         )}

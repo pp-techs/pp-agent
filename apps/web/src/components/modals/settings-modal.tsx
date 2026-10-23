@@ -28,6 +28,7 @@ import {
   WrenchIcon,
   type LucideIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { AgentsSection } from "@/components/settings/agents-section";
 import { GeneralSection } from "@/components/settings/general-section";
@@ -49,17 +50,16 @@ export type SettingsSection =
 
 const SECTIONS: {
   id: SettingsSection;
-  label: string;
   icon: LucideIcon;
   Component: React.ComponentType<{ bridge: DesktopBridge }>;
 }[] = [
-  { id: "general", label: "General", icon: SlidersHorizontalIcon, Component: GeneralSection },
-  { id: "models", label: "Models", icon: SparklesIcon, Component: ModelsSection },
-  { id: "workspaces", label: "Workspaces", icon: FolderKanbanIcon, Component: WorkspacesSection },
-  { id: "agents", label: "Agents", icon: BotIcon, Component: AgentsSection },
-  { id: "tools", label: "Tools", icon: WrenchIcon, Component: ToolsSection },
-  { id: "skills", label: "Skills", icon: BookOpenIcon, Component: SkillsSection },
-  { id: "mcp", label: "MCP servers", icon: BlocksIcon, Component: McpSection },
+  { id: "general", icon: SlidersHorizontalIcon, Component: GeneralSection },
+  { id: "models", icon: SparklesIcon, Component: ModelsSection },
+  { id: "workspaces", icon: FolderKanbanIcon, Component: WorkspacesSection },
+  { id: "agents", icon: BotIcon, Component: AgentsSection },
+  { id: "tools", icon: WrenchIcon, Component: ToolsSection },
+  { id: "skills", icon: BookOpenIcon, Component: SkillsSection },
+  { id: "mcp", icon: BlocksIcon, Component: McpSection },
 ];
 
 type SettingsModalProps = { bridge: DesktopBridge; section?: SettingsSection };
@@ -84,10 +84,11 @@ function SettingsBreadcrumb({
   subPage: string | null;
   onSectionClick: () => void;
 }) {
+  const { t } = useTranslation("settings");
   return (
-    <nav aria-label="Breadcrumb" className="min-w-0">
+    <nav aria-label={t("modal.breadcrumbLabel")} className="min-w-0">
       <ol className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
-        <li className="shrink-0">Settings</li>
+        <li className="shrink-0">{t("modal.breadcrumbRoot")}</li>
         <li aria-hidden className="shrink-0 [&>svg]:size-3.5">
           <ChevronRightIcon />
         </li>
@@ -126,6 +127,7 @@ function SettingsPanes({
   bridge: DesktopBridge;
   initialSection: SettingsSection;
 }) {
+  const { t } = useTranslation("settings");
   const [active, setActive] = React.useState(initialSection);
   const [subPage, setSubPage] = React.useState<string | null>(null);
   // Bumped by the breadcrumb to remount the section, which returns it to its list.
@@ -140,12 +142,12 @@ function SettingsPanes({
       className="min-h-0 flex-1"
       style={{ "--sidebar-width": "13rem" } as React.CSSProperties}
     >
-      <Sidebar collapsible="none" aria-label="Settings sections">
+      <Sidebar collapsible="none" aria-label={t("modal.sidebarLabel")}>
         <SidebarContent>
           <SidebarGroup className="pt-4">
             <SidebarGroupContent>
               <SidebarMenu>
-                {SECTIONS.map(({ id, label, icon: Icon }) => (
+                {SECTIONS.map(({ id, icon: Icon }) => (
                   <SidebarMenuItem key={id}>
                     <SidebarMenuButton
                       isActive={active === id}
@@ -153,7 +155,7 @@ function SettingsPanes({
                       onClick={() => setActive(id)}
                     >
                       <Icon />
-                      <span>{label}</span>
+                      <span>{t(`modal.sections.${id}`)}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
@@ -166,7 +168,7 @@ function SettingsPanes({
         {/* Right padding keeps the breadcrumb clear of the dialog's close button. */}
         <header className="flex h-16 shrink-0 items-center gap-2 pr-16 pl-6">
           <SettingsBreadcrumb
-            section={current.label}
+            section={t(`modal.sections.${current.id}`)}
             subPage={subPage}
             onSectionClick={() => setResetCount((count) => count + 1)}
           />
@@ -181,16 +183,23 @@ function SettingsPanes({
   );
 }
 
+function SettingsHeader() {
+  const { t } = useTranslation("settings");
+  return (
+    <>
+      <DialogTitle className="sr-only">{t("modal.title")}</DialogTitle>
+      <DialogDescription className="sr-only">{t("modal.description")}</DialogDescription>
+    </>
+  );
+}
+
 /** `SettingsModal.show({ bridge, section })` opens Settings at the given section. */
 export const SettingsModal = createModal<SettingsModalProps, void>(
   "settings",
   ({ modal, bridge, section = "general" }) => (
     <Dialog open={modal.visible} onOpenChange={(open) => !open && modal.resolve(undefined)}>
       <DialogContent className="flex h-[80vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
-        <DialogTitle className="sr-only">Settings</DialogTitle>
-        <DialogDescription className="sr-only">
-          Models, agents, tools, skills, and connections used by PP Agent.
-        </DialogDescription>
+        <SettingsHeader />
         {/* Remount on every open so it starts at the requested section. */}
         <SettingsPanes
           key={`${modal.visible}-${section}`}

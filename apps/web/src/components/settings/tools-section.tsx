@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { DesktopBridge, ToolPolicy, ToolSummary } from "@workspace/shared";
+import type { DesktopBridge, ToolPolicy, ToolSummary, ToolWarning } from "@workspace/shared";
 import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert";
 import {
   Empty,
@@ -27,6 +27,8 @@ import {
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
 import { useQuery } from "@tanstack/react-query";
+import type { TFunction } from "i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { SearchIcon, TriangleAlertIcon, WrenchIcon } from "lucide-react";
 
 import { ConfirmModal } from "@/components/modals/confirm-modal";
@@ -36,54 +38,71 @@ import { WebSearchGroup } from "@/components/settings/web-search-group";
 import { toolsQuery, useSetShellEnabled, useSetToolPolicy } from "@/lib/extension-queries";
 import { settingsQuery } from "@/lib/queries";
 
-const POLICY_ITEMS: { value: ToolPolicy; label: string }[] = [
-  { value: "auto", label: "Automatic" },
-  { value: "ask", label: "Always ask" },
-  { value: "allow", label: "Always allow" },
-  { value: "off", label: "Off" },
-];
+type T = TFunction<"extensions">;
+
+function policyItems(t: T): { value: ToolPolicy; label: string }[] {
+  return [
+    { value: "auto", label: t("tools.policy.auto") },
+    { value: "ask", label: t("tools.policy.ask") },
+    { value: "allow", label: t("tools.policy.allow") },
+    { value: "off", label: t("tools.policy.off") },
+  ];
+}
 
 /** The shell never runs on `auto` or `off`: it asks, or runs freely after a warning. */
-const SHELL_POLICY_ITEMS: { value: ToolPolicy; label: string }[] = [
-  { value: "ask", label: "Always ask" },
-  { value: "allow", label: "Run without asking" },
-];
+function shellPolicyItems(t: T): { value: ToolPolicy; label: string }[] {
+  return [
+    { value: "ask", label: t("tools.policy.ask") },
+    { value: "allow", label: t("tools.policy.runWithoutAsking") },
+  ];
+}
 
-const EFFECTIVE_ITEMS: { value: ToolSummary["effective"]; label: string }[] = [
-  { value: "allow", label: "Always allow" },
-  { value: "ask", label: "Always ask" },
-  { value: "off", label: "Off" },
-];
+function effectiveItems(t: T): { value: ToolSummary["effective"]; label: string }[] {
+  return [
+    { value: "allow", label: t("tools.policy.allow") },
+    { value: "ask", label: t("tools.policy.ask") },
+    { value: "off", label: t("tools.policy.off") },
+  ];
+}
 
 const SHELL_TOOLS: Record<string, true> = { bash: true, powershell: true };
 
-/** Plain names for the tools that ship with the app; MCP tools fall back to a tidied-up name. */
-const FRIENDLY_NAMES: Record<string, string> = {
-  read: "Read files",
-  write: "Create and save files",
-  edit: "Edit parts of files",
-  ls: "List folders",
-  find: "Find files by name",
-  grep: "Search inside files",
-  bash: "Run shell commands",
-  powershell: "Run PowerShell commands",
-  read_document: "Read documents (Word, Excel, PDF…)",
-  current_datetime: "Current date and time",
-  web_search: "Search the web",
-  web_fetch: "Open web pages",
-  codemode: "Run scripts with connected tools",
-  tool_search: "Look up connected tools",
-  list_mcp_resources: "List server resources",
-  list_mcp_resource_templates: "List server resource templates",
-  read_mcp_resource: "Read server resources",
-};
+/** Tools that ship with the app have a plain name in the locale files (`tools.names.<name>`). */
+const BUILT_IN_TOOL_NAMES = [
+  "read",
+  "write",
+  "edit",
+  "ls",
+  "find",
+  "grep",
+  "bash",
+  "powershell",
+  "read_document",
+  "current_datetime",
+  "web_search",
+  "web_fetch",
+  "codemode",
+  "tool_search",
+  "list_mcp_resources",
+  "list_mcp_resource_templates",
+  "read_mcp_resource",
+] as const;
+
+function isBuiltInToolName(name: string): name is (typeof BUILT_IN_TOOL_NAMES)[number] {
+  return (BUILT_IN_TOOL_NAMES as readonly string[]).includes(name);
+}
+
+/** Each warning code maps to the locale keys that word it. */
+const WARNING_KEYS = {
+  "shell-unrestricted": "tools.warnings.shellUnrestricted",
+} as const satisfies Record<ToolWarning, string>;
 
 /** Tools above this count get a search box. */
 const SEARCH_THRESHOLD = 8;
 
-function friendlyName(tool: ToolSummary) {
-  const known = FRIENDLY_NAMES[tool.name];
-  if (known) return known;
+/** Built-in tools have a plain name; MCP tools fall back to a tidied-up name. */
+function friendlyName(tool: ToolSummary, t: T) {
+  if (isBuiltInToolName(tool.name)) return t(`tools.names.${tool.name}`);
   let name = tool.name;
   const prefix = `${tool.source}_`;
   if (tool.source !== "built-in" && name.startsWith(prefix) && name.length > prefix.length) {
@@ -93,9 +112,9 @@ function friendlyName(tool: ToolSummary) {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-function lockedReason(tool: ToolSummary) {
-  if (SHELL_TOOLS[tool.name]) return "Turn on “Allow shell commands” above to use this.";
-  return "Always on. Each tool it reaches is checked on its own.";
+function lockedReason(tool: ToolSummary, t: T) {
+  if (SHELL_TOOLS[tool.name]) return t("tools.lockedReason.shell");
+  return t("tools.lockedReason.default");
 }
 
 /** Built-in first, then each MCP server alphabetically. */
@@ -114,6 +133,7 @@ function groupBySource(tools: ToolSummary[]) {
 }
 
 function ShellGroup({ bridge }: { bridge: DesktopBridge }) {
+  const { t } = useTranslation("extensions");
   const settings = useQuery(settingsQuery(bridge));
   const tools = useQuery(toolsQuery(bridge));
   const setShell = useSetShellEnabled(bridge);
@@ -122,14 +142,11 @@ function ShellGroup({ bridge }: { bridge: DesktopBridge }) {
     : (settings.data?.shellEnabled ?? false);
   const warning = tools.data?.find((tool) => SHELL_TOOLS[tool.name] && tool.warning)?.warning;
   return (
-    <OptionGroup
-      legend="Shell commands"
-      description="Lets the agent run commands on your computer (Terminal on Mac, PowerShell on Windows)."
-    >
+    <OptionGroup legend={t("tools.shell.legend")} description={t("tools.shell.description")}>
       <SwitchRow
         id="shell-enabled"
-        label="Allow shell commands"
-        description="It asks you before every command unless you choose “Run without asking” in the list below. Commands can change or delete files, so only approve ones you understand."
+        label={t("tools.shell.enable.label")}
+        description={t("tools.shell.enable.description")}
         checked={checked}
         disabled={settings.isPending || setShell.isPending}
         onCheckedChange={(value) => setShell.mutate(value)}
@@ -137,8 +154,8 @@ function ShellGroup({ bridge }: { bridge: DesktopBridge }) {
       {warning && (
         <Alert variant="destructive">
           <TriangleAlertIcon />
-          <AlertTitle>Shell commands run without asking</AlertTitle>
-          <AlertDescription>{warning}</AlertDescription>
+          <AlertTitle>{t(`${WARNING_KEYS[warning]}.title`)}</AlertTitle>
+          <AlertDescription>{t(`${WARNING_KEYS[warning]}.message`)}</AlertDescription>
         </Alert>
       )}
     </OptionGroup>
@@ -146,19 +163,21 @@ function ShellGroup({ bridge }: { bridge: DesktopBridge }) {
 }
 
 function PolicyControl({ bridge, tool }: { bridge: DesktopBridge; tool: ToolSummary }) {
+  const { t } = useTranslation("extensions");
   const setPolicy = useSetToolPolicy(bridge);
-  const label = `When the agent wants to use “${friendlyName(tool)}”`;
+  const label = t("tools.policyLabel", { name: friendlyName(tool, t) });
 
   if (tool.locked) {
+    const items = effectiveItems(t);
     return (
       <Tooltip>
         <TooltipTrigger render={<span tabIndex={0} className="inline-flex" />}>
-          <Select items={EFFECTIVE_ITEMS} value={tool.effective} disabled>
+          <Select items={items} value={tool.effective} disabled>
             <SelectTrigger size="sm" className="w-36" aria-label={label}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {EFFECTIVE_ITEMS.map((item) => (
+              {items.map((item) => (
                 <SelectItem key={item.value} value={item.value}>
                   {item.label}
                 </SelectItem>
@@ -166,21 +185,20 @@ function PolicyControl({ bridge, tool }: { bridge: DesktopBridge; tool: ToolSumm
             </SelectContent>
           </Select>
         </TooltipTrigger>
-        <TooltipContent>{lockedReason(tool)}</TooltipContent>
+        <TooltipContent>{lockedReason(tool, t)}</TooltipContent>
       </Tooltip>
     );
   }
 
   const isShell = SHELL_TOOLS[tool.name] === true;
-  const items = isShell ? SHELL_POLICY_ITEMS : POLICY_ITEMS;
+  const items = isShell ? shellPolicyItems(t) : policyItems(t);
 
   async function onChange(policy: ToolPolicy) {
     if (isShell && policy === "allow") {
       const confirmed = await ConfirmModal.show({
-        title: "Run shell commands without asking?",
-        description:
-          "The agent will run every command right away, without showing it to you first. Commands can change or delete files and send data out of this computer. Only turn this on if you trust the agent, the model and the content it reads.",
-        confirmLabel: "Run without asking",
+        title: t("tools.shell.confirm.title"),
+        description: t("tools.shell.confirm.description"),
+        confirmLabel: t("tools.policy.runWithoutAsking"),
       });
       if (!confirmed) return;
     }
@@ -208,7 +226,8 @@ function PolicyControl({ bridge, tool }: { bridge: DesktopBridge; tool: ToolSumm
 }
 
 function ToolRow({ bridge, tool }: { bridge: DesktopBridge; tool: ToolSummary }) {
-  const title = friendlyName(tool);
+  const { t } = useTranslation("extensions");
+  const title = friendlyName(tool, t);
   return (
     <Item variant="outline" size="sm">
       <ItemContent className="min-w-0">
@@ -221,11 +240,13 @@ function ToolRow({ bridge, tool }: { bridge: DesktopBridge; tool: ToolSummary })
         {tool.description && (
           <ItemDescription className="line-clamp-2 text-xs">{tool.description}</ItemDescription>
         )}
-        {tool.locked && <ItemDescription className="text-xs">{lockedReason(tool)}</ItemDescription>}
+        {tool.locked && (
+          <ItemDescription className="text-xs">{lockedReason(tool, t)}</ItemDescription>
+        )}
         {tool.warning && (
           <ItemDescription className="flex items-center gap-1 text-xs text-destructive">
             <TriangleAlertIcon className="size-3 shrink-0" />
-            {tool.warning}
+            {t(`${WARNING_KEYS[tool.warning]}.message`)}
           </ItemDescription>
         )}
       </ItemContent>
@@ -247,6 +268,7 @@ function ToolsSkeleton() {
 }
 
 export function ToolsSection({ bridge }: { bridge: DesktopBridge }) {
+  const { t } = useTranslation("extensions");
   const tools = useQuery(toolsQuery(bridge));
   const [search, setSearch] = React.useState("");
 
@@ -254,7 +276,7 @@ export function ToolsSection({ bridge }: { bridge: DesktopBridge }) {
   const query = search.trim().toLowerCase();
   const filtered = query
     ? all.filter((tool) =>
-        [friendlyName(tool), tool.name, tool.description, tool.source].some((text) =>
+        [friendlyName(tool, t), tool.name, tool.description, tool.source].some((text) =>
           text.toLowerCase().includes(query),
         ),
       )
@@ -263,8 +285,8 @@ export function ToolsSection({ bridge }: { bridge: DesktopBridge }) {
   return (
     <div className="flex flex-col gap-6">
       <SectionHeading
-        title="Tools"
-        description="Choose what the agent may do on its own and what it must ask you about first."
+        title={t("tools.heading.title")}
+        description={t("tools.heading.description")}
       />
 
       <ShellGroup bridge={bridge} />
@@ -272,10 +294,11 @@ export function ToolsSection({ bridge }: { bridge: DesktopBridge }) {
       <WebSearchGroup bridge={bridge} />
 
       <p className="text-sm text-muted-foreground">
-        <strong className="font-medium text-foreground">Automatic</strong> lets tools that only look
-        at things run freely and asks before anything that changes something.{" "}
-        <strong className="font-medium text-foreground">Off</strong> hides the tool from the agent
-        completely.
+        <Trans
+          t={t}
+          i18nKey="tools.policyHelp"
+          components={{ strong: <strong className="font-medium text-foreground" /> }}
+        />
       </p>
 
       {tools.isPending ? (
@@ -283,7 +306,7 @@ export function ToolsSection({ bridge }: { bridge: DesktopBridge }) {
       ) : tools.isError ? (
         <Alert variant="destructive">
           <TriangleAlertIcon />
-          <AlertTitle>Couldn't load the tools</AlertTitle>
+          <AlertTitle>{t("tools.loadError")}</AlertTitle>
           <AlertDescription>{tools.error.message}</AlertDescription>
         </Alert>
       ) : all.length === 0 ? (
@@ -292,11 +315,8 @@ export function ToolsSection({ bridge }: { bridge: DesktopBridge }) {
             <EmptyMedia variant="icon">
               <WrenchIcon />
             </EmptyMedia>
-            <EmptyTitle>No tools yet</EmptyTitle>
-            <EmptyDescription>
-              Tools appear here once the agent has started. Connect business systems under MCP
-              servers.
-            </EmptyDescription>
+            <EmptyTitle>{t("tools.empty.title")}</EmptyTitle>
+            <EmptyDescription>{t("tools.empty.description")}</EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : (
@@ -307,19 +327,21 @@ export function ToolsSection({ bridge }: { bridge: DesktopBridge }) {
               <Input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search tools"
-                aria-label="Search tools"
+                placeholder={t("tools.search.placeholder")}
+                aria-label={t("tools.search.label")}
                 className="pl-9"
               />
             </div>
           )}
           {filtered.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No tools match “{search.trim()}”.</p>
+            <p className="text-sm text-muted-foreground">
+              {t("tools.noMatch", { query: search.trim() })}
+            </p>
           ) : (
             groupBySource(filtered).map(([source, list]) => (
               <section key={source} className="flex flex-col gap-2">
                 <h3 className="text-xs font-medium text-muted-foreground uppercase">
-                  {source === "built-in" ? "Built-in" : source}
+                  {source === "built-in" ? t("tools.builtIn") : source}
                 </h3>
                 <ItemGroup>
                   {list.map((tool) => (

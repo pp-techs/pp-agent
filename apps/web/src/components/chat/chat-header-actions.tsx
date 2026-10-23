@@ -4,6 +4,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@workspace/ui/component
 import { Spinner } from "@workspace/ui/components/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
 import { FolderOpenIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { useAgentCommands } from "@/lib/queries";
@@ -17,12 +18,17 @@ const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
 /** Above this share of the window, Pi is about to compact the conversation on its own. */
 const WARN_AT = 0.8;
 
-/** 1.2k, 45k, 1.0M: token counts the way model cards print them. */
-function formatTokens(value: number) {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 10_000) return `${Math.round(value / 1000)}k`;
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
-  return String(value);
+/** 1.2k, 45k, 1.0M: token counts the way model cards print them, with the language's decimal mark. */
+function formatTokens(value: number, language: string) {
+  const format = (amount: number, digits: number) =>
+    new Intl.NumberFormat(language, {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    }).format(amount);
+  if (value >= 1_000_000) return `${format(value / 1_000_000, 1)}M`;
+  if (value >= 10_000) return `${format(Math.round(value / 1000), 0)}k`;
+  if (value >= 1000) return `${format(value / 1000, 1)}k`;
+  return format(value, 0);
 }
 
 /** Circular gauge of how much of the model's context window the conversation fills. */
@@ -67,11 +73,14 @@ function ContextButton({ bridge }: { bridge: DesktopBridge }) {
   const status = useChatStore((state) => state.status);
   const hasMessages = useChatStore((state) => state.messages.length > 0);
   const { compact } = useAgentCommands(bridge);
+  const { t, i18n } = useTranslation("chat");
+  const { language } = i18n;
   if (!context) return null;
 
   const share = context.tokens === null ? null : context.tokens / context.window;
   const percent = share === null ? null : Math.round(share * 100);
-  const label = percent === null ? "Context window" : `Context window, ${percent}% used`;
+  const label =
+    percent === null ? t("header.context.title") : t("header.context.usedLabel", { percent });
   const canCompact = status === "idle" && hasMessages && !compact.isPending;
 
   return (
@@ -88,17 +97,18 @@ function ContextButton({ bridge }: { bridge: DesktopBridge }) {
       </Tooltip>
       <PopoverContent align="end" className="w-64 gap-3 p-4">
         <div className="flex flex-col gap-1">
-          <p className="text-sm font-medium">Context window</p>
+          <p className="text-sm font-medium">{t("header.context.title")}</p>
           <p className="text-sm text-muted-foreground">
             {context.tokens === null
-              ? `Unknown until the next reply · ${formatTokens(context.window)} available`
-              : `${formatTokens(context.tokens)} of ${formatTokens(context.window)} tokens used (${percent}%)`}
+              ? t("header.context.unknown", { window: formatTokens(context.window, language) })
+              : t("header.context.used", {
+                  used: formatTokens(context.tokens, language),
+                  window: formatTokens(context.window, language),
+                  percent,
+                })}
           </p>
         </div>
-        <p className="text-xs text-muted-foreground">
-          When the window fills up, older messages are summarized automatically. You can do it now
-          to free up room.
-        </p>
+        <p className="text-xs text-muted-foreground">{t("header.context.hint")}</p>
         <Button
           variant="outline"
           size="sm"
@@ -108,7 +118,7 @@ function ContextButton({ bridge }: { bridge: DesktopBridge }) {
           }
         >
           {compact.isPending && <Spinner />}
-          Compact conversation
+          {t("header.context.compact")}
         </Button>
       </PopoverContent>
     </Popover>
@@ -118,6 +128,7 @@ function ContextButton({ bridge }: { bridge: DesktopBridge }) {
 /** Opens the folder the open conversation works in (its workspace's folder). */
 function OpenFolderButton({ bridge }: { bridge: DesktopBridge }) {
   const workspaceDir = useChatStore((state) => state.workspaceDir);
+  const { t } = useTranslation("chat");
   return (
     <Tooltip>
       <TooltipTrigger
@@ -125,7 +136,7 @@ function OpenFolderButton({ bridge }: { bridge: DesktopBridge }) {
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Open workspace folder"
+            aria-label={t("header.openFolder")}
             disabled={!workspaceDir}
             onClick={() => {
               if (workspaceDir)
@@ -138,7 +149,7 @@ function OpenFolderButton({ bridge }: { bridge: DesktopBridge }) {
       >
         <FolderOpenIcon />
       </TooltipTrigger>
-      <TooltipContent>Open workspace folder</TooltipContent>
+      <TooltipContent>{t("header.openFolder")}</TooltipContent>
     </Tooltip>
   );
 }

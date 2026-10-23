@@ -244,6 +244,13 @@ export type ToolPolicy = (typeof TOOL_POLICIES)[number];
 export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
+/** Languages the app is translated into. */
+export const LANGUAGES = ["en", "vi"] as const;
+export type Language = (typeof LANGUAGES)[number];
+/** Settings choice: follow the operating system, or a fixed language. */
+export const LANGUAGE_SETTINGS = ["system", ...LANGUAGES] as const;
+export type LanguageSetting = (typeof LANGUAGE_SETTINGS)[number];
+
 export interface AppSettings {
   /** Model for new conversations. */
   defaultModel: ModelRef | null;
@@ -252,6 +259,8 @@ export interface AppSettings {
    * the shell's own policy is `allow`.
    */
   shellEnabled: boolean;
+  /** Language of the app; `system` follows the operating system. */
+  language: LanguageSetting;
   /** Tool name → policy; tools not listed use their default. */
   toolPolicies: Record<string, ToolPolicy>;
   /** Names of installed skills the agent must not see. */
@@ -356,9 +365,12 @@ export interface ToolSummary {
   effective: "allow" | "ask" | "off";
   /** Policy cannot be changed here (shell tools while shell commands are off; discovery tools stay on). */
   locked: boolean;
-  /** Risk the person should know about while the tool is set up this way; shown beside the tool. */
-  warning?: string;
+  /** Risk the person should know about while the tool is set up this way; the renderer words it. */
+  warning?: ToolWarning;
 }
+
+/** Risks the Tools page warns about; the renderer words each one. */
+export type ToolWarning = "shell-unrestricted";
 
 /** Contents of `AgentPaths.settingsFile`. */
 export interface SettingsFile extends AppSettings {
@@ -517,7 +529,7 @@ export interface AgentCommandMap {
 
   get_settings: { params: NoParams; result: AppSettings };
   update_settings: {
-    params: { patch: Partial<Pick<AppSettings, "defaultModel" | "shellEnabled">> };
+    params: { patch: Partial<Pick<AppSettings, "defaultModel" | "shellEnabled" | "language">> };
     result: AppSettings;
   };
 
@@ -701,7 +713,11 @@ export type VaultRequest =
   | { op: "delete"; providerId: string };
 
 export type MainToAgentMessage =
-  | { kind: "init"; paths: AgentPaths }
+  | {
+      kind: "init";
+      paths: AgentPaths;
+      /** `app.getLocale()`, e.g. `vi` or `en-US`. */ systemLocale: string;
+    }
   | { kind: "command"; id: number; command: AgentCommand }
   | { kind: "vault_result"; id: number; ok: true; data: unknown }
   | { kind: "vault_result"; id: number; ok: false; error: string };

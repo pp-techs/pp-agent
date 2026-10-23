@@ -88,6 +88,7 @@ import { buildPrompt, splitAttachedFiles } from "./attachments.ts";
 import { AuthPrompts } from "./auth-prompts.ts";
 import { VaultCredentialStore } from "./credentials.ts";
 import { createReadDocumentTool } from "./documents.ts";
+import { configureLanguage, t } from "./i18n.ts";
 import { emit, errorMessage, send } from "./ipc.ts";
 import { buildOverview, McpCommands, McpConfigFile, McpRegistrations } from "./mcp.ts";
 import {
@@ -121,7 +122,6 @@ import { createWebFetchTool, createWebSearchTool } from "./web/tools.ts";
 import { WebSearchService } from "./web/search.ts";
 
 const TITLE_LENGTH = 80;
-const NO_MODEL_MESSAGE = "Choose a model in Settings › Models before starting a chat.";
 
 /** Changes to apply to the open conversation once no run is active. */
 interface PendingChanges {
@@ -189,7 +189,7 @@ class AgentHost {
     this.ready.promise.catch(() => undefined);
   }
 
-  async init(paths: AgentPaths): Promise<void> {
+  async init(paths: AgentPaths, systemLocale: string): Promise<void> {
     try {
       // Pi's built-in extensions (MCP config, MCP OAuth tokens, logs) resolve the agent directory
       // from this variable rather than the session options; point them at the app's folder.
@@ -198,6 +198,7 @@ class AgentHost {
       for (const dir of [paths.workspaceDir, paths.agentDir, paths.sessionDir, skillsDir])
         mkdirSync(dir, { recursive: true });
       const settings = new SettingsStore(paths.settingsFile);
+      configureLanguage(settings.get().language, systemLocale);
       const runtime = await ModelRuntime.create({
         credentials: this.credentials,
         modelsPath: null,
@@ -224,7 +225,7 @@ class AgentHost {
         this.gatewayIds = new Set(settings.get().gateways.map((gateway) => gateway.id));
         emit({
           type: "error",
-          message: `Saved sign-ins could not be read: ${errorMessage(error)}`,
+          message: t("app.signInsUnreadable", { error: errorMessage(error) }),
         });
       }
       await this.startSession(this.newSessionManager());
@@ -367,7 +368,7 @@ class AgentHost {
 
       default: {
         const unknown: never = command;
-        throw new Error(`Unknown command: ${JSON.stringify(unknown)}`);
+        throw new Error(t("app.unknownCommand", { command: JSON.stringify(unknown) }));
       }
     }
   }
@@ -420,10 +421,10 @@ class AgentHost {
     const session = this.requireSession();
     const trimmed = text.trim();
     if (!trimmed && attachments.length === 0) return;
-    if (!this.currentModel()) throw new Error(NO_MODEL_MESSAGE);
+    if (!this.currentModel()) throw new Error(t("models.noneChosen"));
     // Copy files and encode images before acknowledging, so a bad attachment fails the send.
     const message = await buildPrompt(
-      trimmed || "Please take a look at the attached files.",
+      trimmed || t("conversations.attachmentsPrompt"),
       attachments,
       session.sessionManager.getCwd(),
     );
@@ -437,9 +438,9 @@ class AgentHost {
 
   private async compact(): Promise<void> {
     const session = this.requireSession();
-    if (this.running || session.isStreaming) throw new Error("Wait for the answer to finish.");
+    if (this.running || session.isStreaming) throw new Error(t("conversations.waitForAnswer"));
     if (session.isCompacting) return;
-    const short = "This conversation is still short, so there is nothing to summarize yet.";
+    const short = t("conversations.tooShort");
     if (session.messages.length === 0) throw new Error(short);
     try {
       await session.compact();
@@ -512,7 +513,10 @@ class AgentHost {
     } catch (error) {
       emit({
         type: "error",
-        message: `The folder of workspace ${workspace.name} cannot be used (${errorMessage(error)}). Using the default folder instead.`,
+        message: t("workspaces.folderUnusable", {
+          name: workspace.name,
+          error: errorMessage(error),
+        }),
       });
       return paths.workspaceDir;
     }
@@ -534,7 +538,11 @@ class AgentHost {
           .text.replace(/\s+/g, " ")
           .trim();
         const title =
-          info.name?.trim() || firstMessage || (skill ? `Skill: ${skill.name}` : "Untitled chat");
+          info.name?.trim() ||
+          firstMessage ||
+          (skill
+            ? t("conversations.skillTitle", { name: skill.name })
+            : t("conversations.untitled"));
         return {
           path: info.path,
           workspaceId: workspaceForCwd(workspaces, info.cwd, paths.workspaceDir).id,
@@ -547,7 +555,7 @@ class AgentHost {
 
   private renameSession(path: string, name: string): void {
     const trimmed = name.trim();
-    if (!trimmed) throw new Error("Enter a name.");
+    if (!trimmed) throw new Error(t("conversations.enterName"));
     if (this.session?.sessionFile === path) this.session.setSessionName(trimmed);
     else
       SessionManager.open(path, this.requireServices().paths.sessionDir).appendSessionInfo(trimmed);
@@ -841,7 +849,10 @@ class AgentHost {
           emit({ type: "settings_changed", scopes: ["tools", "mcp"] });
         else if (changes.tools) emit({ type: "settings_changed", scopes: ["tools"] });
       } catch (error) {
-        emit({ type: "error", message: `Settings could not be applied: ${errorMessage(error)}` });
+        emit({
+          type: "error",
+          message: t("app.settingsNotApplied", { error: errorMessage(error) }),
+        });
       }
     });
     return this.applying;
@@ -914,7 +925,10 @@ class AgentHost {
     if (!model) {
       emit({
         type: "error",
-        message: `${ref.modelId} is not available; keeping ${current?.name ?? "the current model"}.`,
+        message: t("models.notAvailableKeeping", {
+          model: ref.modelId,
+          current: current?.name ?? t("models.currentModel"),
+        }),
       });
       return;
     }
@@ -947,7 +961,7 @@ class AgentHost {
   // -------------------------------------------------------------------------------------------
 
   private async updateSettings(
-    patch: Partial<Pick<AppSettings, "defaultModel" | "shellEnabled">>,
+    patch: Partial<Pick<AppSettings, "defaultModel" | "shellEnabled" | "language">>,
   ): Promise<AppSettings> {
     const { runtime, settings } = this.requireServices();
     const scopes: SettingsScope[] = ["settings"];
@@ -956,12 +970,14 @@ class AgentHost {
     if (patch.defaultModel) {
       await runtime.getAvailable();
       if (!findAvailable(runtime, patch.defaultModel))
-        throw new Error("That model is not available. Connect its provider first.");
+        throw new Error(t("models.notAvailableConnect"));
     }
     const after = settings.update((draft) => {
       if (patch.defaultModel !== undefined) draft.defaultModel = patch.defaultModel;
       if (typeof patch.shellEnabled === "boolean") draft.shellEnabled = patch.shellEnabled;
+      if (patch.language !== undefined) draft.language = patch.language;
     });
+    if (after.language !== before.language) configureLanguage(after.language);
     if (after.shellEnabled !== before.shellEnabled) {
       scopes.push("tools");
       apply.tools = true;
@@ -991,12 +1007,12 @@ class AgentHost {
   private async connectProvider(providerId: string): Promise<ProviderSummary> {
     const { runtime } = this.requireServices();
     const provider = runtime.getProvider(providerId);
-    if (!provider) throw new Error(`Unknown provider: ${providerId}`);
+    if (!provider) throw new Error(t("providers.unknown", { id: providerId }));
     try {
       await runtime.login(
         providerId,
         "api_key",
-        authInteraction(this.prompts, `Connect ${provider.name}`),
+        authInteraction(this.prompts, t("providers.connect", { name: provider.name })),
       );
     } catch (error) {
       // The key was saved; only the local refresh failed, and the next refresh catches up.
@@ -1006,7 +1022,7 @@ class AgentHost {
     const summary = (await listProviders(runtime, this.gatewayIds)).find(
       (entry) => entry.id === providerId,
     );
-    if (!summary) throw new Error(`Unknown provider: ${providerId}`);
+    if (!summary) throw new Error(t("providers.unknown", { id: providerId }));
     return summary;
   }
 
@@ -1031,12 +1047,13 @@ class AgentHost {
   private async saveGateway(input: SaveGatewayInput): Promise<GatewayView> {
     const { runtime, settings } = this.requireServices();
     const name = input.name.trim();
-    if (!name) throw new Error("Enter a name for the gateway.");
-    if (!GATEWAY_APIS.includes(input.api)) throw new Error(`Unsupported API: ${input.api}`);
+    if (!name) throw new Error(t("gateways.nameRequired"));
+    if (!GATEWAY_APIS.includes(input.api))
+      throw new Error(t("gateways.unsupportedApi", { api: input.api }));
     const baseUrl = normalizeBaseUrl(input.api, input.baseUrl);
     const models = cleanGatewayModels(input.models);
     if (input.id !== undefined && !settings.get().gateways.some((entry) => entry.id === input.id))
-      throw new Error("This gateway no longer exists.");
+      throw new Error(t("gateways.notFound"));
 
     let gateway: GatewayConfig | undefined;
     const saved = settings.update((draft) => {
@@ -1046,7 +1063,7 @@ class AgentHost {
       if (index === -1) draft.gateways.push(gateway);
       else draft.gateways[index] = gateway;
     });
-    if (!gateway) throw new Error("The gateway could not be saved.");
+    if (!gateway) throw new Error(t("gateways.notSaved"));
     const { id } = gateway;
 
     if (input.apiKey !== undefined) {
@@ -1090,8 +1107,7 @@ class AgentHost {
       await runtime.getAvailable();
       model = findAvailable(runtime, ref);
     }
-    if (!model)
-      throw new Error("That model is not available. Connect its provider in Settings › Models.");
+    if (!model) throw new Error(t("models.notAvailableInSettings"));
     await session.setModel(model);
     this.refreshStatus();
     emit({ type: "snapshot", snapshot: this.snapshot() });
@@ -1107,7 +1123,8 @@ class AgentHost {
   private setThinkingLevel(level: ThinkingLevel): void {
     const { settings } = this.requireServices();
     const session = this.requireSession();
-    if (!THINKING_LEVELS.includes(level)) throw new Error(`Unknown thinking level: ${level}`);
+    if (!THINKING_LEVELS.includes(level))
+      throw new Error(t("settings.unknownThinkingLevel", { level }));
     session.setThinkingLevel(level);
     if (settings.get().thinkingLevel !== level) {
       settings.update((draft) => {
@@ -1144,12 +1161,12 @@ class AgentHost {
 
   private setToolPolicy(name: string, policy: ToolPolicy): void {
     const { settings } = this.requireServices();
-    if (!TOOL_POLICIES.includes(policy)) throw new Error(`Unknown policy: ${policy}`);
+    if (!TOOL_POLICIES.includes(policy)) throw new Error(t("settings.unknownPolicy", { policy }));
     // The shell asks or runs freely; `auto` and `off` do not apply (turn it off with its switch).
     if (name === SHELL_TOOL && policy !== "ask" && policy !== "allow")
-      throw new Error("Shell commands either ask first or run freely.");
+      throw new Error(t("settings.shellPolicy"));
     if (toolRule(name, toolTier(name), settings.get()).locked)
-      throw new Error("This tool's setting cannot be changed here.");
+      throw new Error(t("settings.toolLocked"));
     settings.update((draft) => {
       draft.toolPolicies[name] = policy;
     });
@@ -1245,7 +1262,7 @@ class AgentHost {
   }
 
   private deleteAgent(id: string): void {
-    if (id === DEFAULT_AGENT_ID) throw new Error("The built-in agent cannot be deleted.");
+    if (id === DEFAULT_AGENT_ID) throw new Error(t("agents.builtinCannotDelete"));
     const { settings } = this.requireServices();
     const agent = this.requireAgent(id);
     const wasActive = settings.get().activeAgentId === id;
@@ -1324,7 +1341,7 @@ class AgentHost {
     const { agents, workspaces } = settings.get();
     assertUniqueWorkspaceName(workspaces, fields.name, before?.id);
     if (fields.agentId !== null && !agents.some((agent) => agent.id === fields.agentId))
-      throw new Error("The agent chosen for this workspace no longer exists.");
+      throw new Error(t("workspaces.agentMissing"));
     // Conversations belong to a workspace by its folder, so the folder is set once, on creation.
     const dir = before
       ? before.dir
@@ -1347,7 +1364,7 @@ class AgentHost {
   }
 
   private deleteWorkspace(id: string): void {
-    if (id === DEFAULT_WORKSPACE_ID) throw new Error("The built-in workspace cannot be deleted.");
+    if (id === DEFAULT_WORKSPACE_ID) throw new Error(t("workspaces.builtinCannotDelete"));
     const { settings } = this.requireServices();
     this.requireWorkspace(id);
     settings.update((draft) => {
@@ -1375,7 +1392,7 @@ class AgentHost {
       inside.includes(`..${sep}`) ||
       !target.endsWith(".jsonl")
     )
-      throw new Error("That conversation is not in this app's history.");
+      throw new Error(t("conversations.notInHistory"));
     return target;
   }
 
@@ -1383,7 +1400,7 @@ class AgentHost {
     const workspace = this.requireServices()
       .settings.get()
       .workspaces.find((entry) => entry.id === id);
-    if (!workspace) throw new Error("This workspace no longer exists.");
+    if (!workspace) throw new Error(t("workspaces.notFound"));
     return workspace;
   }
 
@@ -1391,7 +1408,7 @@ class AgentHost {
     const agent = this.requireServices()
       .settings.get()
       .agents.find((entry) => entry.id === id);
-    if (!agent) throw new Error("This agent no longer exists.");
+    if (!agent) throw new Error(t("agents.notFound"));
     return agent;
   }
 
@@ -1399,17 +1416,17 @@ class AgentHost {
   private requireUsedServer(name: string): void {
     if (!this.requireServices().mcpServers.uses(name))
       throw new Error(
-        `${this.currentAgent().name} does not use ${name}. Add it to the agent in Settings › Agents, or switch to an agent that uses it.`,
+        t("agents.notUsingServer", { agent: this.currentAgent().name, server: name }),
       );
   }
 
   private requireSession(): AgentSession {
-    if (!this.session) throw new Error("The agent is still starting.");
+    if (!this.session) throw new Error(t("app.starting"));
     return this.session;
   }
 
   private requireServices(): Services {
-    if (!this.services) throw new Error("The agent is still starting.");
+    if (!this.services) throw new Error(t("app.starting"));
     return this.services;
   }
 }
@@ -1425,11 +1442,19 @@ function branchMessages(session: AgentSession): AgentMessage[] {
 }
 
 function appSettings(store: SettingsStore): AppSettings {
-  const { defaultModel, shellEnabled, toolPolicies, disabledSkills, activeAgentId, thinkingLevel } =
-    store.get();
+  const {
+    defaultModel,
+    shellEnabled,
+    language,
+    toolPolicies,
+    disabledSkills,
+    activeAgentId,
+    thinkingLevel,
+  } = store.get();
   return {
     defaultModel,
     shellEnabled,
+    language,
     toolPolicies,
     disabledSkills,
     activeAgentId,
@@ -1493,7 +1518,7 @@ function cleanGatewayModels(models: readonly GatewayModel[]): GatewayModel[] {
     if (model.maxTokens && model.maxTokens > 0) entry.maxTokens = Math.round(model.maxTokens);
     clean.push(entry);
   }
-  if (clean.length === 0) throw new Error("Add at least one model.");
+  if (clean.length === 0) throw new Error(t("gateways.modelRequired"));
   return clean;
 }
 
@@ -1503,8 +1528,8 @@ process.parentPort.on("message", ({ data }) => {
   const message = data as MainToAgentMessage;
   switch (message.kind) {
     case "init":
-      host.init(message.paths).catch((error: unknown) => {
-        emit({ type: "error", message: `The agent could not start: ${errorMessage(error)}` });
+      host.init(message.paths, message.systemLocale).catch((error: unknown) => {
+        emit({ type: "error", message: t("app.couldNotStart", { error: errorMessage(error) }) });
       });
       break;
     case "command":

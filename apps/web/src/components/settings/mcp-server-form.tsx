@@ -25,6 +25,7 @@ import { Spinner } from "@workspace/ui/components/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs";
 import { Textarea } from "@workspace/ui/components/textarea";
 import { ArrowLeftIcon, GlobeIcon, PlusIcon, TerminalIcon, XIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { OptionGroup } from "@/components/settings/option-group";
@@ -33,31 +34,6 @@ import { useSaveMcpServer } from "@/lib/extension-queries";
 
 /** Connection details belong to the transport tabs above them: indented behind a subtle rule. */
 const NESTED_PANEL = "mt-1 ml-1 border-l border-border/70 py-1 pl-4";
-
-const EXPOSURE_INFO: Record<McpExposure, { label: string; description: string }> = {
-  codemode: {
-    label: "Through scripts (recommended)",
-    description:
-      "The agent combines this server's tools in small scripts. Works well even with many tools.",
-  },
-  deferred: {
-    label: "On demand",
-    description: "The agent looks up this server's tools when it needs them.",
-  },
-  direct: {
-    label: "Always available",
-    description:
-      "Every tool is offered to the agent all the time. Best for servers with few tools.",
-  },
-  hidden: {
-    label: "Hidden",
-    description: "The server stays connected, but the agent can't see its tools.",
-  },
-};
-const EXPOSURE_ITEMS = MCP_EXPOSURES.map((value) => ({
-  value,
-  label: EXPOSURE_INFO[value].label,
-}));
 
 type Pair = { id: number; key: string; value: string };
 
@@ -87,6 +63,7 @@ function KeyValueList({
   valuePlaceholder: string;
   addLabel: string;
 }) {
+  const { t } = useTranslation(["extensions", "common"]);
   function update(id: number, patch: Partial<Pair>) {
     onChange(pairs.map((pair) => (pair.id === id ? { ...pair, ...patch } : pair)));
   }
@@ -98,7 +75,7 @@ function KeyValueList({
             value={pair.key}
             onChange={(event) => update(pair.id, { key: event.target.value })}
             placeholder={keyPlaceholder}
-            aria-label="Name"
+            aria-label={t("mcpForm.keyValue.name")}
             autoComplete="off"
             spellCheck={false}
             className="w-2/5 font-mono"
@@ -107,7 +84,7 @@ function KeyValueList({
             value={pair.value}
             onChange={(event) => update(pair.id, { value: event.target.value })}
             placeholder={valuePlaceholder}
-            aria-label="Value"
+            aria-label={t("mcpForm.keyValue.value")}
             autoComplete="off"
             spellCheck={false}
             className="flex-1 font-mono"
@@ -116,7 +93,7 @@ function KeyValueList({
             type="button"
             variant="ghost"
             size="icon-sm"
-            aria-label="Remove"
+            aria-label={t("common:actions.remove")}
             onClick={() => onChange(pairs.filter((item) => item.id !== pair.id))}
           >
             <XIcon />
@@ -158,6 +135,7 @@ export function McpServerForm({
   existingNames: string[];
   onDone: () => void;
 }) {
+  const { t } = useTranslation(["extensions", "common"]);
   const [name, setName] = React.useState(server?.name ?? "");
   const [description, setDescription] = React.useState(server?.description ?? "");
   const [transport, setTransport] = React.useState<McpServerSettings["transport"]>(
@@ -173,26 +151,28 @@ export function McpServerForm({
   const [timeoutText, setTimeoutText] = React.useState(server?.timeout?.toString() ?? "");
   const [touched, setTouched] = React.useState(false);
   const save = useSaveMcpServer(bridge);
-  useSettingsSubPage(server?.name ?? "Add server");
+  const exposureItems = MCP_EXPOSURES.map((value) => ({
+    value,
+    label: t(`mcpForm.exposure.${value}.label`),
+  }));
+  useSettingsSubPage(server?.name ?? t("mcp.addServer"));
 
   const trimmedName = name.trim();
   const timeoutValue = timeoutText.trim() === "" ? undefined : Number(timeoutText);
   const errors = {
     name: !trimmedName
-      ? "Give the server a name."
+      ? t("mcpForm.validation.nameRequired")
       : !/^[A-Za-z0-9_-]+$/.test(trimmedName)
-        ? "Use only letters, digits, underscores (_), and hyphens (-)."
+        ? t("mcpForm.validation.nameFormat")
         : trimmedName !== server?.name && existingNames.includes(trimmedName)
-          ? "Another server already uses this name."
+          ? t("mcpForm.validation.nameTaken")
           : null,
-    command: transport === "stdio" && !command.trim() ? "Enter the command to run." : null,
-    url:
-      transport === "http" && !isHttpUrl(url.trim())
-        ? "Enter a web address starting with https:// or http://."
-        : null,
+    command:
+      transport === "stdio" && !command.trim() ? t("mcpForm.validation.commandRequired") : null,
+    url: transport === "http" && !isHttpUrl(url.trim()) ? t("mcpForm.validation.urlInvalid") : null,
     timeout:
       timeoutValue !== undefined && !(Number.isFinite(timeoutValue) && timeoutValue > 0)
-        ? "Enter a number of seconds, or leave it empty."
+        ? t("mcpForm.validation.timeoutInvalid")
         : null,
   };
   const valid = Object.values(errors).every((error) => error === null);
@@ -226,7 +206,9 @@ export function McpServerForm({
       { originalName: server?.name, server: next },
       {
         onSuccess: () => {
-          toast.success(server ? `“${next.name}” saved` : `“${next.name}” added`);
+          toast.success(
+            t(server ? "mcpForm.toast.saved" : "mcpForm.toast.added", { name: next.name }),
+          );
           onDone();
         },
       },
@@ -236,22 +218,20 @@ export function McpServerForm({
   return (
     <div className="flex flex-col gap-6">
       <header className="flex items-start gap-2">
-        <Button variant="ghost" size="icon-sm" aria-label="Back to MCP servers" onClick={onDone}>
+        <Button variant="ghost" size="icon-sm" aria-label={t("mcp.backToServers")} onClick={onDone}>
           <ArrowLeftIcon />
         </Button>
         <div className="flex min-w-0 flex-col gap-1">
           <h2 className="font-heading text-base font-medium">
-            {server ? `Edit “${server.name}”` : "Add MCP server"}
+            {server ? t("mcpForm.editTitle", { name: server.name }) : t("mcpForm.addTitle")}
           </h2>
-          <p className="text-sm text-muted-foreground">
-            Copy these details from the server's setup guide, or ask your tech team.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("mcpForm.intro")}</p>
         </div>
       </header>
       <form onSubmit={onSubmit} className="flex flex-col gap-6">
         <FieldGroup>
           <Field data-invalid={Boolean(show(errors.name))}>
-            <FieldLabel htmlFor="mcp-name">Name</FieldLabel>
+            <FieldLabel htmlFor="mcp-name">{t("mcpForm.fields.name.label")}</FieldLabel>
             <Input
               id="mcp-name"
               value={name}
@@ -264,23 +244,23 @@ export function McpServerForm({
             {show(errors.name) ? (
               <FieldError>{errors.name}</FieldError>
             ) : (
-              <FieldDescription>
-                A short name, shown next to the server's tools. Letters, digits, _ and -.
-              </FieldDescription>
+              <FieldDescription>{t("mcpForm.fields.name.hint")}</FieldDescription>
             )}
           </Field>
           <Field>
-            <FieldLabel htmlFor="mcp-description">Description (optional)</FieldLabel>
+            <FieldLabel htmlFor="mcp-description">
+              {t("mcpForm.fields.description.label")}
+            </FieldLabel>
             <Input
               id="mcp-description"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
-              placeholder="Customer records and deals"
+              placeholder={t("mcpForm.fields.description.placeholder")}
             />
-            <FieldDescription>Helps the agent understand what this server is for.</FieldDescription>
+            <FieldDescription>{t("mcpForm.fields.description.hint")}</FieldDescription>
           </Field>
 
-          <OptionGroup legend="How to connect">
+          <OptionGroup legend={t("mcpForm.connect.legend")}>
             <Tabs
               value={transport}
               onValueChange={(value) => setTransport(value === "http" ? "http" : "stdio")}
@@ -288,17 +268,19 @@ export function McpServerForm({
               <TabsList>
                 <TabsTrigger value="stdio">
                   <TerminalIcon />
-                  Local command
+                  {t("mcpForm.connect.local")}
                 </TabsTrigger>
                 <TabsTrigger value="http">
                   <GlobeIcon />
-                  Remote URL
+                  {t("mcpForm.connect.remote")}
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="stdio" className={NESTED_PANEL}>
                 <FieldGroup>
                   <Field data-invalid={Boolean(show(errors.command))}>
-                    <FieldLabel htmlFor="mcp-command">Command</FieldLabel>
+                    <FieldLabel htmlFor="mcp-command">
+                      {t("mcpForm.fields.command.label")}
+                    </FieldLabel>
                     <Input
                       id="mcp-command"
                       value={command}
@@ -312,13 +294,11 @@ export function McpServerForm({
                     {show(errors.command) ? (
                       <FieldError>{errors.command}</FieldError>
                     ) : (
-                      <FieldDescription>
-                        The program that starts the server on this computer.
-                      </FieldDescription>
+                      <FieldDescription>{t("mcpForm.fields.command.hint")}</FieldDescription>
                     )}
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="mcp-args">Arguments</FieldLabel>
+                    <FieldLabel htmlFor="mcp-args">{t("mcpForm.fields.args.label")}</FieldLabel>
                     <Textarea
                       id="mcp-args"
                       value={argsText}
@@ -327,23 +307,21 @@ export function McpServerForm({
                       spellCheck={false}
                       className="min-h-20 resize-y font-mono text-xs md:text-xs"
                     />
-                    <FieldDescription>One per line.</FieldDescription>
+                    <FieldDescription>{t("mcpForm.fields.args.hint")}</FieldDescription>
                   </Field>
                   <Field>
-                    <FieldLabel>Environment variables</FieldLabel>
+                    <FieldLabel>{t("mcpForm.fields.env.label")}</FieldLabel>
                     <KeyValueList
                       pairs={env}
                       onChange={setEnv}
                       keyPlaceholder="API_TOKEN"
-                      valuePlaceholder="Value"
-                      addLabel="Add variable"
+                      valuePlaceholder={t("mcpForm.keyValue.value")}
+                      addLabel={t("mcpForm.fields.env.add")}
                     />
-                    <FieldDescription>
-                      Settings the server reads when it starts, such as access tokens.
-                    </FieldDescription>
+                    <FieldDescription>{t("mcpForm.fields.env.hint")}</FieldDescription>
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="mcp-cwd">Working folder (optional)</FieldLabel>
+                    <FieldLabel htmlFor="mcp-cwd">{t("mcpForm.fields.cwd.label")}</FieldLabel>
                     <Input
                       id="mcp-cwd"
                       value={cwd}
@@ -359,7 +337,7 @@ export function McpServerForm({
               <TabsContent value="http" className={NESTED_PANEL}>
                 <FieldGroup>
                   <Field data-invalid={Boolean(show(errors.url))}>
-                    <FieldLabel htmlFor="mcp-url">Server URL</FieldLabel>
+                    <FieldLabel htmlFor="mcp-url">{t("mcpForm.fields.url.label")}</FieldLabel>
                     <Input
                       id="mcp-url"
                       value={url}
@@ -372,24 +350,19 @@ export function McpServerForm({
                     {show(errors.url) ? (
                       <FieldError>{errors.url}</FieldError>
                     ) : (
-                      <FieldDescription>
-                        If the server needs you to sign in, leave the headers empty and use “Sign
-                        in” after saving.
-                      </FieldDescription>
+                      <FieldDescription>{t("mcpForm.fields.url.hint")}</FieldDescription>
                     )}
                   </Field>
                   <Field>
-                    <FieldLabel>Headers</FieldLabel>
+                    <FieldLabel>{t("mcpForm.fields.headers.label")}</FieldLabel>
                     <KeyValueList
                       pairs={headers}
                       onChange={setHeaders}
                       keyPlaceholder="Authorization"
                       valuePlaceholder="Bearer …"
-                      addLabel="Add header"
+                      addLabel={t("mcpForm.fields.headers.add")}
                     />
-                    <FieldDescription>
-                      Sent with every request, for example an API key.
-                    </FieldDescription>
+                    <FieldDescription>{t("mcpForm.fields.headers.hint")}</FieldDescription>
                   </Field>
                 </FieldGroup>
               </TabsContent>
@@ -397,9 +370,9 @@ export function McpServerForm({
           </OptionGroup>
 
           <Field>
-            <FieldLabel>How the agent sees its tools</FieldLabel>
+            <FieldLabel>{t("mcpForm.fields.exposure.label")}</FieldLabel>
             <Select
-              items={EXPOSURE_ITEMS}
+              items={exposureItems}
               value={exposure}
               onValueChange={(value) => value && setExposure(value)}
             >
@@ -407,17 +380,17 @@ export function McpServerForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {EXPOSURE_ITEMS.map((item) => (
+                {exposureItems.map((item) => (
                   <SelectItem key={item.value} value={item.value}>
                     {item.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <FieldDescription>{EXPOSURE_INFO[exposure].description}</FieldDescription>
+            <FieldDescription>{t(`mcpForm.exposure.${exposure}.description`)}</FieldDescription>
           </Field>
           <Field data-invalid={Boolean(show(errors.timeout))}>
-            <FieldLabel htmlFor="mcp-timeout">Time limit per request (seconds)</FieldLabel>
+            <FieldLabel htmlFor="mcp-timeout">{t("mcpForm.fields.timeout.label")}</FieldLabel>
             <Input
               id="mcp-timeout"
               type="number"
@@ -425,24 +398,24 @@ export function McpServerForm({
               inputMode="numeric"
               value={timeoutText}
               onChange={(event) => setTimeoutText(event.target.value)}
-              placeholder="Default"
+              placeholder={t("mcpForm.fields.timeout.placeholder")}
               className="w-40"
               aria-invalid={Boolean(show(errors.timeout))}
             />
             {show(errors.timeout) ? (
               <FieldError>{errors.timeout}</FieldError>
             ) : (
-              <FieldDescription>Leave empty unless the server is slow to answer.</FieldDescription>
+              <FieldDescription>{t("mcpForm.fields.timeout.hint")}</FieldDescription>
             )}
           </Field>
         </FieldGroup>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onDone}>
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           <Button type="submit" disabled={save.isPending || (touched && !valid)}>
             {save.isPending && <Spinner />}
-            {server ? "Save changes" : "Add server"}
+            {server ? t("saveChanges") : t("mcp.addServer")}
           </Button>
         </div>
       </form>

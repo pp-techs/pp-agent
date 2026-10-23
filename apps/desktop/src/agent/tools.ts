@@ -1,5 +1,6 @@
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import type { AppSettings, ToolPolicy, ToolTier } from "@workspace/shared";
+import type { AppSettings, ToolPolicy, ToolTier, ToolWarning } from "@workspace/shared";
+import { t } from "./i18n.ts";
 import { WEB_FETCH_TOOL, WEB_SEARCH_TOOL } from "./web/names.ts";
 import { Type } from "typebox";
 
@@ -96,11 +97,8 @@ export interface ToolRule {
   policy: ToolPolicy;
   effective: "allow" | "ask" | "off";
   locked: boolean;
-  warning?: string;
+  warning?: ToolWarning;
 }
-
-export const SHELL_ALLOW_WARNING =
-  "Commands run without asking. The agent can change or delete files and send data out of this computer.";
 
 /** What happens when the agent calls `name` under the current settings. */
 export function toolRule(name: string, tier: ToolTier, settings: AppSettings): ToolRule {
@@ -108,7 +106,12 @@ export function toolRule(name: string, tier: ToolTier, settings: AppSettings): T
     if (!settings.shellEnabled) return { policy: "off", effective: "off", locked: true };
     // The shell asks unless its own policy is `allow`; `auto` and `off` mean nothing for it.
     if (settings.toolPolicies[name] === "allow")
-      return { policy: "allow", effective: "allow", locked: false, warning: SHELL_ALLOW_WARNING };
+      return {
+        policy: "allow",
+        effective: "allow",
+        locked: false,
+        warning: "shell-unrestricted",
+      };
     return { policy: "ask", effective: "ask", locked: false };
   }
   if (name === FOREIGN_SHELL) return { policy: "off", effective: "off", locked: true };
@@ -192,35 +195,38 @@ export function describeToolCall(
   input: Record<string, unknown>,
 ): { title: string; detail: string } {
   if (toolName === "write" || toolName === "edit") {
-    const path = typeof input.path === "string" ? input.path : "a file";
+    const path = typeof input.path === "string" ? input.path : t("approvals.aFile");
     if (toolName === "edit")
       return {
-        title: `Edit ${path}`,
+        title: t("approvals.edit", { path }),
         detail: preview(JSON.stringify(input.edits ?? input, null, 2)),
       };
     const content = typeof input.content === "string" ? input.content : "";
-    return { title: `Save ${path}`, detail: preview(content) };
+    return { title: t("approvals.save", { path }), detail: preview(content) };
   }
   if (toolName === SHELL_TOOL) {
     const command = typeof input.command === "string" ? input.command : "";
-    return { title: "Run a command", detail: preview(command) };
+    return { title: t("approvals.runCommand"), detail: preview(command) };
   }
   if (toolName === WEB_FETCH_TOOL) {
-    const url = typeof input.url === "string" ? input.url : "a web page";
-    return { title: `Open ${url}`, detail: url };
+    const url = typeof input.url === "string" ? input.url : t("approvals.aWebPage");
+    return { title: t("approvals.open", { url }), detail: url };
   }
   if (toolName === WEB_SEARCH_TOOL) {
     const query = typeof input.query === "string" ? input.query : "";
-    return { title: "Search the web", detail: preview(query) };
+    return { title: t("approvals.searchWeb"), detail: preview(query) };
   }
   const mcp = parseMcpToolName(toolName);
   if (mcp) {
     return {
-      title: `Use “${mcp.tool}” in ${mcp.server}`,
+      title: t("approvals.useTool", { tool: mcp.tool, server: mcp.server }),
       detail: preview(JSON.stringify(input, null, 2)),
     };
   }
-  return { title: `Run ${toolName}`, detail: preview(JSON.stringify(input, null, 2)) };
+  return {
+    title: t("approvals.run", { tool: toolName }),
+    detail: preview(JSON.stringify(input, null, 2)),
+  };
 }
 
 export const SYSTEM_PROMPT = `You are PP Agent, an assistant for business teams. You help with research, writing, analysis, and everyday office work.

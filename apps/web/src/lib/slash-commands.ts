@@ -1,6 +1,7 @@
 import * as React from "react";
 import { DEFAULT_AGENT_ID, type DesktopBridge } from "@workspace/shared";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { skillsQuery } from "@/lib/extension-queries";
@@ -31,6 +32,7 @@ export function useSlashItems(bridge: DesktopBridge): {
   const skills = useQuery(skillsQuery(bridge));
   const agents = useQuery(agentsQuery(bridge));
   const { newChat, compact } = useAgentCommands(bridge);
+  const { t } = useTranslation("chat");
 
   const commands = React.useMemo<SlashItem[]>(() => {
     const onError = (error: Error) => toast.error(error.message);
@@ -38,29 +40,29 @@ export function useSlashItems(bridge: DesktopBridge): {
       {
         kind: "command",
         name: "new",
-        label: "New chat",
-        description: "Start a fresh conversation.",
+        label: t("slash.commands.new.label"),
+        description: t("slash.commands.new.description"),
         run: () => newChat.mutate(undefined, { onError }),
       },
       {
         kind: "command",
         name: "compact",
-        label: "Summarize the chat so far",
-        description: "Frees up room in long conversations; the agent keeps a summary.",
+        label: t("slash.commands.compact.label"),
+        description: t("slash.commands.compact.description"),
         run: () => {
           if (running) {
-            toast.info("Wait for the answer to finish.");
+            toast.info(t("waitForAnswer"));
             return;
           }
           toast.promise(compact.mutateAsync(), {
-            loading: "Summarizing the conversation…",
-            success: "Conversation summarized",
+            loading: t("slash.commands.compact.loading"),
+            success: t("slash.commands.compact.success"),
             error: (error: Error) => error.message,
           });
         },
       },
     ];
-  }, [newChat, compact, running]);
+  }, [newChat, compact, running, t]);
 
   const available = React.useMemo<SlashItem[]>(() => {
     const allowed = agents.data?.find((agent) => agent.id === agentId)?.skills ?? null;
@@ -109,7 +111,7 @@ export function findTypedCommand(items: SlashItem[], draft: string): SlashItem |
 /** Keeps the message box focused after a menu or list closes. */
 export function focusComposer(): void {
   requestAnimationFrame(() => {
-    const textarea = document.querySelector<HTMLTextAreaElement>("textarea[aria-label='Message']");
+    const textarea = document.querySelector<HTMLTextAreaElement>("textarea[data-composer-input]");
     if (!textarea) return;
     textarea.focus();
     const end = useComposerStore.getState().draft.length;

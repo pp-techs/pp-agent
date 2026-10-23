@@ -1,0 +1,32 @@
+{
+  "actions": {
+    "add": "Thêm",
+    "back": "Quay lại",
+    "cancel": "Hủy",
+    "close": "Đóng",
+    "copy": "Sao chép",
+    "create": "Tạo",
+    "delete": "Xóa",
+    "edit": "Sửa",
+    "import": "Nhập",
+    "export": "Xuất",
+    "ok": "OK",
+    "open": "Mở",
+    "remove": "Gỡ bỏ",
+    "retry": "Thử lại",
+    "save": "Lưu",
+    "search": "Tìm kiếm",
+    "send": "Gửi",
+    "stop": "Dừng"
+  },
+  "states": {
+    "loading": "Đang tải…",
+    "saving": "Đang lưu…",
+    "none": "Không có",
+    "on": "Bật",
+    "off": "Tắt",
+    "optional": "Không bắt buộc",
+    "required": "Bắt buộc"
+  },
+  "unknownError": "Đã xảy ra lỗi."
+}

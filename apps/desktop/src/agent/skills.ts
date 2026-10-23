@@ -5,6 +5,7 @@ import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import type { SaveSkillInput, SkillDetail, SkillSummary } from "@workspace/shared";
 import { unzipSync } from "fflate";
 import { stringify } from "yaml";
+import { t } from "./i18n.ts";
 
 const SKILL_FILE = "SKILL.md";
 const MAX_NAME_LENGTH = 64;
@@ -29,19 +30,16 @@ interface SkillFile {
 
 /** Same rules pi applies when it loads a skill (see `validateName` in pi's core/skills.js). */
 export function validateSkillName(name: string): void {
-  if (!name) throw new Error("Enter a name for the skill.");
+  if (!name) throw new Error(t("skills.nameRequired"));
   if (name.length > MAX_NAME_LENGTH)
-    throw new Error(`The name can be at most ${MAX_NAME_LENGTH} characters.`);
-  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name))
-    throw new Error(
-      "Use lowercase letters, digits, and single hyphens for the name (for example weekly-report).",
-    );
+    throw new Error(t("limits.nameTooLong", { max: MAX_NAME_LENGTH }));
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name)) throw new Error(t("skills.nameFormat"));
 }
 
 function validateDescription(description: string): void {
-  if (!description.trim()) throw new Error("Describe what the skill does and when to use it.");
+  if (!description.trim()) throw new Error(t("skills.descriptionRequired"));
   if (description.length > MAX_DESCRIPTION_LENGTH)
-    throw new Error(`The description can be at most ${MAX_DESCRIPTION_LENGTH} characters.`);
+    throw new Error(t("limits.descriptionTooLong", { max: MAX_DESCRIPTION_LENGTH }));
 }
 
 function parseSkill(content: string, fallbackName: string): SkillFile {
@@ -142,14 +140,15 @@ export class SkillLibrary {
     const staged = info.isDirectory()
       ? await stageFolder(source)
       : stageArchive(await readFile(source), basename(source, extname(source)));
-    if (staged.length === 0) throw new Error("No SKILL.md was found in what you picked.");
+    if (staged.length === 0) throw new Error(t("skills.noSkillFile"));
 
     const seen = new Set<string>();
     for (const skill of staged) {
       validateSkillName(skill.name);
       if (!skill.description.trim())
-        throw new Error(`The skill “${skill.name}” has no description in its SKILL.md.`);
-      if (seen.has(skill.name)) throw new Error(`The skill “${skill.name}” is included twice.`);
+        throw new Error(t("skills.missingDescription", { name: skill.name }));
+      if (seen.has(skill.name))
+        throw new Error(t("skills.duplicateInImport", { name: skill.name }));
       seen.add(skill.name);
       await this.assertFree(skill.name);
     }
@@ -195,7 +194,7 @@ export class SkillLibrary {
 
   private async find(name: string): Promise<{ path: string; skill: SkillFile }> {
     const found = (await this.scan()).find((entry) => entry.skill.name === name);
-    if (!found) throw new Error(`There is no skill named ${name}.`);
+    if (!found) throw new Error(t("skills.notFound", { name }));
     return found;
   }
 
@@ -203,7 +202,7 @@ export class SkillLibrary {
     const taken =
       existsSync(join(this.dir, name)) ||
       (await this.scan()).some((entry) => entry.skill.name === name);
-    if (taken) throw new Error(`A skill named ${name} already exists.`);
+    if (taken) throw new Error(t("skills.nameTaken", { name }));
   }
 }
 
@@ -260,7 +259,7 @@ function archivePath(name: string): string | null {
     /^[a-zA-Z]:/.test(normalized) ||
     normalized.split("/").includes("..")
   )
-    throw new Error("This archive contains unsafe file paths and was not imported.");
+    throw new Error(t("skills.unsafeArchive"));
   const clean = posix.normalize(normalized);
   const parts = clean.split("/");
   if (parts.some((part) => IGNORED[part] === true)) return null;
@@ -272,7 +271,7 @@ function stageArchive(data: Buffer, archiveName: string): StagedSkill[] {
   const entries = unzipSync(new Uint8Array(data), {
     filter: (file) => {
       total += file.originalSize;
-      if (total > MAX_ARCHIVE_BYTES) throw new Error("This archive is too large to import.");
+      if (total > MAX_ARCHIVE_BYTES) throw new Error(t("skills.archiveTooLarge"));
       return true;
     },
   });

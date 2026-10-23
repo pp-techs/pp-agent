@@ -36,15 +36,16 @@ Directory structure, entry points, API patterns, and key modules.
 
 Conventions, naming rules, tech stack versions, and development workflows.
 
-| File                                                                     | Description                                                                                   |
-| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| [toolchain-and-setup.md](code-standard/toolchain-and-setup.md)           | Requirements, `vp` commands, lint config, dependency catalog and version policy               |
-| [typescript-and-naming.md](code-standard/typescript-and-naming.md)       | Formatting, strict TypeScript, validation, naming for files, components, hooks, query keys    |
-| [renderer-patterns.md](code-standard/renderer-patterns.md)               | Contract-first changes, commands vs events, Query/Zustand, modals, Settings patterns, UI copy |
-| [electron-security.md](code-standard/electron-security.md)               | Window hardening, external links, IPC input and path validation, keys only in main            |
-| [pi-sdk-integration.md](code-standard/pi-sdk-integration.md)             | Pi agent dir, explicit extensions, skills loading, deferred changes, reload vs active tools   |
-| [verification-and-secrets.md](code-standard/verification-and-secrets.md) | `vp check`, Electron smoke tests over CDP with copied user data, secrets hygiene              |
-| [release-process.md](code-standard/release-process.md)                   | Changesets, Version Packages PR, installer builds, GitHub Releases, signing secrets           |
+| File                                                                     | Description                                                                                           |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| [toolchain-and-setup.md](code-standard/toolchain-and-setup.md)           | Requirements, `vp` commands, lint config, dependency catalog and version policy                       |
+| [typescript-and-naming.md](code-standard/typescript-and-naming.md)       | Formatting, strict TypeScript, validation, naming for files, components, hooks, query keys            |
+| [renderer-patterns.md](code-standard/renderer-patterns.md)               | Contract-first changes, commands vs events, Query/Zustand, modals, Settings patterns, UI copy         |
+| [i18n.md](code-standard/i18n.md)                                         | Languages (en, vi), i18next namespaces per process, typed keys, what stays English, adding a language |
+| [electron-security.md](code-standard/electron-security.md)               | Window hardening, external links, IPC input and path validation, keys only in main                    |
+| [pi-sdk-integration.md](code-standard/pi-sdk-integration.md)             | Pi agent dir, explicit extensions, skills loading, deferred changes, reload vs active tools           |
+| [verification-and-secrets.md](code-standard/verification-and-secrets.md) | `vp check`, Electron smoke tests over CDP with copied user data, secrets hygiene                      |
+| [release-process.md](code-standard/release-process.md)                   | Changesets, Version Packages PR, installer builds, GitHub Releases, signing secrets                   |
 
 ## Project PDR
 

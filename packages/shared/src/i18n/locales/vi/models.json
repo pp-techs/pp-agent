@@ -1,0 +1,114 @@
+{
+  "section": {
+    "title": "Mô hình",
+    "description": "Kết nối các nhà cung cấp AI bằng khóa API, hoặc thêm Gateway riêng của nhóm bạn.",
+    "connected": {
+      "heading": "Đã kết nối",
+      "emptyTitle": "Chưa kết nối nhà cung cấp nào",
+      "emptyDescription": "Hãy kết nối một nhà cung cấp bên dưới, hoặc thêm Gateway tùy chỉnh, để bắt đầu trò chuyện."
+    },
+    "gateways": {
+      "heading": "Gateway tùy chỉnh",
+      "add": "Thêm Gateway",
+      "hint": "Gateway là địa chỉ tương thích OpenAI hoặc Anthropic mà nhóm bạn tự vận hành hoặc mua."
+    },
+    "available": {
+      "heading": "Nhà cung cấp khả dụng",
+      "search": "Tìm nhà cung cấp",
+      "noMatch": "Không có nhà cung cấp nào khớp.",
+      "allConnected": "Tất cả nhà cung cấp đã được kết nối."
+    }
+  },
+  "modelCount_other": "{{count}} mô hình",
+  "apiTypes": {
+    "openaiCompletions": "Tương thích OpenAI (Chat Completions)",
+    "openaiResponses": "OpenAI Responses",
+    "anthropicMessages": "Anthropic Messages"
+  },
+  "providerRow": {
+    "gatewayBadge": "Gateway",
+    "connect": "Kết nối",
+    "changeKey": "Đổi khóa",
+    "disconnect": "Ngắt kết nối",
+    "connectedToast": "Đã kết nối {{name}}",
+    "disconnectedToast": "Đã ngắt kết nối {{name}}",
+    "disconnectTitle": "Ngắt kết nối {{name}}?",
+    "disconnectDescription": "Khóa đã lưu của nhà cung cấp này sẽ bị xóa khỏi máy tính. Các cuộc trò chuyện đang dùng mô hình của nhà cung cấp này sẽ chuyển sang mô hình khác.",
+    "authSource": {
+      "connected": "Đã kết nối",
+      "savedKey": "Khóa đã lưu",
+      "environmentVariable": "Biến môi trường"
+    }
+  },
+  "modelRow": {
+    "displayName": {
+      "label": "Tên hiển thị của {{id}}",
+      "hint": "Tên hiển thị. Để trống: dùng tên mà Gateway hoặc Pi biết, nếu không thì dùng ID đã được làm gọn."
+    },
+    "contextWindow": {
+      "label": "Cửa sổ ngữ cảnh của {{id}}, tính bằng token",
+      "hint": "Cửa sổ ngữ cảnh tính bằng token. Để trống: dùng kích thước đã biết của mô hình, nếu không thì dùng 128000.",
+      "placeholder": "tự động"
+    },
+    "images": "Hỗ trợ hình ảnh",
+    "reasoning": {
+      "label": "Mô hình suy luận",
+      "hint": "Mô hình suy luận (suy nghĩ trước khi trả lời)"
+    },
+    "remove": "Xóa {{id}}"
+  },
+  "fetchedModels": {
+    "selectedCount": "Đã chọn {{selected}}/{{total}}",
+    "selectedCountShown": "Đã chọn {{selected}}/{{total}} · đang hiển thị {{shown}}",
+    "selectAll": "Chọn tất cả",
+    "selectAllShown": "Chọn tất cả mục đang hiển thị",
+    "clear": "Bỏ chọn",
+    "clearShown": "Bỏ chọn mục đang hiển thị",
+    "search": "Tìm mô hình của Gateway",
+    "noMatch": "Không có mô hình nào khớp."
+  },
+  "gatewayForm": {
+    "titleAdd": "Thêm Gateway",
+    "titleEdit": "Sửa {{name}}",
+    "saved": "Đã lưu {{name}}",
+    "noModelsListed": "Gateway không liệt kê mô hình nào. Hãy thêm mô hình theo tên.",
+    "name": {
+      "label": "Tên",
+      "placeholder": "Gateway của công ty",
+      "description": "Hiển thị trong danh sách mô hình."
+    },
+    "apiType": {
+      "label": "Loại API",
+      "description": "Hầu hết Gateway đều tương thích OpenAI. Hãy hỏi bộ phận kỹ thuật của bạn."
+    },
+    "url": {
+      "label": "URL của Gateway",
+      "invalid": "Nhập địa chỉ web bắt đầu bằng https:// hoặc http://",
+      "description": "Địa chỉ mà nhóm bạn dùng cho các yêu cầu AI."
+    },
+    "apiKey": {
+      "label": "Khóa API",
+      "placeholderSaved": "Đã lưu. Để trống để giữ nguyên.",
+      "placeholderNew": "Dán khóa của bạn",
+      "description": "Được lưu mã hóa trong kho khóa của hệ điều hành."
+    },
+    "models": {
+      "legend": "Mô hình",
+      "description": "Tải danh sách từ Gateway, hoặc thêm mô hình theo tên.",
+      "load": "Tải từ Gateway",
+      "loadError": "Không thể tải mô hình: {{message}}",
+      "manualLabel": "Tên mô hình",
+      "manualPlaceholder": "Hoặc nhập tên mô hình, ví dụ gpt-4o",
+      "atLeastOne": "Hãy thêm ít nhất một mô hình.",
+      "duplicateNames": "Nhiều mô hình có cùng tên {{names}}. Danh sách mô hình sẽ thêm ID mô hình để phân biệt; hãy đặt tên khác nhau để tránh điều đó."
+    }
+  },
+  "gatewayRow": {
+    "keySaved": "Đã lưu khóa",
+    "noKey": "Chưa có khóa",
+    "delete": "Xóa {{name}}",
+    "deleteTitle": "Xóa {{name}}?",
+    "deleteDescription": "Gateway và khóa đã lưu của nó sẽ bị xóa khỏi máy tính. Các cuộc trò chuyện đang dùng mô hình của Gateway này sẽ chuyển sang mô hình khác.",
+    "deleted": "Đã xóa {{name}}"
+  }
+}

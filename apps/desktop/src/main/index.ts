@@ -17,6 +17,7 @@ import {
   pickSkill,
   saveAgentFile,
 } from "./files.ts";
+import { initI18n, translator } from "./i18n.ts";
 import { migrateLegacyProvider } from "./legacy.ts";
 import { createUpdater } from "./updates.ts";
 import { handleVaultRequest } from "./vault.ts";
@@ -31,6 +32,7 @@ const RESTART_DELAY_MS = 1_000;
 const WORKSPACE_DIR = join(app.getPath("documents"), "PP Agent");
 const USER_DATA_DIR = app.getPath("userData");
 const SETTINGS_FILE = join(USER_DATA_DIR, "settings.json");
+initI18n(SETTINGS_FILE);
 
 const updater = createUpdater((state) => window?.webContents.send(IPC.updatesEvent, state));
 
@@ -50,7 +52,7 @@ function sendToRenderer(event: AgentEvent): void {
 }
 
 function postToAgent(message: MainToAgentMessage): void {
-  if (!agent) throw new Error("The agent is not running.");
+  if (!agent) throw new Error(translator()("app.notRunning"));
   agent.postMessage(message);
 }
 
@@ -58,7 +60,7 @@ function postToAgent(message: MainToAgentMessage): void {
 async function openExternal(url: string): Promise<void> {
   const protocol = URL.canParse(url) ? new URL(url).protocol : "";
   if (protocol !== "https:" && protocol !== "http:")
-    throw new Error("Only web links (http or https) can be opened.");
+    throw new Error(translator()("app.onlyWebLinks"));
   await shell.openExternal(url);
 }
 
@@ -118,13 +120,13 @@ async function startAgent(): Promise<void> {
   child.on("exit", (code) => {
     if (agent !== child) return;
     agent = null;
-    for (const request of pending.values())
-      request.reject(new Error("The agent stopped unexpectedly."));
+    const t = translator();
+    for (const request of pending.values()) request.reject(new Error(t("app.stoppedUnexpectedly")));
     pending.clear();
     if (quitting) return;
     sendToRenderer({
       type: "error",
-      message: `The agent stopped (exit code ${code}). Restarting…`,
+      message: t("app.stoppedRestarting", { code }),
     });
     sendToRenderer({ type: "status", status: "starting" });
     setTimeout(() => void startAgent(), RESTART_DELAY_MS);
@@ -138,6 +140,7 @@ async function startAgent(): Promise<void> {
       sessionDir: join(USER_DATA_DIR, "sessions"),
       settingsFile: SETTINGS_FILE,
     },
+    systemLocale: app.getLocale(),
   });
 }
 
@@ -197,24 +200,25 @@ ipcMain.handle(IPC.filesPick, () => pickFiles(window));
 ipcMain.handle(IPC.filesPickSkill, () => pickSkill(window));
 ipcMain.handle(IPC.filesOpenWorkspace, (_event, dir: unknown) => {
   // Only folders can be opened this way, never files (opening a file could run it).
-  if (typeof dir !== "string" || !isAbsolute(dir)) throw new Error("That folder cannot be opened.");
+  if (typeof dir !== "string" || !isAbsolute(dir))
+    throw new Error(translator()("app.folderCannotOpen"));
   return openFolder(dir);
 });
 ipcMain.handle(IPC.filesPickFolder, () => pickFolder(window));
 ipcMain.handle(IPC.filesOpenAgent, () => openAgentFile(window));
 ipcMain.handle(IPC.filesSaveAgent, (_event, suggestedName: unknown, json: unknown) => {
   if (typeof suggestedName !== "string" || typeof json !== "string")
-    throw new Error("The agent could not be exported.");
+    throw new Error(translator()("app.agentCannotExport"));
   return saveAgentFile(window, suggestedName, json);
 });
 ipcMain.handle(IPC.filesReveal, (_event, path: unknown) => {
   // Only the app's own files (skills, mcp.json) and the workspace can be shown.
   if (typeof path !== "string" || !(isInside(USER_DATA_DIR, path) || isInside(WORKSPACE_DIR, path)))
-    throw new Error("That location cannot be shown.");
+    throw new Error(translator()("app.locationCannotShow"));
   shell.showItemInFolder(path);
 });
 ipcMain.handle(IPC.openExternal, (_event, url: unknown) => {
-  if (typeof url !== "string") throw new Error("Only web links (http or https) can be opened.");
+  if (typeof url !== "string") throw new Error(translator()("app.onlyWebLinks"));
   return openExternal(url);
 });
 

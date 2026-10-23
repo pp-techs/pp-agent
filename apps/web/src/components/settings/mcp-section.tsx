@@ -30,6 +30,7 @@ import { Spinner } from "@workspace/ui/components/spinner";
 import { Switch } from "@workspace/ui/components/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import {
   BracesIcon,
   FolderOpenIcon,
@@ -60,26 +61,25 @@ import {
 
 type View = { kind: "list" } | { kind: "form"; name?: string } | { kind: "json" };
 
-const STATE_STYLE: Record<McpServerState, { dot: string; label: string }> = {
-  connected: { dot: "bg-emerald-500", label: "Connected" },
-  starting: { dot: "bg-amber-500 animate-pulse", label: "Connecting…" },
-  connecting: { dot: "bg-amber-500 animate-pulse", label: "Connecting…" },
-  failed: { dot: "bg-destructive", label: "Couldn't connect" },
-  "needs-auth": { dot: "bg-amber-500", label: "Needs sign-in" },
-  disabled: { dot: "bg-muted-foreground/40", label: "Turned off" },
-  disconnected: { dot: "bg-muted-foreground/40", label: "Not connected" },
-};
+const STATE_STYLE = {
+  connected: { dot: "bg-emerald-500", label: "mcp.states.connected" },
+  starting: { dot: "bg-amber-500 animate-pulse", label: "mcp.states.connecting" },
+  connecting: { dot: "bg-amber-500 animate-pulse", label: "mcp.states.connecting" },
+  failed: { dot: "bg-destructive", label: "mcp.states.failed" },
+  "needs-auth": { dot: "bg-amber-500", label: "mcp.states.needsAuth" },
+  disabled: { dot: "bg-muted-foreground/40", label: "mcp.states.disabled" },
+  disconnected: { dot: "bg-muted-foreground/40", label: "mcp.states.disconnected" },
+} as const satisfies Record<McpServerState, { dot: string; label: string }>;
 
 function StatusLabel({ server }: { server: McpServerView }) {
+  const { t } = useTranslation(["extensions", "common"]);
   const style = STATE_STYLE[server.state];
   const tools =
-    server.state === "connected"
-      ? ` · ${server.toolCount} ${server.toolCount === 1 ? "tool" : "tools"}`
-      : "";
+    server.state === "connected" ? ` · ${t("mcp.toolCount", { count: server.toolCount })}` : "";
   return (
     <span className="inline-flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
       <span aria-hidden className={`size-2 shrink-0 rounded-full ${style.dot}`} />
-      {style.label}
+      {t(style.label)}
       {tools}
     </span>
   );
@@ -94,6 +94,7 @@ function ServerRow({
   server: McpServerView;
   onEdit: () => void;
 }) {
+  const { t } = useTranslation(["extensions", "common"]);
   const { settings } = server;
   const save = useSaveMcpServer(bridge);
   const remove = useDeleteMcpServer(bridge);
@@ -114,37 +115,37 @@ function ServerRow({
 
   function onReconnect() {
     reconnect.mutate(settings.name, {
-      onSuccess: () => toast.success(`Reconnected to “${settings.name}”`),
+      onSuccess: () => toast.success(t("mcp.toast.reconnected", { name: settings.name })),
     });
   }
 
   function onSignIn() {
     signIn.mutate(settings.name, {
-      onSuccess: () => toast.success(`Signed in to “${settings.name}”`),
+      onSuccess: () => toast.success(t("mcp.toast.signedIn", { name: settings.name })),
     });
   }
 
   async function onSignOut() {
     const confirmed = await ConfirmModal.show({
-      title: `Sign out of “${settings.name}”?`,
-      description: "The agent won't be able to use this server until you sign in again.",
-      confirmLabel: "Sign out",
+      title: t("mcp.signOutConfirm.title", { name: settings.name }),
+      description: t("mcp.signOutConfirm.description"),
+      confirmLabel: t("mcp.row.signOut"),
     });
     if (!confirmed) return;
     signOut.mutate(settings.name, {
-      onSuccess: () => toast.success(`Signed out of “${settings.name}”`),
+      onSuccess: () => toast.success(t("mcp.toast.signedOut", { name: settings.name })),
     });
   }
 
   async function onDelete() {
     const confirmed = await ConfirmModal.show({
-      title: "Remove this server?",
-      description: `“${settings.name}” and its tools will no longer be available to the agent.`,
-      confirmLabel: "Remove",
+      title: t("mcp.removeConfirm.title"),
+      description: t("mcp.removeConfirm.description", { name: settings.name }),
+      confirmLabel: t("common:actions.remove"),
     });
     if (!confirmed) return;
     remove.mutate(settings.name, {
-      onSuccess: () => toast.success(`“${settings.name}” removed`),
+      onSuccess: () => toast.success(t("mcp.toast.removed", { name: settings.name })),
     });
   }
 
@@ -172,7 +173,7 @@ function ServerRow({
         {server.state === "needs-auth" && (
           <Button size="sm" variant="outline" disabled={busy} onClick={onSignIn}>
             <LogInIcon />
-            Sign in
+            {t("mcp.row.signIn")}
           </Button>
         )}
         <Tooltip>
@@ -181,15 +182,23 @@ function ServerRow({
               checked={enabled}
               disabled={busy}
               onCheckedChange={onToggle}
-              aria-label={enabled ? `Turn off ${settings.name}` : `Turn on ${settings.name}`}
+              aria-label={
+                enabled
+                  ? t("mcp.row.turnOffNamed", { name: settings.name })
+                  : t("mcp.row.turnOnNamed", { name: settings.name })
+              }
             />
           </TooltipTrigger>
-          <TooltipContent>{enabled ? "Turn off" : "Turn on"}</TooltipContent>
+          <TooltipContent>{enabled ? t("mcp.row.turnOff") : t("mcp.row.turnOn")}</TooltipContent>
         </Tooltip>
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
-              <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${settings.name}`} />
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t("mcp.row.actionsFor", { name: settings.name })}
+              />
             }
           >
             <MoreHorizontalIcon />
@@ -197,28 +206,28 @@ function ServerRow({
           <DropdownMenuContent align="end" className="w-44">
             <DropdownMenuItem disabled={!enabled || busy} onClick={onReconnect}>
               <RefreshCwIcon />
-              Reconnect
+              {t("mcp.row.reconnect")}
             </DropdownMenuItem>
             {server.usesOAuth && (
               <>
                 <DropdownMenuItem disabled={!enabled || busy} onClick={onSignIn}>
                   <LogInIcon />
-                  Sign in
+                  {t("mcp.row.signIn")}
                 </DropdownMenuItem>
                 <DropdownMenuItem disabled={busy} onClick={() => void onSignOut()}>
                   <LogOutIcon />
-                  Sign out
+                  {t("mcp.row.signOut")}
                 </DropdownMenuItem>
               </>
             )}
             <DropdownMenuItem onClick={onEdit}>
               <PencilIcon />
-              Edit
+              {t("common:actions.edit")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={() => void onDelete()}>
               <Trash2Icon />
-              Remove
+              {t("common:actions.remove")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -228,10 +237,11 @@ function ServerRow({
 }
 
 function ServersSkeleton() {
+  const { t } = useTranslation(["extensions", "common"]);
   return (
     <div className="flex flex-col gap-2.5">
       <p className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Spinner /> Checking connections… this can take a few seconds.
+        <Spinner /> {t("mcp.checking")}
       </p>
       {Array.from({ length: 2 }, (_, index) => (
         <Skeleton key={index} className="h-16 w-full rounded-2xl" />
@@ -241,6 +251,7 @@ function ServersSkeleton() {
 }
 
 export function McpSection({ bridge }: { bridge: DesktopBridge }) {
+  const { t } = useTranslation(["extensions", "common"]);
   const overview = useQuery(mcpQuery(bridge));
   const [view, setView] = React.useState<View>({ kind: "list" });
 
@@ -265,17 +276,14 @@ export function McpSection({ bridge }: { bridge: DesktopBridge }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <SectionHeading
-        title="MCP servers"
-        description="Connect the agent to business systems such as a CRM, ticketing, or a database."
-      >
+      <SectionHeading title={t("mcp.heading.title")} description={t("mcp.heading.description")}>
         <Tooltip>
           <TooltipTrigger
             render={
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Check connections again"
+                aria-label={t("mcp.checkAgain")}
                 disabled={overview.isFetching}
                 onClick={() => void overview.refetch()}
               />
@@ -283,22 +291,22 @@ export function McpSection({ bridge }: { bridge: DesktopBridge }) {
           >
             {overview.isFetching ? <Spinner /> : <RefreshCwIcon />}
           </TooltipTrigger>
-          <TooltipContent>Check connections again</TooltipContent>
+          <TooltipContent>{t("mcp.checkAgain")}</TooltipContent>
         </Tooltip>
         <Button variant="outline" onClick={() => setView({ kind: "json" })}>
           <BracesIcon />
-          Edit mcp.json
+          {t("mcp.editJson")}
         </Button>
         <Button onClick={() => setView({ kind: "form" })}>
           <PlusIcon />
-          Add server
+          {t("mcp.addServer")}
         </Button>
       </SectionHeading>
 
       {overview.data && overview.data.configErrors.length > 0 && (
         <Alert variant="destructive">
           <TriangleAlertIcon />
-          <AlertTitle>Some servers in mcp.json couldn't be loaded</AlertTitle>
+          <AlertTitle>{t("mcp.configErrors")}</AlertTitle>
           <AlertDescription>
             <ul className="list-disc pl-4">
               {overview.data.configErrors.map((error) => (
@@ -314,7 +322,7 @@ export function McpSection({ bridge }: { bridge: DesktopBridge }) {
       ) : overview.isError ? (
         <Alert variant="destructive">
           <TriangleAlertIcon />
-          <AlertTitle>Couldn't load your MCP servers</AlertTitle>
+          <AlertTitle>{t("mcp.loadError")}</AlertTitle>
           <AlertDescription>{overview.error.message}</AlertDescription>
         </Alert>
       ) : servers.length === 0 ? (
@@ -323,20 +331,17 @@ export function McpSection({ bridge }: { bridge: DesktopBridge }) {
             <EmptyMedia variant="icon">
               <PlugIcon />
             </EmptyMedia>
-            <EmptyTitle>No servers yet</EmptyTitle>
-            <EmptyDescription>
-              MCP servers give the agent tools for your business systems. Add one with the details
-              from its setup guide, or paste a configuration from Claude Desktop or Cursor.
-            </EmptyDescription>
+            <EmptyTitle>{t("mcp.empty.title")}</EmptyTitle>
+            <EmptyDescription>{t("mcp.empty.description")}</EmptyDescription>
           </EmptyHeader>
           <EmptyContent className="flex-row justify-center">
             <Button variant="outline" onClick={() => setView({ kind: "json" })}>
               <BracesIcon />
-              Paste a configuration
+              {t("mcp.empty.paste")}
             </Button>
             <Button onClick={() => setView({ kind: "form" })}>
               <PlusIcon />
-              Add server
+              {t("mcp.addServer")}
             </Button>
           </EmptyContent>
         </Empty>
@@ -355,7 +360,7 @@ export function McpSection({ bridge }: { bridge: DesktopBridge }) {
 
       {configPath && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span>Saved in</span>
+          <span>{t("mcp.savedIn")}</span>
           <code className="truncate font-mono">{configPath}</code>
           <Button
             variant="ghost"
@@ -365,7 +370,7 @@ export function McpSection({ bridge }: { bridge: DesktopBridge }) {
             }
           >
             <FolderOpenIcon />
-            Show in folder
+            {t("showInFolder")}
           </Button>
         </div>
       )}

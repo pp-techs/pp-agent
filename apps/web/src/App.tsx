@@ -13,6 +13,7 @@ import { MessageScrollerProvider } from "@workspace/ui/components/message-scroll
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@workspace/ui/components/sidebar";
 import { Spinner } from "@workspace/ui/components/spinner";
 import { FileUpIcon, PlugIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { AgentPicker } from "@/components/chat/agent-picker";
@@ -42,6 +43,7 @@ function Header({ bridge }: { bridge: DesktopBridge }) {
 }
 
 function ChatBody({ bridge }: { bridge: DesktopBridge }) {
+  const { t } = useTranslation("modals");
   const status = useChatStore((state) => state.status);
   const empty = useChatStore((state) => state.messages.length === 0);
 
@@ -52,7 +54,7 @@ function ChatBody({ bridge }: { bridge: DesktopBridge }) {
           <EmptyMedia variant="icon">
             <Spinner />
           </EmptyMedia>
-          <EmptyTitle>Starting the agent…</EmptyTitle>
+          <EmptyTitle>{t("app.starting")}</EmptyTitle>
         </EmptyHeader>
       </Empty>
     );
@@ -64,15 +66,12 @@ function ChatBody({ bridge }: { bridge: DesktopBridge }) {
           <EmptyMedia variant="icon">
             <PlugIcon />
           </EmptyMedia>
-          <EmptyTitle>Choose a model to start</EmptyTitle>
-          <EmptyDescription>
-            Connect an AI provider with your API key, or add your team's gateway, in Settings ›
-            Models.
-          </EmptyDescription>
+          <EmptyTitle>{t("app.unconfigured.title")}</EmptyTitle>
+          <EmptyDescription>{t("app.unconfigured.description")}</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
           <Button onClick={() => void SettingsModal.show({ bridge, section: "models" })}>
-            Set up models
+            {t("app.unconfigured.action")}
           </Button>
         </EmptyContent>
       </Empty>
@@ -83,6 +82,7 @@ function ChatBody({ bridge }: { bridge: DesktopBridge }) {
 }
 
 function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
+  const { t } = useTranslation("modals");
   useAgentConnection(bridge);
   React.useEffect(() => connectUpdates(bridge), [bridge]);
   const status = useChatStore((state) => state.status);
@@ -126,7 +126,7 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
         {dragDepth > 0 && ready && (
           <div className="pointer-events-none absolute inset-2 z-50 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-primary/40 bg-background/80 text-sm font-medium">
             <FileUpIcon className="size-6" />
-            Drop files to attach them
+            {t("app.dropFiles")}
           </div>
         )}
       </SidebarInset>
@@ -136,14 +136,13 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
 }
 
 export function App() {
+  const { t } = useTranslation("modals");
   if (!bridge) {
     return (
       <Empty className="h-svh">
         <EmptyHeader>
-          <EmptyTitle>Open PP Agent from the desktop app</EmptyTitle>
-          <EmptyDescription>
-            This page is the app's interface and needs the desktop shell to run.
-          </EmptyDescription>
+          <EmptyTitle>{t("app.desktopOnly.title")}</EmptyTitle>
+          <EmptyDescription>{t("app.desktopOnly.description")}</EmptyDescription>
         </EmptyHeader>
       </Empty>
     );
