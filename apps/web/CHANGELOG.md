@@ -1,5 +1,15 @@
 # @workspace/web
 
+## 0.6.0
+
+### Minor Changes
+
+- 310bcdc: Context. Compact now works on shorter conversations instead of saying there is nothing to summarize. The chat keeps showing every message after a compaction, with a divider where earlier messages were summarized. Old tool results are replaced with a short note in what the model reads, so long tool-heavy chats fill the context window more slowly; what you see in the chat does not change.
+
+### Patch Changes
+
+- 310bcdc: MCP servers that run a local command (`npx`, `uvx`, and similar) now work when the app is opened from Finder or the Dock. The app reads `PATH` from your login shell at startup.
+
 ## 0.5.0
 
 ### Minor Changes
