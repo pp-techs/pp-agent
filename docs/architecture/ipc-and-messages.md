@@ -12,7 +12,7 @@ Channel names are the `IPC` constant in `packages/shared/src/index.ts`. All are 
 | `agent:event`          | `agent.onEvent(listener)`         | Pushed by main for every agent event                                |
 | `files:pick`           | `files.pick()`                    | Open dialog, returns `Attachment[]` with path and guessed MIME type |
 | `files:pick-skill`     | `files.pickSkill()`               | Folder or `.zip`/`.skill` picker                                    |
-| `files:pick-folder`    | `files.pickFolder()`              | Folder picker (an agent's workspace)                                |
+| `files:pick-folder`    | `files.pickFolder()`              | Folder picker (a new workspace's folder)                            |
 | `files:open-workspace` | `files.openWorkspace(dir)`        | Opens an absolute folder in Finder / Explorer                       |
 | `files:reveal`         | `files.reveal(path)`              | Shows a path inside userData or the default workspace               |
 | `files:open-agent`     | `files.openAgentFile()`           | Reads an exported agent file                                        |
@@ -107,17 +107,18 @@ Ops are `read`, `list`, `write`, `delete`. Main runs them one at a time through 
 
 `AgentEvent` (shared contract) and how the renderer uses each (`apps/web/src/hooks/use-agent-connection.ts`, `apps/web/src/stores/chat-store.ts`):
 
-| Event                                      | Renderer effect                                                            |
-| ------------------------------------------ | -------------------------------------------------------------------------- |
-| `status`                                   | Sets the chat store status.                                                |
-| `message`                                  | Upserts a `ChatMessage` by id (streaming replaces the same id repeatedly). |
-| `snapshot`                                 | Replaces the whole chat store; refetches sessions and tools.               |
-| `approval_requested` / `approval_resolved` | Adds / removes a pending approval in the chat store.                       |
-| `sessions_changed`                         | Refetches the conversation list.                                           |
-| `settings_changed { scopes }`              | Invalidates the TanStack queries mapped from each `SettingsScope`.         |
-| `auth_prompt` / `auth_prompt_closed`       | Pushes / removes a sign-in prompt in the auth prompt modal store.          |
-| `auth_info`                                | Toast with the flow title, message and an "Open" action for the URL.       |
-| `error`                                    | Error toast.                                                               |
+| Event                                      | Renderer effect                                                                            |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `status`                                   | Sets the chat store status.                                                                |
+| `message`                                  | Upserts a `ChatMessage` by id (streaming replaces the same id repeatedly).                 |
+| `snapshot`                                 | Replaces the whole chat store; refetches sessions and tools.                               |
+| `approval_requested` / `approval_resolved` | Adds / removes a pending approval in the chat store.                                       |
+| `sessions_changed`                         | Refetches the conversation list.                                                           |
+| `context { context }`                      | Updates the context window gauge in the chat store (after each reply and after `compact`). |
+| `settings_changed { scopes }`              | Invalidates the TanStack queries mapped from each `SettingsScope`.                         |
+| `auth_prompt` / `auth_prompt_closed`       | Pushes / removes a sign-in prompt in the auth prompt modal store.                          |
+| `auth_info`                                | Toast with the flow title, message and an "Open" action for the URL.                       |
+| `error`                                    | Error toast.                                                                               |
 
 Scope → query mapping (`SCOPE_KEYS`):
 

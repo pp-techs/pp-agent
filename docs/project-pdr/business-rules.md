@@ -27,8 +27,16 @@ Rules enforced in code. Paths are under `apps/desktop/src/agent/` unless noted.
 - The default agent (id `default`, "PP Agent", 🤖) always exists, can be edited, and cannot be deleted. If the active agent points nowhere, it falls back to the default.
 - Deleting an agent: conversations using it fall back to the default; if it was the active agent or the open conversation's agent, those switch to the default.
 - Names are unique (case-insensitive), at most 60 characters. Icon ≤ 8 characters (one emoji). Description ≤ 1000 characters. Instructions ≤ 20000 characters. At most 20 starter prompts, each ≤ 300 characters. Ids are `ag-<slug>`.
-- Workspace folder must be an absolute path; it is created when missing; files are refused. If it cannot be used at runtime, the default folder is used with a notice.
 - Effective availability is Settings ∩ agent: an app tool is usable only if not off in Settings and in the agent's tools (`null` = all); MCP servers and skills likewise. Unavailable tools are blocked with "not available to <agent name>".
+
+## Workspaces (`workspaces.ts`)
+
+- A workspace is a folder plus defaults and rules for the chats started in it: name, icon, folder, instructions, agent, model, thinking level. The built-in workspace (id `default`, "Personal", 📁) uses the app's folder, can be edited, and cannot be deleted.
+- A chat belongs to the workspace whose folder is its working directory. The folder is set when the workspace is created and cannot change afterwards; it must be an absolute path, is created when missing, files are refused, and no two workspaces share a folder. If it cannot be used at runtime, the default folder is used with a notice.
+- Names are unique (case-insensitive), at most 60 characters. Icon ≤ 8 characters. Instructions ≤ 20000 characters. Ids are `ws-<slug>`.
+- New chats in a workspace start with its agent (else the agent picked last), its thinking level (else the level picked last), and a model chosen in this order: the agent's model, the workspace's model, the default model.
+- Its instructions are added to the system prompt as `## Workspace: <icon> <name>`, next to the agent's section, from the next prompt.
+- Deleting a workspace removes only the profile: its chats and files stay, and its chats are listed under the built-in workspace. Agents are not affected; deleting an agent clears it from the workspaces that started with it.
 
 ## Skills (`skills.ts`)
 

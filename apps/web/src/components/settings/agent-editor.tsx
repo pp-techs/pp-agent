@@ -29,7 +29,7 @@ import {
 import { Spinner } from "@workspace/ui/components/spinner";
 import { Textarea } from "@workspace/ui/components/textarea";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeftIcon, FolderOpenIcon, PlusIcon, TriangleAlertIcon, XIcon } from "lucide-react";
+import { ArrowLeftIcon, PlusIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { OptionGroup, SubOptions, SwitchRow } from "@/components/settings/option-group";
@@ -40,7 +40,7 @@ import {
   skillsQuery,
   useSaveAgent,
 } from "@/lib/extension-queries";
-import { groupByProvider, modelKey } from "@/lib/models";
+import { groupByProvider, modelKey, modelLabeler } from "@/lib/models";
 import { agentsQuery, modelsQuery } from "@/lib/queries";
 
 const NAME_MAX = 60;
@@ -172,6 +172,7 @@ function ModelField({
 }) {
   const models = useQuery(modelsQuery(bridge));
   const available = models.data ?? [];
+  const label = modelLabeler(available);
   const currentKey = value ? modelKey(value) : KEEP_MODEL;
   const missing = value !== null && !available.some((model) => modelKey(model) === currentKey);
   const items = [
@@ -179,7 +180,7 @@ function ModelField({
     ...(missing && value ? [{ value: currentKey, label: `${value.modelId} (not available)` }] : []),
     ...available.map((model) => ({
       value: modelKey(model),
-      label: `${model.name} · ${model.providerName}`,
+      label: `${label(model)} · ${model.providerName}`,
     })),
   ];
 
@@ -210,59 +211,13 @@ function ModelField({
               <SelectLabel>{group.name}</SelectLabel>
               {group.models.map((model) => (
                 <SelectItem key={modelKey(model)} value={modelKey(model)}>
-                  {model.name}
+                  {label(model)}
                 </SelectItem>
               ))}
             </SelectGroup>
           ))}
         </SelectContent>
       </Select>
-    </OptionGroup>
-  );
-}
-
-function WorkspaceField({
-  bridge,
-  value,
-  onChange,
-}: {
-  bridge: DesktopBridge;
-  value: string | null;
-  onChange: (dir: string | null) => void;
-}) {
-  async function onChoose() {
-    try {
-      const dir = await bridge.files.pickFolder();
-      if (dir) onChange(dir);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  return (
-    <OptionGroup
-      legend="Workspace folder"
-      description="Where the agent works. Files it saves go there."
-    >
-      <div className="flex items-center gap-3 rounded-xl bg-muted/50 py-1.5 pr-1.5 pl-3">
-        <FolderOpenIcon className="size-4 shrink-0 text-muted-foreground" />
-        <span
-          className={`min-w-0 flex-1 truncate ${value ? "font-mono text-xs" : "text-sm text-muted-foreground"}`}
-          title={value ?? undefined}
-        >
-          {value ?? "The app's default workspace folder"}
-        </span>
-        <div className="flex shrink-0 gap-1">
-          {value && (
-            <Button type="button" variant="ghost" size="sm" onClick={() => onChange(null)}>
-              Use default
-            </Button>
-          )}
-          <Button type="button" variant="outline" size="sm" onClick={() => void onChoose()}>
-            Choose…
-          </Button>
-        </div>
-      </div>
     </OptionGroup>
   );
 }
@@ -334,7 +289,6 @@ function AgentForm({
   const [description, setDescription] = React.useState(agent?.description ?? "");
   const [instructions, setInstructions] = React.useState(agent?.instructions ?? "");
   const [model, setModel] = React.useState<ModelRef | null>(agent?.model ?? null);
-  const [workspaceDir, setWorkspaceDir] = React.useState(agent?.workspaceDir ?? null);
   const [tools, setTools] = React.useState(agent?.tools ?? null);
   const [mcpServers, setMcpServers] = React.useState(agent?.mcpServers ?? null);
   const [skills, setSkills] = React.useState(agent?.skills ?? null);
@@ -380,7 +334,6 @@ function AgentForm({
         skills,
         model,
         starterPrompts: starterPrompts.map((prompt) => prompt.trim()).filter(Boolean),
-        workspaceDir,
       },
       {
         onSuccess: (saved) => {
@@ -468,7 +421,6 @@ function AgentForm({
           )}
         </Field>
         <ModelField bridge={bridge} value={model} onChange={setModel} />
-        <WorkspaceField bridge={bridge} value={workspaceDir} onChange={setWorkspaceDir} />
         <ChecklistField
           id="agent-tools"
           legend="Tools"

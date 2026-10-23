@@ -11,6 +11,7 @@ import {
 import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { readAgents } from "./agents.ts";
+import { readWorkspaces } from "./workspaces.ts";
 
 const ModelRefSchema = Type.Object({ provider: Type.String(), modelId: Type.String() });
 const GatewaySchema = Type.Object({
@@ -44,6 +45,7 @@ function parse(raw: unknown): SettingsFile {
     disabledSkills: [],
     gateways: [],
     agents: readAgents(null),
+    workspaces: readWorkspaces(null, readAgents(null), null),
     activeAgentId: DEFAULT_AGENT_ID,
     thinkingLevel: "off",
   };
@@ -61,6 +63,8 @@ function parse(raw: unknown): SettingsFile {
   if (Array.isArray(value.gateways))
     settings.gateways = value.gateways.filter((gateway) => Value.Check(GatewaySchema, gateway));
   settings.agents = readAgents(value.agents);
+  // Files from before workspaces carry each agent's folder; they become workspaces here.
+  settings.workspaces = readWorkspaces(value.workspaces, settings.agents, value.agents);
   const activeAgentId = value.activeAgentId;
   if (
     typeof activeAgentId === "string" &&

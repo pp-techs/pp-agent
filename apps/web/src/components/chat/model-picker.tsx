@@ -17,7 +17,7 @@ import { BrainIcon, ChevronDownIcon, ImageIcon, SettingsIcon, SparklesIcon } fro
 import { toast } from "sonner";
 
 import { SettingsModal } from "@/components/modals/settings-modal";
-import { groupByProvider, modelKey } from "@/lib/models";
+import { groupByProvider, modelKey, modelLabeler } from "@/lib/models";
 import { modelsQuery, useAgentCommands } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
 
@@ -26,6 +26,7 @@ export function ModelPicker({ bridge }: { bridge: DesktopBridge }) {
   const current = useChatStore((state) => state.model);
   const status = useChatStore((state) => state.status);
   const models = useQuery(modelsQuery(bridge));
+  const label = modelLabeler(models.data ?? []);
   const { setModel } = useAgentCommands(bridge);
   const [open, setOpen] = React.useState(false);
 
@@ -55,11 +56,15 @@ export function ModelPicker({ bridge }: { bridge: DesktopBridge }) {
             size="sm"
             className="max-w-56 min-w-0"
             disabled={status === "running"}
-            title={status === "running" ? "Wait for the answer to finish" : "Change model"}
+            title={
+              status === "running"
+                ? "Wait for the answer to finish"
+                : `Change model · ${current.modelId}`
+            }
           />
         }
       >
-        <span className="truncate">{current.name}</span>
+        <span className="truncate">{label(current)}</span>
         {setModel.isPending ? (
           <Spinner data-icon="inline-end" />
         ) : (
@@ -87,7 +92,7 @@ export function ModelPicker({ bridge }: { bridge: DesktopBridge }) {
                     <CommandItem
                       key={key}
                       value={key}
-                      keywords={[model.name, model.providerName]}
+                      keywords={[model.name, model.modelId, model.providerName]}
                       data-checked={key === currentKey}
                       onSelect={() => {
                         setOpen(false);
@@ -98,7 +103,9 @@ export function ModelPicker({ bridge }: { bridge: DesktopBridge }) {
                         );
                       }}
                     >
-                      <span className="flex-1 truncate">{model.name}</span>
+                      <span className="flex-1 truncate" title={model.modelId}>
+                        {label(model)}
+                      </span>
                       <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
                         {model.images && <ImageIcon className="size-3.5" aria-label="Images" />}
                         {model.reasoning && (

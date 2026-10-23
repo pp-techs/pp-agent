@@ -1,10 +1,8 @@
 /**
- * Agents: profiles with their own rules, tools, MCP servers, skills, model, starter prompts, and
- * workspace. Stored in settings.json (`SettingsFile.agents`); this module validates them, makes
- * ids, and reads and writes exported agent files.
+ * Agents: profiles with their own rules, tools, MCP servers, skills, model, and starter prompts.
+ * Stored in settings.json (`SettingsFile.agents`); this module validates them, makes ids, and
+ * reads and writes exported agent files.
  */
-import { mkdir, stat } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
 import {
   type AgentExportFile,
   type AgentProfile,
@@ -40,10 +38,9 @@ export const DEFAULT_AGENT: AgentProfile = {
   skills: null,
   model: null,
   starterPrompts: [],
-  workspaceDir: null,
 };
 
-/** Agent fields without id and workspace: what an exported file carries. */
+/** Agent fields without the id: what an exported file carries. */
 type PortableAgent = AgentExportFile["agent"];
 
 export function summarizeAgent(agent: AgentProfile): AgentSummary {
@@ -91,7 +88,7 @@ function nameList(value: unknown): string[] | null {
   return [...new Set(names)];
 }
 
-function modelRef(value: unknown): ModelRef | null {
+export function modelRef(value: unknown): ModelRef | null {
   const object = asLoose(value) as Partial<Record<keyof ModelRef, unknown>> | null;
   if (!object) return null;
   const { provider, modelId } = object;
@@ -163,11 +160,7 @@ export function readAgents(raw: unknown): AgentProfile[] {
     const id = typeof value?.id === "string" ? value.id : "";
     if (!value || !id || ids.has(id)) continue;
     try {
-      const workspaceDir =
-        typeof value.workspaceDir === "string" && isAbsolute(value.workspaceDir)
-          ? value.workspaceDir
-          : null;
-      agents.push({ id, ...portableAgent(value, false), workspaceDir });
+      agents.push({ id, ...portableAgent(value, false) });
       ids.add(id);
     } catch {
       // A nameless entry; the rest of the agents still load.
@@ -211,24 +204,6 @@ export function newAgentId(agents: readonly AgentProfile[], name: string): strin
   let id = `${ID_PREFIX}${slug}`;
   for (let suffix = 2; taken.has(id); suffix += 1) id = `${ID_PREFIX}${slug}-${suffix}`;
   return id;
-}
-
-/**
- * The folder an agent works in, checked before it is saved: an absolute path, created when
- * missing. Empty means the app's default workspace (null).
- */
-export async function prepareWorkspaceDir(dir: string | null): Promise<string | null> {
-  const trimmed = dir?.trim() ?? "";
-  if (!trimmed) return null;
-  if (!isAbsolute(trimmed)) throw new Error("Choose the workspace folder with “Choose…”.");
-  const path = resolve(trimmed);
-  const info = await stat(path).catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "ENOENT") return null;
-    throw error;
-  });
-  if (info && !info.isDirectory()) throw new Error("The workspace must be a folder, not a file.");
-  if (!info) await mkdir(path, { recursive: true });
-  return path;
 }
 
 // ---------------------------------------------------------------------------------------------

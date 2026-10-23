@@ -35,22 +35,21 @@ export function ThinkingPicker({ bridge, disabled }: { bridge: DesktopBridge; di
   const { setThinkingLevel } = useAgentCommands(bridge);
   if (thinking.available.length === 0) return null;
 
-  const on = thinking.level !== "off";
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
           <InputGroupButton
             type="button"
-            variant={on ? "secondary" : "ghost"}
+            variant="ghost"
             size="sm"
             disabled={disabled || running}
             title={running ? "Wait for the answer to finish" : "How much the model thinks first"}
           />
         }
       >
-        <BrainIcon data-icon="inline-start" />
-        {on ? LABELS[thinking.level].label : "Thinking off"}
+        <BrainIcon data-icon="inline-start" className="text-muted-foreground" />
+        <span>{thinking.level === "off" ? "Thinking off" : LABELS[thinking.level].label}</span>
         <ChevronDownIcon data-icon="inline-end" className="text-muted-foreground" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" side="top" className="w-60">

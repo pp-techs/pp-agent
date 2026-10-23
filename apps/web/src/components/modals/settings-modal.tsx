@@ -22,6 +22,7 @@ import {
   BookOpenIcon,
   BotIcon,
   ChevronRightIcon,
+  FolderKanbanIcon,
   SlidersHorizontalIcon,
   SparklesIcon,
   WrenchIcon,
@@ -35,8 +36,16 @@ import { ModelsSection } from "@/components/settings/models-section";
 import { SkillsSection } from "@/components/settings/skills-section";
 import { SettingsSubPageProvider } from "@/components/settings/settings-subpage";
 import { ToolsSection } from "@/components/settings/tools-section";
+import { WorkspacesSection } from "@/components/settings/workspaces-section";
 
-export type SettingsSection = "general" | "models" | "agents" | "tools" | "skills" | "mcp";
+export type SettingsSection =
+  | "general"
+  | "models"
+  | "workspaces"
+  | "agents"
+  | "tools"
+  | "skills"
+  | "mcp";
 
 const SECTIONS: {
   id: SettingsSection;
@@ -46,6 +55,7 @@ const SECTIONS: {
 }[] = [
   { id: "general", label: "General", icon: SlidersHorizontalIcon, Component: GeneralSection },
   { id: "models", label: "Models", icon: SparklesIcon, Component: ModelsSection },
+  { id: "workspaces", label: "Workspaces", icon: FolderKanbanIcon, Component: WorkspacesSection },
   { id: "agents", label: "Agents", icon: BotIcon, Component: AgentsSection },
   { id: "tools", label: "Tools", icon: WrenchIcon, Component: ToolsSection },
   { id: "skills", label: "Skills", icon: BookOpenIcon, Component: SkillsSection },

@@ -28,11 +28,14 @@ import {
   type AgentPaths,
   type AgentProfile,
   type AgentSnapshot,
+  type ContextUsage,
   type AgentStatus,
   type AppSettings,
+  type FetchedGatewayModel,
   type ApprovalRequest,
   type Attachment,
   DEFAULT_AGENT_ID,
+  DEFAULT_WORKSPACE_ID,
   GATEWAY_APIS,
   type GatewayConfig,
   type GatewayModel,
@@ -43,6 +46,7 @@ import {
   type ModelSummary,
   type ProviderSummary,
   type SaveAgentInput,
+  type SaveWorkspaceInput,
   type SaveGatewayInput,
   type SaveSkillInput,
   type SkillSummary,
@@ -53,6 +57,7 @@ import {
   TOOL_POLICIES,
   type ToolPolicy,
   type ToolSummary,
+  type WorkspaceProfile,
 } from "@workspace/shared";
 import {
   AGENT_ENTRY_TYPE,
@@ -63,12 +68,22 @@ import {
   findAgent,
   newAgentId,
   parseAgentExport,
-  prepareWorkspaceDir,
   sortAgents,
   summarizeAgent,
   uniqueName,
   validateAgentInput,
 } from "./agents.ts";
+import {
+  assertUniqueName as assertUniqueWorkspaceName,
+  findWorkspace,
+  newWorkspaceId,
+  prepareFolder,
+  sortWorkspaces,
+  summarizeWorkspace,
+  validateWorkspaceInput,
+  workspaceForCwd,
+  workspacePromptSection,
+} from "./workspaces.ts";
 import { buildPrompt, splitAttachedFiles } from "./attachments.ts";
 import { AuthPrompts } from "./auth-prompts.ts";
 import { VaultCredentialStore } from "./credentials.ts";
@@ -115,7 +130,7 @@ interface PendingChanges {
   model: boolean;
   /** mcp.json, the agent's servers: connect and disconnect MCP servers. */
   mcp: boolean;
-  /** The conversation's agent or its folder changed: move to the agent's workspace. */
+  /** The conversation's workspace was deleted: move to the default workspace's folder. */
   workspace: boolean;
   /** The conversation switched to an agent with its own model: use that model. */
   agentModel: boolean;
@@ -151,6 +166,8 @@ class AgentHost {
   private session: AgentSession | null = null;
   /** Agent of the open conversation; resolves to the default agent once deleted. */
   private agentId: string = DEFAULT_AGENT_ID;
+  /** Workspace of the open conversation; resolves to the default workspace once deleted. */
+  private workspaceId: string = DEFAULT_WORKSPACE_ID;
   private unsubscribe: (() => void) | null = null;
   private running = false;
   private status: AgentStatus = "starting";
@@ -223,7 +240,7 @@ class AgentHost {
       case "abort":
         return this.abort();
       case "new_chat":
-        return this.openSession(null);
+        return this.openSession(null, command.workspaceId ?? null);
       case "respond_approval":
         return this.resolveApproval(command.requestId, command.approved);
       case "list_sessions":
@@ -330,6 +347,13 @@ class AgentHost {
       case "import_agent":
         return this.importAgent(command.json);
 
+      case "list_workspaces":
+        return sortWorkspaces(services.settings.get().workspaces);
+      case "save_workspace":
+        return this.saveWorkspace(command.workspace);
+      case "delete_workspace":
+        return this.deleteWorkspace(command.id);
+
       default: {
         const unknown: never = command;
         throw new Error(`Unknown command: ${JSON.stringify(unknown)}`);
@@ -349,14 +373,26 @@ class AgentHost {
       model: this.currentModel(),
       agent: this.services ? summarizeAgent(this.currentAgent()) : null,
       thinking: this.thinking(),
+      workspace: this.services ? summarizeWorkspace(this.currentWorkspace()) : null,
       workspaceDir: this.session?.sessionManager.getCwd() ?? null,
       sessionPath: this.session?.sessionFile ?? null,
+      context: this.contextUsage(),
     };
+  }
+  /** Context window usage of the open conversation, null while it has no model. */
+  private contextUsage(): ContextUsage | null {
+    const usage = this.session?.getContextUsage();
+    return usage ? { tokens: usage.tokens, window: usage.contextWindow } : null;
   }
 
   /** Agent of the open conversation (the default agent when its agent was deleted). */
   private currentAgent(): AgentProfile {
     return findAgent(this.services?.settings.get().agents ?? [], this.agentId);
+  }
+
+  /** Workspace of the open conversation (the default workspace when it was deleted). */
+  private currentWorkspace(): WorkspaceProfile {
+    return findWorkspace(this.services?.settings.get().workspaces ?? [], this.workspaceId);
   }
 
   /** Model of the open conversation, when it is still usable. */
@@ -402,6 +438,7 @@ class AgentHost {
       throw error;
     }
     emit({ type: "sessions_changed" });
+    emit({ type: "context", context: this.contextUsage() });
   }
 
   private async abort(): Promise<void> {
@@ -410,53 +447,67 @@ class AgentHost {
     await this.session?.abort();
   }
 
-  /** Switch to a saved conversation, or to a new one when `path` is null. */
-  private async openSession(path: string | null): Promise<void> {
+  /** Switch to a saved conversation, or to a new one (in `workspaceId`, else the open workspace). */
+  private async openSession(path: string | null, workspaceId: string | null = null): Promise<void> {
     await this.abort();
     this.disposeSession();
-    await this.startSession(path ? this.savedSessionManager(path) : this.newSessionManager());
+    await this.startSession(
+      path ? this.savedSessionManager(path) : this.newSessionManager(workspaceId),
+    );
     this.transcript.load(branchMessages(this.requireSession()));
     emit({ type: "snapshot", snapshot: this.snapshot() });
   }
 
-  /** A new conversation with the agent picked last, in that agent's workspace. */
-  private newSessionManager(): SessionManager {
+  /**
+   * A new conversation in a workspace, with the workspace's agent (else the agent picked last).
+   * Kept in memory until the first reply.
+   */
+  private newSessionManager(workspaceId: string | null = null): SessionManager {
     const { paths, settings } = this.requireServices();
-    this.agentId = findAgent(settings.get().agents, settings.get().activeAgentId).id;
-    const manager = SessionManager.create(this.workspaceFor(this.currentAgent()), paths.sessionDir);
-    // Kept in memory and written with the conversation's first reply.
+    const { agents, workspaces, activeAgentId } = settings.get();
+    const workspace = findWorkspace(workspaces, workspaceId ?? this.workspaceId);
+    this.workspaceId = workspace.id;
+    this.agentId = findAgent(agents, workspace.agentId ?? activeAgentId).id;
+    const manager = SessionManager.create(this.workspaceFor(workspace), paths.sessionDir);
     manager.appendCustomEntry(AGENT_ENTRY_TYPE, { agentId: this.agentId });
     return manager;
   }
 
-  /** A saved conversation with its own agent, in that agent's current workspace. */
+  /**
+   * A saved conversation with its own agent, in the workspace its folder belongs to. One whose
+   * workspace was deleted continues in the default workspace.
+   */
   private savedSessionManager(path: string): SessionManager {
     const { paths, settings } = this.requireServices();
+    const { agents, workspaces } = settings.get();
     const manager = SessionManager.open(path, paths.sessionDir);
-    this.agentId = findAgent(settings.get().agents, conversationAgentId(manager)).id;
-    const cwd = this.workspaceFor(this.currentAgent());
+    this.agentId = findAgent(agents, conversationAgentId(manager)).id;
+    const workspace = workspaceForCwd(workspaces, manager.getCwd(), paths.workspaceDir);
+    this.workspaceId = workspace.id;
+    const cwd = this.workspaceFor(workspace);
     return cwd === manager.getCwd() ? manager : SessionManager.open(path, paths.sessionDir, cwd);
   }
 
-  /** The agent's workspace folder, created when missing; the app's folder when it cannot be. */
-  private workspaceFor(agent: AgentProfile): string {
+  /** The workspace's folder, created when missing; the app's folder when it cannot be. */
+  private workspaceFor(workspace: WorkspaceProfile): string {
     const { paths } = this.requireServices();
-    if (!agent.workspaceDir) return paths.workspaceDir;
+    if (!workspace.dir) return paths.workspaceDir;
     try {
-      mkdirSync(agent.workspaceDir, { recursive: true });
-      return agent.workspaceDir;
+      mkdirSync(workspace.dir, { recursive: true });
+      return workspace.dir;
     } catch (error) {
       emit({
         type: "error",
-        message: `The workspace folder of ${agent.name} cannot be used (${errorMessage(error)}). Using the default folder instead.`,
+        message: `The folder of workspace ${workspace.name} cannot be used (${errorMessage(error)}). Using the default folder instead.`,
       });
       return paths.workspaceDir;
     }
   }
 
   private async listSessions(): Promise<SessionSummary[]> {
-    const { paths } = this.requireServices();
-    // Conversations of every agent, whatever workspace they ran in.
+    const { paths, settings } = this.requireServices();
+    const { workspaces } = settings.get();
+    // Conversations of every workspace and agent.
     const sessions = await SessionManager.listAll(paths.sessionDir);
     return sessions
       .filter((info) => info.messageCount > 0)
@@ -472,6 +523,7 @@ class AgentHost {
           info.name?.trim() || firstMessage || (skill ? `Skill: ${skill.name}` : "Untitled chat");
         return {
           path: info.path,
+          workspaceId: workspaceForCwd(workspaces, info.cwd, paths.workspaceDir).id,
           title: title.length > TITLE_LENGTH ? `${title.slice(0, TITLE_LENGTH - 1)}…` : title,
           modified: info.modified.getTime(),
           messageCount: info.messageCount,
@@ -508,6 +560,7 @@ class AgentHost {
     return (
       findAvailable(runtime, preferred) ??
       findAvailable(runtime, this.currentAgent().model) ??
+      findAvailable(runtime, this.currentWorkspace().model) ??
       findAvailable(runtime, settings.get().defaultModel) ??
       first
     );
@@ -571,7 +624,7 @@ class AgentHost {
       thinkingLevel:
         sessionManager.buildSessionContext().messages.length > 0
           ? undefined
-          : settings.get().thinkingLevel,
+          : (this.currentWorkspace().thinkingLevel ?? settings.get().thinkingLevel),
       tools: toolSelection(settings.get(), this.currentAgent().tools),
       customTools: [currentDateTimeTool, createReadDocumentTool(cwd)],
       resourceLoader,
@@ -627,6 +680,7 @@ class AgentHost {
       case "message_end":
         if (event.message.role === "assistant")
           this.transcript.updateAssistant(event.message, true);
+        emit({ type: "context", context: this.contextUsage() });
         break;
       case "tool_execution_start":
         this.transcript.setToolStatus(event.toolCallId, "running");
@@ -694,9 +748,12 @@ class AgentHost {
     this.requireServices().mcpServers.attach(pi);
     pi.on("before_agent_start", (event) => {
       const { sections } = event.systemPromptOptions;
-      const section = agentPromptSection(this.currentAgent());
-      if (section) sections.agent = section;
+      const agentSection = agentPromptSection(this.currentAgent());
+      if (agentSection) sections.agent = agentSection;
       else delete sections.agent;
+      const workspaceSection = workspacePromptSection(this.currentWorkspace());
+      if (workspaceSection) sections.workspace = workspaceSection;
+      else delete sections.workspace;
     });
   };
 
@@ -744,7 +801,7 @@ class AgentHost {
         let current = session;
         const moved =
           changes.workspace &&
-          this.workspaceFor(this.currentAgent()) !== session.sessionManager.getCwd();
+          this.workspaceFor(this.currentWorkspace()) !== session.sessionManager.getCwd();
         if (moved) {
           // The new session reflects every setting already.
           current = await this.moveToWorkspace(session);
@@ -777,7 +834,7 @@ class AgentHost {
    */
   private async moveToWorkspace(session: AgentSession): Promise<AgentSession> {
     const { paths } = this.requireServices();
-    const cwd = this.workspaceFor(this.currentAgent());
+    const cwd = this.workspaceFor(this.currentWorkspace());
     const file = session.sessionFile;
     const model = session.model
       ? { provider: session.model.provider, modelId: session.model.id }
@@ -890,15 +947,16 @@ class AgentHost {
       scopes.push("tools");
       apply.tools = true;
     }
-    // A conversation that has not started yet follows the new default model, unless its agent
-    // brings its own.
+    // A conversation that has not started yet follows the new default model, unless its agent or
+    // workspace brings its own.
     const session = this.session;
     if (
       patch.defaultModel &&
       session &&
       !this.running &&
       session.messages.length === 0 &&
-      !findAvailable(runtime, this.currentAgent().model)
+      !findAvailable(runtime, this.currentAgent().model) &&
+      !findAvailable(runtime, this.currentWorkspace().model)
     ) {
       const model = findAvailable(runtime, patch.defaultModel);
       if (model) {
@@ -998,10 +1056,11 @@ class AgentHost {
     rawBaseUrl: string,
     apiKey: string | undefined,
     gatewayId: string | undefined,
-  ): Promise<string[]> {
+  ): Promise<FetchedGatewayModel[]> {
+    const { runtime } = this.requireServices();
     const baseUrl = normalizeBaseUrl(api, rawBaseUrl);
     const key = apiKey?.trim() || (gatewayId ? await this.storedKey(gatewayId) : "");
-    return fetchGatewayModels(api, baseUrl, key);
+    return fetchGatewayModels(runtime, api, baseUrl, key);
   }
 
   private async setModel(ref: ModelRef): Promise<void> {
@@ -1144,11 +1203,9 @@ class AgentHost {
     const fields = validateAgentInput(input);
     const before = input.id === undefined ? undefined : this.requireAgent(input.id);
     assertUniqueName(settings.get().agents, fields.name, before?.id);
-    const workspaceDir = await prepareWorkspaceDir(input.workspaceDir);
     const saved: AgentProfile = {
       id: before?.id ?? newAgentId(settings.get().agents, fields.name),
       ...fields,
-      workspaceDir,
     };
     settings.update((draft) => {
       const index = draft.agents.findIndex((agent) => agent.id === saved.id);
@@ -1173,8 +1230,13 @@ class AgentHost {
     settings.update((draft) => {
       draft.agents = draft.agents.filter((entry) => entry.id !== id);
       if (draft.activeAgentId === id) draft.activeAgentId = DEFAULT_AGENT_ID;
+      // Workspaces that started with it start with the agent picked last instead.
+      for (const workspace of draft.workspaces)
+        if (workspace.agentId === id) workspace.agentId = null;
     });
-    const scopes: SettingsScope[] = wasActive ? ["agents", "settings"] : ["agents"];
+    const scopes: SettingsScope[] = wasActive
+      ? ["agents", "settings", "workspaces"]
+      : ["agents", "workspaces"];
     // Other conversations that used it fall back to the default agent when they are opened.
     if (this.agentId === id)
       this.switchAgent(findAgent(settings.get().agents, DEFAULT_AGENT_ID), scopes, agent);
@@ -1221,13 +1283,59 @@ class AgentHost {
       ...fields,
       id: newAgentId(agents, name),
       name,
-      workspaceDir: null,
     };
     settings.update((draft) => {
       draft.agents.push(agent);
     });
     this.changed(["agents"], {});
     return agent;
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Workspaces
+  // -------------------------------------------------------------------------------------------
+
+  private async saveWorkspace(input: SaveWorkspaceInput): Promise<WorkspaceProfile> {
+    const { paths, settings } = this.requireServices();
+    const fields = validateWorkspaceInput(input);
+    const before = input.id === undefined ? undefined : this.requireWorkspace(input.id);
+    const { agents, workspaces } = settings.get();
+    assertUniqueWorkspaceName(workspaces, fields.name, before?.id);
+    if (fields.agentId !== null && !agents.some((agent) => agent.id === fields.agentId))
+      throw new Error("The agent chosen for this workspace no longer exists.");
+    // Conversations belong to a workspace by its folder, so the folder is set once, on creation.
+    const dir = before
+      ? before.dir
+      : await prepareFolder(input.dir, workspaces, paths.workspaceDir);
+    const saved: WorkspaceProfile = {
+      id: before?.id ?? newWorkspaceId(workspaces, fields.name),
+      ...fields,
+      dir,
+    };
+    settings.update((draft) => {
+      const index = draft.workspaces.findIndex((workspace) => workspace.id === saved.id);
+      if (index === -1) draft.workspaces.push(saved);
+      else draft.workspaces[index] = saved;
+    });
+    this.changed(["workspaces"], {});
+    // Its name or icon may have changed.
+    if (saved.id === this.workspaceId) emit({ type: "snapshot", snapshot: this.snapshot() });
+    emit({ type: "sessions_changed" });
+    return saved;
+  }
+
+  private deleteWorkspace(id: string): void {
+    if (id === DEFAULT_WORKSPACE_ID) throw new Error("The built-in workspace cannot be deleted.");
+    const { settings } = this.requireServices();
+    this.requireWorkspace(id);
+    settings.update((draft) => {
+      draft.workspaces = draft.workspaces.filter((entry) => entry.id !== id);
+    });
+    // Its conversations stay on disk and show up in the default workspace.
+    const open = this.workspaceId === id;
+    if (open) this.workspaceId = DEFAULT_WORKSPACE_ID;
+    this.changed(["workspaces"], { workspace: open });
+    emit({ type: "sessions_changed" });
   }
 
   // -------------------------------------------------------------------------------------------
@@ -1247,6 +1355,14 @@ class AgentHost {
     )
       throw new Error("That conversation is not in this app's history.");
     return target;
+  }
+
+  private requireWorkspace(id: string): WorkspaceProfile {
+    const workspace = this.requireServices()
+      .settings.get()
+      .workspaces.find((entry) => entry.id === id);
+    if (!workspace) throw new Error("This workspace no longer exists.");
+    return workspace;
   }
 
   private requireAgent(id: string): AgentProfile {
@@ -1326,8 +1442,6 @@ function agentChanges(
   switched: boolean,
 ): Partial<PendingChanges> {
   return {
-    // Compared with the conversation's folder when applied.
-    workspace: switched || before.workspaceDir !== after.workspaceDir,
     mcp: !sameList(before.mcpServers, after.mcpServers),
     tools: !sameList(before.tools, after.tools),
     reload: !sameList(before.skills, after.skills),

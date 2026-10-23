@@ -12,7 +12,7 @@ interface PendingChanges {
   tools: boolean; // tool policies, shell, the agent's tool list: recompute active tools
   model: boolean; // providers or gateways changed: keep a usable model
   mcp: boolean; // mcp.json or the agent's servers: register/unregister MCP servers
-  workspace: boolean; // agent or its folder changed: move to the agent's workspace
+  workspace: boolean; // the open conversation's workspace was deleted: move to the default workspace's folder
   agentModel: boolean; // switched to an agent with its own model: use it
 }
 ```
@@ -69,7 +69,7 @@ Notes:
 
 ## Agent switch mid-conversation
 
-An agent is a profile in `settings.json` (`AgentProfile`): rules, icon, description, app tools, MCP servers, skills, model, starter prompts, workspace. `set_agent` records the agent on the open conversation and makes it the agent for new conversations (`activeAgentId`). The renderer disables the agent picker while running; the agent process still defers the session changes if a run is active.
+An agent is a profile in `settings.json` (`AgentProfile`): rules, icon, description, app tools, MCP servers, skills, model, starter prompts. `set_agent` records the agent on the open conversation and makes it the agent for new conversations (`activeAgentId`). The renderer disables the agent picker while running; the agent process still defers the session changes if a run is active.
 
 ```mermaid
 sequenceDiagram
@@ -88,23 +88,16 @@ sequenceDiagram
     Pi-->>A: agent_settled (later)
   end
   A->>A: applyPending()
-  alt B's workspace differs from the session cwd
-    A->>Pi: dispose
-    A->>SM: SessionManager.open(file, sessionDir, newCwd)
-    A->>Pi: startSession (tools, skills, MCP of B)
-    A->>A: transcript.load(branch)
-  else same workspace
-    A->>Pi: reload / mcpServers.sync / setActiveToolsByName as flagged
-  end
+  A->>Pi: reload / mcpServers.sync / setActiveToolsByName as flagged
   opt B has its own model
     A->>Pi: setModel(B.model) or error "not available, keeping …"
   end
   A-->>R: snapshot, settings_changed tools/mcp
 ```
 
-`agentChanges(before, after, switched)` sets `workspace` on every switch (compared with the session's actual folder when applied), and `mcp`, `tools`, `reload` only when the respective lists differ. `agentModel` is set when the new agent has a model and either it is a switch or the model changed.
+`agentChanges(before, after, switched)` sets `mcp`, `tools`, `reload` only when the respective lists differ. `agentModel` is set when the new agent has a model and either it is a switch or the model changed.
 
-`moveToWorkspace` keeps the transcript and the model. A conversation with no reply yet has no session file, so it starts over in the new folder with a fresh `pp-agent` entry.
+An agent has no folder: the working folder belongs to the conversation's workspace, so switching agents never moves a conversation. `moveToWorkspace` runs only when the open conversation's workspace is deleted (`delete_workspace` sets the `workspace` flag): it keeps the transcript and the model and reopens the session file with the default workspace's folder as `cwd`. A conversation with no reply yet has no session file, so it starts over in that folder with a fresh `pp-agent` entry.
 
 Editing the conversation's own agent (`save_agent`) uses the same mechanism with `switched = false`. Deleting it switches the open conversation to the default agent; other conversations that used it fall back to the default agent when opened. The default agent (`id: "default"`) cannot be deleted.
 

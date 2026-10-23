@@ -1,11 +1,13 @@
 import type {
   AgentEvent,
   AgentSnapshot,
+  ContextUsage,
   AgentSummary,
   AgentStatus,
   ApprovalRequest,
   ChatMessage,
   ModelSummary,
+  WorkspaceSummary,
 } from "@workspace/shared";
 import { create } from "zustand";
 
@@ -20,9 +22,13 @@ interface ChatState {
   agent: AgentSummary | null;
   /** Thinking level of the open conversation and the levels its model offers. */
   thinking: AgentSnapshot["thinking"];
-  /** Workspace of the open conversation (its agent's folder). */
+  /** Workspace of the open conversation. */
+  workspace: WorkspaceSummary | null;
+  /** Folder the open conversation works in. */
   workspaceDir: string | null;
   sessionPath: string | null;
+  /** Context window usage of the open conversation. */
+  context: ContextUsage | null;
   apply: (event: AgentEvent) => void;
 }
 
@@ -33,7 +39,9 @@ export const useChatStore = create<ChatState>()((set) => ({
   model: null,
   agent: null,
   thinking: { level: "off", available: [] },
+  workspace: null,
   workspaceDir: null,
+  context: null,
   sessionPath: null,
 
   apply: (event) =>
@@ -52,8 +60,10 @@ export const useChatStore = create<ChatState>()((set) => ({
             model: snapshot.model,
             agent: snapshot.agent,
             thinking: snapshot.thinking,
+            workspace: snapshot.workspace,
             workspaceDir: snapshot.workspaceDir,
             sessionPath: snapshot.sessionPath,
+            context: snapshot.context,
           };
         }
         case "message": {
@@ -71,6 +81,8 @@ export const useChatStore = create<ChatState>()((set) => ({
           const { [event.requestId]: _resolved, ...approvals } = state.approvals;
           return { approvals };
         }
+        case "context":
+          return { context: event.context };
         case "sessions_changed":
         case "settings_changed":
         case "auth_prompt":
