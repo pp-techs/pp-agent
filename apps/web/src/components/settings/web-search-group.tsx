@@ -204,6 +204,7 @@ function ProviderRow({
 function WebSearchForm({ bridge, view }: { bridge: DesktopBridge; view: WebSearchView }) {
   const save = useSaveWebSearch(bridge);
   const [draft, setDraft] = React.useState(() => initialDraft(view));
+  const [saves, setSaves] = React.useState(0);
   const dirty = isDirty(view, draft);
 
   // Enabled providers first, in the draft's order, then the rest as the service lists them.
@@ -228,7 +229,7 @@ function WebSearchForm({ bridge, view }: { bridge: DesktopBridge; view: WebSearc
       <ItemGroup className="gap-2">
         {rows.map((provider) => (
           <ProviderRow
-            key={provider.id}
+            key={`${provider.id}-${saves}`}
             bridge={bridge}
             provider={provider}
             draft={draft}
@@ -244,11 +245,17 @@ function WebSearchForm({ bridge, view }: { bridge: DesktopBridge; view: WebSearc
         <Button
           disabled={!dirty || save.isPending}
           onClick={() =>
-            save.mutate({
-              providers: draft.enabled,
-              endpoints: draft.endpoints,
-              keys: draft.keys,
-            })
+            save.mutate(
+              { providers: draft.enabled, endpoints: draft.endpoints, keys: draft.keys },
+              {
+                // The saved view never holds key values, so it can equal the old one: reset the
+                // form (and the rows' test results) from it explicitly.
+                onSuccess: (saved) => {
+                  setDraft(initialDraft(saved));
+                  setSaves((count) => count + 1);
+                },
+              },
+            )
           }
         >
           {save.isPending ? "Saving…" : "Save web search"}
