@@ -1,5 +1,11 @@
 # @workspace/desktop
 
+## 0.5.0
+
+### Minor Changes
+
+- 908a6cd: Languages. The whole app, including errors, approval cards, and dialogs, is now available in English and Tiếng Việt. Choose the language in Settings › General; "System" follows your computer's language.
+
 ## 0.4.0
 
 ### Minor Changes
