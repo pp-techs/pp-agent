@@ -114,6 +114,18 @@ function UserMessage({ parts }: { parts: ChatPart[] }) {
   );
 }
 
+/** Where older messages were summarized for the model; the messages above stay readable. */
+function CompactionDivider() {
+  const { t } = useTranslation("chat");
+  return (
+    <div role="separator" className="flex items-center gap-3 text-xs text-muted-foreground">
+      <div className="h-px flex-1 bg-border" />
+      <span>{t("message.compacted")}</span>
+      <div className="h-px flex-1 bg-border" />
+    </div>
+  );
+}
+
 export function ChatMessageView({
   message,
   streaming,
@@ -127,6 +139,7 @@ export function ChatMessageView({
   onRespond: (requestId: string, approved: boolean) => void;
   responding: boolean;
 }) {
+  if (message.role === "compaction") return <CompactionDivider />;
   if (message.role === "user") return <UserMessage parts={message.parts} />;
 
   const blocks = toBlocks(message.parts);

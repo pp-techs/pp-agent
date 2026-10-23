@@ -18,6 +18,7 @@ import {
   saveAgentFile,
 } from "./files.ts";
 import { initI18n, translator } from "./i18n.ts";
+import { resolveShellPath } from "./shell-path.ts";
 import { migrateLegacyProvider } from "./legacy.ts";
 import { createUpdater } from "./updates.ts";
 import { handleVaultRequest } from "./vault.ts";
@@ -42,6 +43,8 @@ let nextCommandId = 0;
 let quitting = false;
 /** Resolves once the legacy provider.json has been migrated; the agent starts after it. */
 let migration: Promise<void> | null = null;
+/** Resolved once: asking the login shell takes a moment and the answer does not change. */
+let shellPath: Promise<string | undefined> | null = null;
 const pending = new Map<
   number,
   { resolve: (data: unknown) => void; reject: (error: Error) => void }
@@ -88,9 +91,11 @@ async function startAgent(): Promise<void> {
   });
   await migration;
 
+  const PATH = await (shellPath ??= resolveShellPath());
   const child = utilityProcess.fork(join(DIST_DIR, "agent.mjs"), [], {
     serviceName: "PP Agent",
     stdio: "inherit",
+    env: PATH ? { ...process.env, PATH } : process.env,
   });
   agent = child;
 

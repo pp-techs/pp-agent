@@ -14,6 +14,9 @@ interface ToolState {
   output?: string;
 }
 
+/** What the chat is rebuilt from: the model's messages plus the points where it was compacted. */
+export type TranscriptItem = AgentMessage | { role: "compaction" };
+
 /** Tool output shown in the UI is capped; the model still receives the full result. */
 const OUTPUT_LIMIT = 8_000;
 /** Streaming updates are coalesced so a long reply does not flood IPC with one frame per token. */
@@ -74,12 +77,14 @@ export class Transcript {
   }
 
   /** Rebuild the chat from a saved session's messages without emitting per-message updates. */
-  load(messages: readonly AgentMessage[]): void {
+  load(items: readonly TranscriptItem[]): void {
     this.reset();
     this.loading = true;
     try {
-      for (const message of messages) {
-        if (message.role === "user") {
+      for (const message of items) {
+        if (message.role === "compaction") {
+          this.addCompaction();
+        } else if (message.role === "user") {
           this.addUser(message);
         } else if (message.role === "assistant") {
           this.startAssistant();
@@ -97,6 +102,11 @@ export class Transcript {
       this.loading = false;
       this.dirty.clear();
     }
+  }
+
+  /** Marks where the model's view of the chat was summarized; the messages above stay visible. */
+  addCompaction(): void {
+    this.upsert({ id: this.newId(), role: "compaction", parts: [] }, true);
   }
 
   startAssistant(): void {

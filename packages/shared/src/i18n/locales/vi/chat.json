@@ -21,7 +21,8 @@
     "thinking": "Đang suy luận",
     "thought": "Đã suy luận",
     "skill": "Kỹ năng: {{name}}",
-    "attachedImage": "Hình ảnh đính kèm"
+    "attachedImage": "Hình ảnh đính kèm",
+    "compacted": "Các tin nhắn trước đó đã được tóm tắt"
   },
   "sidebar": {
     "relativeTime": {
