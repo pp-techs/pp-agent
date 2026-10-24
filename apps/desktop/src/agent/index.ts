@@ -461,6 +461,7 @@ class AgentHost {
       case "mcp_sign_out":
         this.requireUsedServer(command.name);
         await this.mcp.signOut(this.requireSession(), command.name);
+        await this.mcpAuth?.flush();
         return this.changed(["mcp", "tools"], {});
       case "get_mcp_json":
         return services.mcpConfig.readText();
@@ -787,7 +788,7 @@ class AgentHost {
         manager.getCwd(),
         paths.workspaceDir,
       ).name,
-      date: new Date().toISOString().slice(0, 10),
+      date: new Date().toLocaleDateString("sv-SE"), // yyyy-mm-dd in local time
       messages: messages.list(),
     };
     const labels = {

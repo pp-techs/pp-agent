@@ -214,6 +214,7 @@ jobs:
       # Pinned version and SHA-256 per asset; the binary is bundled by electron-builder
       # (extraResources) and signed with the app on macOS.
       - name: Fetch OfficeCLI
+        shell: bash
         env:
           OFFICECLI_PLATFORM: ${{ matrix.officecli }}
         run: node scripts/fetch-officecli.ts "$OFFICECLI_PLATFORM"
@@ -241,10 +242,11 @@ jobs:
               args+=(-c.mac.identity=- -c.mac.hardenedRuntime=false -c.mac.notarize=false)
               echo "::warning::CSC_LINK is not set: macOS build is ad-hoc signed and not notarized."
             elif [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
-              : # Developer ID signing with the hardened runtime, then notarization (electron-builder.yml).
+              # Developer ID signing with the hardened runtime, then notarization (electron-builder.yml).
+              args+=(-c.extraMetadata.ppDeveloperIdSigned=true)
             else
               # electron-builder fails on partial Apple credentials, so skip notarization explicitly.
-              args+=(-c.mac.notarize=false)
+              args+=(-c.mac.notarize=false -c.extraMetadata.ppDeveloperIdSigned=true)
               echo "::warning::APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD or APPLE_TEAM_ID is not set: macOS build is signed but not notarized."
             fi
           fi

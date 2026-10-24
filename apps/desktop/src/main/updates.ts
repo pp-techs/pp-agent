@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { app } from "electron";
 import electronUpdater from "electron-updater";
 import type { UpdateInfo } from "electron-updater";
@@ -16,12 +18,30 @@ type Install = Available["install"];
 
 const releaseUrl = (version: string) => `https://github.com/${REPO}/releases/tag/v${version}`;
 
+/** The release workflow stamps `ppDeveloperIdSigned` into package.json of Developer ID builds. */
+function isDeveloperIdSigned(): boolean {
+  try {
+    const manifest: unknown = JSON.parse(
+      readFileSync(join(app.getAppPath(), "package.json"), "utf8"),
+    );
+    return (
+      typeof manifest === "object" &&
+      manifest !== null &&
+      "ppDeveloperIdSigned" in manifest &&
+      manifest.ppDeveloperIdSigned === true
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Windows installers, signed macOS builds, and Linux AppImages replace themselves. `.deb` installs
  * belong to the system package manager; for those the person downloads the new installer instead.
  */
 function installMode(): Install {
-  if (process.platform === "win32" || process.platform === "darwin") return "in-app";
+  if (process.platform === "win32") return "in-app";
+  if (process.platform === "darwin") return isDeveloperIdSigned() ? "in-app" : "download-page";
   if (process.platform === "linux" && process.env.APPIMAGE) return "in-app";
   return "download-page";
 }

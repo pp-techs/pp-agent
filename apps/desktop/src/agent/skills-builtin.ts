@@ -5,7 +5,8 @@
  * Nothing the person did is overwritten. `builtin-skills.json` remembers the content hash each
  * copy had when it was written: a copy still matching it is replaced when the app ships a newer
  * version; an edited copy, a skill of the same name the person made, and a built-in skill the
- * person deleted are left alone.
+ * person deleted are left alone. A skill the app no longer ships is removed again when its copy is
+ * still unmodified.
  */
 import { createHash } from "node:crypto";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -80,6 +81,15 @@ export async function seedBuiltInSkills(
       changed = true;
     }
     unmodified.add(name);
+  }
+
+  for (const [name, remembered] of Object.entries(manifest)) {
+    if (names.includes(name)) continue;
+    const target = join(skillsDir, name);
+    const installed = await hashFolder(target).catch(() => null);
+    if (installed === remembered) await rm(target, { recursive: true, force: true });
+    delete manifest[name];
+    changed = true;
   }
 
   if (changed) await writeFile(manifestFile, JSON.stringify(manifest, null, 2));

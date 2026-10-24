@@ -23,8 +23,8 @@ export function DesktopGroup({ bridge }: { bridge: DesktopBridge }) {
   const shortcut = draft ?? current.shortcut;
   const valid = isValidAccelerator(shortcut);
 
-  const save = (patch: Parameters<typeof update.mutate>[0]) =>
-    update.mutate(patch, { onError: (error) => toast.error(error.message) });
+  const save = (patch: Parameters<typeof update.mutate>[0], onSuccess?: () => void) =>
+    update.mutate(patch, { onError: (error) => toast.error(error.message), onSuccess });
 
   return (
     <OptionGroup
@@ -73,8 +73,8 @@ export function DesktopGroup({ bridge }: { bridge: DesktopBridge }) {
               disabled={!valid || draft === null || draft === current.shortcut || update.isPending}
               onClick={() => {
                 if (draft === null) return;
-                save({ shortcut: draft });
-                setDraft(null);
+                // Keep what was typed when the shortcut is refused, so it can be corrected.
+                save({ shortcut: draft }, () => setDraft(null));
               }}
             >
               {t("general.desktop.shortcut.save")}

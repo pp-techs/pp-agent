@@ -36,6 +36,20 @@ export class VaultCredentialStore implements CredentialStore {
     return (await this.load(providerId)) ?? undefined;
   }
 
+  /**
+   * Like `read`, but an entry that exists and cannot be read throws instead of counting as missing,
+   * for callers that would otherwise write an empty replacement over it.
+   */
+  async readStrict(providerId: string): Promise<Credential | undefined> {
+    const cached = this.cache.get(providerId);
+    if (cached !== undefined) return cached ?? undefined;
+    if (!(await this.ids()).has(providerId)) return undefined;
+    const credential = (await this.request({ op: "read", providerId })) as Credential | null;
+    // A write may have landed while the read was in flight; it wins.
+    if (!this.cache.has(providerId)) this.cache.set(providerId, credential);
+    return this.cache.get(providerId) ?? undefined;
+  }
+
   /** Whether the OS keychain can encrypt what the vault holds. */
   async secureStorageAvailable(): Promise<boolean> {
     return (await this.request({ op: "available" })) === true;

@@ -52,7 +52,8 @@ export class VaultMcpAuthStore {
   ): Promise<VaultMcpAuthStore | null> {
     try {
       if (!(await vault.secureStorageAvailable())) return null;
-      const stored = await vault.read(VAULT_ID);
+      // A failed read must not look like "no sign-ins": the next save would overwrite them all.
+      const stored = await vault.readStrict(VAULT_ID);
       const parsed: unknown =
         stored?.type === "api_key" && stored.key ? JSON.parse(stored.key) : {};
       const store = new VaultMcpAuthStore(vault, isStates(parsed) ? parsed : {});
@@ -98,11 +99,19 @@ export class VaultMcpAuthStore {
 
   remove(name: string, serverUrl: string): boolean {
     const { key, legacyKey } = storeKeys(name, serverUrl);
-    const stored = key in this.states ? key : legacyKey in this.states ? legacyKey : undefined;
-    if (stored === undefined) return false;
-    delete this.states[stored];
+    // Both keys go: a leftover URL-only entry would be adopted again by the next `forServer`.
+    const had = key in this.states || legacyKey in this.states;
+    if (!had) return false;
+    delete this.states[key];
+    delete this.states[legacyKey];
+    // Pi's sign-out is synchronous; the caller awaits `flush()` before reporting success.
     void this.persist().catch(() => undefined);
     return true;
+  }
+
+  /** Resolves once every write so far reached the vault; rejects if the last one failed. */
+  async flush(): Promise<void> {
+    await this.persist();
   }
 
   private async migrate(file: string): Promise<void> {

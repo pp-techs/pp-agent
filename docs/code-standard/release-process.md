@@ -85,6 +85,7 @@ Signing is optional and driven by repository secrets (Settings → Secrets and v
   - no `CSC_LINK`: ad-hoc signature, `-c.mac.hardenedRuntime=false -c.mac.notarize=false`, plus a warning;
   - `CSC_LINK` and all three `APPLE_*` secrets: Developer ID signature, hardened runtime, notarization;
   - `CSC_LINK` but a missing `APPLE_*` secret: signed, `-c.mac.notarize=false`, plus a warning. (electron-builder itself throws when only some of `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` are set, and silently skips when none is.)
+- Developer ID builds (with or without notarization) get `ppDeveloperIdSigned: true` stamped into the app's `package.json` (`-c.extraMetadata`). `apps/desktop/src/main/updates.ts` reads it: on macOS only such builds update in the app; ad-hoc signed builds open the release page instead.
 - Notarization uploads the app to Apple and waits for the result, which can add several minutes to the macOS jobs.
 
 ### Windows

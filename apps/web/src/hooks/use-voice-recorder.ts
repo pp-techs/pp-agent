@@ -38,13 +38,18 @@ export function useVoiceRecorder(bridge: DesktopBridge, onText: (text: string) =
   const recording = React.useRef<Recording | null>(null);
   // Bumped to drop the result of a transcription that was cancelled or outlived the composer.
   const attempt = React.useRef(0);
+  // True while the microphone permission or device is being opened.
+  const starting = React.useRef(false);
+  const mounted = React.useRef(true);
   const latest = React.useRef({ onText, t });
   React.useEffect(() => {
     latest.current = { onText, t };
   });
 
-  React.useEffect(
-    () => () => {
+  React.useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
       attempt.current++;
       const current = recording.current;
       recording.current = null;
@@ -53,9 +58,8 @@ export function useVoiceRecorder(bridge: DesktopBridge, onText: (text: string) =
         if (current.recorder.state !== "inactive") current.recorder.stop();
         releaseMicrophone(current);
       }
-    },
-    [],
-  );
+    };
+  }, []);
 
   async function transcribe(current: Recording, durationMs: number) {
     const { t: translate } = latest.current;
@@ -95,7 +99,9 @@ export function useVoiceRecorder(bridge: DesktopBridge, onText: (text: string) =
     recording.current = null;
     const durationMs = Math.min(Date.now() - current.startedAt, VOICE_LIMITS.maxDurationMs);
     const stopped = new Promise<void>((resolve) => {
-      current.recorder.onstop = () => resolve();
+      // A recorder that stopped by itself (device unplugged) has no stop event left to wait for.
+      if (current.recorder.state === "inactive") resolve();
+      else current.recorder.onstop = () => resolve();
     });
     if (current.recorder.state !== "inactive") current.recorder.stop();
     await stopped;
@@ -125,16 +131,24 @@ export function useVoiceRecorder(bridge: DesktopBridge, onText: (text: string) =
   }
 
   async function start() {
-    if (state !== "idle" || recording.current) return;
+    if (state !== "idle" || recording.current || starting.current) return;
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       toast.error(latest.current.t("composer.voice.errors.unsupported"));
       return;
     }
+    starting.current = true;
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (error) {
       toast.error(startError(error));
+      return;
+    } finally {
+      starting.current = false;
+    }
+    if (!mounted.current) {
+      // The composer went away while the permission prompt was open.
+      stream.getTracks().forEach((track) => track.stop());
       return;
     }
     try {
