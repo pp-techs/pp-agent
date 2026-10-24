@@ -14,7 +14,8 @@
     "folderCannotOpen": "Không thể mở thư mục đó.",
     "folderMissing": "Thư mục đó không tồn tại.",
     "locationCannotShow": "Không thể hiển thị vị trí đó.",
-    "agentCannotExport": "Không thể xuất Agent."
+    "agentCannotExport": "Không thể xuất Agent.",
+    "conversationCannotExport": "Không thể xuất cuộc trò chuyện."
   },
   "limits": {
     "nameTooLong": "Tên chỉ được dài tối đa {{max}} ký tự.",
@@ -57,6 +58,7 @@
     "archiveTooLarge": "Tệp nén này quá lớn để nhập."
   },
   "mcp": {
+    "authNotSaved": "Không lưu được đăng nhập MCP vào kho bảo mật:",
     "serverNotFound": "Không có máy chủ MCP nào tên {{name}}.",
     "serverNameFormat": "Tên máy chủ chỉ gồm chữ cái, chữ số, dấu gạch ngang và dấu gạch dưới.",
     "serverNameTaken": "Đã có một máy chủ MCP tên {{name}}.",
@@ -94,17 +96,38 @@
     "connect": "Kết nối {{name}}",
     "savedKey": "Khóa đã lưu",
     "environmentVariable": "Biến môi trường",
+    "noKeyNeeded": "Không cần khóa",
     "continueInBrowser": "Hãy tiếp tục trong trình duyệt của bạn.",
     "enterCode": "Hãy nhập mã {{code}} trên trang vừa mở."
   },
   "models": {
     "notAvailableConnect": "Mô hình đó chưa khả dụng. Hãy kết nối nhà cung cấp của nó trước.",
     "notAvailableInSettings": "Mô hình đó chưa khả dụng. Hãy kết nối nhà cung cấp của nó trong Cài đặt › Mô hình.",
+    "gatewayNeedsKey": "Cổng {{name}} cần khóa API trước khi dùng được các mô hình của nó. Hãy thêm khóa trong Cài đặt › Mô hình.",
     "notAvailableKeeping": "{{model}} chưa khả dụng; vẫn giữ {{current}}.",
     "currentModel": "mô hình hiện tại",
     "noneChosen": "Hãy chọn một mô hình trong Cài đặt › Mô hình trước khi bắt đầu cuộc trò chuyện."
   },
+  "shell": {
+    "notification": {
+      "runFinished": "Đã có câu trả lời",
+      "runFinishedBody": "{{title}}",
+      "approvalNeeded": "Cần bạn phê duyệt",
+      "approvalNeededBody": "{{title}}: {{tool}}"
+    },
+    "tray": {
+      "tooltip": "PP Agent",
+      "show": "Hiện PP Agent",
+      "hide": "Ẩn PP Agent",
+      "newChat": "Cuộc trò chuyện mới",
+      "quit": "Thoát PP Agent"
+    },
+    "shortcut": {
+      "failed": "Không đăng ký được phím tắt {{shortcut}}. Có thể ứng dụng khác đang dùng nó. Hãy chọn phím tắt khác trong Cài đặt › Chung."
+    }
+  },
   "settings": {
+    "shortcutInvalid": "Phím tắt không hợp lệ. Hãy dùng phím bổ trợ và một phím, ví dụ CommandOrControl+Shift+Space.",
     "unknownThinkingLevel": "Mức suy luận không xác định: {{level}}",
     "unknownPolicy": "Chính sách không xác định: {{policy}}",
     "shellPolicy": "Lệnh shell chỉ có thể hỏi trước hoặc chạy tự do.",
@@ -120,7 +143,23 @@
     "untitled": "Cuộc trò chuyện chưa đặt tên",
     "interrupted": "Bị gián đoạn trước khi hoàn tất.",
     "modelError": "Mô hình trả về lỗi.",
-    "stopped": "Đã dừng."
+    "stopped": "Đã dừng.",
+    "messageNotFound": "Tin nhắn đó không còn trong cuộc trò chuyện này.",
+    "noAnswerToRedo": "Chưa có câu trả lời nào để tạo lại.",
+    "branchTitle": "{{title}} (nhánh)",
+    "cannotBranch": "Chưa thể tách nhánh cuộc trò chuyện này.",
+    "notEditable": "Chỉ có thể sửa tin nhắn của chính bạn.",
+    "export": {
+      "you": "Bạn",
+      "assistant": "Trợ lý",
+      "image": "hình ảnh",
+      "skill": "Kỹ năng: {{name}}",
+      "attachment": "Đính kèm: {{name}}",
+      "tool": "Công cụ: {{name}}",
+      "toolOn": "Công cụ: {{name}} · {{target}}",
+      "exportedOn": "Xuất ngày {{date}}",
+      "workspace": "Không gian làm việc: {{name}}"
+    }
   },
   "approvals": {
     "runCommand": "Chạy một lệnh",
@@ -131,7 +170,10 @@
     "open": "Mở {{url}}",
     "searchWeb": "Tìm kiếm web",
     "useTool": "Dùng “{{tool}}” trong {{server}}",
-    "run": "Chạy {{tool}}"
+    "run": "Chạy {{tool}}",
+    "remember": "Ghi nhớ một ghi chú",
+    "forget": "Quên một ghi chú",
+    "editOffice": "Thay đổi {{file}}"
   },
   "webSearch": {
     "unknownProvider": "Nhà cung cấp tìm kiếm không xác định.",
@@ -159,10 +201,66 @@
     "importAgentTitle": "Nhập một Agent",
     "agentTooLarge": "Tệp này quá lớn để là một Agent đã xuất.",
     "exportAgentTitle": "Xuất Agent",
-    "exportButton": "Xuất"
+    "exportButton": "Xuất",
+    "exportConversationTitle": "Xuất cuộc trò chuyện",
+    "markdownFiles": "Tài liệu Markdown",
+    "htmlFiles": "Trang web (để in)"
   },
   "updates": {
     "checkFailed": "Không thể kiểm tra cập nhật. Hãy kiểm tra kết nối internet và thử lại.",
     "downloadFailed": "Không thể tải bản cập nhật. Hãy thử lại sau."
+  },
+  "memory": {
+    "problems": {
+      "empty": "Ghi chú đang trống.",
+      "too-long": "Ghi chú quá dài.",
+      "full": "Bộ nhớ đã đầy. Hãy xóa bớt một ghi chú trước.",
+      "duplicate": "Đã có ghi chú khác nói điều này.",
+      "missing": "Ghi chú này không còn nữa."
+    }
+  },
+  "scheduler": {
+    "errors": {
+      "schedule": {
+        "interval": "Chọn tần suất chạy: mỗi 5 đến 1.440 phút, hoặc mỗi 1 đến 168 giờ.",
+        "time": "Nhập giờ theo dạng HH:MM, ví dụ 09:30.",
+        "days": "Chọn ít nhất một ngày trong tuần.",
+        "kind": "Chọn thời điểm chạy tác vụ."
+      },
+      "nameRequired": "Nhập tên cho tác vụ.",
+      "nameTaken": "Đã có tác vụ tên {{name}}.",
+      "promptRequired": "Nhập việc tác nhân cần làm.",
+      "promptTooLong": "Hướng dẫn tối đa {{max}} ký tự.",
+      "tooMany": "Bạn chỉ có thể có tối đa {{max}} tác vụ định kỳ.",
+      "notFound": "Tác vụ này không còn tồn tại.",
+      "alreadyRunning": "Tác vụ này đang chạy hoặc đang chờ chạy.",
+      "timedOut": "Lần chạy mất quá lâu nên đã bị dừng.",
+      "runFailed": "Lần chạy thất bại.",
+      "stopped": "Lần chạy đã bị dừng.",
+      "noAnswer": "Tác nhân không trả lời."
+    }
+  },
+  "voice": {
+    "errors": {
+      "modelRequired": "Nhập mô hình chuyển giọng nói thành văn bản, ví dụ whisper-1.",
+      "modelTooLong": "Tên mô hình tối đa {{max}} ký tự.",
+      "languageInvalid": "Dùng ngôn ngữ của ứng dụng, tự nhận diện, hoặc mã ngôn ngữ hai chữ cái như en.",
+      "recordingInvalid": "Không đọc được bản ghi âm.",
+      "formatUnsupported": "Định dạng âm thanh này không được hỗ trợ.",
+      "empty": "Bản ghi âm trống.",
+      "tooLarge": "Bản ghi âm quá lớn. Giới hạn là {{max}} MB.",
+      "tooLong": "Bản ghi âm quá dài. Giới hạn là {{max}} phút.",
+      "notConfigured": "Chưa thiết lập nhập bằng giọng nói. Chọn nhà cung cấp tại Cài đặt › Chung › Nhập bằng giọng nói.",
+      "providerUnavailable": "Nhà cung cấp đã chọn cho nhập bằng giọng nói chưa được kết nối hoặc không nhận âm thanh. Chọn nhà cung cấp khác tại Cài đặt › Chung › Nhập bằng giọng nói.",
+      "timedOut": "Việc chuyển giọng nói thành văn bản mất quá lâu. Hãy thử ghi âm ngắn hơn.",
+      "unreachable": "Không kết nối được dịch vụ chuyển giọng nói thành văn bản ({{error}}).",
+      "badResponse": "Dịch vụ chuyển giọng nói thành văn bản gửi về phản hồi mà ứng dụng không hiểu.",
+      "nothingHeard": "Không nhận ra lời nói nào trong bản ghi âm.",
+      "keyRejected": "Dịch vụ chuyển giọng nói thành văn bản từ chối khóa. Kiểm tra khóa tại Cài đặt › Mô hình.",
+      "notSupported": "Dịch vụ này không hỗ trợ chuyển giọng nói thành văn bản tại địa chỉ đã cấu hình. Chọn nhà cung cấp khác tại Cài đặt › Chung › Nhập bằng giọng nói.",
+      "limitReached": "Đã đạt giới hạn sử dụng của dịch vụ chuyển giọng nói thành văn bản. Hãy thử lại sau.",
+      "serviceFailed": "Dịch vụ chuyển giọng nói thành văn bản gặp lỗi (mã {{status}}).",
+      "serviceFailedWith": "Dịch vụ chuyển giọng nói thành văn bản gặp lỗi (mã {{status}}): {{detail}}"
+    }
   }
 }

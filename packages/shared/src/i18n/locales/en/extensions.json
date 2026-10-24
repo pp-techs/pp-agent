@@ -42,7 +42,15 @@
       "tool_search": "Look up connected tools",
       "list_mcp_resources": "List server resources",
       "list_mcp_resource_templates": "List server resource templates",
-      "read_mcp_resource": "Read server resources"
+      "read_mcp_resource": "Read server resources",
+      "memory_save": "Remember notes",
+      "memory_list": "List saved notes",
+      "memory_search": "Search saved notes",
+      "memory_forget": "Forget notes",
+      "todo_write": "Plan with a checklist",
+      "delegate_task": "Hand off research",
+      "office_read": "Inspect Word, Excel, PowerPoint files",
+      "office_edit": "Create and edit Word, Excel, PowerPoint files"
     },
     "shell": {
       "legend": "Shell commands",
@@ -101,6 +109,7 @@
     },
     "newSkill": "New skill",
     "onlyWhenAsked": "Only when asked",
+    "builtIn": "Built in",
     "loadError": "Couldn't load your skills",
     "empty": {
       "title": "No skills yet",

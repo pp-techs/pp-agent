@@ -6,6 +6,9 @@ import { WEB_KEY_PREFIX } from "./web/names.ts";
 
 type VaultResult = Extract<MainToAgentMessage, { kind: "vault_result" }>;
 
+/** Vault id prefix of the MCP OAuth state; Pi's provider list skips it like search keys. */
+export const MCP_AUTH_KEY_PREFIX = "mcp-auth:";
+
 /**
  * Pi's credential store, backed by the encrypted vault in the main process. Every provider
  * credential (built-in providers and gateways) lives there; this process only keeps a cache. Only
@@ -33,12 +36,32 @@ export class VaultCredentialStore implements CredentialStore {
     return (await this.load(providerId)) ?? undefined;
   }
 
+  /**
+   * Like `read`, but an entry that exists and cannot be read throws instead of counting as missing,
+   * for callers that would otherwise write an empty replacement over it.
+   */
+  async readStrict(providerId: string): Promise<Credential | undefined> {
+    const cached = this.cache.get(providerId);
+    if (cached !== undefined) return cached ?? undefined;
+    if (!(await this.ids()).has(providerId)) return undefined;
+    const credential = (await this.request({ op: "read", providerId })) as Credential | null;
+    // A write may have landed while the read was in flight; it wins.
+    if (!this.cache.has(providerId)) this.cache.set(providerId, credential);
+    return this.cache.get(providerId) ?? undefined;
+  }
+
+  /** Whether the OS keychain can encrypt what the vault holds. */
+  async secureStorageAvailable(): Promise<boolean> {
+    return (await this.request({ op: "available" })) === true;
+  }
+
   async list(): Promise<readonly CredentialInfo[]> {
     const ids = await this.ids();
     const infos: CredentialInfo[] = [];
     for (const providerId of ids) {
       // Search keys share the vault but are not providers.
-      if (providerId.startsWith(WEB_KEY_PREFIX)) continue;
+      if (providerId.startsWith(WEB_KEY_PREFIX) || providerId.startsWith(MCP_AUTH_KEY_PREFIX))
+        continue;
       const credential = await this.load(providerId);
       if (credential) infos.push({ providerId, type: credential.type });
     }

@@ -14,7 +14,8 @@
     "folderCannotOpen": "That folder cannot be opened.",
     "folderMissing": "That folder does not exist.",
     "locationCannotShow": "That location cannot be shown.",
-    "agentCannotExport": "The agent could not be exported."
+    "agentCannotExport": "The agent could not be exported.",
+    "conversationCannotExport": "The conversation could not be exported."
   },
   "limits": {
     "nameTooLong": "The name can be at most {{max}} characters.",
@@ -57,6 +58,7 @@
     "archiveTooLarge": "This archive is too large to import."
   },
   "mcp": {
+    "authNotSaved": "MCP sign-ins could not be saved to secure storage:",
     "serverNotFound": "There is no MCP server named {{name}}.",
     "serverNameFormat": "Use letters, digits, hyphens, and underscores for the server name.",
     "serverNameTaken": "An MCP server named {{name}} already exists.",
@@ -94,17 +96,38 @@
     "connect": "Connect {{name}}",
     "savedKey": "Saved key",
     "environmentVariable": "Environment variable",
+    "noKeyNeeded": "No key needed",
     "continueInBrowser": "Continue in your browser.",
     "enterCode": "Enter the code {{code}} on the page that opens."
   },
   "models": {
     "notAvailableConnect": "That model is not available. Connect its provider first.",
     "notAvailableInSettings": "That model is not available. Connect its provider in Settings › Models.",
+    "gatewayNeedsKey": "The gateway {{name}} needs an API key before its models can be used. Add one in Settings › Models.",
     "notAvailableKeeping": "{{model}} is not available; keeping {{current}}.",
     "currentModel": "the current model",
     "noneChosen": "Choose a model in Settings › Models before starting a chat."
   },
+  "shell": {
+    "notification": {
+      "runFinished": "Reply ready",
+      "runFinishedBody": "{{title}}",
+      "approvalNeeded": "Approval needed",
+      "approvalNeededBody": "{{title}}: {{tool}}"
+    },
+    "tray": {
+      "tooltip": "PP Agent",
+      "show": "Show PP Agent",
+      "hide": "Hide PP Agent",
+      "newChat": "New chat",
+      "quit": "Quit PP Agent"
+    },
+    "shortcut": {
+      "failed": "The shortcut {{shortcut}} could not be registered. Another app may be using it. Choose a different one in Settings › General."
+    }
+  },
   "settings": {
+    "shortcutInvalid": "The shortcut is not valid. Use modifiers and one key, for example CommandOrControl+Shift+Space.",
     "unknownThinkingLevel": "Unknown thinking level: {{level}}",
     "unknownPolicy": "Unknown policy: {{policy}}",
     "shellPolicy": "Shell commands either ask first or run freely.",
@@ -120,7 +143,23 @@
     "untitled": "Untitled chat",
     "interrupted": "Interrupted before it finished.",
     "modelError": "The model returned an error.",
-    "stopped": "Stopped."
+    "stopped": "Stopped.",
+    "messageNotFound": "That message is no longer in this conversation.",
+    "noAnswerToRedo": "There is no answer to redo yet.",
+    "branchTitle": "{{title}} (branch)",
+    "cannotBranch": "This conversation cannot be branched yet.",
+    "notEditable": "Only your own messages can be edited.",
+    "export": {
+      "you": "You",
+      "assistant": "Assistant",
+      "image": "image",
+      "skill": "Skill: {{name}}",
+      "attachment": "Attachment: {{name}}",
+      "tool": "Tool: {{name}}",
+      "toolOn": "Tool: {{name}} · {{target}}",
+      "exportedOn": "Exported {{date}}",
+      "workspace": "Workspace: {{name}}"
+    }
   },
   "approvals": {
     "runCommand": "Run a command",
@@ -131,7 +170,10 @@
     "open": "Open {{url}}",
     "searchWeb": "Search the web",
     "useTool": "Use “{{tool}}” in {{server}}",
-    "run": "Run {{tool}}"
+    "run": "Run {{tool}}",
+    "remember": "Remember a note",
+    "forget": "Forget a note",
+    "editOffice": "Change {{file}}"
   },
   "webSearch": {
     "unknownProvider": "Unknown search provider.",
@@ -159,10 +201,66 @@
     "importAgentTitle": "Import an agent",
     "agentTooLarge": "This file is too large to be an exported agent.",
     "exportAgentTitle": "Export agent",
-    "exportButton": "Export"
+    "exportButton": "Export",
+    "exportConversationTitle": "Export conversation",
+    "markdownFiles": "Markdown document",
+    "htmlFiles": "Web page (printable)"
   },
   "updates": {
     "checkFailed": "Could not check for updates. Check your internet connection and try again.",
     "downloadFailed": "The update could not be downloaded. Try again later."
+  },
+  "memory": {
+    "problems": {
+      "empty": "The note is empty.",
+      "too-long": "The note is too long.",
+      "full": "Memory is full. Delete a note first.",
+      "duplicate": "Another note already says this.",
+      "missing": "That note no longer exists."
+    }
+  },
+  "scheduler": {
+    "errors": {
+      "schedule": {
+        "interval": "Choose how often it runs: every 5 to 1,440 minutes, or every 1 to 168 hours.",
+        "time": "Enter a time as HH:MM, for example 09:30.",
+        "days": "Choose at least one day of the week.",
+        "kind": "Choose when the task runs."
+      },
+      "nameRequired": "Enter a name for the task.",
+      "nameTaken": "A task named {{name}} already exists.",
+      "promptRequired": "Enter what the agent should do.",
+      "promptTooLong": "The instructions can be at most {{max}} characters.",
+      "tooMany": "You can have at most {{max}} scheduled tasks.",
+      "notFound": "This task no longer exists.",
+      "alreadyRunning": "This task is already running or waiting to run.",
+      "timedOut": "The run took too long and was stopped.",
+      "runFailed": "The run failed.",
+      "stopped": "The run was stopped.",
+      "noAnswer": "The agent did not answer."
+    }
+  },
+  "voice": {
+    "errors": {
+      "modelRequired": "Enter the transcription model, for example whisper-1.",
+      "modelTooLong": "The model name can be at most {{max}} characters.",
+      "languageInvalid": "Use the app language, automatic detection, or a two-letter language code such as en.",
+      "recordingInvalid": "The recording could not be read.",
+      "formatUnsupported": "This audio format is not supported.",
+      "empty": "The recording is empty.",
+      "tooLarge": "The recording is too large. The limit is {{max}} MB.",
+      "tooLong": "The recording is too long. The limit is {{max}} minutes.",
+      "notConfigured": "Voice input is not set up. Choose a provider in Settings › General › Voice input.",
+      "providerUnavailable": "The provider chosen for voice input is not connected or does not accept audio. Choose another in Settings › General › Voice input.",
+      "timedOut": "The transcription took too long. Try a shorter recording.",
+      "unreachable": "The transcription service could not be reached ({{error}}).",
+      "badResponse": "The transcription service sent an answer the app does not understand.",
+      "nothingHeard": "No speech was recognized in the recording.",
+      "keyRejected": "The transcription service rejected the key. Check it in Settings › Models.",
+      "notSupported": "This service does not offer speech-to-text at its address. Choose another provider in Settings › General › Voice input.",
+      "limitReached": "The transcription service's usage limit was reached. Try again later.",
+      "serviceFailed": "The transcription service failed (status {{status}}).",
+      "serviceFailedWith": "The transcription service failed (status {{status}}): {{detail}}"
+    }
   }
 }

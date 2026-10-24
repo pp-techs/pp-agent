@@ -60,6 +60,9 @@ Product goals, use cases, business rules, and constraints.
 | [use-case-agents.md](project-pdr/use-case-agents.md)                                           | Agent fields, building, import/export, switching                          |
 | [use-case-skills.md](project-pdr/use-case-skills.md)                                           | Importing, writing, enabling, and invoking skills                         |
 | [use-case-chat-history.md](project-pdr/use-case-chat-history.md)                               | Saved conversations and what each remembers                               |
+| [use-case-memory-and-planning.md](project-pdr/use-case-memory-and-planning.md)                 | Long-term memory, the `todo_write` checklist, `delegate_task` helpers     |
+| [use-case-scheduled-tasks.md](project-pdr/use-case-scheduled-tasks.md)                         | Tasks that run on a schedule, headless approval rule                      |
+| [use-case-voice-input.md](project-pdr/use-case-voice-input.md)                                 | Microphone button and speech-to-text provider                             |
 | [use-case-thinking-and-slash-commands.md](project-pdr/use-case-thinking-and-slash-commands.md) | Thinking levels, `/new`, `/compact`, `/skill:<name>`                      |
 | [business-rules.md](project-pdr/business-rules.md)                                             | Tool tiers and policies, defaults, name and size limits, Settings ∩ agent |
 | [constraints-and-limitations.md](project-pdr/constraints-and-limitations.md)                   | Known limitations and their evidence                                      |

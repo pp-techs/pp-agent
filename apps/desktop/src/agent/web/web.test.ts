@@ -119,6 +119,10 @@ describe("shell policy", () => {
     activeAgentId: "default",
     thinkingLevel: "off",
     language: "system",
+    notifications: true,
+    tray: false,
+    shortcutEnabled: false,
+    shortcut: "CommandOrControl+Shift+Space",
     ...overrides,
   });
 

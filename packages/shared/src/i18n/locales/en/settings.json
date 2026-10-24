@@ -12,12 +12,14 @@
       "agents": "Agents",
       "tools": "Tools",
       "skills": "Skills",
-      "mcp": "MCP servers"
+      "mcp": "MCP servers",
+      "memory": "Memory",
+      "scheduledTasks": "Scheduled tasks"
     }
   },
   "general": {
     "title": "General",
-    "description": "Your language, workspace, appearance, default model, and updates.",
+    "description": "Your language, workspace, appearance, default model, voice input, and updates.",
     "language": {
       "title": "Language",
       "description": "The language used across the app.",
@@ -43,12 +45,200 @@
       "label": "Default model",
       "firstAvailable": "First available model",
       "notAvailable": "{{modelId}} (not available)",
+      "needsKey": "{{name}} (needs key)",
       "emptyHint": "Connect a provider in Models to choose a default.",
       "hint": "Used for new chats. You can switch models in any chat from below the message box."
     },
     "updates": {
       "title": "Updates",
       "check": "Check for updates"
+    },
+    "desktop": {
+      "legend": "Desktop",
+      "description": "How PP Agent behaves next to your other apps.",
+      "notifications": {
+        "label": "Notifications",
+        "description": "Tell me when an answer is ready or an action needs my approval while PP Agent is not in front."
+      },
+      "tray": {
+        "label": "Tray icon",
+        "description": "Keep an icon in the menu bar or system tray. Closing the window then hides it and the app keeps running."
+      },
+      "shortcut": {
+        "label": "Global shortcut",
+        "description": "Press a key combination anywhere to bring PP Agent to the front with the message box ready.",
+        "keys": "Keys",
+        "save": "Save",
+        "hint": "Modifiers and one key, for example CommandOrControl+Shift+Space.",
+        "invalid": "Not a valid shortcut. Use modifiers and one key, for example CommandOrControl+Shift+Space."
+      }
+    },
+    "voice": {
+      "legend": "Voice input",
+      "description": "Speak instead of typing: the microphone button in the message box turns your recording into text. The recording is sent to the service you choose here.",
+      "provider": {
+        "label": "Provider",
+        "none": "Not set up",
+        "help": "Choose a provider or gateway you already added a key for in Models. It must offer speech-to-text, as OpenAI does.",
+        "empty": "No provider with a key yet. Add one in Models first."
+      },
+      "model": {
+        "label": "Model",
+        "help": "The speech-to-text model, for example whisper-1."
+      },
+      "language": {
+        "label": "Spoken language",
+        "app": "Same as the app",
+        "auto": "Detect automatically",
+        "help": "Telling the service the language makes the text more accurate."
+      },
+      "ready": "Ready: the microphone button works.",
+      "notReady": "Not ready: choose a provider that has a key.",
+      "save": "Save",
+      "saved": "Voice input saved.",
+      "loadError": "Couldn't load voice input"
+    }
+  },
+  "memory": {
+    "title": "Memory",
+    "description": "Short notes the agent keeps across conversations, such as your preferences. They are added to every new conversation as information, never as instructions.",
+    "enable": {
+      "legend": "Long-term memory",
+      "label": "Remember notes between conversations",
+      "description": "When off, no notes are shared with the agent and it cannot save new ones. Agents can also turn memory off for themselves."
+    },
+    "add": "Add a note",
+    "clearAll": "Clear all",
+    "form": {
+      "text": "Note",
+      "textPlaceholder": "For example: I prefer short answers in Vietnamese.",
+      "tag": "Label (optional)",
+      "tagPlaceholder": "preference"
+    },
+    "errors": {
+      "textRequired": "Write the note.",
+      "textTooLong": "A note can be at most {{max}} characters."
+    },
+    "editLabel": "Edit note",
+    "deleteLabel": "Delete note",
+    "deleted": "Note deleted.",
+    "cleared": "All notes deleted.",
+    "deleteConfirm": {
+      "title": "Delete this note?",
+      "description": "The agent will no longer remember: “{{text}}”"
+    },
+    "clearConfirm": {
+      "title": "Delete all notes?",
+      "description": "The agent forgets everything it saved. This cannot be undone.",
+      "confirm": "Delete all"
+    },
+    "loadError": "Couldn't load the notes",
+    "empty": {
+      "title": "No notes yet",
+      "description": "The agent saves notes when you ask it to remember something. You can also add them here."
+    },
+    "count_one": "{{count}} note of {{max}}",
+    "count_other": "{{count}} notes of {{max}}"
+  },
+  "scheduledTasks": {
+    "title": "Scheduled tasks",
+    "description": "Instructions the agent carries out on its own at set times. Each run is saved as a conversation you can read from the sidebar.",
+    "add": "New task",
+    "approval": {
+      "title": "Runs without you",
+      "description": "Nobody is there to say yes, so any action that needs your approval is skipped and noted in the conversation. Reading and actions you set to Allow still run. The app must be open at the scheduled time; a run missed while it was closed is made up once if it was due in the last 24 hours."
+    },
+    "state": {
+      "running": "Running",
+      "queued": "Waiting"
+    },
+    "paused": "Paused",
+    "nextRun": "Next run: {{when}}",
+    "lastRun": {
+      "never": "Not run yet",
+      "completed": "Last run: {{when}}, finished",
+      "failed": "Last run: {{when}}, failed",
+      "denied_one": "{{count}} action skipped: it needed your approval",
+      "denied_other": "{{count}} actions skipped: they needed your approval"
+    },
+    "agentWorkspace": "{{agent}} · {{workspace}}",
+    "runNow": "Run now",
+    "runQueued": "“{{name}}” is starting. Its conversation appears in the sidebar.",
+    "enableLabel": "Run “{{name}}” on schedule",
+    "editLabel": "Edit task",
+    "deleteLabel": "Delete task",
+    "deleteConfirm": {
+      "title": "Delete this task?",
+      "description": "“{{name}}” stops running. Conversations it already created stay in your history."
+    },
+    "deleted": "Task “{{name}}” deleted.",
+    "loadError": "Couldn't load the scheduled tasks",
+    "empty": {
+      "title": "No scheduled tasks",
+      "description": "Create a task to have the agent do something regularly, such as summarizing your reports every Friday."
+    },
+    "count_one": "{{count}} task of {{max}}",
+    "count_other": "{{count}} tasks of {{max}}",
+    "schedule": {
+      "intervalMinutes_one": "Every minute",
+      "intervalMinutes_other": "Every {{count}} minutes",
+      "intervalHours_one": "Every hour",
+      "intervalHours_other": "Every {{count}} hours",
+      "daily": "Every day at {{time}}",
+      "weekly": "{{days}} at {{time}}"
+    },
+    "editor": {
+      "newTitle": "New scheduled task",
+      "editTitle": "Edit scheduled task",
+      "editNamed": "Edit {{name}}",
+      "subtitle": "Choose what the agent does and when it does it.",
+      "backToTasks": "Back to scheduled tasks",
+      "openError": "Couldn't open the task",
+      "notFound": {
+        "title": "Task not found",
+        "description": "It may have been deleted. Go back to the list."
+      },
+      "name": "Name",
+      "namePlaceholder": "Weekly report summary",
+      "prompt": "What should the agent do?",
+      "promptPlaceholder": "Read the files in the Reports folder and list anything that needs my attention.",
+      "promptHelp": "Write it as you would in a new chat. At most {{max}} characters.",
+      "agent": "Agent",
+      "workspace": "Workspace",
+      "fallbackHelp": "If the agent or workspace is deleted later, the default one is used.",
+      "when": {
+        "legend": "When",
+        "description": "Times follow this computer's clock.",
+        "kind": "Repeat",
+        "kinds": {
+          "interval": "At regular intervals",
+          "daily": "Every day",
+          "weekly": "On chosen days"
+        },
+        "every": "Every",
+        "unit": "Unit",
+        "units": {
+          "minutes": "minutes",
+          "hours": "hours"
+        },
+        "time": "At",
+        "days": "On"
+      },
+      "enabled": {
+        "label": "Turned on",
+        "description": "When off, the task is kept but never starts by itself. You can still use Run now."
+      },
+      "errors": {
+        "nameRequired": "Enter a name for the task.",
+        "nameTaken": "Another task already has this name.",
+        "promptRequired": "Write what the agent should do.",
+        "tooLong": "Use at most {{max}} characters.",
+        "interval": "Use {{minMinutes}} to {{maxMinutes}} minutes, or 1 to {{maxHours}} hours.",
+        "time": "Enter a time.",
+        "days": "Choose at least one day."
+      },
+      "create": "Create task",
+      "saved": "Task “{{name}}” saved."
     }
   }
 }

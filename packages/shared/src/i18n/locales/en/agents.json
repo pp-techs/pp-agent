@@ -8,6 +8,7 @@
     "useAsIcon": "Use {{icon}} as the icon",
     "maxChars": "Use at most {{max}} characters.",
     "modelUnavailable": "{{modelId}} (not available)",
+    "modelNeedsKey": "{{name}} (needs key)",
     "saveChanges": "Save changes"
   },
   "toolOptions": {
@@ -58,6 +59,38 @@
     "powershell": {
       "label": "Run PowerShell commands",
       "description": "Run commands on this computer; asks first unless set to run freely."
+    },
+    "memory_save": {
+      "label": "Remember notes",
+      "description": "Keep short facts and preferences; asks first."
+    },
+    "memory_list": {
+      "label": "List saved notes",
+      "description": "See what the agent remembers."
+    },
+    "memory_search": {
+      "label": "Search saved notes",
+      "description": "Look for something the agent remembers."
+    },
+    "memory_forget": {
+      "label": "Forget notes",
+      "description": "Remove a saved note; asks first."
+    },
+    "todo_write": {
+      "label": "Plan with a checklist",
+      "description": "Keep a checklist for tasks with several steps."
+    },
+    "delegate_task": {
+      "label": "Hand off research",
+      "description": "Give a focused read-only task to a helper and get back a summary."
+    },
+    "office_read": {
+      "label": "Inspect Word, Excel, PowerPoint files",
+      "description": "Look at the structure and content of Office files without changing them."
+    },
+    "office_edit": {
+      "label": "Create and edit Word, Excel, PowerPoint files",
+      "description": "Build and change Office files in the workspace; asks first."
     }
   },
   "agentsSection": {
@@ -147,6 +180,11 @@
       "placeholder": "Summarise this month's expenses by team",
       "remove": "Remove starter prompt {{number}}",
       "add": "Add starter prompt"
+    },
+    "memory": {
+      "legend": "Memory",
+      "label": "Use long-term memory",
+      "description": "Adds the saved notes to this agent's conversations and lets it save new ones."
     }
   },
   "workspacesSection": {

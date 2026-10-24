@@ -87,8 +87,14 @@
       "invalid": "Enter a web address starting with https:// or http://",
       "description": "The address your team uses for AI requests."
     },
+    "requiresKey": {
+      "label": "This gateway needs an API key",
+      "description": "Turn off for local endpoints such as Ollama, LM Studio or vLLM that take no key."
+    },
     "apiKey": {
       "label": "API key",
+      "labelOptional": "API key (optional)",
+      "descriptionOptional": "Only needed if the endpoint checks one. Stored encrypted in your system keychain.",
       "placeholderSaved": "Saved. Leave blank to keep it.",
       "placeholderNew": "Paste your key",
       "description": "Stored encrypted in your system keychain."
@@ -106,7 +112,8 @@
   },
   "gatewayRow": {
     "keySaved": "Key saved",
-    "noKey": "No key",
+    "needsKey": "Needs API key",
+    "noKeyNeeded": "No key needed",
     "delete": "Delete {{name}}",
     "deleteTitle": "Delete {{name}}?",
     "deleteDescription": "The gateway and its saved key are removed from this computer. Chats that use its models will switch to another model.",

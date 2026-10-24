@@ -2,12 +2,14 @@ import type {
   DesktopBridge,
   McpServerSettings,
   SaveAgentInput,
+  SaveScheduledTaskInput,
   SaveSkillInput,
   SaveWebSearchInput,
   SaveWorkspaceInput,
   SearchProviderId,
   ToolPolicy,
   ToolSummary,
+  VoiceSettings,
 } from "@workspace/shared";
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -16,6 +18,92 @@ import { queryKeys } from "@/lib/queries";
 
 function showError(error: Error) {
   toast.error(error.message);
+}
+
+/** Saved notes (newest first) and the global memory switch. */
+export const memoryQuery = (bridge: DesktopBridge) =>
+  queryOptions({
+    queryKey: queryKeys.memory,
+    queryFn: () => bridge.agent.command({ type: "get_memory" }),
+  });
+
+/** Mutations of Settings › Memory; the agent also reports changes with `settings_changed`. */
+export function useMemoryCommands(bridge: DesktopBridge) {
+  const queryClient = useQueryClient();
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.memory });
+  const setEnabled = useMutation({
+    mutationFn: (enabled: boolean) => bridge.agent.command({ type: "set_memory_enabled", enabled }),
+    onSuccess: (view) => queryClient.setQueryData(queryKeys.memory, view),
+    onError: showError,
+  });
+  const save = useMutation({
+    mutationFn: (input: { id?: string; text: string; tag: string | null }) =>
+      bridge.agent.command({ type: "save_memory_entry", ...input }),
+    onSuccess: invalidate,
+    onError: showError,
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => bridge.agent.command({ type: "delete_memory_entry", id }),
+    onSuccess: invalidate,
+    onError: showError,
+  });
+  const clear = useMutation({
+    mutationFn: () => bridge.agent.command({ type: "clear_memory" }),
+    onSuccess: invalidate,
+    onError: showError,
+  });
+  return { setEnabled, save, remove, clear };
+}
+
+/** Scheduled tasks with their running state and next run; the agent reports changes. */
+export const scheduledTasksQuery = (bridge: DesktopBridge) =>
+  queryOptions({
+    queryKey: queryKeys.scheduledTasks,
+    queryFn: () => bridge.agent.command({ type: "list_scheduled_tasks" }),
+  });
+
+/** Mutations of Settings › Scheduled tasks; each refetches the list. */
+export function useScheduledTaskCommands(bridge: DesktopBridge) {
+  const queryClient = useQueryClient();
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.scheduledTasks });
+  const save = useMutation({
+    mutationFn: (task: SaveScheduledTaskInput) =>
+      bridge.agent.command({ type: "save_scheduled_task", task }),
+    onSuccess: invalidate,
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => bridge.agent.command({ type: "delete_scheduled_task", id }),
+    onSuccess: invalidate,
+    onError: showError,
+  });
+  const setEnabled = useMutation({
+    mutationFn: (input: { id: string; enabled: boolean }) =>
+      bridge.agent.command({ type: "set_scheduled_task_enabled", ...input }),
+    onSuccess: invalidate,
+    onError: showError,
+  });
+  const run = useMutation({
+    mutationFn: (id: string) => bridge.agent.command({ type: "run_scheduled_task", id }),
+    onSuccess: invalidate,
+    onError: showError,
+  });
+  return { save, remove, setEnabled, run };
+}
+
+/** The voice input setting, the providers that can transcribe, and whether it is ready to use. */
+export const voiceQuery = (bridge: DesktopBridge) =>
+  queryOptions({
+    queryKey: queryKeys.voice,
+    queryFn: () => bridge.agent.command({ type: "get_voice" }),
+  });
+
+export function useSaveVoice(bridge: DesktopBridge) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (config: VoiceSettings) => bridge.agent.command({ type: "save_voice", config }),
+    onSuccess: (view) => queryClient.setQueryData(queryKeys.voice, view),
+    onError: showError,
+  });
 }
 
 /** Tools the agent can use, including those of connected MCP servers. */

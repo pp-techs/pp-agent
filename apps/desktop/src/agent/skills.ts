@@ -71,6 +71,9 @@ export class SkillLibrary {
   /** `dir` with symlinks resolved; pi reports skill folders by their real path. */
   private readonly realDir: string;
 
+  /** Names of the unedited skills that ship with the app (see `skills-builtin.ts`). */
+  builtIn = new Set<string>();
+
   /** `dir` must exist. */
   constructor(readonly dir: string) {
     this.realDir = realpathSync(dir);
@@ -122,6 +125,9 @@ export class SkillLibrary {
     if (input.modelInvocable) delete next["disable-model-invocation"];
     else next["disable-model-invocation"] = true;
     await writeFile(join(path, SKILL_FILE), serializeSkill(next, input.body));
+    // An edited copy is the person's now; it is no longer replaced by app updates.
+    this.builtIn.delete(input.originalName ?? name);
+    this.builtIn.delete(name);
     return this.summary(
       path,
       parseSkill(await readFile(join(path, SKILL_FILE), "utf8"), name),
@@ -171,6 +177,7 @@ export class SkillLibrary {
       enabled: !disabled.includes(skill.name),
       path,
       modelInvocable: skill.modelInvocable,
+      builtIn: this.builtIn.has(skill.name),
     };
   }
 

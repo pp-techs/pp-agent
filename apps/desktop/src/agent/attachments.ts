@@ -67,9 +67,14 @@ export async function buildPrompt(
     files.push(relative);
   }
 
-  if (files.length === 0) return { text, images };
+  return { text: withAttachedFiles(text, files), images };
+}
+
+/** `text` followed by the block that lists workspace-relative `files`; unchanged without files. */
+export function withAttachedFiles(text: string, files: readonly string[]): string {
+  if (files.length === 0) return text;
   const list = files.map((path) => `- ${path}`).join("\n");
-  return { text: `${text}\n\n${OPEN_TAG}\n${list}\n${CLOSE_TAG}`, images };
+  return `${text}\n\n${OPEN_TAG}\n${list}\n${CLOSE_TAG}`;
 }
 
 /**

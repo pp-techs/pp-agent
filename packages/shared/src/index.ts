@@ -3,6 +3,8 @@
  * Everything crossing a process boundary is defined here so the three sides cannot drift.
  */
 
+export * from "./accelerator.ts";
+
 /** Approval tier of a tool, modelled on omp: reads run freely, writes and execution need a person. */
 export type ToolTier = "read" | "write" | "exec";
 
@@ -32,6 +34,11 @@ export interface ChatMessage {
   role: "user" | "assistant" | "compaction";
   parts: ChatPart[];
   error?: string;
+  /**
+   * Id of the message's entry in the saved conversation, which message actions (edit, regenerate,
+   * branch) refer to. Absent while the message is still streaming.
+   */
+  entryId?: string;
 }
 
 export interface ApprovalRequest {
@@ -89,7 +96,10 @@ export type SettingsScope =
   | "mcp"
   | "agents"
   | "workspaces"
-  | "sessions";
+  | "sessions"
+  | "memory"
+  | "scheduledTasks"
+  | "voice";
 
 export type AgentEvent =
   | { type: "status"; status: AgentStatus }
@@ -129,6 +139,45 @@ export interface SessionSummary {
   /** Last change, epoch milliseconds. */
   modified: number;
   messageCount: number;
+  /** Pinned conversations are listed first, in the sidebar's "Pinned" group. */
+  pinned: boolean;
+}
+
+/** A conversation that matches a search, with where it matched. Ranges are [start, end) offsets. */
+export interface SessionSearchHit {
+  path: string;
+  workspaceId: string;
+  title: string;
+  /** Where in `title` the search words occur. */
+  titleMatches: Array<[number, number]>;
+  /** Last change, epoch milliseconds. */
+  modified: number;
+  /** Excerpt of the first message that matches; empty when only the title matched. */
+  snippet: string;
+  /** Where in `snippet` the search words occur. */
+  snippetMatches: Array<[number, number]>;
+}
+
+export const EXPORT_FORMATS = ["md", "html"] as const;
+export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+
+/** A conversation rendered as a document, ready for the save dialog. */
+export interface SessionExport {
+  /** File name without extension. */
+  suggestedName: string;
+  content: string;
+}
+
+/** Tokens and estimated cost of the open conversation, summed over every reply the models gave. */
+export interface SessionUsage {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  /** Estimated cost in US dollars; null when none of the replies had a known price. */
+  cost: number | null;
+  /** Some replies came from models without a known price, so `cost` leaves them out. */
+  costPartial: boolean;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -155,6 +204,8 @@ export interface ModelSummary extends ModelRef {
   /** Accepts image input. */
   images: boolean;
   contextWindow: number;
+  /** Set by `list_models` on a gateway's models when the gateway needs an API key and has none. */
+  needsKey?: boolean;
 }
 
 export interface ProviderSummary {
@@ -189,6 +240,8 @@ export interface GatewayConfig {
   api: GatewayApi;
   baseUrl: string;
   models: GatewayModel[];
+  /** The gateway needs an API key. `false` for local endpoints (Ollama, LM Studio, vLLM) that take none. Absent in older files = true. */
+  requiresApiKey: boolean;
 }
 
 export interface GatewayView extends GatewayConfig {
@@ -202,6 +255,8 @@ export interface SaveGatewayInput {
   api: GatewayApi;
   baseUrl: string;
   models: GatewayModel[];
+  /** The gateway needs an API key (default in the editor: true). */
+  requiresApiKey: boolean;
   /** Omit to keep the stored key; empty string removes it. */
   apiKey?: string;
 }
@@ -271,6 +326,14 @@ export interface AppSettings {
   activeAgentId: string;
   /** Thinking level for new conversations: the one picked last. */
   thinkingLevel: ThinkingLevel;
+  /** Native notifications when a run finishes or needs approval while the window is not in focus. */
+  notifications: boolean;
+  /** Keep a tray / menu bar icon; closing the window then hides it instead of quitting. */
+  tray: boolean;
+  /** Register `shortcut` as a global shortcut that shows the window and focuses the message box. */
+  shortcutEnabled: boolean;
+  /** Electron accelerator for the global shortcut (see `isValidAccelerator`). */
+  shortcut: string;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -305,6 +368,35 @@ export interface AgentProfile extends AgentSummary {
   model: ModelRef | null;
   /** Suggestions shown on an empty chat. */
   starterPrompts: string[];
+  /** Uses long-term memory (notes in the prompt, memory tools). Missing in older files = true. */
+  memory: boolean;
+}
+
+/** Limits of long-term memory, shared so the editor can enforce the same ones. */
+export const MEMORY_LIMITS = {
+  maxEntries: 200,
+  maxEntryLength: 500,
+  maxTagLength: 30,
+  /** Characters of notes added to the system prompt; the newest notes come first. */
+  maxInjectedLength: 4000,
+} as const;
+
+/** A short fact or preference the agent keeps across conversations. */
+export interface MemoryEntry {
+  id: string;
+  text: string;
+  /** One short label ("preference", "project"…); null = none. */
+  tag: string | null;
+  /** Epoch milliseconds. */
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface MemoryView {
+  /** Global switch: off = no notes in prompts and the memory tools do nothing. */
+  enabled: boolean;
+  /** Most recently saved or edited first. */
+  entries: MemoryEntry[];
 }
 
 /** Omit `id` to create an agent. */
@@ -382,6 +474,110 @@ export interface SettingsFile extends AppSettings {
   /** Always contains the workspace with id `DEFAULT_WORKSPACE_ID`. */
   workspaces: WorkspaceProfile[];
   webSearch: WebSearchConfig;
+  /** File names of the pinned conversations (`<id>.jsonl` inside the sessions folder). */
+  pinnedSessions: string[];
+  scheduledTasks: ScheduledTask[];
+  voice: VoiceSettings;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Scheduled tasks (prompts that run on a schedule, without opening a chat)
+// ---------------------------------------------------------------------------------------------
+
+/** Limits shared so the editor enforces the same ones as the agent. */
+export const SCHEDULE_LIMITS = {
+  maxTasks: 50,
+  maxNameLength: 60,
+  maxPromptLength: 20_000,
+  minMinutes: 5,
+  maxMinutes: 1_440,
+  maxHours: 168,
+} as const;
+
+/** Times are local to the computer. Weekdays are numbered like `Date.getDay()`: 0 = Sunday. */
+export type TaskSchedule =
+  | { kind: "interval"; every: number; unit: "minutes" | "hours" }
+  | { kind: "daily"; time: string }
+  | { kind: "weekly"; days: number[]; time: string };
+
+/** How the last run of a task ended. */
+export interface TaskRun {
+  /** When it started, epoch milliseconds. */
+  at: number;
+  durationMs: number;
+  status: "completed" | "failed";
+  /** Why it failed, in the language of the app at the time. */
+  error?: string;
+  /** Tools that needed approval and were denied because nobody was there to approve. */
+  deniedTools: number;
+  /** The saved conversation of the run; absent when it could not start. */
+  sessionPath?: string;
+}
+
+export interface ScheduledTask {
+  id: string;
+  /** Unique, case-insensitively. */
+  name: string;
+  prompt: string;
+  /** Agent that runs it; a deleted agent falls back to the default agent. */
+  agentId: string;
+  /** Workspace it runs in; a deleted workspace falls back to the default workspace. */
+  workspaceId: string;
+  schedule: TaskSchedule;
+  enabled: boolean;
+  /** Runs are counted from here: creation, enabling, or the last schedule change (epoch ms). */
+  armedAt: number;
+  lastRun: TaskRun | null;
+}
+
+export type ScheduledTaskState = "idle" | "queued" | "running";
+
+export interface ScheduledTaskView extends ScheduledTask {
+  state: ScheduledTaskState;
+  /** Next scheduled run, epoch milliseconds; null while disabled. */
+  nextRun: number | null;
+}
+
+/** Omit `id` to create a task. */
+export type SaveScheduledTaskInput = Omit<ScheduledTask, "id" | "armedAt" | "lastRun"> & {
+  id?: string;
+};
+
+// ---------------------------------------------------------------------------------------------
+// Voice input (speech to text for the message box)
+// ---------------------------------------------------------------------------------------------
+
+export const VOICE_LIMITS = {
+  /** A recording stops by itself after this long. */
+  maxDurationMs: 300_000,
+  /** Largest recording the app sends (transcription services refuse about 25 MB). */
+  maxBytes: 20 * 1024 * 1024,
+  maxModelLength: 100,
+} as const;
+
+export const DEFAULT_VOICE_MODEL = "whisper-1";
+
+/** Contents of `SettingsFile.voice`. */
+export interface VoiceSettings {
+  /** Provider or gateway id whose key pays for transcription; null = not set up. */
+  providerId: string | null;
+  /** Transcription model, such as `whisper-1`. */
+  model: string;
+  /** `app` = the language of the app, `auto` = let the service detect it, or a two-letter code. */
+  language: string;
+}
+
+/** A provider or gateway that can transcribe: it has a key and an OpenAI-style address. */
+export interface VoiceProviderOption {
+  id: string;
+  name: string;
+}
+
+export interface VoiceView {
+  config: VoiceSettings;
+  providers: VoiceProviderOption[];
+  /** The chosen provider still has a key, so the mic button works. */
+  ready: boolean;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -446,6 +642,8 @@ export interface SkillSummary {
   path: string;
   /** False when `disable-model-invocation` is set: only `/skill:<name>` loads it. */
   modelInvocable: boolean;
+  /** Ships with the app and has not been edited; the app updates it with new versions. */
+  builtIn: boolean;
 }
 
 export interface SkillDetail extends SkillSummary {
@@ -502,11 +700,30 @@ export interface McpServerView {
   usesOAuth: boolean;
 }
 
+/** The settings a person can change with `update_settings`. */
+export type SettingsPatch = Partial<
+  Pick<
+    AppSettings,
+    | "defaultModel"
+    | "shellEnabled"
+    | "language"
+    | "notifications"
+    | "tray"
+    | "shortcutEnabled"
+    | "shortcut"
+  >
+>;
+
 export interface McpOverview {
   servers: McpServerView[];
   /** Problems in mcp.json that kept entries from loading. */
   configErrors: string[];
   configPath: string;
+  /**
+   * Where MCP sign-in tokens are kept: `encrypted` in the vault, or `file` (a plain file in the
+   * app folder) when the OS cannot encrypt them.
+   */
+  authStorage: "encrypted" | "file";
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -528,10 +745,36 @@ export interface AgentCommandMap {
   open_session: { params: { path: string }; result: void };
   rename_session: { params: { path: string; name: string }; result: void };
   delete_session: { params: { path: string }; result: void };
+  /** Pins or unpins a saved conversation; pinned ones are listed first. */
+  pin_session: { params: { path: string; pinned: boolean }; result: void };
+  /** Full-text search (ignoring case and accents) over the titles and messages of saved chats. */
+  search_sessions: { params: { query: string }; result: SessionSearchHit[] };
+  /** A saved conversation as a document; the renderer then asks main to save it. */
+  export_session: { params: { path: string; format: ExportFormat }; result: SessionExport };
+  /** Tokens and estimated cost of the open conversation. */
+  get_usage: { params: NoParams; result: SessionUsage };
+  /** Asks again for the last answer: drops it and the model answers the same message anew. */
+  regenerate: { params: NoParams; result: void };
+  /**
+   * Replaces a message and everything after it, then sends the new text. `keep` lists the
+   * attachments of the original message to send again: workspace-relative file paths and indexes
+   * of its images; `attachments` are added.
+   */
+  edit_message: {
+    params: {
+      entryId: string;
+      text: string;
+      attachments: Attachment[];
+      keep: { files: string[]; images: number[] };
+    };
+    result: void;
+  };
+  /** Starts a new conversation holding the chat up to and including this message, and opens it. */
+  branch_session: { params: { entryId: string }; result: void };
 
   get_settings: { params: NoParams; result: AppSettings };
   update_settings: {
-    params: { patch: Partial<Pick<AppSettings, "defaultModel" | "shellEnabled" | "language">> };
+    params: { patch: SettingsPatch };
     result: AppSettings;
   };
 
@@ -598,6 +841,37 @@ export interface AgentCommandMap {
   save_workspace: { params: { workspace: SaveWorkspaceInput }; result: WorkspaceProfile };
   /** The default workspace cannot be deleted. Its conversations move to the default workspace. */
   delete_workspace: { params: { id: string }; result: void };
+
+  /** Saved notes, newest first, and whether memory is on. */
+  get_memory: { params: NoParams; result: MemoryView };
+  /** The global switch of long-term memory (Settings › Memory). */
+  set_memory_enabled: { params: { enabled: boolean }; result: MemoryView };
+  /** Adds a note (`id` omitted) or edits one. A note that already exists is not added twice. */
+  save_memory_entry: {
+    params: { id?: string; text: string; tag?: string | null };
+    result: MemoryEntry;
+  };
+  delete_memory_entry: { params: { id: string }; result: void };
+  /** Forgets every note. */
+  clear_memory: { params: NoParams; result: void };
+
+  /** Scheduled tasks with their running state and next run, by name. */
+  list_scheduled_tasks: { params: NoParams; result: ScheduledTaskView[] };
+  /** Adds a task (`id` omitted) or edits one. */
+  save_scheduled_task: { params: { task: SaveScheduledTaskInput }; result: ScheduledTaskView };
+  delete_scheduled_task: { params: { id: string }; result: void };
+  set_scheduled_task_enabled: { params: { id: string; enabled: boolean }; result: void };
+  /** Queues a run now (also for a disabled task). Fails when the task is already queued or running. */
+  run_scheduled_task: { params: { id: string }; result: void };
+
+  /** Voice input setting, and whether it can transcribe right now. */
+  get_voice: { params: NoParams; result: VoiceView };
+  save_voice: { params: { config: VoiceSettings }; result: VoiceView };
+  /** Sends a recording to the transcription service chosen in Settings; the key stays here. */
+  transcribe_audio: {
+    params: { data: string; mimeType: string; durationMs: number };
+    result: { text: string };
+  };
 }
 
 export type AgentCommandType = keyof AgentCommandMap;
@@ -653,6 +927,8 @@ export interface DesktopBridge {
     openAgentFile(): Promise<string | null>;
     /** Asks where to save an exported agent; false when cancelled. */
     saveAgentFile(suggestedName: string, json: string): Promise<boolean>;
+    /** Asks where to save an exported conversation; false when cancelled. */
+    saveExport(suggestedName: string, format: ExportFormat, content: string): Promise<boolean>;
   };
   updates: {
     state(): Promise<UpdateState>;
@@ -666,6 +942,12 @@ export interface DesktopBridge {
   };
   /** Opens an http(s) URL in the default browser. */
   openExternal(url: string): Promise<void>;
+  shell: {
+    /** The global shortcut fired: the window is in front, focus the message box. */
+    onFocusComposer(listener: () => void): () => void;
+    /** True once when the window was created by the shortcut and missed the event; clears it. */
+    takePendingFocus(): Promise<boolean>;
+  };
 }
 
 export const IPC = {
@@ -678,12 +960,15 @@ export const IPC = {
   filesPickFolder: "files:pick-folder",
   filesOpenAgent: "files:open-agent",
   filesSaveAgent: "files:save-agent",
+  filesSaveExport: "files:save-export",
   openExternal: "shell:open-external",
   updatesState: "updates:state",
   updatesCheck: "updates:check",
   updatesDownload: "updates:download",
   updatesInstall: "updates:install",
   updatesEvent: "updates:event",
+  shellFocusComposer: "shell:focus-composer",
+  shellTakePendingFocus: "shell:take-pending-focus",
 } as const;
 
 // ---------------------------------------------------------------------------------------------
@@ -711,6 +996,8 @@ export type StoredCredential =
 export type VaultRequest =
   | { op: "read"; providerId: string }
   | { op: "list" }
+  /** Whether the OS keychain can protect the vault (false: no keychain, or a plain-text fallback). */
+  | { op: "available" }
   | { op: "write"; providerId: string; credential: StoredCredential }
   | { op: "delete"; providerId: string };
 

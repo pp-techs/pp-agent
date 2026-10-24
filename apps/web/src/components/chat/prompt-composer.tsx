@@ -14,6 +14,7 @@ import {
   InputGroupButton,
   InputGroupTextarea,
 } from "@workspace/ui/components/input-group";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowUpIcon, FileTextIcon, SquareIcon, XIcon } from "lucide-react";
 import { cn } from "@workspace/ui/lib/utils";
 import { useTranslation } from "react-i18next";
@@ -23,7 +24,11 @@ import { ComposerMenu } from "@/components/chat/composer-menu";
 import { ModelPicker } from "@/components/chat/model-picker";
 import { SlashSuggestions } from "@/components/chat/slash-suggestions";
 import { ThinkingPicker } from "@/components/chat/thinking-picker";
+import { VoiceControls } from "@/components/chat/voice-controls";
+import { SettingsModal } from "@/components/modals/settings-modal";
 import { useSendMessage } from "@/hooks/use-send-message";
+import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
+import { voiceQuery } from "@/lib/extension-queries";
 import { useAgentCommands } from "@/lib/queries";
 import {
   filterSlashItems,
@@ -34,6 +39,7 @@ import {
   slashText,
   useSlashItems,
 } from "@/lib/slash-commands";
+import { insertTranscript } from "@/lib/voice-input";
 import { useChatStore } from "@/stores/chat-store";
 import { toAttachments, useComposerStore } from "@/stores/composer-store";
 
@@ -50,7 +56,38 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
   const send = useSendMessage(bridge);
   const { t } = useTranslation(["chat", "common"]);
   const { commands, skills } = useSlashItems(bridge);
-  const canSend = !disabled && (draft.trim().length > 0 || attachments.length > 0);
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const voice = useQuery(voiceQuery(bridge));
+
+  /** Writes the transcript into the draft at the cursor; the person sends it when ready. */
+  function insertText(text: string) {
+    if (!text) return;
+    const textarea = textareaRef.current;
+    const current = useComposerStore.getState().draft;
+    const start = textarea?.selectionStart ?? current.length;
+    const result = insertTranscript(current, text, start, textarea?.selectionEnd ?? start);
+    setDraft(result.draft);
+    setExpanded((was) => was || result.draft.length > 60 || result.draft.includes("\n"));
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(result.caret, result.caret);
+    });
+  }
+
+  const recorder = useVoiceRecorder(bridge, insertText);
+  const canSend =
+    !disabled && recorder.state === "idle" && (draft.trim().length > 0 || attachments.length > 0);
+
+  /** Starts recording; when voice input is not set up, explains and opens its setting instead. */
+  async function onMicrophone() {
+    const view = voice.data ?? (await voice.refetch()).data;
+    if (!view?.ready) {
+      toast.info(t("composer.voice.notConfigured"));
+      void SettingsModal.show({ bridge, section: "general" });
+      return;
+    }
+    void recorder.start();
+  }
 
   // Suggestions follow the `/` token being typed; Escape hides them until the text changes.
   const [activeIndex, setActiveIndex] = React.useState(0);
@@ -180,6 +217,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
             onPick={pickItem}
           />
           <InputGroupTextarea
+            ref={textareaRef}
             value={draft}
             onChange={(event) => {
               const { value, scrollHeight } = event.target;
@@ -207,6 +245,14 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
           {isExpanded && <div className="flex-1" />}
           <ModelPicker bridge={bridge} />
           <ThinkingPicker bridge={bridge} disabled={disabled} />
+          <VoiceControls
+            state={recorder.state}
+            startedAt={recorder.startedAt}
+            disabled={disabled}
+            onStart={() => void onMicrophone()}
+            onStop={recorder.stop}
+            onCancel={recorder.cancel}
+          />
           {running ? (
             <InputGroupButton
               type="button"

@@ -90,7 +90,7 @@ sequenceDiagram
 - `sync()` compares each entry's JSON with what is registered, so an `mcp.json` edit or an agent switch only touches servers that changed.
 - If Pi refuses a config, the reason is kept (`failure(name)`) and shown in the MCP overview as `failed`.
 - MCP tools are named `mcp__<server>__<tool>`. Their exposure (`codemode` default, `deferred`, `direct`, `hidden`) is handled by Pi's MCP, codemode and tool search extensions; `hidden` tools are not listed in Settings › Tools.
-- OAuth sign-in URLs from Pi's MCP extension go to main as `open_url` (`createMcpExtension({ openUrl })`). Tokens are kept by Pi in `agent/mcp-auth.json`.
+- OAuth sign-in URLs from Pi's MCP extension go to main as `open_url` (`createMcpExtension({ openUrl })`). Tokens are kept in the safeStorage vault (`VaultMcpAuthStore`), falling back to Pi's `agent/mcp-auth.json` only when the OS cannot encrypt.
 
 ### Status via `/mcp`
 

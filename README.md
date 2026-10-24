@@ -27,6 +27,12 @@ Coding agents are powerful but built for developers. PP Agent puts the same engi
 - **Any model.** Sign in to Pi's built-in providers (Anthropic, OpenAI, Google, OpenRouter, Mistral, Groq, and more) with an API key, or add your own OpenAI- or Anthropic-compatible gateways. Choose the model and thinking level per conversation.
 - **Business systems through MCP.** Add, edit, and monitor [MCP](https://modelcontextprotocol.io) servers in Settings, including OAuth sign-in. Paste configurations from Claude Desktop or Cursor.
 - **Approvals you control.** Read-only actions run freely; saving files, shell commands, and actions that change data in your systems ask first. Each tool can be set to automatic, always ask, always allow, or off. Shell commands are off by default and can be set to run without asking, after a confirmation and with a standing warning in Settings.
+- **Create and edit Office files.** The agent builds and changes Word, Excel, and PowerPoint files in your workspace with the bundled [OfficeCLI](https://github.com/iOfficeAI/OfficeCLI); saving asks first.
+- **Chat history.** Search past chats, pin them, export to Markdown or HTML, copy, edit and resend a message, regenerate an answer, branch a chat, and see token use and estimated cost.
+- **Memory, checklists, helpers.** The agent keeps notes between chats (view and edit them in **Settings › Memory**), tracks multi-step work in a checklist, and hands research to a read-only helper.
+- **Scheduled tasks.** Run a prompt daily, weekly, or at an interval; each run is saved as a chat. Actions that need approval are skipped, since nobody is there to approve them.
+- **Voice input.** Dictate into the message box with a speech-to-text service you choose.
+- **Desktop.** Notifications when an answer is ready, an optional tray icon, and a global shortcut.
 - **Languages.** English and Tiếng Việt, chosen in **Settings › General** or following your system language. Errors, approvals, and dialogs are translated too.
 - **Skills.** Import [Agent Skills](https://agentskills.io), write your own in the app, and invoke them with `/skill:<name>`. Slash commands `/new` and `/compact` keep long chats manageable.
 - **Private by design.** API keys (model providers and search services) are encrypted with your operating system's keychain; conversations and files stay on your computer except what you send to the providers, search services, and MCP servers you configure. Search queries go to the search service you choose.
@@ -44,10 +50,10 @@ Download the installer for your system from the [latest release](https://github.
 
 Each release lists SHA-256 checksums in `SHA256SUMS.txt`.
 
-The app checks for new versions on start and under **Settings → General → Updates**. Windows and Linux (AppImage) install updates from inside the app; on macOS and with the `.deb` it opens the download page.
+The app checks for new versions on start and under **Settings → General → Updates**. Windows, Linux (AppImage), and macOS builds signed with a Developer ID install updates from inside the app; with the `.deb` it opens the download page.
 
 > [!NOTE]
-> Release builds are not yet signed with a Developer ID or Windows certificate.
+> macOS releases are signed with a Developer ID and notarized, and Windows releases are signed, only when the maintainers have configured certificates. Unsigned builds still show warnings:
 > On macOS, if the app "is damaged" or "cannot be opened", run `xattr -dr com.apple.quarantine "/Applications/PP Agent.app"` once.
 > On Windows, choose **More info → Run anyway** in SmartScreen.
 

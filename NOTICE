@@ -6,3 +6,10 @@ This product includes software developed by PP Techs (https://github.com/pp-tech
 PP Agent is built on the Pi SDK (https://github.com/earendil-works/pi), Electron
 (https://www.electronjs.org), and other open-source packages listed in the package manifests;
 their licenses are included in the distributed application.
+
+The desktop app bundles OfficeCLI (https://github.com/iOfficeAI/OfficeCLI), a single-file command
+line tool for Word, Excel, and PowerPoint files, and the skill texts that come with it
+(apps/desktop/resources/skills/officecli*). OfficeCLI is Copyright 2026 OfficeCLI
+(https://OfficeCLI.AI) and is licensed under the Apache License, Version 2.0. Its license, NOTICE,
+and third-party notices are installed with the app in resources/licenses/officecli and are kept
+in apps/desktop/resources/licenses/officecli.

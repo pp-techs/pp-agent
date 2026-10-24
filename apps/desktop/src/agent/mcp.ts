@@ -302,6 +302,7 @@ export function buildOverview(
   statusText: string | null,
   registrations: McpRegistrations,
   agentName: string,
+  authStorage: McpOverview["authStorage"],
 ): McpOverview {
   let entries: McpConfigEntry[] = [];
   const fileErrors: string[] = [];
@@ -339,6 +340,7 @@ export function buildOverview(
     servers: views,
     configErrors: [...fileErrors, ...configErrors, ...refused],
     configPath: config.path,
+    authStorage,
   };
 }
 

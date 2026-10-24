@@ -18,10 +18,12 @@ import {
   SidebarProvider,
 } from "@workspace/ui/components/sidebar";
 import {
+  AlarmClockIcon,
   BlocksIcon,
   BookOpenIcon,
   BotIcon,
   ChevronRightIcon,
+  BrainIcon,
   FolderKanbanIcon,
   SlidersHorizontalIcon,
   SparklesIcon,
@@ -33,6 +35,8 @@ import { useTranslation } from "react-i18next";
 import { AgentsSection } from "@/components/settings/agents-section";
 import { GeneralSection } from "@/components/settings/general-section";
 import { McpSection } from "@/components/settings/mcp-section";
+import { MemorySection } from "@/components/settings/memory-section";
+import { ScheduledTasksSection } from "@/components/settings/scheduled-tasks-section";
 import { ModelsSection } from "@/components/settings/models-section";
 import { SkillsSection } from "@/components/settings/skills-section";
 import { SettingsSubPageProvider } from "@/components/settings/settings-subpage";
@@ -46,6 +50,8 @@ export type SettingsSection =
   | "agents"
   | "tools"
   | "skills"
+  | "memory"
+  | "scheduledTasks"
   | "mcp";
 
 const SECTIONS: {
@@ -59,6 +65,8 @@ const SECTIONS: {
   { id: "agents", icon: BotIcon, Component: AgentsSection },
   { id: "tools", icon: WrenchIcon, Component: ToolsSection },
   { id: "skills", icon: BookOpenIcon, Component: SkillsSection },
+  { id: "memory", icon: BrainIcon, Component: MemorySection },
+  { id: "scheduledTasks", icon: AlarmClockIcon, Component: ScheduledTasksSection },
   { id: "mcp", icon: BlocksIcon, Component: McpSection },
 ];
 

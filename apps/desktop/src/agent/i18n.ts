@@ -12,3 +12,8 @@ export function configureLanguage(setting: LanguageSetting, locale?: string): vo
   if (locale !== undefined) systemLocale = locale;
   void i18n.changeLanguage(resolveLanguage(setting, systemLocale));
 }
+
+/** Language the person reads right now (`en`, `vi`). */
+export function currentLanguage(): string {
+  return i18n.language;
+}

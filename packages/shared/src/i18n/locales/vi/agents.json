@@ -8,6 +8,7 @@
     "useAsIcon": "Dùng {{icon}} làm biểu tượng",
     "maxChars": "Tối đa {{max}} ký tự.",
     "modelUnavailable": "{{modelId}} (không khả dụng)",
+    "modelNeedsKey": "{{name}} (cần khóa)",
     "saveChanges": "Lưu thay đổi"
   },
   "toolOptions": {
@@ -58,6 +59,38 @@
     "powershell": {
       "label": "Chạy lệnh PowerShell",
       "description": "Chạy lệnh trên máy tính này; sẽ hỏi bạn trước, trừ khi được đặt để chạy tự do."
+    },
+    "memory_save": {
+      "label": "Ghi nhớ ghi chú",
+      "description": "Lưu các thông tin và sở thích ngắn; hỏi trước khi lưu."
+    },
+    "memory_list": {
+      "label": "Xem ghi chú đã lưu",
+      "description": "Xem agent đang nhớ những gì."
+    },
+    "memory_search": {
+      "label": "Tìm trong ghi chú đã lưu",
+      "description": "Tìm điều agent đã ghi nhớ."
+    },
+    "memory_forget": {
+      "label": "Quên ghi chú",
+      "description": "Xóa một ghi chú đã lưu; hỏi trước khi xóa."
+    },
+    "todo_write": {
+      "label": "Lập kế hoạch bằng danh sách",
+      "description": "Giữ một danh sách việc cần làm cho các tác vụ nhiều bước."
+    },
+    "delegate_task": {
+      "label": "Giao việc tra cứu",
+      "description": "Giao một việc tra cứu chỉ-đọc cho trợ lý phụ và nhận lại bản tóm tắt."
+    },
+    "office_read": {
+      "label": "Xem tệp Word, Excel, PowerPoint",
+      "description": "Xem cấu trúc và nội dung tệp Office mà không thay đổi chúng."
+    },
+    "office_edit": {
+      "label": "Tạo và chỉnh sửa tệp Word, Excel, PowerPoint",
+      "description": "Tạo và thay đổi tệp Office trong thư mục làm việc; hỏi trước khi làm."
     }
   },
   "agentsSection": {
@@ -147,6 +180,11 @@
       "placeholder": "Tổng hợp chi phí tháng này theo từng nhóm",
       "remove": "Xóa gợi ý khởi đầu {{number}}",
       "add": "Thêm gợi ý khởi đầu"
+    },
+    "memory": {
+      "legend": "Bộ nhớ",
+      "label": "Dùng bộ nhớ dài hạn",
+      "description": "Thêm các ghi chú đã lưu vào cuộc trò chuyện của agent này và cho phép nó lưu ghi chú mới."
     }
   },
   "workspacesSection": {

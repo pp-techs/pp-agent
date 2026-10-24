@@ -77,6 +77,15 @@ async function remove(providerId: string): Promise<void> {
   await writeVault(vault);
 }
 
+/**
+ * Whether the OS keychain really protects the vault. On Linux without a keyring Electron falls
+ * back to a hard-coded key (`basic_text`), which is no protection for new secrets.
+ */
+async function secureStorageAvailable(): Promise<boolean> {
+  if (!(await safeStorage.isAsyncEncryptionAvailable())) return false;
+  return process.platform !== "linux" || safeStorage.getSelectedStorageBackend() !== "basic_text";
+}
+
 /** Answers a `vault` message from the agent process. */
 export function handleVaultRequest(request: VaultRequest): Promise<unknown> {
   return serialize(async () => {
@@ -85,6 +94,8 @@ export function handleVaultRequest(request: VaultRequest): Promise<unknown> {
         return read(request.providerId);
       case "list":
         return Object.keys(await readVault());
+      case "available":
+        return secureStorageAvailable();
       case "write":
         return write(request.providerId, request.credential);
       case "delete":

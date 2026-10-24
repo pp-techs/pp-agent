@@ -32,6 +32,8 @@ import { toast } from "sonner";
 
 import { useTheme } from "@/components/theme-provider";
 import { SectionHeading } from "@/components/settings/section-heading";
+import { DesktopGroup } from "@/components/settings/desktop-group";
+import { VoiceInputGroup } from "@/components/settings/voice-input-group";
 import { groupByProvider, modelKey, modelLabeler } from "@/lib/models";
 import { modelsQuery, settingsQuery, useUpdateSettings } from "@/lib/queries";
 import { describeUpdate, updateAction } from "@/components/update-actions";
@@ -148,8 +150,10 @@ function DefaultModelField({ bridge }: { bridge: DesktopBridge }) {
             <SelectGroup key={provider}>
               <SelectLabel>{group.name}</SelectLabel>
               {group.models.map((model) => (
-                <SelectItem key={modelKey(model)} value={modelKey(model)}>
-                  {label(model)}
+                <SelectItem key={modelKey(model)} value={modelKey(model)} disabled={model.needsKey}>
+                  {model.needsKey
+                    ? t("general.defaultModel.needsKey", { name: label(model) })
+                    : label(model)}
                 </SelectItem>
               ))}
             </SelectGroup>
@@ -245,6 +249,8 @@ export function GeneralSection({ bridge }: { bridge: DesktopBridge }) {
           </ToggleGroup>
         </Field>
         <DefaultModelField bridge={bridge} />
+        <DesktopGroup bridge={bridge} />
+        <VoiceInputGroup bridge={bridge} />
         <UpdatesField bridge={bridge} />
       </FieldGroup>
     </div>
