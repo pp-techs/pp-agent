@@ -259,7 +259,7 @@ jobs:
             keychain_password="$(uuidgen)"
             cert="$RUNNER_TEMP/developer-id.p12"
             case "$CSC_LINK" in
-              http*) curl -fsSL "$CSC_LINK" -o "$cert" ;;
+              http*) curl -fsSL --proto '=https' --proto-redir '=https' "$CSC_LINK" -o "$cert" ;;
               *) printf '%s' "$CSC_LINK" | base64 --decode > "$cert" ;;
             esac
             security create-keychain -p "$keychain_password" "$keychain"
@@ -269,7 +269,12 @@ jobs:
             security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain"
             security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
             rm -f "$cert"
-            security find-identity -v -p codesigning "$keychain"
+            # `find-identity` exits 0 even with no identity; fail here instead of building unsigned.
+            security find-identity -v -p codesigning "$keychain" | tee "$RUNNER_TEMP/identities.txt"
+            grep -q 'Developer ID Application' "$RUNNER_TEMP/identities.txt" || {
+              echo "::error::No valid Developer ID Application identity in the imported certificate."
+              exit 1
+            }
             export CSC_KEYCHAIN="$keychain"
             unset CSC_LINK CSC_KEY_PASSWORD
           fi
