@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { ApprovalRequest, ChatMessage, ChatPart } from "@workspace/shared";
+import type { ApprovalRequest, ChatMessage, ChatPart, DesktopBridge } from "@workspace/shared";
 import {
   Attachment,
   AttachmentContent,
@@ -8,7 +8,9 @@ import {
 } from "@workspace/ui/components/attachment";
 import { Badge } from "@workspace/ui/components/badge";
 import { Bubble, BubbleContent } from "@workspace/ui/components/bubble";
-import { Message, MessageContent } from "@workspace/ui/components/message";
+import { Button } from "@workspace/ui/components/button";
+import { Message, MessageContent, MessageFooter } from "@workspace/ui/components/message";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
 import {
   Trace,
   TraceCollapsible,
@@ -18,11 +20,24 @@ import {
   TraceLine,
   TraceTitle,
 } from "@workspace/ui/components/trace";
-import { BrainIcon, CircleAlertIcon, FileTextIcon, SparklesIcon } from "lucide-react";
+import {
+  BrainIcon,
+  CheckIcon,
+  CircleAlertIcon,
+  CopyIcon,
+  FileTextIcon,
+  GitBranchIcon,
+  PencilIcon,
+  RefreshCwIcon,
+  SparklesIcon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 import { Markdown } from "@/components/markdown";
+import { MessageEditor } from "@/components/chat/message-editor";
 import { ToolStep } from "@/components/chat/tool-step";
+import { useAgentCommands } from "@/lib/queries";
 
 type StepPart = Extract<ChatPart, { type: "thinking" | "tool" }>;
 type Block = { kind: "text"; text: string } | { kind: "steps"; parts: StepPart[] };
@@ -40,6 +55,124 @@ function toBlocks(parts: ChatPart[]): Block[] {
     }
   }
   return blocks;
+}
+
+/** The commands message actions run; owned by the thread so messages do not each create them. */
+export type MessageCommands = Pick<
+  ReturnType<typeof useAgentCommands>,
+  "regenerate" | "branchSession" | "editMessage"
+>;
+
+/** Text of a message as the person reads it: its text parts, tools and thinking left out. */
+function messageText(parts: ChatPart[]) {
+  return parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("\n\n");
+}
+
+const COPIED_MS = 1500;
+
+function ActionButton({
+  label,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  disabled?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={label}
+            disabled={disabled}
+            onClick={onClick}
+          />
+        }
+      >
+        {children}
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** Copy, regenerate, edit, and branch under a message. Hidden until hovered or focused. */
+function MessageActions({
+  commands,
+  message,
+  canRegenerate,
+  disabled,
+  onEdit,
+}: {
+  commands: MessageCommands;
+  message: ChatMessage;
+  canRegenerate: boolean;
+  /** An answer is being written: the commands that change the conversation wait. */
+  disabled: boolean;
+  onEdit?: () => void;
+}) {
+  const { t } = useTranslation("chat");
+  const { regenerate, branchSession } = commands;
+  const [copied, setCopied] = React.useState(false);
+  const { entryId } = message;
+  const onError = (error: Error) => toast.error(error.message);
+
+  React.useEffect(() => {
+    if (!copied) return;
+    const timeout = setTimeout(() => setCopied(false), COPIED_MS);
+    return () => clearTimeout(timeout);
+  }, [copied]);
+
+  function copy() {
+    navigator.clipboard.writeText(messageText(message.parts)).then(
+      () => setCopied(true),
+      (error: unknown) => toast.error(error instanceof Error ? error.message : String(error)),
+    );
+  }
+
+  return (
+    <MessageFooter className="gap-0.5 px-0 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100">
+      <ActionButton
+        label={copied ? t("message.actions.copied") : t("message.actions.copy")}
+        onClick={copy}
+      >
+        {copied ? <CheckIcon /> : <CopyIcon />}
+      </ActionButton>
+      {onEdit && (
+        <ActionButton
+          label={t("message.actions.edit")}
+          disabled={disabled || !entryId}
+          onClick={onEdit}
+        >
+          <PencilIcon />
+        </ActionButton>
+      )}
+      {canRegenerate && (
+        <ActionButton
+          label={t("message.actions.regenerate")}
+          disabled={disabled || regenerate.isPending}
+          onClick={() => regenerate.mutate(undefined, { onError })}
+        >
+          <RefreshCwIcon />
+        </ActionButton>
+      )}
+      <ActionButton
+        label={t("message.actions.branch")}
+        disabled={disabled || !entryId || branchSession.isPending}
+        onClick={() => entryId && branchSession.mutate(entryId, { onError })}
+      >
+        <GitBranchIcon />
+      </ActionButton>
+    </MessageFooter>
+  );
 }
 
 function ThinkingStep({ text, running }: { text: string; running: boolean }) {
@@ -60,7 +193,20 @@ function ThinkingStep({ text, running }: { text: string; running: boolean }) {
   );
 }
 
-function UserMessage({ parts }: { parts: ChatPart[] }) {
+function UserMessage({
+  bridge,
+  commands,
+  message,
+  disabled,
+}: {
+  bridge: DesktopBridge;
+  commands: MessageCommands;
+  message: ChatMessage;
+  disabled: boolean;
+}) {
+  const { parts } = message;
+  const [editing, setEditing] = React.useState(false);
+  const { editMessage } = commands;
   const text = parts
     .filter((part) => part.type === "text")
     .map((part) => part.text)
@@ -69,6 +215,30 @@ function UserMessage({ parts }: { parts: ChatPart[] }) {
   const files = parts.filter((part) => part.type === "file");
   const skills = parts.filter((part) => part.type === "skill");
   const { t } = useTranslation("chat");
+  if (editing && message.entryId) {
+    const { entryId } = message;
+    return (
+      <Message align="end">
+        <MessageContent>
+          <MessageEditor
+            bridge={bridge}
+            parts={parts}
+            pending={editMessage.isPending}
+            onCancel={() => setEditing(false)}
+            onSubmit={(edit) =>
+              editMessage.mutate(
+                { entryId, ...edit },
+                {
+                  onSuccess: () => setEditing(false),
+                  onError: (error) => toast.error(error.message),
+                },
+              )
+            }
+          />
+        </MessageContent>
+      </Message>
+    );
+  }
   return (
     <Message align="end">
       <MessageContent>
@@ -109,6 +279,13 @@ function UserMessage({ parts }: { parts: ChatPart[] }) {
             <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
           </Bubble>
         )}
+        <MessageActions
+          commands={commands}
+          message={message}
+          canRegenerate={false}
+          disabled={disabled}
+          onEdit={() => setEditing(true)}
+        />
       </MessageContent>
     </Message>
   );
@@ -127,20 +304,31 @@ function CompactionDivider() {
 }
 
 export function ChatMessageView({
+  bridge,
+  commands,
   message,
+  last,
+  busy,
   streaming,
   approvals,
   onRespond,
   responding,
 }: {
+  bridge: DesktopBridge;
+  commands: MessageCommands;
   message: ChatMessage;
+  /** The last message of the chat: the only answer that can be regenerated. */
+  last: boolean;
+  /** An answer is being written, so commands that change the conversation wait. */
+  busy: boolean;
   streaming: boolean;
   approvals: ApprovalRequest[];
   onRespond: (requestId: string, approved: boolean) => void;
   responding: boolean;
 }) {
   if (message.role === "compaction") return <CompactionDivider />;
-  if (message.role === "user") return <UserMessage parts={message.parts} />;
+  if (message.role === "user")
+    return <UserMessage bridge={bridge} commands={commands} message={message} disabled={busy} />;
 
   const blocks = toBlocks(message.parts);
   return (
@@ -184,6 +372,14 @@ export function ChatMessageView({
             <CircleAlertIcon className="size-4 shrink-0" />
             <span>{message.error}</span>
           </div>
+        )}
+        {!streaming && (last || blocks.some((block) => block.kind === "text")) && (
+          <MessageActions
+            commands={commands}
+            message={message}
+            canRegenerate={last}
+            disabled={busy}
+          />
         )}
       </MessageContent>
     </Message>

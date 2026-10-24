@@ -15,6 +15,22 @@
       "hint": "When the window fills up, older messages are summarized automatically. You can do it now to free up room.",
       "compact": "Compact conversation"
     },
+    "usage": {
+      "title": "Usage",
+      "input": "Input tokens",
+      "output": "Output tokens",
+      "cacheRead": "Cache read",
+      "cacheWrite": "Cache write",
+      "cost": "Estimated cost",
+      "costUnknown": "Unknown (no price for this model)",
+      "costPartial": "{{cost}} + unpriced replies",
+      "empty": "No replies yet."
+    },
+    "export": {
+      "label": "Export conversation",
+      "markdown": "Markdown (.md)",
+      "html": "Web page (.html, printable)"
+    },
     "openFolder": "Open workspace folder"
   },
   "message": {
@@ -22,7 +38,22 @@
     "thought": "Thought",
     "skill": "Skill: {{name}}",
     "attachedImage": "Attached image",
-    "compacted": "Earlier messages summarized"
+    "compacted": "Earlier messages summarized",
+    "actions": {
+      "copy": "Copy message",
+      "copied": "Copied",
+      "regenerate": "Regenerate answer",
+      "edit": "Edit and resend",
+      "branch": "Branch into a new chat",
+      "cancel": "Cancel",
+      "resend": "Resend",
+      "editLabel": "Edit your message",
+      "addFile": "Add file",
+      "removeAttachment": "Remove {{name}}"
+    }
+  },
+  "export": {
+    "saved": "Conversation exported."
   },
   "sidebar": {
     "relativeTime": {
@@ -40,6 +71,17 @@
     "noChats": "No chats yet",
     "showLess": "Show less",
     "showMore": "Show {{hidden}} more",
+    "pinned": "Pinned",
+    "search": {
+      "label": "Search chats",
+      "placeholder": "Search chats…",
+      "clear": "Clear search",
+      "searching": "Searching…",
+      "noResults": "No chats match “{{query}}”.",
+      "failed": "Search failed. Try again.",
+      "tooShort": "Type at least {{count}} characters.",
+      "results": "Search results"
+    },
     "workspace": {
       "newChat": "New chat in {{name}}",
       "actions": "Actions for {{name}}",
@@ -51,6 +93,11 @@
     "session": {
       "actions": "Chat actions",
       "rename": "Rename",
+      "pin": "Pin",
+      "unpin": "Unpin",
+      "export": "Export",
+      "exportMarkdown": "Markdown (.md)",
+      "exportHtml": "Web page (.html)",
       "renameTitle": "Rename chat",
       "name": "Chat name",
       "deleteTitle": "Delete this chat?",
@@ -62,7 +109,26 @@
     "placeholderDisconnected": "Connect a model in Settings to start",
     "ariaLabel": "Message",
     "removeAttachment": "Remove {{name}}",
-    "cantAttach": "Can't attach {{name}}."
+    "cantAttach": "Can't attach {{name}}.",
+    "voice": {
+      "start": "Voice input",
+      "notConfigured": "Voice input isn't set up yet. Choose a provider in Settings › General › Voice input.",
+      "recording": "Recording {{time}} of {{max}}",
+      "stop": "Stop and write out",
+      "cancel": "Discard recording",
+      "transcribing": "Writing out your recording…",
+      "cancelTranscribing": "Cancel",
+      "limitReached": "You reached the {{minutes}}-minute limit. Writing out your recording…",
+      "errors": {
+        "denied": "The microphone is blocked. Allow PP Agent to use it in your system settings, then try again.",
+        "noDevice": "No microphone was found. Connect one and try again.",
+        "unsupported": "This computer can't record audio in the app.",
+        "failed": "Couldn't record: {{error}}",
+        "tooShort": "The recording was too short.",
+        "tooLarge": "The recording is too large. Record a shorter message.",
+        "unreadable": "The recording could not be read."
+      }
+    }
   },
   "composerMenu": {
     "add": "Add files, skills, and commands",
@@ -101,20 +167,44 @@
     "none": "No models yet.",
     "images": "Images",
     "reasoning": "Reasoning",
-    "manage": "Manage models…"
+    "manage": "Manage models…",
+    "needsKey": "Needs key",
+    "needsKeyMessage": "The gateway {{name}} needs an API key before its models can be used.",
+    "addKey": "Add key"
   },
   "thinking": {
     "title": "Thinking",
     "off": "Thinking off",
     "description": "How much the model thinks first",
     "levels": {
-      "off": { "label": "Off", "hint": "Answers right away" },
-      "minimal": { "label": "Minimal", "hint": "A quick look before answering" },
-      "low": { "label": "Low", "hint": "Some thought for simple tasks" },
-      "medium": { "label": "Medium", "hint": "Balanced for most work" },
-      "high": { "label": "High", "hint": "Careful reasoning, slower" },
-      "xhigh": { "label": "Extra high", "hint": "Very thorough, slower and costlier" },
-      "max": { "label": "Max", "hint": "Deepest reasoning, slowest" }
+      "off": {
+        "label": "Off",
+        "hint": "Answers right away"
+      },
+      "minimal": {
+        "label": "Minimal",
+        "hint": "A quick look before answering"
+      },
+      "low": {
+        "label": "Low",
+        "hint": "Some thought for simple tasks"
+      },
+      "medium": {
+        "label": "Medium",
+        "hint": "Balanced for most work"
+      },
+      "high": {
+        "label": "High",
+        "hint": "Careful reasoning, slower"
+      },
+      "xhigh": {
+        "label": "Extra high",
+        "hint": "Very thorough, slower and costlier"
+      },
+      "max": {
+        "label": "Max",
+        "hint": "Deepest reasoning, slowest"
+      }
     }
   },
   "toolStep": {
@@ -176,6 +266,36 @@
         "active": "Using {{name}}",
         "done": "Used {{name}}",
         "notDone": "Use {{name}}"
+      },
+      "memorySave": {
+        "active": "Saving a note",
+        "done": "Saved a note",
+        "notDone": "Save a note"
+      },
+      "memoryForget": {
+        "active": "Forgetting a note",
+        "done": "Forgot a note",
+        "notDone": "Forget a note"
+      },
+      "memoryList": {
+        "active": "Looking through saved notes",
+        "done": "Looked through saved notes",
+        "notDone": "Look through saved notes"
+      },
+      "memorySearch": {
+        "active": "Searching saved notes",
+        "done": "Searched saved notes",
+        "notDone": "Search saved notes"
+      },
+      "todo": {
+        "active": "Updating the checklist",
+        "done": "Updated the checklist",
+        "notDone": "Update the checklist"
+      },
+      "delegate": {
+        "active": "Helper is researching",
+        "done": "Helper finished",
+        "notDone": "Hand research to a helper"
       }
     },
     "approval": {
@@ -183,6 +303,20 @@
       "description": "The agent wants to make a change. Review it before it happens.",
       "deny": "Deny",
       "approve": "Approve"
+    },
+    "todo": {
+      "title": "Checklist",
+      "progress": "{{done}} of {{total}} done",
+      "empty": "The checklist is empty.",
+      "status": {
+        "pending": "To do",
+        "in_progress": "In progress",
+        "done": "Done"
+      }
+    },
+    "helper": {
+      "task": "Task",
+      "working": "Working…"
     }
   }
 }

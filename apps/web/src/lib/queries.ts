@@ -1,5 +1,4 @@
 import type {
-  AppSettings,
   Attachment,
   DesktopBridge,
   FetchGatewayModelsInput,
@@ -8,9 +7,11 @@ import type {
   ModelRef,
   ProviderSummary,
   SaveGatewayInput,
+  SettingsPatch,
   ThinkingLevel,
 } from "@workspace/shared";
 import {
+  keepPreviousData,
   queryOptions,
   useMutation,
   useQueryClient,
@@ -33,6 +34,9 @@ export const queryKeys = {
   agents: ["agents"] as const,
   workspaces: ["workspaces"] as const,
   agentToolOptions: ["agent-tool-options"] as const,
+  memory: ["memory"] as const,
+  scheduledTasks: ["scheduled-tasks"] as const,
+  voice: ["voice"] as const,
 };
 
 export const settingsQuery = (bridge: DesktopBridge) =>
@@ -68,6 +72,27 @@ export const sessionsQuery = (bridge: DesktopBridge) =>
     queryFn: () => bridge.agent.command({ type: "list_sessions" }),
   });
 
+/** Search words shorter than this are not sent; the agent ignores them as well. */
+export const MIN_SEARCH_LENGTH = 2;
+
+/** Saved conversations whose title or messages contain the words of `query`. */
+export const searchSessionsQuery = (bridge: DesktopBridge, query: string) =>
+  queryOptions({
+    queryKey: ["session-search", query] as const,
+    queryFn: () => bridge.agent.command({ type: "search_sessions", query }),
+    enabled: query.trim().length >= MIN_SEARCH_LENGTH,
+    // Messages change as chats continue; a repeated search should see them.
+    staleTime: 0,
+  });
+
+/** Tokens and estimated cost of the open conversation; `version` refetches it after each reply. */
+export const usageQuery = (bridge: DesktopBridge, sessionPath: string | null, version: unknown) =>
+  queryOptions({
+    queryKey: ["usage", sessionPath, version] as const,
+    queryFn: () => bridge.agent.command({ type: "get_usage" }),
+    placeholderData: keepPreviousData,
+  });
+
 /** Agents (profiles), the default one first. */
 export const agentsQuery = (bridge: DesktopBridge) =>
   queryOptions({
@@ -85,8 +110,7 @@ export const workspacesQuery = (bridge: DesktopBridge) =>
 export function useUpdateSettings(bridge: DesktopBridge) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (patch: Partial<Pick<AppSettings, "defaultModel" | "shellEnabled" | "language">>) =>
-      bridge.agent.command({ type: "update_settings", patch }),
+    mutationFn: (patch: SettingsPatch) => bridge.agent.command({ type: "update_settings", patch }),
     onSuccess: (settings) => queryClient.setQueryData(queryKeys.settings, settings),
   });
 }
@@ -175,6 +199,24 @@ export function useAgentCommands(bridge: DesktopBridge) {
   const deleteSession = useMutation({
     mutationFn: (path: string) => bridge.agent.command({ type: "delete_session", path }),
   });
+  const pinSession = useMutation({
+    mutationFn: (input: { path: string; pinned: boolean }) =>
+      bridge.agent.command({ type: "pin_session", ...input }),
+  });
+  const regenerate = useMutation({
+    mutationFn: () => bridge.agent.command({ type: "regenerate" }),
+  });
+  const editMessage = useMutation({
+    mutationFn: (input: {
+      entryId: string;
+      text: string;
+      attachments: Attachment[];
+      keep: { files: string[]; images: number[] };
+    }) => bridge.agent.command({ type: "edit_message", ...input }),
+  });
+  const branchSession = useMutation({
+    mutationFn: (entryId: string) => bridge.agent.command({ type: "branch_session", entryId }),
+  });
   const setModel = useMutation({
     mutationFn: (model: ModelRef) => bridge.agent.command({ type: "set_model", ...model }),
   });
@@ -196,6 +238,10 @@ export function useAgentCommands(bridge: DesktopBridge) {
     openSession,
     renameSession,
     deleteSession,
+    pinSession,
+    regenerate,
+    editMessage,
+    branchSession,
     setModel,
     setAgent,
     setThinkingLevel,

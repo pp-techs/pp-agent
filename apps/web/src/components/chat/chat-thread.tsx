@@ -18,7 +18,8 @@ export function ChatThread({ bridge }: { bridge: DesktopBridge }) {
   const approvalsById = useChatStore((state) => state.approvals);
   const approvals = React.useMemo(() => Object.values(approvalsById), [approvalsById]);
   const running = useChatStore((state) => state.status === "running");
-  const { respondApproval } = useAgentCommands(bridge);
+  const { respondApproval, regenerate, branchSession, editMessage } = useAgentCommands(bridge);
+  const commands = { regenerate, branchSession, editMessage };
 
   const onRespond = (requestId: string, approved: boolean) =>
     respondApproval.mutate(
@@ -40,7 +41,11 @@ export function ChatThread({ bridge }: { bridge: DesktopBridge }) {
               scrollAnchor={message.role === "user"}
             >
               <ChatMessageView
+                bridge={bridge}
+                commands={commands}
                 message={message}
+                last={index === messages.length - 1}
+                busy={running}
                 streaming={running && index === messages.length - 1}
                 approvals={approvals}
                 onRespond={onRespond}

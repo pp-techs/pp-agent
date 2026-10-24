@@ -12,12 +12,14 @@
       "agents": "Agent",
       "tools": "Công cụ",
       "skills": "Kỹ năng",
-      "mcp": "Máy chủ MCP"
+      "mcp": "Máy chủ MCP",
+      "memory": "Bộ nhớ",
+      "scheduledTasks": "Tác vụ định kỳ"
     }
   },
   "general": {
     "title": "Chung",
-    "description": "Ngôn ngữ, không gian làm việc, giao diện, mô hình mặc định và cập nhật.",
+    "description": "Ngôn ngữ, không gian làm việc, giao diện, mô hình mặc định, nhập bằng giọng nói và cập nhật.",
     "language": {
       "title": "Ngôn ngữ",
       "description": "Ngôn ngữ được dùng trong toàn bộ ứng dụng.",
@@ -43,12 +45,195 @@
       "label": "Mô hình mặc định",
       "firstAvailable": "Mô hình khả dụng đầu tiên",
       "notAvailable": "{{modelId}} (không khả dụng)",
+      "needsKey": "{{name}} (cần khóa)",
       "emptyHint": "Hãy kết nối một nhà cung cấp trong mục Mô hình để chọn mô hình mặc định.",
       "hint": "Dùng cho các cuộc trò chuyện mới. Bạn có thể đổi mô hình trong bất kỳ cuộc trò chuyện nào ở bên dưới ô nhập tin nhắn."
     },
     "updates": {
       "title": "Cập nhật",
       "check": "Kiểm tra cập nhật"
+    },
+    "desktop": {
+      "legend": "Máy tính",
+      "description": "Cách PP Agent hoạt động cạnh các ứng dụng khác của bạn.",
+      "notifications": {
+        "label": "Thông báo",
+        "description": "Báo cho tôi khi câu trả lời đã xong hoặc có thao tác cần tôi duyệt lúc PP Agent không ở phía trước."
+      },
+      "tray": {
+        "label": "Biểu tượng khay hệ thống",
+        "description": "Giữ một biểu tượng trên thanh menu hoặc khay hệ thống. Đóng cửa sổ sẽ chỉ ẩn nó và ứng dụng vẫn chạy."
+      },
+      "shortcut": {
+        "label": "Phím tắt toàn cục",
+        "description": "Nhấn tổ hợp phím ở bất kỳ đâu để đưa PP Agent lên phía trước, sẵn sàng nhập tin nhắn.",
+        "keys": "Phím",
+        "save": "Lưu",
+        "hint": "Phím bổ trợ và một phím, ví dụ CommandOrControl+Shift+Space.",
+        "invalid": "Phím tắt không hợp lệ. Dùng phím bổ trợ và một phím, ví dụ CommandOrControl+Shift+Space."
+      }
+    },
+    "voice": {
+      "legend": "Nhập bằng giọng nói",
+      "description": "Nói thay vì gõ: nút micro trong ô nhập tin nhắn chuyển bản ghi âm của bạn thành văn bản. Bản ghi âm được gửi đến dịch vụ bạn chọn ở đây.",
+      "provider": {
+        "label": "Nhà cung cấp",
+        "none": "Chưa thiết lập",
+        "help": "Chọn nhà cung cấp hoặc cổng đã có khóa trong Mô hình. Dịch vụ này phải hỗ trợ chuyển giọng nói thành văn bản, như OpenAI.",
+        "empty": "Chưa có nhà cung cấp nào có khóa. Hãy thêm một nhà cung cấp trong Mô hình trước."
+      },
+      "model": {
+        "label": "Mô hình",
+        "help": "Mô hình chuyển giọng nói thành văn bản, ví dụ whisper-1."
+      },
+      "language": {
+        "label": "Ngôn ngữ nói",
+        "app": "Giống ngôn ngữ ứng dụng",
+        "auto": "Tự nhận diện",
+        "help": "Cho dịch vụ biết ngôn ngữ giúp văn bản chính xác hơn."
+      },
+      "ready": "Sẵn sàng: nút micro đang hoạt động.",
+      "notReady": "Chưa sẵn sàng: hãy chọn nhà cung cấp có khóa.",
+      "save": "Lưu",
+      "saved": "Đã lưu cài đặt nhập bằng giọng nói.",
+      "loadError": "Không tải được cài đặt nhập bằng giọng nói"
+    }
+  },
+  "memory": {
+    "title": "Bộ nhớ",
+    "description": "Những ghi chú ngắn mà agent giữ lại giữa các cuộc trò chuyện, ví dụ sở thích của bạn. Chúng được thêm vào mỗi cuộc trò chuyện mới như thông tin tham khảo, không phải chỉ dẫn.",
+    "enable": {
+      "legend": "Bộ nhớ dài hạn",
+      "label": "Ghi nhớ ghi chú giữa các cuộc trò chuyện",
+      "description": "Khi tắt, agent không nhận ghi chú nào và không thể lưu ghi chú mới. Mỗi agent cũng có thể tự tắt bộ nhớ."
+    },
+    "add": "Thêm ghi chú",
+    "clearAll": "Xóa tất cả",
+    "form": {
+      "text": "Ghi chú",
+      "textPlaceholder": "Ví dụ: Tôi thích câu trả lời ngắn gọn bằng tiếng Việt.",
+      "tag": "Nhãn (không bắt buộc)",
+      "tagPlaceholder": "sở thích"
+    },
+    "errors": {
+      "textRequired": "Hãy nhập ghi chú.",
+      "textTooLong": "Một ghi chú tối đa {{max}} ký tự."
+    },
+    "editLabel": "Sửa ghi chú",
+    "deleteLabel": "Xóa ghi chú",
+    "deleted": "Đã xóa ghi chú.",
+    "cleared": "Đã xóa tất cả ghi chú.",
+    "deleteConfirm": {
+      "title": "Xóa ghi chú này?",
+      "description": "Agent sẽ không còn nhớ: “{{text}}”"
+    },
+    "clearConfirm": {
+      "title": "Xóa tất cả ghi chú?",
+      "description": "Agent sẽ quên mọi thứ đã lưu. Không thể hoàn tác.",
+      "confirm": "Xóa tất cả"
+    },
+    "loadError": "Không tải được các ghi chú",
+    "empty": {
+      "title": "Chưa có ghi chú",
+      "description": "Agent lưu ghi chú khi bạn nhờ nó ghi nhớ điều gì đó. Bạn cũng có thể thêm ghi chú tại đây."
+    },
+    "count_other": "{{count}} / {{max}} ghi chú"
+  },
+  "scheduledTasks": {
+    "title": "Tác vụ định kỳ",
+    "description": "Những việc tác nhân tự thực hiện vào giờ đã đặt. Mỗi lần chạy được lưu thành một cuộc trò chuyện để bạn đọc ở thanh bên.",
+    "add": "Tác vụ mới",
+    "approval": {
+      "title": "Chạy khi bạn vắng mặt",
+      "description": "Không có ai để đồng ý, nên mọi thao tác cần bạn phê duyệt đều bị bỏ qua và ghi chú trong cuộc trò chuyện. Việc đọc và các thao tác bạn đặt là Cho phép vẫn chạy. Ứng dụng phải đang mở vào giờ đã hẹn; lần chạy bị lỡ khi ứng dụng đóng sẽ được chạy bù một lần nếu đến hạn trong 24 giờ qua."
+    },
+    "state": {
+      "running": "Đang chạy",
+      "queued": "Đang chờ"
+    },
+    "paused": "Đã tạm dừng",
+    "nextRun": "Lần chạy tiếp theo: {{when}}",
+    "lastRun": {
+      "never": "Chưa chạy lần nào",
+      "completed": "Lần chạy gần nhất: {{when}}, đã xong",
+      "failed": "Lần chạy gần nhất: {{when}}, thất bại",
+      "denied_other": "Đã bỏ qua {{count}} thao tác vì cần bạn phê duyệt"
+    },
+    "agentWorkspace": "{{agent}} · {{workspace}}",
+    "runNow": "Chạy ngay",
+    "runQueued": "“{{name}}” đang bắt đầu. Cuộc trò chuyện sẽ xuất hiện ở thanh bên.",
+    "enableLabel": "Chạy “{{name}}” theo lịch",
+    "editLabel": "Sửa tác vụ",
+    "deleteLabel": "Xóa tác vụ",
+    "deleteConfirm": {
+      "title": "Xóa tác vụ này?",
+      "description": "“{{name}}” sẽ ngừng chạy. Các cuộc trò chuyện nó đã tạo vẫn nằm trong lịch sử của bạn."
+    },
+    "deleted": "Đã xóa tác vụ “{{name}}”.",
+    "loadError": "Không tải được các tác vụ định kỳ",
+    "empty": {
+      "title": "Chưa có tác vụ định kỳ",
+      "description": "Tạo một tác vụ để tác nhân làm việc đều đặn, ví dụ tóm tắt báo cáo vào mỗi thứ Sáu."
+    },
+    "count_other": "{{count}} / {{max}} tác vụ",
+    "schedule": {
+      "intervalMinutes_other": "Mỗi {{count}} phút",
+      "intervalHours_other": "Mỗi {{count}} giờ",
+      "daily": "Mỗi ngày lúc {{time}}",
+      "weekly": "{{days}} lúc {{time}}"
+    },
+    "editor": {
+      "newTitle": "Tác vụ định kỳ mới",
+      "editTitle": "Sửa tác vụ định kỳ",
+      "editNamed": "Sửa {{name}}",
+      "subtitle": "Chọn việc tác nhân làm và thời điểm làm.",
+      "backToTasks": "Quay lại tác vụ định kỳ",
+      "openError": "Không mở được tác vụ",
+      "notFound": {
+        "title": "Không tìm thấy tác vụ",
+        "description": "Có thể tác vụ đã bị xóa. Hãy quay lại danh sách."
+      },
+      "name": "Tên",
+      "namePlaceholder": "Tóm tắt báo cáo hằng tuần",
+      "prompt": "Tác nhân cần làm gì?",
+      "promptPlaceholder": "Đọc các tệp trong thư mục Báo cáo và liệt kê những gì tôi cần chú ý.",
+      "promptHelp": "Viết như khi bạn nhập vào một cuộc trò chuyện mới. Tối đa {{max}} ký tự.",
+      "agent": "Tác nhân",
+      "workspace": "Không gian làm việc",
+      "fallbackHelp": "Nếu sau này tác nhân hoặc không gian làm việc bị xóa, ứng dụng dùng mục mặc định.",
+      "when": {
+        "legend": "Khi nào",
+        "description": "Giờ theo đồng hồ của máy tính này.",
+        "kind": "Lặp lại",
+        "kinds": {
+          "interval": "Cách đều nhau",
+          "daily": "Mỗi ngày",
+          "weekly": "Vào các ngày chọn"
+        },
+        "every": "Mỗi",
+        "unit": "Đơn vị",
+        "units": {
+          "minutes": "phút",
+          "hours": "giờ"
+        },
+        "time": "Lúc",
+        "days": "Vào"
+      },
+      "enabled": {
+        "label": "Đang bật",
+        "description": "Khi tắt, tác vụ vẫn được giữ nhưng không tự chạy. Bạn vẫn có thể dùng Chạy ngay."
+      },
+      "errors": {
+        "nameRequired": "Nhập tên cho tác vụ.",
+        "nameTaken": "Đã có tác vụ khác dùng tên này.",
+        "promptRequired": "Hãy viết việc tác nhân cần làm.",
+        "tooLong": "Tối đa {{max}} ký tự.",
+        "interval": "Dùng từ {{minMinutes}} đến {{maxMinutes}} phút, hoặc từ 1 đến {{maxHours}} giờ.",
+        "time": "Nhập giờ.",
+        "days": "Chọn ít nhất một ngày."
+      },
+      "create": "Tạo tác vụ",
+      "saved": "Đã lưu tác vụ “{{name}}”."
     }
   }
 }

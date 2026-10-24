@@ -65,6 +65,14 @@ const TOOL_OPTION_NAMES = [
   "current_datetime",
   "web_search",
   "web_fetch",
+  "memory_save",
+  "memory_list",
+  "memory_search",
+  "memory_forget",
+  "todo_write",
+  "delegate_task",
+  "office_read",
+  "office_edit",
   "write",
   "edit",
   "bash",
@@ -232,8 +240,10 @@ function ModelField({
             <SelectGroup key={provider}>
               <SelectLabel>{group.name}</SelectLabel>
               {group.models.map((model) => (
-                <SelectItem key={modelKey(model)} value={modelKey(model)}>
-                  {label(model)}
+                <SelectItem key={modelKey(model)} value={modelKey(model)} disabled={model.needsKey}>
+                  {model.needsKey
+                    ? t("shared.modelNeedsKey", { name: label(model) })
+                    : label(model)}
                 </SelectItem>
               ))}
             </SelectGroup>
@@ -316,6 +326,7 @@ function AgentForm({
   const [mcpServers, setMcpServers] = React.useState(agent?.mcpServers ?? null);
   const [skills, setSkills] = React.useState(agent?.skills ?? null);
   const [starterPrompts, setStarterPrompts] = React.useState(agent?.starterPrompts ?? []);
+  const [memory, setMemory] = React.useState(agent?.memory ?? true);
   const [touched, setTouched] = React.useState(false);
   const { t, i18n } = useTranslation(["agents", "common"]);
   const save = useSaveAgent(bridge);
@@ -358,6 +369,7 @@ function AgentForm({
         skills,
         model,
         starterPrompts: starterPrompts.map((prompt) => prompt.trim()).filter(Boolean),
+        memory,
       },
       {
         onSuccess: (saved) => {
@@ -503,6 +515,15 @@ function AgentForm({
           selected={skills}
           onChange={setSkills}
         />
+        <OptionGroup legend={t("agentEditor.memory.legend")}>
+          <SwitchRow
+            id="agent-memory"
+            label={t("agentEditor.memory.label")}
+            description={t("agentEditor.memory.description")}
+            checked={memory}
+            onCheckedChange={setMemory}
+          />
+        </OptionGroup>
         <StarterPromptsField value={starterPrompts} onChange={setStarterPrompts} />
       </FieldGroup>
       {save.isError && <FieldError>{save.error.message}</FieldError>}

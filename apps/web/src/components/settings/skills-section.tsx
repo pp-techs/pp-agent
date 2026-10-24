@@ -87,6 +87,7 @@ function SkillRow({
       <ItemContent className="min-w-0">
         <ItemTitle className="flex-wrap">
           <span className="font-mono">{skill.name}</span>
+          {skill.builtIn && <Badge variant="outline">{t("skills.builtIn")}</Badge>}
           {!skill.modelInvocable && <Badge variant="secondary">{t("skills.onlyWhenAsked")}</Badge>}
         </ItemTitle>
         <ItemDescription className="line-clamp-2">{skill.description}</ItemDescription>

@@ -5,8 +5,8 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import { rm } from "node:fs/promises";
-import { join, relative, resolve, sep } from "node:path";
-import type { Api, Model } from "@earendil-works/pi-ai";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import type { Api, AssistantMessage, Model } from "@earendil-works/pi-ai";
 import {
   type AgentSession,
   type AgentSessionEvent,
@@ -17,6 +17,7 @@ import {
   createToolSearchExtension,
   DefaultResourceLoader,
   type ExtensionFactory,
+  type ExtensionUIContext,
   ModelRuntime,
   parseSkillBlock,
   SessionManager,
@@ -33,14 +34,23 @@ import {
   type FetchedGatewayModel,
   type ApprovalRequest,
   type Attachment,
+  type SaveScheduledTaskInput,
+  type ScheduledTask,
+  type ScheduledTaskView,
+  type TaskRun,
+  type VoiceSettings,
+  type VoiceView,
   DEFAULT_AGENT_ID,
   DEFAULT_WORKSPACE_ID,
   GATEWAY_APIS,
+  isValidAccelerator,
   type GatewayConfig,
   type GatewayModel,
   type GatewayView,
   type MainToAgentMessage,
   type McpServerSettings,
+  type MemoryEntry,
+  type MemoryView,
   type ModelRef,
   type ModelSummary,
   type ProviderSummary,
@@ -49,7 +59,11 @@ import {
   type SaveGatewayInput,
   type SaveSkillInput,
   type SkillSummary,
+  type SessionExport,
+  type SessionSearchHit,
   type SessionSummary,
+  type SessionUsage,
+  type SettingsPatch,
   type SettingsScope,
   THINKING_LEVELS,
   type ThinkingLevel,
@@ -83,19 +97,34 @@ import {
   workspaceForCwd,
   workspacePromptSection,
 } from "./workspaces.ts";
-import { buildPrompt, splitAttachedFiles } from "./attachments.ts";
+import { buildPrompt, splitAttachedFiles, withAttachedFiles } from "./attachments.ts";
 import { AuthPrompts } from "./auth-prompts.ts";
 import { pruneToolOutputs } from "./context.ts";
 import { VaultCredentialStore } from "./credentials.ts";
 import { createReadDocumentTool } from "./documents.ts";
-import { configureLanguage, t } from "./i18n.ts";
+import { createOfficeTools } from "./office/tools.ts";
+import { resourcePath } from "./office/run.ts";
+import { conversationToHtml, conversationToMarkdown, exportFileName } from "./export.ts";
+import {
+  branchEntries,
+  chatEntryIds,
+  endOfTurnEntry,
+  pinKey,
+  searchSessions,
+  sessionTitle,
+  summarizeUsage,
+  userContent,
+} from "./history.ts";
+import { configureLanguage, currentLanguage, t } from "./i18n.ts";
 import { emit, errorMessage, send } from "./ipc.ts";
 import { buildOverview, McpCommands, McpConfigFile, McpRegistrations } from "./mcp.ts";
+import { VaultMcpAuthStore } from "./mcp-auth.ts";
 import {
   authInteraction,
   availableModels,
   fetchGatewayModels,
   findAvailable,
+  gatewayNeedingKey,
   listProviders,
   newGatewayId,
   normalizeBaseUrl,
@@ -103,27 +132,44 @@ import {
   syncGateways,
 } from "./providers.ts";
 import { SettingsStore } from "./settings-store.ts";
+import { newTaskId, runTitle, validateTaskInput } from "./scheduled-tasks.ts";
+import { nextRun, Scheduler, schedulableOf } from "./scheduler.ts";
+import { VoiceService } from "./transcription.ts";
 import { SkillLibrary } from "./skills.ts";
+import { seedBuiltInSkills } from "./skills-builtin.ts";
+import { createDelegateTool, DELEGATE_TOOL } from "./subagent.ts";
+import {
+  createMemoryTools,
+  MEMORY_FORGET_TOOL,
+  MEMORY_TOOLS,
+  MemoryStore,
+  memorySection,
+} from "./memory.ts";
 import {
   activeToolsFor,
   agentAllowsTool,
   currentDateTimeTool,
   describeToolCall,
+  helperTools,
   isListedTool,
   parseMcpToolName,
+  planningSection,
   SHELL_TOOL,
   SYSTEM_PROMPT,
   toolRule,
   toolSelection,
   toolTier,
 } from "./tools.ts";
-import { Transcript, type TranscriptItem } from "./transcript.ts";
+import { createTodoTool } from "./todo.ts";
+import { Transcript } from "./transcript.ts";
 import { createWebFetchTool, createWebSearchTool } from "./web/tools.ts";
 import { WebSearchService } from "./web/search.ts";
 
-const TITLE_LENGTH = 80;
 /** Sent to the model when a message has attachments but no text. The model reads English. */
 const ATTACHMENTS_ONLY_PROMPT = "Please take a look at the attached files.";
+
+/** What a prompt sends to the model: text (with the attached-files block) and inline images. */
+type PromptMessage = Awaited<ReturnType<typeof buildPrompt>>;
 
 /** Changes to apply to the open conversation once no run is active. */
 interface PendingChanges {
@@ -158,8 +204,26 @@ interface Services {
   skills: SkillLibrary;
   webSearch: WebSearchService;
   mcpConfig: McpConfigFile;
+  /** Long-term notes shared by every conversation (`memory.json` next to settings.json). */
+  memory: MemoryStore;
   /** MCP servers connected for the open conversation's agent. */
   mcpServers: McpRegistrations;
+  /** Speech to text for the message box. */
+  voice: VoiceService;
+}
+
+/**
+ * What one Pi session is built for: the open conversation, or a headless scheduled run. The agent
+ * and workspace decide its model, tools, skills, and prompt; `mcpServers` connects the agent's
+ * servers for this session alone.
+ */
+interface SessionScope {
+  agent: () => AgentProfile;
+  workspace: () => WorkspaceProfile;
+  mcpServers: McpRegistrations;
+  approvalGate: ExtensionFactory;
+  /** Extra system prompt section (headless runs tell the model nobody is watching). */
+  systemNote?: string;
 }
 
 /** Pi's error when the messages it keeps already cover the whole conversation. */
@@ -167,11 +231,30 @@ const NOTHING_TO_COMPACT = /nothing to compact/i;
 /** Pi's default `compaction.keepRecentTokens`; manual compaction retries with less. */
 const DEFAULT_KEEP_TOKENS = 20_000;
 const MANUAL_KEEP_TOKENS = 2_000;
+/** A scheduled run that takes longer than this is stopped and recorded as failed. */
+const TASK_RUN_LIMIT_MS = 30 * 60_000;
+/** Why a tool call was blocked in a scheduled run; the model sees it as the tool result. */
+const SCHEDULED_DENIED_REASON =
+  "Nobody is available to approve this action because this is a scheduled run, so it was not carried out. Continue without it and mention it in your answer.";
+
+/** System prompt section of a scheduled run: nobody is watching, and what that means. */
+function scheduledTaskNote(name: string): string {
+  return [
+    `This is the scheduled task "${name}". It runs automatically without anyone watching, so you cannot ask questions or wait for answers.`,
+    "Do the task with what you have and write a complete answer the person reads later.",
+    "Tools that need the person's approval are denied in this run. If one is denied, do not retry it; finish without it and say what you could not do.",
+  ].join("\n");
+}
 
 class AgentHost {
   private services: Services | null = null;
   private readonly ready = Promise.withResolvers<Services>();
   readonly credentials = new VaultCredentialStore();
+  /**
+   * Encrypted home of MCP sign-in tokens; null when the OS cannot encrypt, and Pi keeps its plain
+   * `mcp-auth.json` (the MCP section tells the person).
+   */
+  private mcpAuth: VaultMcpAuthStore | null = null;
   private readonly prompts = new AuthPrompts();
   private readonly mcp = new McpCommands(this.prompts);
   private gatewayIds = new Set<string>();
@@ -191,6 +274,10 @@ class AgentHost {
     { request: ApprovalRequest; resolve: (approved: boolean) => void }
   >();
   private readonly transcript = new Transcript((message) => emit({ type: "message", message }));
+  /** Runs scheduled tasks one at a time, each in its own Pi session. */
+  private scheduler: Scheduler | null = null;
+  /** Session of the scheduled task being run, by task id, so deleting the task can stop it. */
+  private readonly taskSessions = new Map<string, AgentSession>();
 
   constructor() {
     // Commands wait for `ready`; a failed init must not also surface as an unhandled rejection.
@@ -205,6 +292,18 @@ class AgentHost {
       const skillsDir = join(paths.agentDir, "skills");
       for (const dir of [paths.workspaceDir, paths.agentDir, paths.sessionDir, skillsDir])
         mkdirSync(dir, { recursive: true });
+      // The library resolves its folder, so it is created after the folder exists.
+      const skills = new SkillLibrary(skillsDir);
+      // Copy the skills that ship with the app (OfficeCLI's), leaving anything the person edited.
+      const builtIn = await seedBuiltInSkills(
+        resourcePath("skills"),
+        skillsDir,
+        join(paths.agentDir, "builtin-skills.json"),
+      ).catch((error: unknown) => {
+        emit({ type: "error", message: errorMessage(error) });
+        return new Set<string>();
+      });
+      for (const name of builtIn) skills.builtIn.add(name);
       const settings = new SettingsStore(paths.settingsFile);
       configureLanguage(settings.get().language, systemLocale);
       const runtime = await ModelRuntime.create({
@@ -212,14 +311,17 @@ class AgentHost {
         modelsPath: null,
         refreshOnCreate: false,
       });
+      this.mcpAuth = await VaultMcpAuthStore.open(this.credentials, paths.agentDir);
       const mcpConfig = new McpConfigFile(join(paths.agentDir, "mcp.json"));
       const services: Services = {
         paths,
         runtime,
         settings,
-        skills: new SkillLibrary(skillsDir),
+        skills,
         webSearch: new WebSearchService(settings, this.credentials),
         mcpConfig,
+        voice: new VoiceService(runtime, settings),
+        memory: new MemoryStore(join(dirname(paths.settingsFile), "memory.json")),
         mcpServers: new McpRegistrations(mcpConfig, (name) => {
           const { mcpServers } = this.currentAgent();
           return mcpServers === null || mcpServers.includes(name);
@@ -239,6 +341,7 @@ class AgentHost {
       await this.startSession(this.newSessionManager());
       this.ready.resolve(services);
       emit({ type: "snapshot", snapshot: this.snapshot() });
+      this.startScheduler();
     } catch (error) {
       this.ready.reject(error);
       throw error;
@@ -267,6 +370,20 @@ class AgentHost {
         return this.renameSession(this.requireSessionPath(command.path), command.name);
       case "delete_session":
         return this.deleteSession(this.requireSessionPath(command.path));
+      case "pin_session":
+        return this.pinSession(this.requireSessionPath(command.path), command.pinned);
+      case "search_sessions":
+        return this.searchSessions(command.query);
+      case "export_session":
+        return this.exportSession(this.requireSessionPath(command.path), command.format);
+      case "get_usage":
+        return this.usage();
+      case "regenerate":
+        return this.regenerate();
+      case "edit_message":
+        return this.editMessage(command);
+      case "branch_session":
+        return this.branchSession(command.entryId);
 
       case "get_settings":
         return appSettings(services.settings);
@@ -292,7 +409,7 @@ class AgentHost {
       case "fetch_gateway_models":
         return this.fetchModels(command.api, command.baseUrl, command.apiKey, command.gatewayId);
       case "list_models":
-        return availableModels(services.runtime);
+        return availableModels(services.runtime, this.gatewayIds);
       case "set_model":
         return this.setModel({ provider: command.provider, modelId: command.modelId });
 
@@ -326,6 +443,7 @@ class AgentHost {
           await this.mcpStatus(),
           services.mcpServers,
           this.currentAgent().name,
+          this.mcpAuth ? "encrypted" : "file",
         );
       case "save_mcp_server":
         return this.saveMcpServer(command.originalName, command.server);
@@ -373,6 +491,37 @@ class AgentHost {
         return this.saveWorkspace(command.workspace);
       case "delete_workspace":
         return this.deleteWorkspace(command.id);
+
+      case "get_memory":
+        return services.memory.view();
+      case "set_memory_enabled":
+        return this.setMemoryEnabled(command.enabled);
+      case "save_memory_entry":
+        return this.saveMemoryEntry(command.id, command.text, command.tag ?? null);
+      case "delete_memory_entry":
+        return this.deleteMemoryEntry(command.id);
+      case "clear_memory":
+        return this.clearMemory();
+
+      case "list_scheduled_tasks":
+        return this.listScheduledTasks();
+      case "save_scheduled_task":
+        return this.saveScheduledTask(command.task);
+      case "delete_scheduled_task":
+        return this.deleteScheduledTask(command.id);
+      case "set_scheduled_task_enabled":
+        return this.setScheduledTaskEnabled(command.id, command.enabled);
+      case "run_scheduled_task":
+        return this.runScheduledTaskNow(command.id);
+
+      case "get_voice":
+        return services.voice.view();
+      case "save_voice":
+        return this.saveVoice(command.config);
+      case "transcribe_audio":
+        return {
+          text: await services.voice.transcribe(command.data, command.mimeType, command.durationMs),
+        };
 
       default: {
         const unknown: never = command;
@@ -436,7 +585,12 @@ class AgentHost {
       attachments,
       session.sessionManager.getCwd(),
     );
-    // prompt() resolves when the whole run finishes; progress arrives through session events.
+    this.startRun(session, message);
+  }
+
+  /** Sends a message to the model without waiting for the run; progress arrives as events. */
+  private startRun(session: AgentSession, message: PromptMessage): void {
+    // prompt() resolves when the whole run finishes.
     const run = session.prompt(message.text, {
       images: message.images,
       ...(session.isStreaming ? { streamingBehavior: "followUp" as const } : {}),
@@ -485,7 +639,7 @@ class AgentHost {
     await this.startSession(
       path ? this.savedSessionManager(path) : this.newSessionManager(workspaceId),
     );
-    this.transcript.load(branchMessages(this.requireSession()));
+    this.transcript.load(branchEntries(this.requireSession().sessionManager));
     emit({ type: "snapshot", snapshot: this.snapshot() });
   }
 
@@ -543,33 +697,29 @@ class AgentHost {
 
   private async listSessions(): Promise<SessionSummary[]> {
     const { paths, settings } = this.requireServices();
-    const { workspaces } = settings.get();
+    const { workspaces, pinnedSessions } = settings.get();
+    const pins = new Set(pinnedSessions);
     // Conversations of every workspace and agent.
     const sessions = await SessionManager.listAll(paths.sessionDir);
     return sessions
       .filter((info) => info.messageCount > 0)
       .sort((a, b) => b.modified.getTime() - a.modified.getTime())
-      .map((info) => {
-        const skill = parseSkillBlock(info.firstMessage);
-        const firstMessage = splitAttachedFiles(
-          skill ? (skill.userMessage ?? "") : info.firstMessage,
-        )
-          .text.replace(/\s+/g, " ")
-          .trim();
-        const title =
-          info.name?.trim() ||
-          firstMessage ||
-          (skill
-            ? t("conversations.skillTitle", { name: skill.name })
-            : t("conversations.untitled"));
-        return {
-          path: info.path,
-          workspaceId: workspaceForCwd(workspaces, info.cwd, paths.workspaceDir).id,
-          title: title.length > TITLE_LENGTH ? `${title.slice(0, TITLE_LENGTH - 1)}…` : title,
-          modified: info.modified.getTime(),
-          messageCount: info.messageCount,
-        };
-      });
+      .map((info) => ({
+        path: info.path,
+        workspaceId: workspaceForCwd(workspaces, info.cwd, paths.workspaceDir).id,
+        title: sessionTitle(info.name, info.firstMessage, this.titleFallbacks()),
+        modified: info.modified.getTime(),
+        messageCount: info.messageCount,
+        pinned: pins.has(pinKey(info.path)),
+      }));
+  }
+
+  /** Translated titles for conversations that have no name and no text of their own. */
+  private titleFallbacks(): Parameters<typeof sessionTitle>[2] {
+    return {
+      skillTitle: (name) => t("conversations.skillTitle", { name }),
+      untitled: t("conversations.untitled"),
+    };
   }
 
   private renameSession(path: string, name: string): void {
@@ -584,14 +734,216 @@ class AgentHost {
   private async deleteSession(path: string): Promise<void> {
     if (this.session?.sessionFile === path) await this.openSession(null);
     await rm(path, { force: true });
+    this.setPinned(path, false);
     emit({ type: "sessions_changed" });
+  }
+
+  /** Pins are kept by file name in settings.json; deleting a conversation forgets its pin. */
+  private setPinned(path: string, pinned: boolean): boolean {
+    const { settings } = this.requireServices();
+    const key = pinKey(path);
+    if (settings.get().pinnedSessions.includes(key) === pinned) return false;
+    settings.update((draft) => {
+      draft.pinnedSessions = pinned
+        ? [...draft.pinnedSessions, key]
+        : draft.pinnedSessions.filter((name) => name !== key);
+    });
+    return true;
+  }
+
+  private pinSession(path: string, pinned: boolean): void {
+    if (this.setPinned(path, pinned)) emit({ type: "sessions_changed" });
+  }
+
+  private searchSessions(query: string): Promise<SessionSearchHit[]> {
+    const { paths, settings } = this.requireServices();
+    const { workspaces } = settings.get();
+    return searchSessions(
+      paths.sessionDir,
+      query,
+      (cwd) => workspaceForCwd(workspaces, cwd, paths.workspaceDir).id,
+      this.titleFallbacks(),
+    );
+  }
+
+  /** A saved conversation as a Markdown or HTML document, in the app's language. */
+  private exportSession(path: string, format: "md" | "html"): SessionExport {
+    const { paths, settings } = this.requireServices();
+    const manager = SessionManager.open(path, paths.sessionDir);
+    const messages = new Transcript(() => {});
+    messages.load(branchEntries(manager));
+    const firstUser = manager
+      .getBranch()
+      .find((entry) => entry.type === "message" && entry.message.role === "user");
+    const title = sessionTitle(
+      manager.getSessionName(),
+      firstUser?.type === "message" ? userContent(firstUser.message).text : "",
+      this.titleFallbacks(),
+    );
+    const source = {
+      title,
+      workspaceName: workspaceForCwd(
+        settings.get().workspaces,
+        manager.getCwd(),
+        paths.workspaceDir,
+      ).name,
+      date: new Date().toISOString().slice(0, 10),
+      messages: messages.list(),
+    };
+    const labels = {
+      user: t("conversations.export.you"),
+      assistant: t("conversations.export.assistant"),
+      image: t("conversations.export.image"),
+      skill: (name: string) => t("conversations.export.skill", { name }),
+      attachment: (name: string) => t("conversations.export.attachment", { name }),
+      tool: (name: string, target: string) =>
+        target
+          ? t("conversations.export.toolOn", { name, target })
+          : t("conversations.export.tool", { name }),
+      exportedOn: (date: string) => t("conversations.export.exportedOn", { date }),
+      workspace: (name: string) => t("conversations.export.workspace", { name }),
+    };
+    return {
+      suggestedName: exportFileName(title),
+      content:
+        format === "md"
+          ? conversationToMarkdown(source, labels)
+          : conversationToHtml(source, labels, currentLanguage()),
+    };
+  }
+
+  /** Tokens and estimated cost over every reply of the open conversation, as billed. */
+  private usage(): SessionUsage {
+    const entries = this.session?.sessionManager.getEntries() ?? [];
+    return summarizeUsage(
+      entries.flatMap((entry) => (entry.type === "message" ? [entry.message] : [])),
+    );
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Message actions
+  // -------------------------------------------------------------------------------------------
+
+  private idleSession(): AgentSession {
+    const session = this.requireSession();
+    if (this.running || session.isStreaming || session.isCompacting)
+      throw new Error(t("conversations.waitForAnswer"));
+    return session;
+  }
+
+  /** The user message of `entryId` on the open conversation's branch. */
+  private userEntry(session: AgentSession, entryId: string) {
+    const manager = session.sessionManager;
+    const entry = manager.getEntry(entryId);
+    if (!entry || !chatEntryIds(manager).includes(entryId))
+      throw new Error(t("conversations.messageNotFound"));
+    if (entry.type !== "message" || entry.message.role !== "user")
+      throw new Error(t("conversations.notEditable"));
+    return entry.message;
+  }
+
+  /**
+   * Continues from the entry before a user message, dropping it and everything after it (they stay
+   * in the file as another branch), and sends `message` in its place.
+   */
+  private async resend(session: AgentSession, entryId: string, message: PromptMessage) {
+    if (!this.currentModel()) throw new Error(t("models.noneChosen"));
+    const manager = session.sessionManager;
+    if (manager.getLeafId() === entryId) {
+      // Pi does not move off the entry it is on, which is the case for a message nobody answered.
+      const parent = manager.getEntry(entryId)?.parentId ?? null;
+      if (parent === null) manager.resetLeaf();
+      else manager.branch(parent);
+      session.agent.state.messages = manager.buildSessionProjection().messages;
+    } else {
+      await session.navigateTree(entryId);
+    }
+    this.transcript.load(branchEntries(manager));
+    emit({ type: "snapshot", snapshot: this.snapshot() });
+    this.startRun(session, message);
+  }
+
+  /** Asks again for the last answer: the last user message is sent anew from where it was. */
+  private async regenerate(): Promise<void> {
+    const session = this.idleSession();
+    const branch = session.sessionManager.getBranch();
+    const lastUser = branch.findLastIndex(
+      (entry) => entry.type === "message" && entry.message.role === "user",
+    );
+    const user = branch[lastUser];
+    const answered = branch
+      .slice(lastUser + 1)
+      .some((entry) => entry.type === "message" && entry.message.role === "assistant");
+    if (!user || user.type !== "message" || !answered)
+      throw new Error(t("conversations.noAnswerToRedo"));
+    const { text, images } = userContent(user.message);
+    await this.resend(session, user.id, { text, images });
+  }
+
+  private async editMessage(params: {
+    entryId: string;
+    text: string;
+    attachments: Attachment[];
+    keep: { files: string[]; images: number[] };
+  }): Promise<void> {
+    const session = this.idleSession();
+    const original = userContent(this.userEntry(session, params.entryId));
+    const skill = parseSkillBlock(original.text);
+    const oldFiles = splitAttachedFiles(skill ? (skill.userMessage ?? "") : original.text).files;
+    const keptFiles = oldFiles
+      .map((file) => file.path)
+      .filter((path) => params.keep.files.includes(path));
+    const keptImages = original.images.filter((_, index) => params.keep.images.includes(index));
+
+    const typed = params.text.trim();
+    const hasAttachments = keptFiles.length + keptImages.length + params.attachments.length > 0;
+    if (!typed && !skill && !hasAttachments) return;
+    // A skill stays invoked: pi expands the command again.
+    const base = skill
+      ? `/skill:${skill.name}${typed ? ` ${typed}` : ""}`
+      : typed || ATTACHMENTS_ONLY_PROMPT;
+    // Files and images are prepared before anything is dropped, so a bad attachment fails the edit.
+    const added = await buildPrompt(base, params.attachments, session.sessionManager.getCwd());
+    const addedFiles = splitAttachedFiles(added.text).files.map((file) => file.path);
+    await this.resend(session, params.entryId, {
+      text: withAttachedFiles(base, [...keptFiles, ...addedFiles]),
+      images: [...keptImages, ...added.images],
+    });
+  }
+
+  /** Starts a new conversation with the chat up to and including a message, and opens it. */
+  private async branchSession(entryId: string): Promise<void> {
+    const session = this.idleSession();
+    const { paths } = this.requireServices();
+    const file = session.sessionFile;
+    const manager = session.sessionManager;
+    if (!file || !existsSync(file)) throw new Error(t("conversations.cannotBranch"));
+    if (!chatEntryIds(manager).includes(entryId))
+      throw new Error(t("conversations.messageNotFound"));
+    // A second manager over the same file: branching rewrites the manager it is called on.
+    const fork = SessionManager.open(file, paths.sessionDir);
+    const forked = fork.createBranchedSession(endOfTurnEntry(fork, entryId));
+    if (!forked) throw new Error(t("conversations.cannotBranch"));
+    const first = fork
+      .getBranch()
+      .find((entry) => entry.type === "message" && entry.message.role === "user");
+    const title = sessionTitle(
+      manager.getSessionName(),
+      first?.type === "message" ? userContent(first.message).text : "",
+      this.titleFallbacks(),
+    );
+    fork.appendSessionInfo(t("conversations.branchTitle", { title }));
+    await this.openSession(forked);
   }
 
   /**
    * Model for a conversation: `preferred` (a saved chat's own model) when still usable, else the
-   * agent's model, else the default model, else the first available one.
+   * agent's model, else the workspace's, else the default model, else the first available one.
    */
-  private chooseModel(preferred: ModelRef | null): Model<Api> | undefined {
+  private chooseModel(
+    preferred: ModelRef | null,
+    scope: SessionScope = this.liveScope(),
+  ): Model<Api> | undefined {
     const { runtime, settings } = this.requireServices();
     const first = [...runtime.getAvailableSnapshot()].sort((a, b) => {
       const providerA = runtime.getProvider(a.provider)?.name ?? a.provider;
@@ -600,20 +952,48 @@ class AgentHost {
     })[0];
     return (
       findAvailable(runtime, preferred) ??
-      findAvailable(runtime, this.currentAgent().model) ??
-      findAvailable(runtime, this.currentWorkspace().model) ??
+      findAvailable(runtime, scope.agent().model) ??
+      findAvailable(runtime, scope.workspace().model) ??
       findAvailable(runtime, settings.get().defaultModel) ??
       first
     );
   }
 
-  /** Starts the conversation of `sessionManager` (its cwd is the agent's workspace). */
-  private async startSession(
+  /** The open conversation's agent, workspace, MCP servers, and approval gate. */
+  private liveScope(): SessionScope {
+    return {
+      agent: () => this.currentAgent(),
+      workspace: () => this.currentWorkspace(),
+      mcpServers: this.requireServices().mcpServers,
+      approvalGate: this.approvalGate,
+    };
+  }
+
+  /**
+   * Builds a Pi session for `sessionManager` (its cwd is the workspace) from the same pieces for
+   * the open conversation and for headless scheduled runs: the resource loader with its
+   * extensions, skills filtered by the agent, model choice, tools, and bound extensions. It does
+   * not touch the host's open conversation. `uiContext` wraps pi's UI context (live session only).
+   */
+  private async buildSession(
     sessionManager: SessionManager,
-    preferredModel: ModelRef | null = sessionManager.buildSessionContext().model,
-  ): Promise<void> {
-    const { paths, runtime, settings, skills, webSearch } = this.requireServices();
+    preferredModel: ModelRef | null,
+    scope: SessionScope,
+    uiContext?: (base: ExtensionUIContext) => ExtensionUIContext,
+  ): Promise<AgentSession> {
+    const { paths, runtime, settings, skills, webSearch, memory } = this.requireServices();
     const cwd = sessionManager.getCwd();
+    // Tools the delegate_task helper can use as well.
+    const appTools = [
+      currentDateTimeTool,
+      createReadDocumentTool(cwd),
+      createWebSearchTool(webSearch),
+      createWebFetchTool(),
+      ...createOfficeTools({
+        workspaceDir: cwd,
+        homeDir: join(paths.agentDir, "officecli"),
+      }),
+    ];
     const settingsManager = SettingsManager.inMemory({
       compaction: { enabled: true },
       retry: { enabled: true, maxRetries: 2 },
@@ -628,20 +1008,21 @@ class AgentHost {
       noPromptTemplates: true,
       noThemes: true,
       extensionFactories: [
-        { name: "approval-gate", factory: this.approvalGate },
-        { name: "pp-agent", factory: this.agentExtension },
+        { name: "approval-gate", factory: scope.approvalGate },
+        { name: "pp-agent", factory: this.agentExtensionFor(scope) },
         createCodemodeExtension(),
         createToolSearchExtension(),
         // Pi's own mcp.json loading is off: the agent extension registers the agent's servers.
         createMcpExtension({
           loadConfig: () => ({ servers: [], errors: [] }),
           openUrl: (url) => send({ kind: "open_url", url }),
+          ...(this.mcpAuth ? { credentials: this.mcpAuth.asPiStore() } : {}),
         }),
       ],
       // Read on every reload, so enabling or disabling a skill applies with `session.reload()`.
       skillsOverride: (base) => {
         const disabled = settings.get().disabledSkills;
-        const allowed = this.currentAgent().skills;
+        const allowed = scope.agent().skills;
         return {
           skills: base.skills.filter(
             (skill) =>
@@ -660,18 +1041,28 @@ class AgentHost {
       cwd,
       agentDir: paths.agentDir,
       modelRuntime: runtime,
-      model: this.chooseModel(preferredModel),
+      model: this.chooseModel(preferredModel, scope),
       // A saved conversation keeps its own level (pi restores it); a new one uses the last pick.
       thinkingLevel:
         sessionManager.buildSessionContext().messages.length > 0
           ? undefined
-          : (this.currentWorkspace().thinkingLevel ?? settings.get().thinkingLevel),
-      tools: toolSelection(settings.get(), this.currentAgent().tools),
+          : (scope.workspace().thinkingLevel ?? settings.get().thinkingLevel),
+      tools: toolSelection(settings.get(), scope.agent().tools),
       customTools: [
-        currentDateTimeTool,
-        createReadDocumentTool(cwd),
-        createWebSearchTool(webSearch),
-        createWebFetchTool(),
+        ...appTools,
+        ...createMemoryTools({
+          store: memory,
+          isEnabled: () => memory.enabled && scope.agent().memory,
+          onChanged: () => emit({ type: "settings_changed", scopes: ["memory"] }),
+        }),
+        createTodoTool(),
+        createDelegateTool({
+          runtime,
+          cwd,
+          agentDir: paths.agentDir,
+          customTools: appTools,
+          allowedTools: () => helperTools(settings.get(), scope.agent().tools),
+        }),
       ],
       resourceLoader,
       settingsManager,
@@ -680,15 +1071,29 @@ class AgentHost {
     // Emits session_start, which connects the MCP servers in the background. The UI context lets
     // Settings drive pi's `/mcp` command (status, reconnect, sign-in).
     await session.bindExtensions({
-      uiContext: this.mcp.uiContext(session.extensionRunner.getUIContext()),
+      ...(uiContext ? { uiContext: uiContext(session.extensionRunner.getUIContext()) } : {}),
       mode: "rpc",
       onError: (error) => emit({ type: "error", message: `${error.event}: ${error.error}` }),
     });
+    this.applyActiveTools(session, scope);
+    return session;
+  }
+
+  /** Starts the conversation of `sessionManager` (its cwd is the agent's workspace). */
+  private async startSession(
+    sessionManager: SessionManager,
+    preferredModel: ModelRef | null = sessionManager.buildSessionContext().model,
+  ): Promise<void> {
+    const session = await this.buildSession(
+      sessionManager,
+      preferredModel,
+      this.liveScope(),
+      (base) => this.mcp.uiContext(base),
+    );
     this.session = session;
     this.unsubscribe = session.subscribe((event) => this.onSessionEvent(event));
     // The new session already reflects every setting.
     this.pending = { ...NO_CHANGES };
-    this.applyActiveTools(session);
     this.refreshStatus();
     this.watchMcp(session);
   }
@@ -713,6 +1118,7 @@ class AgentHost {
         break;
       case "agent_settled":
         this.running = false;
+        if (this.session) this.transcript.setEntryIds(chatEntryIds(this.session.sessionManager));
         this.transcript.flush();
         this.refreshStatus();
         emit({ type: "sessions_changed" });
@@ -734,6 +1140,19 @@ class AgentHost {
       case "tool_execution_start":
         this.transcript.setToolStatus(event.toolCallId, "running");
         break;
+      case "tool_execution_update": {
+        // delegate_task reports the helper's steps while it works; the final summary replaces them.
+        if (event.toolName !== DELEGATE_TOOL) break;
+        const content: unknown = event.partialResult?.content;
+        const text = Array.isArray(content)
+          ? content
+              .filter((block) => block?.type === "text")
+              .map((block) => block.text)
+              .join("\n")
+          : "";
+        if (text) this.transcript.setToolStatus(event.toolCallId, "running", text);
+        break;
+      }
       case "tool_execution_end": {
         const content: unknown = event.result?.content;
         this.transcript.finishTool(
@@ -761,52 +1180,85 @@ class AgentHost {
   // Approvals
   // -------------------------------------------------------------------------------------------
 
-  /** Extension that applies tool policies and asks the person before tools that need it. */
-  private readonly approvalGate: ExtensionFactory = (pi) => {
-    pi.on("tool_call", async (event) => {
-      const info = pi.getAllTools().find((tool) => tool.name === event.toolName);
-      const tier = toolTier(event.toolName, info?.annotations);
-      const settings = this.services?.settings.get();
-      if (!settings) return { block: true, reason: "The app is still starting." };
-      // Tools that are off stay registered (codemode can reach any registered tool), so the gate
-      // blocks them too.
-      const rule = toolRule(event.toolName, tier, settings);
-      if (rule.effective === "off")
-        return { block: true, reason: `${event.toolName} is turned off in Settings.` };
-      const agent = this.currentAgent();
-      if (!agentAllowsTool(agent.tools, event.toolName))
-        return { block: true, reason: `${event.toolName} is not available to ${agent.name}.` };
-      if (rule.effective === "allow") return undefined;
-      const approved = await this.requestApproval({
-        requestId: randomUUID(),
-        toolCallId: event.toolCallId,
-        anchorToolCallId: event.parentToolCallId ?? event.toolCallId,
-        toolName: event.toolName,
-        tier,
-        ...describeToolCall(event.toolName, event.input),
-      });
-      return approved ? undefined : { block: true, reason: "The user declined this action." };
-    });
-  };
+  /** Gate of the open conversation: asks the person before tools that need approval. */
+  private readonly approvalGate: ExtensionFactory = this.gateFor(
+    () => this.currentAgent(),
+    (request) => this.requestApproval(request),
+  );
 
   /**
-   * Extension of the open conversation's agent: connects its MCP servers and adds its rules to the
-   * system prompt (read on every prompt, so edits apply from the next message).
+   * Extension that applies tool policies for `agent` and settles tools that need approval through
+   * `ask`: the open conversation asks the person, a scheduled run (nobody there) denies.
    */
-  private readonly agentExtension: ExtensionFactory = (pi) => {
-    this.requireServices().mcpServers.attach(pi);
-    // Old tool output is replaced by a note in what the model reads; the chat keeps showing it.
-    pi.on("context", (event) => ({ messages: pruneToolOutputs(event.messages) }));
-    pi.on("before_agent_start", (event) => {
-      const { sections } = event.systemPromptOptions;
-      const agentSection = agentPromptSection(this.currentAgent());
-      if (agentSection) sections.agent = agentSection;
-      else delete sections.agent;
-      const workspaceSection = workspacePromptSection(this.currentWorkspace());
-      if (workspaceSection) sections.workspace = workspaceSection;
-      else delete sections.workspace;
-    });
-  };
+  private gateFor(
+    agent: () => AgentProfile,
+    ask: (request: ApprovalRequest) => Promise<boolean>,
+    declinedReason = "The user declined this action.",
+  ): ExtensionFactory {
+    return (pi) => {
+      pi.on("tool_call", async (event) => {
+        const info = pi.getAllTools().find((tool) => tool.name === event.toolName);
+        const tier = toolTier(event.toolName, info?.annotations);
+        const settings = this.services?.settings.get();
+        if (!settings) return { block: true, reason: "The app is still starting." };
+        // Tools that are off stay registered (codemode can reach any registered tool), so the gate
+        // blocks them too.
+        const rule = toolRule(event.toolName, tier, settings);
+        if (rule.effective === "off")
+          return { block: true, reason: `${event.toolName} is turned off in Settings.` };
+        const profile = agent();
+        if (!agentAllowsTool(profile.tools, event.toolName))
+          return { block: true, reason: `${event.toolName} is not available to ${profile.name}.` };
+        if (rule.effective === "allow") return undefined;
+        const approved = await ask({
+          requestId: randomUUID(),
+          toolCallId: event.toolCallId,
+          anchorToolCallId: event.parentToolCallId ?? event.toolCallId,
+          toolName: event.toolName,
+          tier,
+          ...describeToolCall(event.toolName, this.approvalInput(event.toolName, event.input)),
+        });
+        return approved ? undefined : { block: true, reason: declinedReason };
+      });
+    };
+  }
+
+  /** What the approval card describes: a note to forget is shown by its text, not its id. */
+  private approvalInput(toolName: string, input: Record<string, unknown>): Record<string, unknown> {
+    if (toolName !== MEMORY_FORGET_TOOL || typeof input.id !== "string") return input;
+    const note = this.services?.memory.find(input.id.trim());
+    return note ? { ...input, text: note.text } : input;
+  }
+
+  /**
+   * Extension of a session's agent: connects its MCP servers and adds its rules to the system
+   * prompt (read on every prompt, so edits apply from the next message). A scope with a
+   * `systemNote` (headless run) adds it as well.
+   */
+  private agentExtensionFor(scope: SessionScope): ExtensionFactory {
+    return (pi) => {
+      scope.mcpServers.attach(pi);
+      // Old tool output is replaced by a note in what the model reads; the chat keeps showing it.
+      pi.on("context", (event) => ({ messages: pruneToolOutputs(event.messages) }));
+      pi.on("before_agent_start", (event) => {
+        const { sections } = event.systemPromptOptions;
+        const agentSection = agentPromptSection(scope.agent());
+        if (agentSection) sections.agent = agentSection;
+        else delete sections.agent;
+        const workspaceSection = workspacePromptSection(scope.workspace());
+        if (workspaceSection) sections.workspace = workspaceSection;
+        else delete sections.workspace;
+        if (scope.systemNote) sections.scheduled_task = scope.systemNote;
+        const memory = this.services?.memory;
+        if (memory && this.memoryOn(scope.agent()))
+          sections.memory = memorySection(memory.entries());
+        else delete sections.memory;
+        const planning = planningSection(pi.getActiveTools());
+        if (planning) sections.planning = planning;
+        else delete sections.planning;
+      });
+    };
+  }
 
   private requestApproval(request: ApprovalRequest): Promise<boolean> {
     this.transcript.setToolStatus(request.toolCallId, "awaiting-approval");
@@ -903,17 +1355,18 @@ class AgentHost {
     }
     await this.startSession(manager, model);
     const next = this.requireSession();
-    this.transcript.load(branchMessages(next));
+    this.transcript.load(branchEntries(next.sessionManager));
     return next;
   }
 
-  private applyActiveTools(session: AgentSession): void {
+  private applyActiveTools(session: AgentSession, scope: SessionScope = this.liveScope()): void {
     const current = session.getActiveToolNames();
-    const next = activeToolsFor(
-      current,
-      this.requireServices().settings.get(),
-      this.currentAgent().tools,
-    );
+    const agent = scope.agent();
+    const allActive = activeToolsFor(current, this.requireServices().settings.get(), agent.tools);
+    // Without memory (Settings › Memory or the agent's own switch) the memory tools are not offered.
+    const next = this.memoryOn(agent)
+      ? allActive
+      : allActive.filter((name) => !MEMORY_TOOLS.includes(name));
     // Only touch the loadout when it changes: replacing it drops MCP tools still connecting.
     const same = next.length === current.length && next.every((name) => current.includes(name));
     if (!same) session.setActiveToolsByName(next);
@@ -984,22 +1437,32 @@ class AgentHost {
   // Settings, providers, gateways
   // -------------------------------------------------------------------------------------------
 
-  private async updateSettings(
-    patch: Partial<Pick<AppSettings, "defaultModel" | "shellEnabled" | "language">>,
-  ): Promise<AppSettings> {
+  private async updateSettings(patch: SettingsPatch): Promise<AppSettings> {
     const { runtime, settings } = this.requireServices();
     const scopes: SettingsScope[] = ["settings"];
     const apply: Partial<PendingChanges> = {};
     const before = settings.get();
     if (patch.defaultModel) {
       await runtime.getAvailable();
-      if (!findAvailable(runtime, patch.defaultModel))
-        throw new Error(t("models.notAvailableConnect"));
+      if (!findAvailable(runtime, patch.defaultModel)) {
+        const gateway = gatewayNeedingKey(runtime, this.gatewayIds, patch.defaultModel);
+        throw new Error(
+          gateway
+            ? t("models.gatewayNeedsKey", { name: gateway })
+            : t("models.notAvailableConnect"),
+        );
+      }
     }
+    if (patch.shortcut !== undefined && !isValidAccelerator(patch.shortcut))
+      throw new Error(t("settings.shortcutInvalid"));
     const after = settings.update((draft) => {
       if (patch.defaultModel !== undefined) draft.defaultModel = patch.defaultModel;
       if (typeof patch.shellEnabled === "boolean") draft.shellEnabled = patch.shellEnabled;
       if (patch.language !== undefined) draft.language = patch.language;
+      if (typeof patch.notifications === "boolean") draft.notifications = patch.notifications;
+      if (typeof patch.tray === "boolean") draft.tray = patch.tray;
+      if (typeof patch.shortcutEnabled === "boolean") draft.shortcutEnabled = patch.shortcutEnabled;
+      if (patch.shortcut !== undefined) draft.shortcut = patch.shortcut;
     });
     if (after.language !== before.language) {
       configureLanguage(after.language);
@@ -1086,7 +1549,14 @@ class AgentHost {
     let gateway: GatewayConfig | undefined;
     const saved = settings.update((draft) => {
       const id = input.id ?? newGatewayId(name, new Set(draft.gateways.map((entry) => entry.id)));
-      gateway = { id, name, api: input.api, baseUrl, models };
+      gateway = {
+        id,
+        name,
+        api: input.api,
+        baseUrl,
+        models,
+        requiresApiKey: input.requiresApiKey !== false,
+      };
       const index = draft.gateways.findIndex((entry) => entry.id === id);
       if (index === -1) draft.gateways.push(gateway);
       else draft.gateways[index] = gateway;
@@ -1135,7 +1605,14 @@ class AgentHost {
       await runtime.getAvailable();
       model = findAvailable(runtime, ref);
     }
-    if (!model) throw new Error(t("models.notAvailableInSettings"));
+    if (!model) {
+      const gateway = gatewayNeedingKey(runtime, this.gatewayIds, ref);
+      throw new Error(
+        gateway
+          ? t("models.gatewayNeedsKey", { name: gateway })
+          : t("models.notAvailableInSettings"),
+      );
+    }
     await session.setModel(model);
     this.refreshStatus();
     emit({ type: "snapshot", snapshot: this.snapshot() });
@@ -1406,6 +1883,242 @@ class AgentHost {
   }
 
   // -------------------------------------------------------------------------------------------
+  // Scheduled tasks
+  // -------------------------------------------------------------------------------------------
+
+  private async saveVoice(config: VoiceSettings): Promise<VoiceView> {
+    const view = await this.requireServices().voice.save(config);
+    emit({ type: "settings_changed", scopes: ["voice"] });
+    return view;
+  }
+
+  private startScheduler(): void {
+    const { settings } = this.requireServices();
+    const scheduler = new Scheduler({
+      now: () => Date.now(),
+      tasks: () => settings.get().scheduledTasks,
+      rearm: (id, at) =>
+        this.updateTask(id, (task) => {
+          task.armedAt = at;
+        }),
+      run: (task) => this.runScheduledTask(task),
+      changed: () => emit({ type: "settings_changed", scopes: ["scheduledTasks"] }),
+    });
+    this.scheduler = scheduler;
+    scheduler.start();
+  }
+
+  /** Changes one stored task; false when it no longer exists. */
+  private updateTask(id: string, change: (task: ScheduledTask) => void): boolean {
+    const { settings } = this.requireServices();
+    if (!settings.get().scheduledTasks.some((task) => task.id === id)) return false;
+    settings.update((draft) => {
+      const task = draft.scheduledTasks.find((entry) => entry.id === id);
+      if (task) change(task);
+    });
+    return true;
+  }
+
+  private taskView(task: ScheduledTask): ScheduledTaskView {
+    return {
+      ...task,
+      state: this.scheduler?.state(task.id) ?? "idle",
+      nextRun: nextRun(schedulableOf(task), Date.now()),
+    };
+  }
+
+  private listScheduledTasks(): ScheduledTaskView[] {
+    return [...this.requireServices().settings.get().scheduledTasks]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((task) => this.taskView(task));
+  }
+
+  private requireTask(id: string): ScheduledTask {
+    const task = this.requireServices()
+      .settings.get()
+      .scheduledTasks.find((entry) => entry.id === id);
+    if (!task) throw new Error(t("scheduler.errors.notFound"));
+    return task;
+  }
+
+  private saveScheduledTask(input: SaveScheduledTaskInput): ScheduledTaskView {
+    const { settings } = this.requireServices();
+    const existing = settings.get().scheduledTasks;
+    const previous = input.id ? this.requireTask(input.id) : undefined;
+    const fields = validateTaskInput(input, existing);
+    this.requireAgent(fields.agentId);
+    this.requireWorkspace(fields.workspaceId);
+    const now = Date.now();
+    // Runs are counted from now when the task is new, switched on, or its schedule changed.
+    const rearm =
+      !previous ||
+      (!previous.enabled && fields.enabled) ||
+      JSON.stringify(previous.schedule) !== JSON.stringify(fields.schedule);
+    const id = previous?.id ?? newTaskId(new Set(existing.map((task) => task.id)));
+    const task: ScheduledTask = {
+      ...fields,
+      id,
+      armedAt: rearm ? now : (previous?.armedAt ?? now),
+      lastRun: previous?.lastRun ?? null,
+    };
+    settings.update((draft) => {
+      const index = draft.scheduledTasks.findIndex((entry) => entry.id === id);
+      if (index >= 0) draft.scheduledTasks[index] = task;
+      else draft.scheduledTasks.push(task);
+    });
+    this.tasksChanged();
+    return this.taskView(task);
+  }
+
+  private setScheduledTaskEnabled(id: string, enabled: boolean): void {
+    const task = this.requireTask(id);
+    if (task.enabled === enabled) return;
+    this.updateTask(id, (draft) => {
+      draft.enabled = enabled;
+      if (enabled) draft.armedAt = Date.now();
+    });
+    this.tasksChanged();
+  }
+
+  private deleteScheduledTask(id: string): void {
+    this.requireTask(id);
+    this.requireServices().settings.update((draft) => {
+      draft.scheduledTasks = draft.scheduledTasks.filter((task) => task.id !== id);
+    });
+    // A run in progress for a deleted task stops; its conversation stays.
+    void this.taskSessions.get(id)?.abort();
+    this.tasksChanged();
+  }
+
+  private runScheduledTaskNow(id: string): void {
+    this.requireTask(id);
+    if (!this.scheduler?.runNow(id)) throw new Error(t("scheduler.errors.alreadyRunning"));
+  }
+
+  private tasksChanged(): void {
+    emit({ type: "settings_changed", scopes: ["scheduledTasks"] });
+    this.scheduler?.refresh();
+  }
+
+  /**
+   * Runs a task in its own Pi session (a saved conversation titled after the task), apart from
+   * the open conversation, which it neither reads nor disturbs. Nobody is there to approve:
+   * tools whose policy is not `allow` are denied, and the model is told so.
+   */
+  private async runScheduledTask(task: ScheduledTask): Promise<void> {
+    const services = this.requireServices();
+    const startedAt = Date.now();
+    let denied = 0;
+    let timedOut = false;
+    let session: AgentSession | null = null;
+    let mcpServers: McpRegistrations | null = null;
+    let outcome: Pick<TaskRun, "status" | "error"> = { status: "completed" };
+    let limit: NodeJS.Timeout | undefined;
+    try {
+      const { settings, paths, mcpConfig } = services;
+      const agent = findAgent(settings.get().agents, task.agentId);
+      const workspace = findWorkspace(settings.get().workspaces, task.workspaceId);
+      const manager = SessionManager.create(this.workspaceFor(workspace), paths.sessionDir);
+      manager.appendCustomEntry(AGENT_ENTRY_TYPE, { agentId: agent.id });
+      manager.appendSessionInfo(runTitle(task.name, new Date(startedAt), currentLanguage()));
+      mcpServers = new McpRegistrations(
+        mcpConfig,
+        (name) => agent.mcpServers === null || agent.mcpServers.includes(name),
+      );
+      session = await this.buildSession(manager, null, {
+        agent: () => agent,
+        workspace: () => workspace,
+        mcpServers,
+        approvalGate: this.gateFor(
+          () => agent,
+          async () => {
+            denied += 1;
+            return false;
+          },
+          SCHEDULED_DENIED_REASON,
+        ),
+        systemNote: scheduledTaskNote(task.name),
+      });
+      if (!session.model) throw new Error(t("models.noneChosen"));
+      this.taskSessions.set(task.id, session);
+      limit = setTimeout(() => {
+        timedOut = true;
+        void session?.abort();
+      }, TASK_RUN_LIMIT_MS);
+      // The agent's MCP servers connect in the background; wait for them to settle.
+      if (mcpServers.hasServers()) await this.mcp.status(session).catch(() => undefined);
+      await session.prompt(task.prompt);
+      await session.waitForIdle();
+      const reply = session.messages.findLast(
+        (message): message is AssistantMessage => message.role === "assistant",
+      );
+      if (timedOut) outcome = { status: "failed", error: t("scheduler.errors.timedOut") };
+      else if (reply?.stopReason === "error")
+        outcome = {
+          status: "failed",
+          error: reply.errorMessage ?? t("scheduler.errors.runFailed"),
+        };
+      else if (reply?.stopReason === "aborted")
+        outcome = { status: "failed", error: t("scheduler.errors.stopped") };
+      else if (!reply) outcome = { status: "failed", error: t("scheduler.errors.noAnswer") };
+    } catch (error) {
+      outcome = { status: "failed", error: errorMessage(error) };
+    } finally {
+      clearTimeout(limit);
+      this.taskSessions.delete(task.id);
+    }
+    const run: TaskRun = {
+      at: startedAt,
+      durationMs: Date.now() - startedAt,
+      ...outcome,
+      deniedTools: denied,
+      ...(session?.sessionFile ? { sessionPath: session.sessionFile } : {}),
+    };
+    mcpServers?.detach();
+    session?.dispose();
+    this.updateTask(task.id, (draft) => {
+      draft.lastRun = run;
+    });
+    emit({ type: "settings_changed", scopes: ["scheduledTasks"] });
+    emit({ type: "sessions_changed" });
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Memory
+  // -------------------------------------------------------------------------------------------
+
+  /** Memory is on in Settings › Memory and for the agent. */
+  private memoryOn(agent: AgentProfile): boolean {
+    return (this.services?.memory.enabled ?? false) && agent.memory;
+  }
+
+  private setMemoryEnabled(enabled: boolean): MemoryView {
+    const { memory } = this.requireServices();
+    memory.setEnabled(enabled);
+    // The memory tools join or leave the active set; the notes follow with the next message.
+    this.changed(["memory"], { tools: true });
+    return memory.view();
+  }
+
+  private saveMemoryEntry(id: string | undefined, text: string, tag: string | null): MemoryEntry {
+    const { memory } = this.requireServices();
+    const result = id === undefined ? memory.add({ text, tag }) : memory.edit(id, { text, tag });
+    if (!result.ok) throw new Error(t(`memory.problems.${result.problem}`));
+    this.changed(["memory"], {});
+    return result.entry;
+  }
+
+  private deleteMemoryEntry(id: string): void {
+    if (!this.requireServices().memory.remove(id)) throw new Error(t("memory.problems.missing"));
+    this.changed(["memory"], {});
+  }
+
+  private clearMemory(): void {
+    this.requireServices().memory.clear();
+    this.changed(["memory"], {});
+  }
+
+  // -------------------------------------------------------------------------------------------
   // Guards
   // -------------------------------------------------------------------------------------------
 
@@ -1459,18 +2172,6 @@ class AgentHost {
   }
 }
 
-/**
- * Every message on the conversation's branch, including those a compaction summarized away
- * (`session.messages` holds only what the model still sees), so the chat shows its full history,
- * with a marker where each compaction happened.
- */
-function branchMessages(session: AgentSession): TranscriptItem[] {
-  return session.sessionManager.getBranch().flatMap((entry): TranscriptItem[] => {
-    if (entry.type === "message") return [entry.message];
-    return entry.type === "compaction" ? [{ role: "compaction" }] : [];
-  });
-}
-
 function appSettings(store: SettingsStore): AppSettings {
   const {
     defaultModel,
@@ -1480,11 +2181,19 @@ function appSettings(store: SettingsStore): AppSettings {
     disabledSkills,
     activeAgentId,
     thinkingLevel,
+    notifications,
+    tray,
+    shortcutEnabled,
+    shortcut,
   } = store.get();
   return {
     defaultModel,
     shellEnabled,
     language,
+    notifications,
+    tray,
+    shortcutEnabled,
+    shortcut,
     toolPolicies,
     disabledSkills,
     activeAgentId,
@@ -1520,7 +2229,7 @@ function agentChanges(
 ): Partial<PendingChanges> {
   return {
     mcp: !sameList(before.mcpServers, after.mcpServers),
-    tools: !sameList(before.tools, after.tools),
+    tools: !sameList(before.tools, after.tools) || before.memory !== after.memory,
     reload: !sameList(before.skills, after.skills),
     agentModel:
       after.model !== null &&

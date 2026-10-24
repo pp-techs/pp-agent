@@ -34,6 +34,8 @@ const bridge: DesktopBridge = {
     pickFolder: () => invoke(IPC.filesPickFolder),
     openAgentFile: () => invoke(IPC.filesOpenAgent),
     saveAgentFile: (suggestedName, json) => invoke(IPC.filesSaveAgent, suggestedName, json),
+    saveExport: (suggestedName, format, content) =>
+      invoke(IPC.filesSaveExport, suggestedName, format, content),
     reveal: (path) => invoke(IPC.filesReveal, path),
   },
   updates: {
@@ -50,6 +52,16 @@ const bridge: DesktopBridge = {
     },
   },
   openExternal: (url) => invoke(IPC.openExternal, url),
+  shell: {
+    onFocusComposer(listener) {
+      const handler = () => listener();
+      ipcRenderer.on(IPC.shellFocusComposer, handler);
+      return () => {
+        ipcRenderer.off(IPC.shellFocusComposer, handler);
+      };
+    },
+    takePendingFocus: () => invoke(IPC.shellTakePendingFocus),
+  },
 };
 
 contextBridge.exposeInMainWorld("ppAgent", bridge);

@@ -15,6 +15,22 @@
       "hint": "Khi cửa sổ đầy, các tin nhắn cũ sẽ được tự động tóm tắt. Bạn có thể tóm tắt ngay bây giờ để giải phóng dung lượng.",
       "compact": "Thu gọn cuộc trò chuyện"
     },
+    "usage": {
+      "title": "Mức sử dụng",
+      "input": "Token đầu vào",
+      "output": "Token đầu ra",
+      "cacheRead": "Đọc từ bộ nhớ đệm",
+      "cacheWrite": "Ghi vào bộ nhớ đệm",
+      "cost": "Chi phí ước tính",
+      "costUnknown": "Chưa rõ (mô hình này chưa có giá)",
+      "costPartial": "{{cost}} + các phản hồi chưa có giá",
+      "empty": "Chưa có phản hồi nào."
+    },
+    "export": {
+      "label": "Xuất cuộc trò chuyện",
+      "markdown": "Markdown (.md)",
+      "html": "Trang web (.html, để in)"
+    },
     "openFolder": "Mở thư mục không gian làm việc"
   },
   "message": {
@@ -22,7 +38,22 @@
     "thought": "Đã suy luận",
     "skill": "Kỹ năng: {{name}}",
     "attachedImage": "Hình ảnh đính kèm",
-    "compacted": "Các tin nhắn trước đó đã được tóm tắt"
+    "compacted": "Các tin nhắn trước đó đã được tóm tắt",
+    "actions": {
+      "copy": "Sao chép tin nhắn",
+      "copied": "Đã sao chép",
+      "regenerate": "Tạo lại câu trả lời",
+      "edit": "Sửa và gửi lại",
+      "branch": "Tách thành cuộc trò chuyện mới",
+      "cancel": "Hủy",
+      "resend": "Gửi lại",
+      "editLabel": "Sửa tin nhắn của bạn",
+      "addFile": "Thêm tệp",
+      "removeAttachment": "Xóa {{name}}"
+    }
+  },
+  "export": {
+    "saved": "Đã xuất cuộc trò chuyện."
   },
   "sidebar": {
     "relativeTime": {
@@ -40,6 +71,17 @@
     "noChats": "Chưa có cuộc trò chuyện nào",
     "showLess": "Thu gọn",
     "showMore": "Xem thêm {{hidden}}",
+    "pinned": "Đã ghim",
+    "search": {
+      "label": "Tìm cuộc trò chuyện",
+      "placeholder": "Tìm cuộc trò chuyện…",
+      "clear": "Xóa tìm kiếm",
+      "searching": "Đang tìm…",
+      "noResults": "Không có cuộc trò chuyện nào khớp với “{{query}}”.",
+      "failed": "Tìm kiếm không thành công. Hãy thử lại.",
+      "tooShort": "Nhập ít nhất {{count}} ký tự.",
+      "results": "Kết quả tìm kiếm"
+    },
     "workspace": {
       "newChat": "Cuộc trò chuyện mới trong {{name}}",
       "actions": "Thao tác cho {{name}}",
@@ -51,6 +93,11 @@
     "session": {
       "actions": "Thao tác với cuộc trò chuyện",
       "rename": "Đổi tên",
+      "pin": "Ghim",
+      "unpin": "Bỏ ghim",
+      "export": "Xuất",
+      "exportMarkdown": "Markdown (.md)",
+      "exportHtml": "Trang web (.html)",
       "renameTitle": "Đổi tên cuộc trò chuyện",
       "name": "Tên cuộc trò chuyện",
       "deleteTitle": "Xóa cuộc trò chuyện này?",
@@ -62,7 +109,26 @@
     "placeholderDisconnected": "Hãy kết nối một mô hình trong Cài đặt để bắt đầu",
     "ariaLabel": "Tin nhắn",
     "removeAttachment": "Xóa {{name}}",
-    "cantAttach": "Không thể đính kèm {{name}}."
+    "cantAttach": "Không thể đính kèm {{name}}.",
+    "voice": {
+      "start": "Nhập bằng giọng nói",
+      "notConfigured": "Chưa thiết lập nhập bằng giọng nói. Chọn nhà cung cấp tại Cài đặt › Chung › Nhập bằng giọng nói.",
+      "recording": "Đang ghi âm {{time}} / {{max}}",
+      "stop": "Dừng và chuyển thành chữ",
+      "cancel": "Hủy bản ghi âm",
+      "transcribing": "Đang chuyển bản ghi âm thành chữ…",
+      "cancelTranscribing": "Hủy",
+      "limitReached": "Bạn đã đạt giới hạn {{minutes}} phút. Đang chuyển bản ghi âm thành chữ…",
+      "errors": {
+        "denied": "Micro đang bị chặn. Hãy cho phép PP Agent dùng micro trong cài đặt hệ thống rồi thử lại.",
+        "noDevice": "Không tìm thấy micro. Hãy kết nối một micro rồi thử lại.",
+        "unsupported": "Máy tính này không thể ghi âm trong ứng dụng.",
+        "failed": "Không ghi âm được: {{error}}",
+        "tooShort": "Bản ghi âm quá ngắn.",
+        "tooLarge": "Bản ghi âm quá lớn. Hãy ghi âm tin nhắn ngắn hơn.",
+        "unreadable": "Không đọc được bản ghi âm."
+      }
+    }
   },
   "composerMenu": {
     "add": "Thêm tệp, kỹ năng và lệnh",
@@ -101,20 +167,44 @@
     "none": "Chưa có mô hình nào.",
     "images": "Hình ảnh",
     "reasoning": "Suy luận",
-    "manage": "Quản lý mô hình…"
+    "manage": "Quản lý mô hình…",
+    "needsKey": "Cần khóa",
+    "needsKeyMessage": "Cổng {{name}} cần khóa API trước khi dùng được các mô hình của nó.",
+    "addKey": "Thêm khóa"
   },
   "thinking": {
     "title": "Mức suy luận",
     "off": "Tắt suy luận",
     "description": "Mức độ mô hình suy nghĩ trước khi trả lời",
     "levels": {
-      "off": { "label": "Tắt", "hint": "Trả lời ngay" },
-      "minimal": { "label": "Tối thiểu", "hint": "Xem nhanh trước khi trả lời" },
-      "low": { "label": "Thấp", "hint": "Suy nghĩ đôi chút cho việc đơn giản" },
-      "medium": { "label": "Trung bình", "hint": "Cân bằng cho hầu hết công việc" },
-      "high": { "label": "Cao", "hint": "Suy luận cẩn thận, chậm hơn" },
-      "xhigh": { "label": "Rất cao", "hint": "Rất kỹ lưỡng, chậm hơn và tốn kém hơn" },
-      "max": { "label": "Tối đa", "hint": "Suy luận sâu nhất, chậm nhất" }
+      "off": {
+        "label": "Tắt",
+        "hint": "Trả lời ngay"
+      },
+      "minimal": {
+        "label": "Tối thiểu",
+        "hint": "Xem nhanh trước khi trả lời"
+      },
+      "low": {
+        "label": "Thấp",
+        "hint": "Suy nghĩ đôi chút cho việc đơn giản"
+      },
+      "medium": {
+        "label": "Trung bình",
+        "hint": "Cân bằng cho hầu hết công việc"
+      },
+      "high": {
+        "label": "Cao",
+        "hint": "Suy luận cẩn thận, chậm hơn"
+      },
+      "xhigh": {
+        "label": "Rất cao",
+        "hint": "Rất kỹ lưỡng, chậm hơn và tốn kém hơn"
+      },
+      "max": {
+        "label": "Tối đa",
+        "hint": "Suy luận sâu nhất, chậm nhất"
+      }
     }
   },
   "toolStep": {
@@ -176,6 +266,36 @@
         "active": "Đang dùng {{name}}",
         "done": "Đã dùng {{name}}",
         "notDone": "Dùng {{name}}"
+      },
+      "memorySave": {
+        "active": "Đang lưu ghi chú",
+        "done": "Đã lưu ghi chú",
+        "notDone": "Lưu ghi chú"
+      },
+      "memoryForget": {
+        "active": "Đang xóa ghi chú",
+        "done": "Đã xóa ghi chú",
+        "notDone": "Xóa ghi chú"
+      },
+      "memoryList": {
+        "active": "Đang xem các ghi chú đã lưu",
+        "done": "Đã xem các ghi chú đã lưu",
+        "notDone": "Xem các ghi chú đã lưu"
+      },
+      "memorySearch": {
+        "active": "Đang tìm trong ghi chú đã lưu",
+        "done": "Đã tìm trong ghi chú đã lưu",
+        "notDone": "Tìm trong ghi chú đã lưu"
+      },
+      "todo": {
+        "active": "Đang cập nhật danh sách việc",
+        "done": "Đã cập nhật danh sách việc",
+        "notDone": "Cập nhật danh sách việc"
+      },
+      "delegate": {
+        "active": "Trợ lý phụ đang tra cứu",
+        "done": "Trợ lý phụ đã xong",
+        "notDone": "Giao việc tra cứu cho trợ lý phụ"
       }
     },
     "approval": {
@@ -183,6 +303,20 @@
       "description": "Agent muốn thực hiện một thay đổi. Hãy xem lại trước khi thay đổi được áp dụng.",
       "deny": "Từ chối",
       "approve": "Duyệt"
+    },
+    "todo": {
+      "title": "Danh sách việc cần làm",
+      "progress": "Xong {{done}}/{{total}}",
+      "empty": "Danh sách đang trống.",
+      "status": {
+        "pending": "Chưa làm",
+        "in_progress": "Đang làm",
+        "done": "Xong"
+      }
+    },
+    "helper": {
+      "task": "Việc",
+      "working": "Đang làm…"
     }
   }
 }

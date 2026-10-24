@@ -3,11 +3,20 @@ import {
   type AgentCommand,
   type AgentEvent,
   type AgentToMainMessage,
+  EXPORT_FORMATS,
   IPC,
   type MainToAgentMessage,
   type VaultRequest,
 } from "@workspace/shared";
-import { app, BrowserWindow, ipcMain, shell, type UtilityProcess, utilityProcess } from "electron";
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  session,
+  shell,
+  type UtilityProcess,
+  utilityProcess,
+} from "electron";
 import {
   isInside,
   openAgentFile,
@@ -16,8 +25,14 @@ import {
   pickFolder,
   pickSkill,
   saveAgentFile,
+  saveExportFile,
 } from "./files.ts";
 import { initI18n, translator } from "./i18n.ts";
+import { createNotifier, type Notifier } from "./notifications.ts";
+import { restrictPermissions } from "./permissions.ts";
+import { readShellSettings } from "./settings.ts";
+import { releaseShortcut, syncShortcut } from "./shortcut.ts";
+import { destroyTray, refreshTray, syncTray, trayActive } from "./tray.ts";
 import { resolveShellPath } from "./shell-path.ts";
 import { migrateLegacyProvider } from "./legacy.ts";
 import { createUpdater } from "./updates.ts";
@@ -38,6 +53,8 @@ initI18n(SETTINGS_FILE);
 const updater = createUpdater((state) => window?.webContents.send(IPC.updatesEvent, state));
 
 let window: BrowserWindow | null = null;
+/** The shortcut fired while no page was loaded to receive the event; the renderer asks on mount. */
+let pendingFocus = false;
 let agent: UtilityProcess | null = null;
 let nextCommandId = 0;
 let quitting = false;
@@ -52,6 +69,82 @@ const pending = new Map<
 
 function sendToRenderer(event: AgentEvent): void {
   window?.webContents.send(IPC.agentEvent, event);
+}
+
+/** Brings the window to the front, creating it when it was closed. */
+function showWindow(): void {
+  if (!window) {
+    createWindow();
+    return;
+  }
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+  app.focus({ steal: true });
+}
+
+/** Shows the window and puts the cursor in the message box. */
+function showAndFocusComposer(): void {
+  const created = !window;
+  showWindow();
+  if (created || !window || window.webContents.isLoading()) pendingFocus = true;
+  else window.webContents.send(IPC.shellFocusComposer);
+}
+
+const notifier: Notifier = createNotifier({
+  window: () => window,
+  enabled: () => readShellSettings(SETTINGS_FILE).notifications,
+  activate(sessionPath) {
+    showWindow();
+    // Another conversation may have been opened since; go back to the one the alert was about.
+    if (sessionPath && sessionPath !== notifier.currentSession()) {
+      commandAgent({ type: "open_session", path: sessionPath }).catch((error: unknown) => {
+        console.error("Could not open the conversation from the notification:", error);
+      });
+    }
+  },
+});
+
+/** Sends an event once the page has loaded (a toast sent earlier would be lost). */
+function sendWhenLoaded(event: AgentEvent): void {
+  const target = window;
+  if (!target) return;
+  if (!target.webContents.isLoading()) {
+    sendToRenderer(event);
+    return;
+  }
+  target.webContents.once("did-finish-load", () => setTimeout(() => sendToRenderer(event), 800));
+}
+
+/** Makes the tray icon and the global shortcut match settings.json. */
+function applyShellSettings(): void {
+  const settings = readShellSettings(SETTINGS_FILE);
+  syncTray(
+    settings.tray,
+    {
+      windowShown: () => !!window && window.isVisible() && !window.isMinimized(),
+      toggleWindow() {
+        if (window?.isVisible() && !window.isMinimized()) window.hide();
+        else showWindow();
+        refreshTray();
+      },
+      newChat() {
+        showAndFocusComposer();
+        commandAgent({ type: "new_chat" }).catch((error: unknown) => {
+          console.error("Could not start a new chat from the tray:", error);
+        });
+      },
+      quit: () => app.quit(),
+    },
+    DIST_DIR,
+  );
+  const result = syncShortcut(settings.shortcutEnabled, settings.shortcut, showAndFocusComposer);
+  if (result === "failed") {
+    sendWhenLoaded({
+      type: "error",
+      message: translator()("shell.shortcut.failed", { shortcut: settings.shortcut }),
+    });
+  }
 }
 
 function postToAgent(message: MainToAgentMessage): void {
@@ -103,6 +196,9 @@ async function startAgent(): Promise<void> {
     switch (message.kind) {
       case "event":
         sendToRenderer(message.event);
+        notifier.handle(message.event);
+        if (message.event.type === "settings_changed" && message.event.scopes.includes("settings"))
+          applyShellSettings();
         return;
       case "vault":
         answerVault(child, message.id, message.request);
@@ -179,6 +275,16 @@ function createWindow(): void {
     },
   });
   window.once("ready-to-show", () => window?.show());
+  // With the tray icon on, closing the window keeps the app running in the tray.
+  window.on("close", (event) => {
+    if (quitting || !trayActive()) return;
+    event.preventDefault();
+    window?.hide();
+  });
+  window.on("show", refreshTray);
+  window.on("hide", refreshTray);
+  window.on("minimize", refreshTray);
+  window.on("restore", refreshTray);
   window.on("closed", () => {
     window = null;
   });
@@ -216,6 +322,15 @@ ipcMain.handle(IPC.filesSaveAgent, (_event, suggestedName: unknown, json: unknow
     throw new Error(translator()("app.agentCannotExport"));
   return saveAgentFile(window, suggestedName, json);
 });
+ipcMain.handle(
+  IPC.filesSaveExport,
+  (_event, suggestedName: unknown, format: unknown, content: unknown) => {
+    const known = EXPORT_FORMATS.find((candidate) => candidate === format);
+    if (typeof suggestedName !== "string" || !known || typeof content !== "string")
+      throw new Error(translator()("app.conversationCannotExport"));
+    return saveExportFile(window, suggestedName, known, content);
+  },
+);
 ipcMain.handle(IPC.filesReveal, (_event, path: unknown) => {
   // Only the app's own files (skills, mcp.json) and the workspace can be shown.
   if (typeof path !== "string" || !(isInside(USER_DATA_DIR, path) || isInside(WORKSPACE_DIR, path)))
@@ -225,6 +340,12 @@ ipcMain.handle(IPC.filesReveal, (_event, path: unknown) => {
 ipcMain.handle(IPC.openExternal, (_event, url: unknown) => {
   if (typeof url !== "string") throw new Error(translator()("app.onlyWebLinks"));
   return openExternal(url);
+});
+
+ipcMain.handle(IPC.shellTakePendingFocus, () => {
+  const wasPending = pendingFocus;
+  pendingFocus = false;
+  return wasPending;
 });
 
 ipcMain.handle(IPC.updatesState, () => updater.state());
@@ -237,17 +358,25 @@ app.on("before-quit", () => {
   agent?.kill();
 });
 
+app.on("will-quit", () => {
+  releaseShortcut();
+  destroyTray();
+});
+
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
 app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  // Clicking the Dock icon brings back a window hidden to the tray, too.
+  showWindow();
 });
 
 // No top-level await: Electron emits `ready` only after the ESM main module finishes evaluating.
 void app.whenReady().then(() => {
+  restrictPermissions(session.defaultSession, () => window);
   void startAgent();
   createWindow();
+  applyShellSettings();
   updater.start();
 });

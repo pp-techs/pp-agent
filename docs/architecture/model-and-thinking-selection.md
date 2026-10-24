@@ -1,6 +1,6 @@
 # Model and thinking selection
 
-Models come from Pi's `ModelRuntime`: built-in providers the person connected, plus gateways registered from `settings.json`. A model is "available" when the runtime's availability snapshot contains it (`findAvailable` in `apps/desktop/src/agent/providers.ts`); only available models are listed (`list_models`) or chosen.
+Models come from Pi's `ModelRuntime`: built-in providers the person connected, plus gateways registered from `settings.json`. A model is "available" when the runtime's availability snapshot contains it (`findAvailable` in `apps/desktop/src/agent/providers.ts`); only available models can be chosen. `list_models` (`availableModels`) also returns the models of gateways that need a key and have none, marked `needsKey: true`; `set_model` and `update_settings` reject them with a "needs an API key" error (`gatewayNeedingKey`), and saved agent, workspace and conversation models pointing at them fall back as for any unavailable model. A gateway with `requiresApiKey: false` is registered with the literal placeholder `apiKey` `not-needed`, which makes Pi treat it as configured (auth source `fallback`, shown as "No key needed"); a key stored in the vault takes precedence (Pi checks the stored credential before the configured key).
 
 ## Which model a conversation uses
 

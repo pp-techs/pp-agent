@@ -17,12 +17,11 @@ type Install = Available["install"];
 const releaseUrl = (version: string) => `https://github.com/${REPO}/releases/tag/v${version}`;
 
 /**
- * Windows installers and Linux AppImages replace themselves. macOS builds are not signed with an
- * Apple Developer ID, which macOS requires for self-updates, and `.deb` installs belong to the
- * system package manager; for those the person downloads the new installer instead.
+ * Windows installers, signed macOS builds, and Linux AppImages replace themselves. `.deb` installs
+ * belong to the system package manager; for those the person downloads the new installer instead.
  */
 function installMode(): Install {
-  if (process.platform === "win32") return "in-app";
+  if (process.platform === "win32" || process.platform === "darwin") return "in-app";
   if (process.platform === "linux" && process.env.APPIMAGE) return "in-app";
   return "download-page";
 }

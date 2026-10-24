@@ -1,4 +1,4 @@
-import type { ApprovalRequest, ChatPart } from "@workspace/shared";
+import type { ApprovalRequest, ChatMessage, ChatPart } from "@workspace/shared";
 import { Button } from "@workspace/ui/components/button";
 import { CodeBlock, CodeBlockContent } from "@workspace/ui/components/code-block";
 import {
@@ -21,10 +21,16 @@ import {
 import {
   BanIcon,
   BlocksIcon,
+  BotIcon,
+  BrainIcon,
+  CircleCheckIcon,
+  CircleDashedIcon,
+  CircleDotIcon,
   ClockIcon,
   CodeIcon,
   FileTextIcon,
   FolderOpenIcon,
+  ListChecksIcon,
   type LucideIcon,
   SaveIcon,
   SearchIcon,
@@ -33,6 +39,8 @@ import {
 } from "lucide-react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
+
+import { useChatStore } from "@/stores/chat-store";
 
 type ToolPart = Extract<ChatPart, { type: "tool" }>;
 
@@ -46,6 +54,14 @@ const ICONS: Record<string, LucideIcon> = {
   current_datetime: ClockIcon,
   codemode: CodeIcon,
   tool_search: SearchIcon,
+  memory_save: BrainIcon,
+  memory_forget: BrainIcon,
+  memory_list: BrainIcon,
+  memory_search: BrainIcon,
+  todo_write: ListChecksIcon,
+  delegate_task: BotIcon,
+  office_read: FileTextIcon,
+  office_edit: SaveIcon,
 };
 
 function stringArg(args: Record<string, unknown>, key: string) {
@@ -91,6 +107,18 @@ function stepTitle(part: ToolPart, t: TFunction<"chat">) {
       return t(`toolStep.titles.codemode.${state}`);
     case "tool_search":
       return t(`toolStep.titles.toolSearch.${state}`);
+    case "memory_save":
+      return t(`toolStep.titles.memorySave.${state}`);
+    case "memory_forget":
+      return t(`toolStep.titles.memoryForget.${state}`);
+    case "memory_list":
+      return t(`toolStep.titles.memoryList.${state}`);
+    case "memory_search":
+      return t(`toolStep.titles.memorySearch.${state}`);
+    case "todo_write":
+      return t(`toolStep.titles.todo.${state}`);
+    case "delegate_task":
+      return t(`toolStep.titles.delegate.${state}`);
   }
   // MCP tools are named mcp__<server>__<tool>.
   const mcp = /^mcp__(.+?)__(.+)$/.exec(part.name);
@@ -142,6 +170,111 @@ function ApprovalCard({
   );
 }
 
+/** Id of the newest `todo_write` call in the chat. */
+function latestTodoCallId(state: { messages: ChatMessage[] }): string | undefined {
+  for (const message of state.messages.toReversed()) {
+    for (const part of message.parts.toReversed()) {
+      if (part.type === "tool" && part.name === "todo_write") return part.toolCallId;
+    }
+  }
+  return undefined;
+}
+
+interface TodoItem {
+  content: string;
+  status: "pending" | "in_progress" | "done";
+}
+
+/** The checklist in a `todo_write` call's arguments; arguments still streaming may be incomplete. */
+function todoItems(args: Record<string, unknown>): TodoItem[] {
+  if (!Array.isArray(args.todos)) return [];
+  const items: TodoItem[] = [];
+  for (const item of args.todos as unknown[]) {
+    if (typeof item !== "object" || item === null) continue;
+    const { content, status } = item as { content?: unknown; status?: unknown };
+    if (typeof content !== "string" || !content) continue;
+    items.push({
+      content,
+      status: status === "done" || status === "in_progress" ? status : "pending",
+    });
+  }
+  return items;
+}
+
+const TODO_ICONS: Record<TodoItem["status"], LucideIcon> = {
+  pending: CircleDashedIcon,
+  in_progress: CircleDotIcon,
+  done: CircleCheckIcon,
+};
+
+/** The model's checklist as a compact card; it is the call's own arguments, so it updates live. */
+function TodoCard({ items }: { items: TodoItem[] }) {
+  const { t } = useTranslation("chat");
+  const done = items.filter((item) => item.status === "done").length;
+  return (
+    <Item variant="outline" size="sm" className="w-full">
+      <ItemMedia variant="icon">
+        <ListChecksIcon />
+      </ItemMedia>
+      <ItemContent className="min-w-0">
+        <ItemTitle>
+          {t("toolStep.todo.title")}
+          <span className="text-xs font-normal text-muted-foreground">
+            {t("toolStep.todo.progress", { done, total: items.length })}
+          </span>
+        </ItemTitle>
+        {items.length === 0 ? (
+          <ItemDescription>{t("toolStep.todo.empty")}</ItemDescription>
+        ) : (
+          <ul className="mt-1 flex flex-col gap-1">
+            {items.map((item, index) => {
+              const StatusIcon = TODO_ICONS[item.status];
+              return (
+                <li
+                  key={index}
+                  aria-label={`${item.content} — ${t(`toolStep.todo.status.${item.status}`)}`}
+                  className={`flex items-start gap-2 text-sm ${
+                    item.status === "done"
+                      ? "text-muted-foreground line-through"
+                      : item.status === "in_progress"
+                        ? "font-medium"
+                        : ""
+                  }`}
+                >
+                  <StatusIcon aria-hidden className="mt-0.5 size-4 shrink-0" />
+                  <span className="min-w-0">{item.content}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </ItemContent>
+    </Item>
+  );
+}
+
+/** Steps the helper of `delegate_task` has taken so far: `<tool name>\t<what it works on>` lines. */
+function HelperProgress({ output }: { output: string }) {
+  const { t } = useTranslation("chat");
+  const steps = output
+    .split("\n")
+    .map((line) => line.split("\t"))
+    .slice(-6);
+  return (
+    <ul
+      aria-label={t("toolStep.helper.working")}
+      className="flex flex-col gap-0.5 pl-6 text-xs text-muted-foreground"
+    >
+      {steps.map(([tool, target], index) => (
+        <li key={index} className="truncate">
+          <span className="font-mono">{tool}</span>
+          {target ? ` · ${target}` : ""}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function ToolStep({
   part,
   approvals,
@@ -155,6 +288,8 @@ export function ToolStep({
   responding: boolean;
 }) {
   const { t } = useTranslation("chat");
+  // Only the newest checklist of the chat is a card; earlier versions collapse into a step.
+  const latestTodoId = useChatStore(latestTodoCallId);
   const Icon = ICONS[part.name] ?? (part.name.startsWith("mcp__") ? BlocksIcon : WrenchIcon);
   const cards = approvals.map((approval) => (
     <ApprovalCard
@@ -168,6 +303,10 @@ export function ToolStep({
   // A pending approval for this call is a question to the person, not activity, so it replaces the line.
   if (approvals.some((approval) => approval.toolCallId === part.toolCallId)) return <>{cards}</>;
 
+  // The checklist is one card that changes as the model rewrites it; older versions collapse.
+  if (part.name === "todo_write" && part.toolCallId === latestTodoId && part.status !== "denied")
+    return <TodoCard items={todoItems(part.args)} />;
+
   const status =
     part.status === "running" ? "running" : part.status === "error" ? "error" : undefined;
   const line = (
@@ -179,24 +318,28 @@ export function ToolStep({
     </TraceLine>
   );
 
-  const step = part.output ? (
-    <TraceCollapsible>
-      <TraceCollapsibleTrigger>{line}</TraceCollapsibleTrigger>
-      <TraceCollapsibleContent>
-        <CodeBlock size="sm">
-          <CodeBlockContent wrap className="max-h-64">
-            {part.output}
-          </CodeBlockContent>
-        </CodeBlock>
-      </TraceCollapsibleContent>
-    </TraceCollapsible>
-  ) : (
-    line
-  );
+  // While the helper works, its output is the list of its steps; the summary replaces it at the end.
+  const helperWorking = part.name === "delegate_task" && part.status === "running";
+  const step =
+    part.output && !helperWorking ? (
+      <TraceCollapsible>
+        <TraceCollapsibleTrigger>{line}</TraceCollapsibleTrigger>
+        <TraceCollapsibleContent>
+          <CodeBlock size="sm">
+            <CodeBlockContent wrap className="max-h-64">
+              {part.output}
+            </CodeBlockContent>
+          </CodeBlock>
+        </TraceCollapsibleContent>
+      </TraceCollapsible>
+    ) : (
+      line
+    );
 
   return (
     <>
       {step}
+      {helperWorking && part.output && <HelperProgress output={part.output} />}
       {cards}
     </>
   );

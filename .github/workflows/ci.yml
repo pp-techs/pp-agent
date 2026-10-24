@@ -54,6 +54,9 @@ jobs:
       - name: Build
         run: vp run -r build
 
+      - name: Fetch OfficeCLI
+        run: node scripts/fetch-officecli.ts linux-x64
+
       # Linux installers (AppImage + deb): proves the electron-builder config on every change,
       # including target-specific checks an unpacked build skips.
       - name: Package (Linux installers)
@@ -62,6 +65,39 @@ jobs:
           vp exec electron-builder --config electron-builder.yml --linux --x64 --publish never
           # The release workflow uploads this feed; the installed app finds updates through it.
           test -f release/latest-linux.yml
+
+  # Windows installer (NSIS), unsigned and never run: proves the electron-builder config on Windows.
+  build-windows:
+    name: Build (Windows installer)
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af # v1.21.2
+        with:
+          node-version-file: .node-version
+          cache: true
+
+      - name: Build
+        run: vp run -r build
+
+      - name: Fetch OfficeCLI
+        run: node scripts/fetch-officecli.ts win-x64
+
+      - name: Package (Windows installer)
+        shell: bash
+        working-directory: apps/desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          vp exec electron-builder --config electron-builder.yml --win --x64 --publish never
+          # The release workflow uploads this feed; the installed app finds updates through it.
+          test -f release/latest.yml
 
   changeset:
     name: Changeset

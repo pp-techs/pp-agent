@@ -42,7 +42,15 @@
       "tool_search": "Tra cứu các công cụ đã kết nối",
       "list_mcp_resources": "Liệt kê tài nguyên của máy chủ",
       "list_mcp_resource_templates": "Liệt kê mẫu tài nguyên của máy chủ",
-      "read_mcp_resource": "Đọc tài nguyên của máy chủ"
+      "read_mcp_resource": "Đọc tài nguyên của máy chủ",
+      "memory_save": "Ghi nhớ ghi chú",
+      "memory_list": "Xem ghi chú đã lưu",
+      "memory_search": "Tìm trong ghi chú đã lưu",
+      "memory_forget": "Quên ghi chú",
+      "todo_write": "Lập kế hoạch bằng danh sách",
+      "delegate_task": "Giao việc tra cứu",
+      "office_read": "Xem tệp Word, Excel, PowerPoint",
+      "office_edit": "Tạo và chỉnh sửa tệp Word, Excel, PowerPoint"
     },
     "shell": {
       "legend": "Lệnh shell",
@@ -101,6 +109,7 @@
     },
     "newSkill": "Kỹ năng mới",
     "onlyWhenAsked": "Chỉ khi được yêu cầu",
+    "builtIn": "Tích hợp sẵn",
     "loadError": "Không thể tải danh sách kỹ năng",
     "empty": {
       "title": "Chưa có kỹ năng nào",

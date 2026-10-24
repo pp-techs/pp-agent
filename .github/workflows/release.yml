@@ -13,10 +13,12 @@ name: Release
 # Merging the Version Packages PR is the release. A failed run is retried by re-running the failed
 # jobs: an existing tag or Release is left alone.
 #
-# Code signing is optional. Without secrets, macOS builds are ad-hoc signed and Windows builds are
-# unsigned. Set CSC_LINK + CSC_KEY_PASSWORD (Developer ID .p12) and APPLE_ID +
-# APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID to sign and notarize macOS builds, and
-# WIN_CSC_LINK + WIN_CSC_KEY_PASSWORD to sign Windows builds.
+# Code signing is optional and driven by repository secrets (docs/code-standard/release-process.md):
+# - macOS: with CSC_LINK + CSC_KEY_PASSWORD (Developer ID .p12) the app is signed with the hardened
+#   runtime; with APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID as well it is notarized
+#   (a warning is printed when some of those are missing). Without a certificate the app is
+#   ad-hoc signed and not notarized.
+# - Windows: WIN_CSC_LINK + WIN_CSC_KEY_PASSWORD sign the installer; without them it is unsigned.
 
 on:
   push:
@@ -175,21 +177,25 @@ jobs:
             platform: --mac
             arch: --arm64
             artifact: installers-mac-arm64
+            officecli: mac-arm64
           - name: macOS x64
             runner: macos-latest
             platform: --mac
             arch: --x64
             artifact: installers-mac-x64
+            officecli: mac-x64
           - name: Windows x64
             runner: windows-latest
             platform: --win
             arch: --x64
             artifact: installers-win-x64
+            officecli: win-x64
           - name: Linux x64
             runner: ubuntu-latest
             platform: --linux
             arch: --x64
             artifact: installers-linux-x64
+            officecli: linux-x64
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -204,6 +210,13 @@ jobs:
 
       - name: Build renderer and desktop bundles
         run: vp run -r build
+
+      # Pinned version and SHA-256 per asset; the binary is bundled by electron-builder
+      # (extraResources) and signed with the app on macOS.
+      - name: Fetch OfficeCLI
+        env:
+          OFFICECLI_PLATFORM: ${{ matrix.officecli }}
+        run: node scripts/fetch-officecli.ts "$OFFICECLI_PLATFORM"
 
       - name: Make installers
         shell: bash
@@ -220,17 +233,35 @@ jobs:
           ARCH: ${{ matrix.arch }}
         run: |
           args=(--config electron-builder.yml "$PLATFORM" "$ARCH" --publish never)
-          # Without a certificate: ad-hoc sign on macOS (Apple silicon refuses unsigned apps). The
-          # hardened runtime only matters for notarization, which needs a Developer ID anyway.
-          if [ "$PLATFORM" = "--mac" ] && [ -z "$CSC_LINK" ]; then
-            export CSC_IDENTITY_AUTO_DISCOVERY=false
-            args+=(-c.mac.identity=- -c.mac.hardenedRuntime=false)
+          if [ "$PLATFORM" = "--mac" ]; then
+            if [ -z "$CSC_LINK" ]; then
+              # No certificate: ad-hoc sign (Apple silicon refuses unsigned apps). The hardened
+              # runtime only matters for notarization, which needs a Developer ID anyway.
+              export CSC_IDENTITY_AUTO_DISCOVERY=false
+              args+=(-c.mac.identity=- -c.mac.hardenedRuntime=false -c.mac.notarize=false)
+              echo "::warning::CSC_LINK is not set: macOS build is ad-hoc signed and not notarized."
+            elif [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+              : # Developer ID signing with the hardened runtime, then notarization (electron-builder.yml).
+            else
+              # electron-builder fails on partial Apple credentials, so skip notarization explicitly.
+              args+=(-c.mac.notarize=false)
+              echo "::warning::APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD or APPLE_TEAM_ID is not set: macOS build is signed but not notarized."
+            fi
           fi
           # Unset empty secrets so electron-builder does not treat them as configured.
           for name in CSC_LINK CSC_KEY_PASSWORD WIN_CSC_LINK WIN_CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
             [ -n "${!name}" ] || unset "$name"
           done
+          # Windows builds are signed only with WIN_CSC_LINK; never pick up the macOS CSC_LINK there.
+          if [ "$PLATFORM" = "--win" ] && [ -z "${WIN_CSC_LINK:-}" ]; then
+            unset CSC_LINK CSC_KEY_PASSWORD
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
           vp exec electron-builder "${args[@]}"
+          # Each macOS job writes a feed for its own architecture; `publish` merges them.
+          if [ "$PLATFORM" = "--mac" ]; then
+            mv release/latest-mac.yml "release/latest-mac-${ARCH#--}.yml"
+          fi
 
       - name: Upload installers
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -244,6 +275,7 @@ jobs:
             apps/desktop/release/*.deb
             apps/desktop/release/latest.yml
             apps/desktop/release/latest-linux.yml
+            apps/desktop/release/latest-mac-*.yml
           if-no-files-found: error
           retention-days: 7
 
@@ -272,7 +304,11 @@ jobs:
           mkdir -p "$assets"
           find "$RUNNER_TEMP/release" -path '*/installers-*/*' -type f -exec mv {} "$assets/" \;
           # The installed app finds updates through these feeds; a release without them cannot update.
-          for feed in latest.yml latest-linux.yml; do
+          # One macOS feed that lists both architectures; electron-updater picks the matching files.
+          yq eval-all '. as $item ireduce ({}; . *+ $item)' \
+            "$assets"/latest-mac-arm64.yml "$assets"/latest-mac-x64.yml > "$assets/latest-mac.yml"
+          rm "$assets"/latest-mac-arm64.yml "$assets"/latest-mac-x64.yml
+          for feed in latest.yml latest-linux.yml latest-mac.yml; do
             [ -f "$assets/$feed" ] || { echo "::error::Missing update feed $feed"; exit 1; }
           done
           (cd "$assets" && sha256sum -- * > SHA256SUMS.txt)

@@ -324,8 +324,14 @@ function WorkspaceForm({
                   <SelectGroup key={provider}>
                     <SelectLabel>{group.name}</SelectLabel>
                     {group.models.map((item) => (
-                      <SelectItem key={modelKey(item)} value={modelKey(item)}>
-                        {label(item)}
+                      <SelectItem
+                        key={modelKey(item)}
+                        value={modelKey(item)}
+                        disabled={item.needsKey}
+                      >
+                        {item.needsKey
+                          ? t("shared.modelNeedsKey", { name: label(item) })
+                          : label(item)}
                       </SelectItem>
                     ))}
                   </SelectGroup>

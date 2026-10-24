@@ -18,6 +18,12 @@ const GATEWAY_PREFIX = "gw-";
 const FETCH_TIMEOUT_MS = 15_000;
 const DEFAULT_CONTEXT_WINDOW = 128_000;
 const DEFAULT_MAX_TOKENS = 16_384;
+/**
+ * Literal `apiKey` for gateways that need none (Ollama, LM Studio, vLLM). Pi only treats a provider
+ * as configured when it has a credential, and sends this value as the bearer token. A key saved in
+ * the vault takes precedence over it.
+ */
+const KEYLESS_PLACEHOLDER_KEY = "not-needed";
 
 /**
  * Trims and validates a gateway URL. Anthropic clients append `/v1/messages` themselves, so a
@@ -81,6 +87,7 @@ function gatewayProvider(
     name: gateway.name,
     baseUrl: gateway.baseUrl,
     api: gateway.api,
+    ...(gateway.requiresApiKey ? {} : { apiKey: KEYLESS_PLACEHOLDER_KEY }),
     models: gateway.models.map((model) => {
       const known = lookup(model.id);
       return {
@@ -220,12 +227,38 @@ export function summarizeModel(runtime: ModelRuntime, model: Model<Api>): ModelS
   };
 }
 
-/** Available models (configured providers only), by provider name then model name. */
-export async function availableModels(runtime: ModelRuntime): Promise<ModelSummary[]> {
-  const models = await runtime.getAvailable();
-  return models
-    .map((model) => summarizeModel(runtime, model))
-    .sort((a, b) => a.providerName.localeCompare(b.providerName) || a.name.localeCompare(b.name));
+/**
+ * Available models, then the models of gateways that need an API key and have none (marked
+ * `needsKey`, not selectable), by provider name then model name.
+ */
+export async function availableModels(
+  runtime: ModelRuntime,
+  gatewayIds: ReadonlySet<string>,
+): Promise<ModelSummary[]> {
+  const available = await runtime.getAvailable();
+  const summaries = available.map((model) => summarizeModel(runtime, model));
+  for (const id of gatewayIds) {
+    if (runtime.hasConfiguredAuth(id)) continue;
+    for (const model of runtime.getModels(id)) {
+      summaries.push({ ...summarizeModel(runtime, model), needsKey: true });
+    }
+  }
+  return summaries.sort(
+    (a, b) => a.providerName.localeCompare(b.providerName) || a.name.localeCompare(b.name),
+  );
+}
+
+/** Name of the gateway `ref` points at when that gateway needs an API key and has none. */
+export function gatewayNeedingKey(
+  runtime: ModelRuntime,
+  gatewayIds: ReadonlySet<string>,
+  ref: ModelRef | null,
+): string | undefined {
+  if (!ref || !gatewayIds.has(ref.provider) || runtime.hasConfiguredAuth(ref.provider)) {
+    return undefined;
+  }
+  if (!runtime.getModels(ref.provider).some((model) => model.id === ref.modelId)) return undefined;
+  return runtime.getProvider(ref.provider)?.name ?? ref.provider;
 }
 
 /** The model `ref` points at when it is still usable, else undefined. */
@@ -245,6 +278,9 @@ function authSource(runtime: ModelRuntime, providerId: string): string | undefin
       return t("providers.savedKey");
     case "environment":
       return status.label ?? t("providers.environmentVariable");
+    case "fallback":
+      // Only keyless gateways register a literal key (the placeholder); never show it.
+      return t("providers.noKeyNeeded");
     default:
       return status.label;
   }

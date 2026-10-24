@@ -1,6 +1,6 @@
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { basename, extname, isAbsolute, relative, resolve, sep } from "node:path";
-import type { Attachment } from "@workspace/shared";
+import { type Attachment, EXPORT_FORMATS, type ExportFormat } from "@workspace/shared";
 import { type BrowserWindow, dialog, shell } from "electron";
 import { translator } from "./i18n.ts";
 
@@ -138,6 +138,39 @@ export async function saveAgentFile(
     : await dialog.showSaveDialog(options);
   if (result.canceled || !result.filePath) return false;
   await writeFile(result.filePath, json, "utf8");
+  return true;
+}
+
+/** Exported conversations are text; this is far beyond any real chat and stops a runaway payload. */
+const MAX_EXPORT_CHARS = 50 * 1024 * 1024;
+
+/** Asks where to save an exported conversation and writes it; false when cancelled. */
+export async function saveExportFile(
+  window: BrowserWindow | null,
+  suggestedName: string,
+  format: ExportFormat,
+  content: string,
+): Promise<boolean> {
+  if (!EXPORT_FORMATS.includes(format) || content.length > MAX_EXPORT_CHARS)
+    throw new Error(translator()("app.conversationCannotExport"));
+  // Characters that are not allowed in file names on some systems are replaced.
+  const name = suggestedName.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "-").trim() || "chat";
+  const t = translator();
+  const options: Electron.SaveDialogOptions = {
+    title: t("files.exportConversationTitle"),
+    buttonLabel: t("files.exportButton"),
+    defaultPath: `${name}.${format}`,
+    filters: [
+      format === "md"
+        ? { name: t("files.markdownFiles"), extensions: ["md"] }
+        : { name: t("files.htmlFiles"), extensions: ["html"] },
+    ],
+  };
+  const result = window
+    ? await dialog.showSaveDialog(window, options)
+    : await dialog.showSaveDialog(options);
+  if (result.canceled || !result.filePath) return false;
+  await writeFile(result.filePath, content, "utf8");
   return true;
 }
 

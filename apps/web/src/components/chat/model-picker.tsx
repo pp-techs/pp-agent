@@ -1,5 +1,6 @@
 import * as React from "react";
 import type { DesktopBridge } from "@workspace/shared";
+import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import {
   Command,
@@ -99,16 +100,33 @@ export function ModelPicker({ bridge }: { bridge: DesktopBridge }) {
                       onSelect={() => {
                         setOpen(false);
                         if (key === currentKey) return;
+                        if (model.needsKey) {
+                          toast.error(
+                            t("modelPicker.needsKeyMessage", { name: model.providerName }),
+                            {
+                              action: { label: t("modelPicker.addKey"), onClick: openSettings },
+                            },
+                          );
+                          return;
+                        }
                         setModel.mutate(
                           { provider: model.provider, modelId: model.modelId },
                           { onError: (error) => toast.error(error.message) },
                         );
                       }}
                     >
-                      <span className="flex-1 truncate" title={model.modelId}>
+                      <span
+                        className={`flex-1 truncate ${model.needsKey ? "text-muted-foreground" : ""}`}
+                        title={model.modelId}
+                      >
                         {label(model)}
                       </span>
                       <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
+                        {model.needsKey && (
+                          <Badge variant="outline" className="font-normal">
+                            {t("modelPicker.needsKey")}
+                          </Badge>
+                        )}
                         {model.images && (
                           <ImageIcon className="size-3.5" aria-label={t("modelPicker.images")} />
                         )}

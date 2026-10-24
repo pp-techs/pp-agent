@@ -53,7 +53,7 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
 import { ConfirmModal } from "@/components/modals/confirm-modal";
-import { OptionGroup, SubOptions } from "@/components/settings/option-group";
+import { OptionGroup, SubOptions, SwitchRow } from "@/components/settings/option-group";
 import { SectionHeading } from "@/components/settings/section-heading";
 import { modelLabel } from "@/lib/models";
 import {
@@ -387,13 +387,14 @@ function GatewayForm({
   const [api, setApi] = React.useState<GatewayApi>(gateway?.api ?? "openai-completions");
   const [baseUrl, setBaseUrl] = React.useState(gateway?.baseUrl ?? "");
   const [apiKey, setApiKey] = React.useState("");
+  const [requiresApiKey, setRequiresApiKey] = React.useState(gateway?.requiresApiKey ?? true);
   const [models, setModels] = React.useState<GatewayModel[]>(gateway?.models ?? []);
   const [manualId, setManualId] = React.useState("");
   const [fetched, setFetched] = React.useState<FetchedGatewayModel[] | null>(null);
 
   const url = baseUrl.trim();
   const urlInvalid = url !== "" && !isHttpUrl(url);
-  const hasKey = apiKey.trim() !== "" || Boolean(gateway?.hasApiKey);
+  const hasKey = apiKey.trim() !== "" || Boolean(gateway?.hasApiKey) || !requiresApiKey;
   const canSave = name.trim() !== "" && isHttpUrl(url) && models.length > 0;
   const included = new Set(models.map((model) => model.id));
   // Names the person typed, or the tidied ids, that more than one model of this gateway shows.
@@ -459,6 +460,7 @@ function GatewayForm({
         name: name.trim(),
         api,
         baseUrl: url,
+        requiresApiKey,
         models,
         apiKey: apiKey.trim() || undefined,
       },
@@ -521,8 +523,17 @@ function GatewayForm({
             <FieldDescription>{t("gatewayForm.url.description")}</FieldDescription>
           )}
         </Field>
+        <SwitchRow
+          id="gateway-requires-key"
+          label={t("gatewayForm.requiresKey.label")}
+          description={t("gatewayForm.requiresKey.description")}
+          checked={requiresApiKey}
+          onCheckedChange={setRequiresApiKey}
+        />
         <Field>
-          <FieldLabel htmlFor="gateway-key">{t("gatewayForm.apiKey.label")}</FieldLabel>
+          <FieldLabel htmlFor="gateway-key">
+            {requiresApiKey ? t("gatewayForm.apiKey.label") : t("gatewayForm.apiKey.labelOptional")}
+          </FieldLabel>
           <Input
             id="gateway-key"
             type="password"
@@ -535,7 +546,11 @@ function GatewayForm({
             }
             autoComplete="off"
           />
-          <FieldDescription>{t("gatewayForm.apiKey.description")}</FieldDescription>
+          <FieldDescription>
+            {requiresApiKey
+              ? t("gatewayForm.apiKey.description")
+              : t("gatewayForm.apiKey.descriptionOptional")}
+          </FieldDescription>
         </Field>
         <OptionGroup
           legend={t("gatewayForm.models.legend")}
@@ -674,7 +689,11 @@ function GatewayRow({
           {[
             gateway.baseUrl,
             t("modelCount", { count: gateway.models.length }),
-            gateway.hasApiKey ? t("gatewayRow.keySaved") : t("gatewayRow.noKey"),
+            gateway.hasApiKey
+              ? t("gatewayRow.keySaved")
+              : gateway.requiresApiKey
+                ? t("gatewayRow.needsKey")
+                : t("gatewayRow.noKeyNeeded"),
           ].join(" · ")}
         </ItemDescription>
       </ItemContent>

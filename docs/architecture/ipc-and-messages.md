@@ -6,23 +6,24 @@ Two hops carry all traffic: renderer ↔ main over Electron IPC (through the pre
 
 Channel names are the `IPC` constant in `packages/shared/src/index.ts`. All are `ipcMain.handle` / `ipcRenderer.invoke` pairs, except `agent:event`, which main pushes with `webContents.send`.
 
-| Channel                | Bridge method                     | Handled by                                                          |
-| ---------------------- | --------------------------------- | ------------------------------------------------------------------- |
-| `agent:command`        | `agent.command(command)`          | Forwarded to the agent process (below)                              |
-| `agent:event`          | `agent.onEvent(listener)`         | Pushed by main for every agent event                                |
-| `files:pick`           | `files.pick()`                    | Open dialog, returns `Attachment[]` with path and guessed MIME type |
-| `files:pick-skill`     | `files.pickSkill()`               | Folder or `.zip`/`.skill` picker                                    |
-| `files:pick-folder`    | `files.pickFolder()`              | Folder picker (a new workspace's folder)                            |
-| `files:open-workspace` | `files.openWorkspace(dir)`        | Opens an absolute folder in Finder / Explorer                       |
-| `files:reveal`         | `files.reveal(path)`              | Shows a path inside userData or the default workspace               |
-| `files:open-agent`     | `files.openAgentFile()`           | Reads an exported agent file                                        |
-| `files:save-agent`     | `files.saveAgentFile(name, json)` | Writes an exported agent file                                       |
-| `shell:open-external`  | `openExternal(url)`               | http(s) URL in the default browser                                  |
-| `updates:state`        | `updates.state()`                 | Current `UpdateState`                                               |
-| `updates:check`        | `updates.check()`                 | Looks for a newer release (a person asked)                          |
-| `updates:download`     | `updates.download()`              | Downloads in the app, or opens the release page on macOS / `.deb`   |
-| `updates:install`      | `updates.install()`               | Quits and installs a downloaded update                              |
-| `updates:event`        | `updates.onState(listener)`       | Pushed by main whenever the `UpdateState` changes                   |
+| Channel                | Bridge method                             | Handled by                                                                           |
+| ---------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------ |
+| `agent:command`        | `agent.command(command)`                  | Forwarded to the agent process (below)                                               |
+| `agent:event`          | `agent.onEvent(listener)`                 | Pushed by main for every agent event                                                 |
+| `files:pick`           | `files.pick()`                            | Open dialog, returns `Attachment[]` with path and guessed MIME type                  |
+| `files:pick-skill`     | `files.pickSkill()`                       | Folder or `.zip`/`.skill` picker                                                     |
+| `files:pick-folder`    | `files.pickFolder()`                      | Folder picker (a new workspace's folder)                                             |
+| `files:open-workspace` | `files.openWorkspace(dir)`                | Opens an absolute folder in Finder / Explorer                                        |
+| `files:reveal`         | `files.reveal(path)`                      | Shows a path inside userData or the default workspace                                |
+| `files:open-agent`     | `files.openAgentFile()`                   | Reads an exported agent file                                                         |
+| `files:save-agent`     | `files.saveAgentFile(name, json)`         | Writes an exported agent file                                                        |
+| `files:save-export`    | `files.saveExport(name, format, content)` | Save dialog, then writes an exported conversation (`md` or `html`; capped at 50 MiB) |
+| `shell:open-external`  | `openExternal(url)`                       | http(s) URL in the default browser                                                   |
+| `updates:state`        | `updates.state()`                         | Current `UpdateState`                                                                |
+| `updates:check`        | `updates.check()`                         | Looks for a newer release (a person asked)                                           |
+| `updates:download`     | `updates.download()`                      | Downloads in the app, or opens the release page for `.deb`                           |
+| `updates:install`      | `updates.install()`                       | Quits and installs a downloaded update                                               |
+| `updates:event`        | `updates.onState(listener)`               | Pushed by main whenever the `UpdateState` changes                                    |
 
 `files.pathFor(file)` is answered in the preload itself (`webUtils.getPathForFile`) without IPC.
 
@@ -135,5 +136,5 @@ Scope → query mapping (`SCOPE_KEYS`):
 ## Renderer state split
 
 - **Zustand chat store** holds the live conversation: status, messages, approvals, model, agent, thinking, workspace, session path. It is fed only by agent events and the initial `get_snapshot`.
-- **TanStack Query** holds everything requested on demand (settings, providers, models, tools, skills, MCP, agents, sessions) and runs commands as mutations (`useAgentCommands` in `apps/web/src/lib/queries.ts`). The agent process tells it what is stale through `settings_changed` and `sessions_changed`; the renderer does not guess.
+- **TanStack Query** holds everything requested on demand (settings, providers, models, tools, skills, MCP, agents, sessions, memory, scheduled tasks, voice input) and runs commands as mutations (`useAgentCommands` in `apps/web/src/lib/queries.ts`). The agent process tells it what is stale through `settings_changed` and `sessions_changed`; the renderer does not guess.
 - **Composer store** (`apps/web/src/stores/composer-store.ts`) holds the draft and attachments; a failed `prompt` restores both.

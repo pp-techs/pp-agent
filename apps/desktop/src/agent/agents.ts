@@ -39,6 +39,7 @@ export const DEFAULT_AGENT: AgentProfile = {
   skills: null,
   model: null,
   starterPrompts: [],
+  memory: true,
 };
 
 /** Agent fields without the id: what an exported file carries. */
@@ -141,6 +142,7 @@ function portableAgent(value: Loose, strict: boolean): PortableAgent {
     starterPrompts: prompts
       .slice(0, MAX_STARTER_PROMPTS)
       .map((prompt) => prompt.slice(0, MAX_STARTER_PROMPT_LENGTH)),
+    memory: value.memory !== false,
   };
 }
 
@@ -224,6 +226,7 @@ export function exportAgent(agent: AgentProfile): string {
       skills: agent.skills,
       model: agent.model,
       starterPrompts: agent.starterPrompts,
+      memory: agent.memory,
     },
   };
   return JSON.stringify(file, null, 2);
@@ -276,6 +279,32 @@ const TOOL_TEXT: Record<string, { label: string; description: string }> = {
   },
   web_search: { label: "Search the web", description: "Look things up on the internet." },
   web_fetch: { label: "Open web pages", description: "Read the content of a web address." },
+  memory_save: {
+    label: "Remember notes",
+    description: "Keep short facts and preferences; asks first.",
+  },
+  memory_list: { label: "List saved notes", description: "See what the agent remembers." },
+  memory_search: {
+    label: "Search saved notes",
+    description: "Look for something the agent remembers.",
+  },
+  memory_forget: { label: "Forget notes", description: "Remove a saved note; asks first." },
+  todo_write: {
+    label: "Plan with a checklist",
+    description: "Keep a checklist for tasks with several steps.",
+  },
+  delegate_task: {
+    label: "Hand off research",
+    description: "Give a focused read-only task to a helper and get back a summary.",
+  },
+  office_read: {
+    label: "Inspect Word, Excel, PowerPoint files",
+    description: "Look at the structure and content of Office files without changing them.",
+  },
+  office_edit: {
+    label: "Create and edit Word, Excel, PowerPoint files",
+    description: "Build and change Office files in the workspace; asks first.",
+  },
   write: { label: "Create and save files", description: "Save new files; asks first." },
   edit: { label: "Edit parts of files", description: "Change parts of existing files." },
   bash: {

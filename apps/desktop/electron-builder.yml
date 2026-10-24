@@ -10,6 +10,19 @@ extraResources:
   # Built by `vp run @workspace/web#build`; loaded by the main process in packaged builds.
   - from: ../web/dist
     to: renderer
+  # Tray icons (PNG), read by the main process in packaged builds. electron-builder only warns
+  # ("file source doesn't exist") when the directory is missing.
+  - from: resources/tray
+    to: tray
+  # OfficeCLI (Apache-2.0) for office_read/office_edit: the binary of the platform being packaged,
+  # fetched by scripts/fetch-officecli.ts (pinned and checksummed), its license texts, and the
+  # skills written for it. The binary is signed with the app on macOS.
+  - from: resources/officecli/${os}-${arch}
+    to: officecli/${os}-${arch}
+  - from: resources/licenses/officecli
+    to: licenses/officecli
+  - from: resources/skills
+    to: skills
 asar: true
 # Space-free names for release assets, e.g. pp-agent-0.1.0-mac-arm64.dmg.
 artifactName: pp-agent-${version}-${os}-${arch}.${ext}
@@ -23,6 +36,19 @@ publish:
 mac:
   category: public.app-category.productivity
   target: [dmg, zip]
+  # Developer ID signing needs the hardened runtime; notarization requires it. With no certificate
+  # the release workflow overrides this (ad-hoc signature, no hardened runtime).
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  gatekeeperAssess: false
+  extendInfo:
+    # Shown by macOS when voice input asks for the microphone for the first time.
+    NSMicrophoneUsageDescription: PP Agent uses the microphone only while you record a voice message to turn it into text.
+  # Notarizes only when APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID are set (or an API
+  # key / keychain profile); otherwise electron-builder logs "skipped macOS notarization". The
+  # release workflow passes -c.mac.notarize=false for unsigned or ad-hoc builds.
+  notarize: true
 win:
   target: [nsis]
 nsis:

@@ -6,7 +6,12 @@ export default defineConfig({
   },
   fmt: {
     printWidth: 100,
-    ignorePatterns: ["**/dist/**", "**/release/**", "pnpm-lock.yaml"],
+    ignorePatterns: [
+      "**/dist/**",
+      "**/release/**",
+      "pnpm-lock.yaml",
+      "apps/desktop/resources/skills/**",
+    ],
   },
   lint: {
     plugins: ["typescript"],

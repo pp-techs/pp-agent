@@ -86,8 +86,14 @@
       "invalid": "Nhập địa chỉ web bắt đầu bằng https:// hoặc http://",
       "description": "Địa chỉ mà nhóm bạn dùng cho các yêu cầu AI."
     },
+    "requiresKey": {
+      "label": "Gateway này cần khóa API",
+      "description": "Hãy tắt với các điểm cuối cục bộ như Ollama, LM Studio hoặc vLLM không dùng khóa."
+    },
     "apiKey": {
       "label": "Khóa API",
+      "labelOptional": "Khóa API (không bắt buộc)",
+      "descriptionOptional": "Chỉ cần khi điểm cuối có kiểm tra khóa. Được lưu mã hóa trong kho khóa của hệ điều hành.",
       "placeholderSaved": "Đã lưu. Để trống để giữ nguyên.",
       "placeholderNew": "Dán khóa của bạn",
       "description": "Được lưu mã hóa trong kho khóa của hệ điều hành."
@@ -105,7 +111,8 @@
   },
   "gatewayRow": {
     "keySaved": "Đã lưu khóa",
-    "noKey": "Chưa có khóa",
+    "needsKey": "Cần khóa API",
+    "noKeyNeeded": "Không cần khóa",
     "delete": "Xóa {{name}}",
     "deleteTitle": "Xóa {{name}}?",
     "deleteDescription": "Gateway và khóa đã lưu của nó sẽ bị xóa khỏi máy tính. Các cuộc trò chuyện đang dùng mô hình của Gateway này sẽ chuyển sang mô hình khác.",

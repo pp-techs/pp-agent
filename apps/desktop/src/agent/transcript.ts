@@ -14,8 +14,13 @@ interface ToolState {
   output?: string;
 }
 
-/** What the chat is rebuilt from: the model's messages plus the points where it was compacted. */
 export type TranscriptItem = AgentMessage | { role: "compaction" };
+
+/** One item of a saved conversation with the id of its session entry (compactions have none). */
+export interface TranscriptEntry {
+  item: TranscriptItem;
+  entryId?: string;
+}
 
 /** Tool output shown in the UI is capped; the model still receives the full result. */
 const OUTPUT_LIMIT = 8_000;
@@ -77,18 +82,20 @@ export class Transcript {
   }
 
   /** Rebuild the chat from a saved session's messages without emitting per-message updates. */
-  load(items: readonly TranscriptItem[]): void {
+  load(entries: readonly TranscriptEntry[]): void {
     this.reset();
     this.loading = true;
     try {
-      for (const message of items) {
+      for (const { item: message, entryId } of entries) {
         if (message.role === "compaction") {
           this.addCompaction();
         } else if (message.role === "user") {
           this.addUser(message);
+          this.tag(entryId);
         } else if (message.role === "assistant") {
           this.startAssistant();
           this.updateAssistant(message, true);
+          this.tag(entryId);
         } else if (message.role === "toolResult") {
           this.finishTool(message.toolCallId, message.content, message.isError);
         }
@@ -102,6 +109,28 @@ export class Transcript {
       this.loading = false;
       this.dirty.clear();
     }
+  }
+
+  /**
+   * Gives the chat's user and assistant messages the ids of their session entries, in order. Called
+   * once a run settles, when the entries of the new messages exist; changes go out with `flush`.
+   */
+  setEntryIds(entryIds: readonly string[]): void {
+    let next = 0;
+    for (const message of this.messages) {
+      if (message.role === "compaction") continue;
+      const entryId = entryIds[next];
+      next += 1;
+      if (entryId === undefined || message.entryId === entryId) continue;
+      message.entryId = entryId;
+      this.dirty.add(message.id);
+    }
+  }
+
+  /** Records the session entry of the message just added. */
+  private tag(entryId: string | undefined): void {
+    const message = this.messages.at(-1);
+    if (message && entryId !== undefined) message.entryId = entryId;
   }
 
   /** Marks where the model's view of the chat was summarized; the messages above stay visible. */
