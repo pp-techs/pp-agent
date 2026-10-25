@@ -1,5 +1,11 @@
 # @workspace/desktop
 
+## 0.7.1
+
+### Patch Changes
+
+- 507ba8e: Model context window can now be set to any positive number of tokens, not only multiples of 1000.
+
 ## 0.7.0
 
 ### Minor Changes
