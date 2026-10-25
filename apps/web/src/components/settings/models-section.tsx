@@ -222,8 +222,8 @@ function ModelRow({
       </div>
       <Input
         type="number"
-        min={1000}
-        step={1000}
+        min={1}
+        step={1}
         inputMode="numeric"
         aria-label={t("modelRow.contextWindow.label", { id: model.id })}
         title={t("modelRow.contextWindow.hint")}
