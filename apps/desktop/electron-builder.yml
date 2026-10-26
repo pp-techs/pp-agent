@@ -3,6 +3,8 @@ productName: PP Agent
 copyright: Copyright © 2026 PP Techs
 directories:
   output: release
+  # icon.icns (macOS), icon.ico (Windows) and icon.png (Linux) are picked up from here.
+  buildResources: build
 files:
   - dist/**
   - package.json
@@ -14,6 +16,9 @@ extraResources:
   # ("file source doesn't exist") when the directory is missing.
   - from: resources/tray
     to: tray
+  # Window icon (PNG) for Windows and Linux, read by the main process in packaged builds.
+  - from: resources/icons
+    to: icons
   # OfficeCLI (Apache-2.0) for office_read/office_edit: the binary of the platform being packaged,
   # fetched by scripts/fetch-officecli.ts (pinned and checksummed), its license texts, and the
   # skills written for it. The binary is signed with the app on macOS.

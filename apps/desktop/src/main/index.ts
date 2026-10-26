@@ -29,6 +29,12 @@ import { migrateLegacyVault } from "./legacy-vault.ts";
 import { createUpdater } from "./updates.ts";
 
 const DIST_DIR = import.meta.dirname;
+/** Window icon for Windows and Linux (macOS takes the Dock icon from the app bundle). */
+const WINDOW_ICON = join(
+  app.isPackaged ? process.resourcesPath : join(DIST_DIR, "..", "resources"),
+  "icons",
+  "icon.png",
+);
 /** Unpackaged runs load the renderer dev server (`vp dev` in apps/web); packaged builds load bundled files. */
 const RENDERER_URL = app.isPackaged
   ? null
@@ -200,6 +206,7 @@ function createWindow(): void {
     minWidth: 640,
     minHeight: 480,
     title: "PP Agent",
+    icon: WINDOW_ICON,
     show: false,
     webPreferences: {
       preload: join(DIST_DIR, "preload.cjs"),
