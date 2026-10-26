@@ -9,9 +9,9 @@ import {
   EmptyTitle,
 } from "@workspace/ui/components/empty";
 import { useQuery } from "@tanstack/react-query";
-import { MessageCircleDashedIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { Logo } from "@/components/logo";
 import { useSendMessage } from "@/hooks/use-send-message";
 import { agentsQuery } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
@@ -33,8 +33,8 @@ export function EmptyChat({ bridge }: { bridge: DesktopBridge }) {
       <EmptyHeader>
         {generic ? (
           <>
-            <EmptyMedia variant="icon">
-              <MessageCircleDashedIcon />
+            <EmptyMedia>
+              <Logo className="size-16" />
             </EmptyMedia>
             <EmptyTitle>{t("emptyChat.title")}</EmptyTitle>
             <EmptyDescription>
