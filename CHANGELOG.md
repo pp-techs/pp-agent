@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.8.1] — 2026-10-26
+
+PP Agent now has its own logo: app icon, tray icon, browser favicon, and a light/dark mark on the empty chat screen.
+
 ## [0.8.0] — 2026-10-26
 
 The agent can now keep running in the background after you close or quit the app, and you can chat with it from Telegram. Turn on Settings › Background to keep it running, and set up Telegram in Settings › Channels; scheduled tasks keep running too. Saved sign-ins move to a new encrypted store automatically.
