@@ -1,12 +1,13 @@
 import { randomBytes } from "node:crypto";
 import { proof } from "./auth.ts";
-import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { connect, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DAEMON_PROTOCOL, type AgentCommand, type DaemonFrame } from "@workspace/shared";
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { encodeFrame, FrameDecoder } from "./framing.ts";
+import { endpointFor } from "./paths.ts";
 import { DaemonServer, ensureToken, type DaemonHost } from "./server.ts";
 
 const TOKEN = "a".repeat(64);
@@ -180,6 +181,52 @@ describe("DaemonServer", () => {
   it.skipIf(process.platform === "win32")("restricts the socket to its owner", async () => {
     await startServer();
     expect((await stat(endpoint)).mode & 0o777).toBe(0o600);
+  });
+
+  describe.skipIf(process.platform === "win32")("socket directory", () => {
+    beforeEach(async () => {
+      endpoint = endpointFor(dir);
+      await chmod(dir, 0o755);
+    });
+
+    it("creates a private run directory without changing home permissions", async () => {
+      await startServer();
+      expect((await stat(join(dir, "run"))).mode & 0o777).toBe(0o700);
+      expect((await stat(dir)).mode & 0o777).toBe(0o755);
+    });
+
+    it.each([0o755, 0o777])("tightens an existing run directory with mode %s", async (mode) => {
+      await mkdir(join(dir, "run"));
+      await chmod(join(dir, "run"), mode);
+      await startServer();
+      expect((await stat(join(dir, "run"))).mode & 0o777).toBe(0o700);
+      expect((await stat(dir)).mode & 0o777).toBe(0o755);
+      const client = await openClient();
+      expect((await client.hello()).kind).toBe("hello_ok");
+    });
+
+    it("rejects a foreign directory without changing its permissions", async () => {
+      const run = join(dir, "run");
+      await mkdir(run);
+      await chmod(run, 0o777);
+      const uid = process.getuid!();
+      const getuid = vi.spyOn(process, "getuid").mockReturnValue(uid + 1);
+      try {
+        await expect(createServer().listen()).rejects.toThrow(/owned by the current user/);
+        expect((await stat(run)).mode & 0o777).toBe(0o777);
+      } finally {
+        getuid.mockRestore();
+      }
+    });
+
+    it("rejects a symlinked directory without changing its target permissions", async () => {
+      const target = join(dir, "target");
+      await mkdir(target);
+      await chmod(target, 0o755);
+      await symlink(target, join(dir, "run"));
+      await expect(createServer().listen()).rejects.toThrow(/must be a directory/);
+      expect((await stat(target)).mode & 0o777).toBe(0o755);
+    });
   });
 
   it("turns a wrong token away and closes the connection", async () => {

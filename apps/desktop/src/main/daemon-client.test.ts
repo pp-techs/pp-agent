@@ -1,8 +1,8 @@
 import { randomBytes } from "node:crypto";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { proof } from "@workspace/daemon/auth";
 import { encodeFrame, FrameDecoder } from "@workspace/daemon/framing";
 import { resolveDaemonPaths } from "@workspace/daemon/paths";
@@ -27,6 +27,9 @@ async function setup(authenticated: boolean) {
   const paths = resolveDaemonPaths({ PP_AGENT_HOME: home });
   const token = randomBytes(32).toString("hex");
   await writeFile(paths.tokenFile, token, { mode: 0o600 });
+  if (process.platform !== "win32") {
+    await mkdir(dirname(paths.endpoint), { recursive: true, mode: 0o700 });
+  }
   const received: unknown[] = [];
   server = createServer((socket) => {
     sockets.push(socket);

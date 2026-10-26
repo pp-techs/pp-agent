@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { dirname } from "node:path";
 import type { HostOutput } from "@workspace/agent-core";
@@ -190,6 +190,10 @@ export class DaemonServer {
 
   private async prepareSocketDir(dir: string): Promise<void> {
     await mkdir(dir, { recursive: true, mode: 0o700 });
+    const stats = await lstat(dir);
+    if (stats.isDirectory() && stats.uid === process.getuid?.() && (stats.mode & 0o077) !== 0) {
+      await chmod(dir, 0o700);
+    }
     await validateSocketDirectory(dir);
   }
 

@@ -1,5 +1,20 @@
+import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { readlink, symlink, unlink } from "node:fs/promises";
+import { readFile, readlink, symlink, unlink } from "node:fs/promises";
+import { promisify } from "node:util";
+
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+let boot: Promise<string> | undefined;
+
+async function bootIdentifier(): Promise<string> {
+  const value =
+    process.platform === "darwin"
+      ? (await promisify(execFile)("/usr/sbin/sysctl", ["-n", "kern.bootsessionuuid"])).stdout
+      : await readFile("/proc/sys/kernel/random/boot_id", "utf8");
+  const id = value.trim().toLowerCase();
+  if (!new RegExp(`^${UUID}$`).test(id)) throw new Error("Invalid system boot identifier.");
+  return id;
+}
 
 function alive(pid: number): boolean {
   try {
@@ -20,9 +35,10 @@ async function owner(path: string): Promise<string | null> {
   }
 }
 
-/** Atomically publishes the PID and unique generation, with no empty-lock crash window. */
+/** Atomically publishes the PID, unique generation and boot, with no empty-lock crash window. */
 export async function acquireEndpointLock(path: string): Promise<(() => Promise<void>) | null> {
-  const mine = `${process.pid}-${randomBytes(16).toString("hex")}`;
+  const bootId = await (boot ??= bootIdentifier());
+  const mine = `${process.pid}-${randomBytes(16).toString("hex")}-${bootId}`;
   for (;;) {
     try {
       await symlink(mine, path);
@@ -34,14 +50,15 @@ export async function acquireEndpointLock(path: string): Promise<(() => Promise<
     }
     const previous = await owner(path);
     if (previous === null) continue;
-    const match = /^(\d+)-[0-9a-f]{32}$/.exec(previous);
+    const match = new RegExp(`^(\\d+)-[0-9a-f]{32}(?:-(${UUID}))?$`).exec(previous);
     if (!match) throw new Error(`Invalid endpoint lock: ${path}`);
     const pid = Number(match[1]);
     if (!Number.isSafeInteger(pid) || pid <= 0) throw new Error(`Invalid lock PID: ${path}`);
-    if (alive(pid)) return null;
+    // Legacy locks have no boot ID, so conservatively retain their PID liveness check.
+    if ((match[2] === undefined || match[2] === bootId) && alive(pid)) return null;
 
     // Serialize reclaimers of THIS generation so a delayed contender cannot unlink a new lock.
-    // A reclaimer that itself crashed is recovered by the same PID check.
+    // A reclaimer that itself crashed is recovered by the same boot and PID checks.
     const release = await acquireEndpointLock(`${path}.${previous}.reap`);
     if (!release) return null;
     try {
