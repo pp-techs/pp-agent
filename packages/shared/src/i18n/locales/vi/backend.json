@@ -214,8 +214,8 @@
     "problems": {
       "empty": "Ghi chú đang trống.",
       "too-long": "Ghi chú quá dài.",
-      "full": "Bộ nhớ đã đầy. Hãy xóa bớt một ghi chú trước.",
-      "duplicate": "Đã có ghi chú khác nói điều này.",
+      "full": "Nơi đó đã đầy. Hãy xóa bớt một ghi chú trước, hoặc lưu ghi chú ở nơi khác.",
+      "duplicate": "Nơi đó đã có ghi chú khác nói điều này.",
       "missing": "Ghi chú này không còn nữa."
     }
   },
@@ -251,6 +251,12 @@
       "tooLarge": "Bản ghi âm quá lớn. Giới hạn là {{max}} MB.",
       "tooLong": "Bản ghi âm quá dài. Giới hạn là {{max}} phút.",
       "notConfigured": "Chưa thiết lập nhập bằng giọng nói. Chọn nhà cung cấp tại Cài đặt › Chung › Nhập bằng giọng nói.",
+      "localBinaryMissing": "Nhập bằng giọng nói cục bộ cần whisper.cpp. Hãy cài (ví dụ `brew install whisper-cpp`) rồi thử lại.",
+      "localModelMissing": "Mô hình cục bộ chưa được tải xuống. Hãy tải tại Cài đặt › Chung › Nhập bằng giọng nói.",
+      "localModelInvalid": "Mô hình cục bộ phải là mô hình đã tải xuống hoặc đường dẫn tệp ggml.",
+      "localFailed": "Nhập bằng giọng nói cục bộ gặp lỗi: {{error}}",
+      "localFfmpegMissing": "Nhập bằng giọng nói cục bộ cần ffmpeg để đọc định dạng bản ghi âm này. Hãy cài (ví dụ `brew install ffmpeg`) rồi thử lại.",
+      "modelDownloadFailed": "Không tải được mô hình: {{error}}",
       "providerUnavailable": "Nhà cung cấp đã chọn cho nhập bằng giọng nói chưa được kết nối hoặc không nhận âm thanh. Chọn nhà cung cấp khác tại Cài đặt › Chung › Nhập bằng giọng nói.",
       "timedOut": "Việc chuyển giọng nói thành văn bản mất quá lâu. Hãy thử ghi âm ngắn hơn.",
       "unreachable": "Không kết nối được dịch vụ chuyển giọng nói thành văn bản ({{error}}).",

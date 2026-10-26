@@ -373,7 +373,7 @@ export interface AgentProfile extends AgentSummary {
   memory: boolean;
 }
 
-/** Limits of long-term memory, shared so the editor can enforce the same ones. */
+/** Limits of long-term memory (per place), shared so the editor can enforce the same ones. */
 export const MEMORY_LIMITS = {
   maxEntries: 200,
   maxEntryLength: 500,
@@ -388,6 +388,8 @@ export interface MemoryEntry {
   text: string;
   /** One short label ("preference", "project"…); null = none. */
   tag: string | null;
+  /** Where the note lives: null = every workspace, else only that workspace's conversations. */
+  workspaceId: string | null;
   /** Epoch milliseconds. */
   createdAt: number;
   updatedAt: number;
@@ -605,15 +607,42 @@ export const VOICE_LIMITS = {
   /** Largest recording the app sends (transcription services refuse about 25 MB). */
   maxBytes: 20 * 1024 * 1024,
   maxModelLength: 100,
+  /** A local model can be the path of a ggml file, which is longer than a model name. */
+  maxModelPathLength: 1024,
 } as const;
 
 export const DEFAULT_VOICE_MODEL = "whisper-1";
 
+/**
+ * Reserved provider id of local speech to text (whisper.cpp on this computer): no key, no
+ * service, and the recording never leaves the computer.
+ */
+export const LOCAL_VOICE_PROVIDER = "local";
+
+/** Local whisper.cpp models Settings can download, smallest first. */
+export const VOICE_MODEL_PRESETS = ["tiny", "base", "small", "medium"] as const;
+export type VoiceModelPreset = (typeof VOICE_MODEL_PRESETS)[number];
+
+/** The model a new local voice setting starts with: fast enough, good with accents. */
+export const DEFAULT_LOCAL_VOICE_MODEL: VoiceModelPreset = "base";
+
+export function isVoiceModelPreset(value: string): value is VoiceModelPreset {
+  return (VOICE_MODEL_PRESETS as readonly string[]).includes(value);
+}
+
+/** Size of each downloadable ggml file, so the person sees it before downloading. */
+export const VOICE_MODEL_PRESET_BYTES: Record<VoiceModelPreset, number> = {
+  tiny: 77_691_713,
+  base: 147_951_465,
+  small: 487_601_967,
+  medium: 1_533_763_059,
+};
+
 /** Contents of `SettingsFile.voice`. */
 export interface VoiceSettings {
-  /** Provider or gateway id whose key pays for transcription; null = not set up. */
+  /** Provider or gateway id whose key pays for transcription, `local`, or null = not set up. */
   providerId: string | null;
-  /** Transcription model, such as `whisper-1`. */
+  /** A service's model (`whisper-1`), or with `local` a preset name or a ggml file path. */
   model: string;
   /** `app` = the language of the app, `auto` = let the service detect it, or a two-letter code. */
   language: string;
@@ -625,10 +654,21 @@ export interface VoiceProviderOption {
   name: string;
 }
 
+/** What local speech to text (whisper.cpp) can do on this computer right now. */
+export interface VoiceLocalStatus {
+  /** whisper.cpp's `whisper-cli` was found, bundled with the app or on the PATH. */
+  binary: boolean;
+  /** Which downloadable models are already in the app's models folder. */
+  models: Record<VoiceModelPreset, boolean>;
+  /** The ggml file the setting points at exists (a preset or a path the person gave). */
+  model: boolean;
+}
+
 export interface VoiceView {
   config: VoiceSettings;
   providers: VoiceProviderOption[];
-  /** The chosen provider still has a key, so the mic button works. */
+  local: VoiceLocalStatus;
+  /** The chosen way to transcribe can work right now, so the mic button works. */
   ready: boolean;
 }
 
@@ -894,13 +934,17 @@ export interface AgentCommandMap {
   /** The default workspace cannot be deleted. Its conversations move to the default workspace. */
   delete_workspace: { params: { id: string }; result: void };
 
-  /** Saved notes, newest first, and whether memory is on. */
+  /** Saved notes of every place, newest first, and whether memory is on. */
   get_memory: { params: NoParams; result: MemoryView };
   /** The global switch of long-term memory (Settings › Memory). */
   set_memory_enabled: { params: { enabled: boolean }; result: MemoryView };
-  /** Adds a note (`id` omitted) or edits one. A note that already exists is not added twice. */
+  /**
+   * Adds a note (`id` omitted) or edits one. A note that already exists in its place is not added
+   * twice. `workspaceId`: null/omitted = every workspace, else one workspace; an edit can move the
+   * note, an omitted `workspaceId` keeps where it lives.
+   */
   save_memory_entry: {
-    params: { id?: string; text: string; tag?: string | null };
+    params: { id?: string; text: string; tag?: string | null; workspaceId?: string | null };
     result: MemoryEntry;
   };
   delete_memory_entry: { params: { id: string }; result: void };
@@ -919,6 +963,8 @@ export interface AgentCommandMap {
   /** Voice input setting, and whether it can transcribe right now. */
   get_voice: { params: NoParams; result: VoiceView };
   save_voice: { params: { config: VoiceSettings }; result: VoiceView };
+  /** Downloads a local whisper.cpp model into the app's models folder. */
+  install_voice_model: { params: { model: VoiceModelPreset }; result: VoiceView };
   /** Sends a recording to the transcription service chosen in Settings; the key stays here. */
   transcribe_audio: {
     params: { data: string; mimeType: string; durationMs: number };

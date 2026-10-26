@@ -214,8 +214,8 @@
     "problems": {
       "empty": "The note is empty.",
       "too-long": "The note is too long.",
-      "full": "Memory is full. Delete a note first.",
-      "duplicate": "Another note already says this.",
+      "full": "That place is full. Delete a note first, or save the note in another place.",
+      "duplicate": "Another note in the same place already says this.",
       "missing": "That note no longer exists."
     }
   },
@@ -251,6 +251,12 @@
       "tooLarge": "The recording is too large. The limit is {{max}} MB.",
       "tooLong": "The recording is too long. The limit is {{max}} minutes.",
       "notConfigured": "Voice input is not set up. Choose a provider in Settings › General › Voice input.",
+      "localBinaryMissing": "Local speech to text needs whisper.cpp. Install it (for example `brew install whisper-cpp`) and try again.",
+      "localModelMissing": "The local model is not downloaded yet. Download it in Settings › General › Voice input.",
+      "localModelInvalid": "The local model must be a downloaded model or the path of a ggml file.",
+      "localFailed": "Local speech to text failed: {{error}}",
+      "localFfmpegMissing": "Local speech to text needs ffmpeg to read this recording's format. Install it (for example `brew install ffmpeg`) and try again.",
+      "modelDownloadFailed": "The model could not be downloaded: {{error}}",
       "providerUnavailable": "The provider chosen for voice input is not connected or does not accept audio. Choose another in Settings › General › Voice input.",
       "timedOut": "The transcription took too long. Try a shorter recording.",
       "unreachable": "The transcription service could not be reached ({{error}}).",

@@ -1,4 +1,4 @@
-import { VOICE_LIMITS } from "@workspace/shared";
+import { DEFAULT_LOCAL_VOICE_MODEL, VOICE_LIMITS } from "@workspace/shared";
 import { describe, expect, test } from "vite-plus/test";
 import {
   audioExtension,
@@ -61,8 +61,21 @@ describe("voice settings", () => {
       language: "en",
     });
     expect(readVoiceSettings({ language: "english" }).language).toBe("app");
+    // A model that does not fit the provider falls back to that provider's own default.
     expect(readVoiceSettings({ model: "x".repeat(VOICE_LIMITS.maxModelLength + 1) }).model).toBe(
-      "whisper-1",
+      DEFAULT_LOCAL_VOICE_MODEL,
+    );
+    expect(
+      readVoiceSettings({
+        providerId: "openai",
+        model: "x".repeat(VOICE_LIMITS.maxModelLength + 1),
+      }).model,
+    ).toBe("whisper-1");
+    expect(readVoiceSettings({ providerId: "local", model: "/models/ggml.bin" }).model).toBe(
+      "/models/ggml.bin",
+    );
+    expect(readVoiceSettings({ providerId: "local", model: "whisper-1" }).model).toBe(
+      DEFAULT_LOCAL_VOICE_MODEL,
     );
   });
 
@@ -73,6 +86,12 @@ describe("voice settings", () => {
     expect(() => validateVoiceSettings({ providerId: null, model: "", language: "app" })).toThrow();
     expect(() =>
       validateVoiceSettings({ providerId: null, model: "m", language: "klingon" }),
+    ).toThrow();
+    expect(validateVoiceSettings({ providerId: "local", model: "small", language: "app" })).toEqual(
+      { providerId: "local", model: "small", language: "app" },
+    );
+    expect(() =>
+      validateVoiceSettings({ providerId: "local", model: "whisper-1", language: "app" }),
     ).toThrow();
   });
 });

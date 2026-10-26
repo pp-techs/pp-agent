@@ -77,12 +77,29 @@
     },
     "voice": {
       "legend": "Voice input",
-      "description": "Speak instead of typing: the microphone button in the message box turns your recording into text. The recording is sent to the service you choose here.",
+      "description": "Speak instead of typing: the microphone button in the message box turns your recording into text. It runs whisper.cpp on this computer, or sends the recording to a service you choose here.",
       "provider": {
         "label": "Provider",
         "none": "Not set up",
-        "help": "Choose a provider or gateway you already added a key for in Models. It must offer speech-to-text, as OpenAI does.",
-        "empty": "No provider with a key yet. Add one in Models first."
+        "local": "This computer (whisper.cpp)",
+        "help": "Local speech to text needs no key and sends nothing anywhere. A provider or gateway from Models is used only when you pick it here.",
+        "empty": "No provider with a key yet. Local speech to text works without one."
+      },
+      "local": {
+        "modelLabel": "Local model",
+        "modelHelp": "The whisper model to run on this computer. Smaller models are faster; larger ones handle accents and noise better.",
+        "models": {
+          "tiny": "Tiny (74 MB)",
+          "base": "Base (141 MB)",
+          "small": "Small (465 MB)",
+          "medium": "Medium (1.4 GB)"
+        },
+        "download": "Download",
+        "downloading": "Downloading…",
+        "downloaded": "Downloaded",
+        "notDownloaded": "Not downloaded yet",
+        "missingBinary": "whisper.cpp is not installed. Install it (for example `brew install whisper-cpp`) and restart PP Agent.",
+        "privacy": "The recording stays on this computer."
       },
       "model": {
         "label": "Model",
@@ -95,7 +112,7 @@
         "help": "Telling the service the language makes the text more accurate."
       },
       "ready": "Ready: the microphone button works.",
-      "notReady": "Not ready: choose a provider that has a key.",
+      "notReady": "Not ready: download the local model, or choose a provider that has a key.",
       "save": "Save",
       "saved": "Voice input saved.",
       "loadError": "Couldn't load voice input"
@@ -103,7 +120,7 @@
   },
   "memory": {
     "title": "Memory",
-    "description": "Short notes the agent keeps across conversations, such as your preferences. They are added to every new conversation as information, never as instructions.",
+    "description": "Short notes the agent keeps across conversations, such as your preferences. They are added to every new conversation as information, never as instructions. Each note is remembered everywhere or in one workspace only.",
     "enable": {
       "legend": "Long-term memory",
       "label": "Remember notes between conversations",
@@ -115,11 +132,15 @@
       "text": "Note",
       "textPlaceholder": "For example: I prefer short answers in Vietnamese.",
       "tag": "Label (optional)",
-      "tagPlaceholder": "preference"
+      "tagPlaceholder": "preference",
+      "scope": "Remembers in",
+      "scopeGlobal": "Everywhere",
+      "scopeWorkspace": "Only in {{name}}"
     },
     "errors": {
       "textRequired": "Write the note.",
-      "textTooLong": "A note can be at most {{max}} characters."
+      "textTooLong": "A note can be at most {{max}} characters.",
+      "scopeFull": "That place already holds {{max}} notes. Delete one first."
     },
     "editLabel": "Edit note",
     "deleteLabel": "Delete note",
@@ -139,8 +160,10 @@
       "title": "No notes yet",
       "description": "The agent saves notes when you ask it to remember something. You can also add them here."
     },
-    "count_one": "{{count}} note of {{max}}",
-    "count_other": "{{count}} notes of {{max}}"
+    "groupGlobal": "Everywhere",
+    "groupOther": "Other places",
+    "count_one": "{{count}} note · up to {{max}} in each place",
+    "count_other": "{{count}} notes · up to {{max}} in each place"
   },
   "scheduledTasks": {
     "title": "Scheduled tasks",

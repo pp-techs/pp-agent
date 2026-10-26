@@ -238,6 +238,12 @@
       "description": "The agent a new chat in this workspace starts with. You can still change it in the chat.",
       "agent": "Agent",
       "agentInherit": "The agent picked last"
+    },
+    "memory": {
+      "legend": "Memory",
+      "description": "Notes the agent remembers in this workspace's chats only. Notes it remembers everywhere are managed in Settings › Memory.",
+      "add": "Add a note",
+      "empty": "No notes here yet."
     }
   }
 }

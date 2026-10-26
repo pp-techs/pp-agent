@@ -6,14 +6,23 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import {
+  DEFAULT_LOCAL_VOICE_MODEL,
   DEFAULT_VOICE_MODEL,
+  LOCAL_VOICE_PROVIDER,
   VOICE_LIMITS,
+  type VoiceModelPreset,
   type VoiceProviderOption,
   type VoiceSettings,
   type VoiceView,
 } from "@workspace/shared";
 import { currentLanguage, t } from "./i18n.ts";
 import type { SettingsStore } from "./settings-store.ts";
+import {
+  downloadVoiceModel,
+  isModelFileSetting,
+  localVoiceStatus,
+  transcribeWithWhisper,
+} from "./voice-local.ts";
 
 const REQUEST_TIMEOUT_MS = 120_000;
 /** The recorder stops at the cap; this much extra covers the time it takes to flush. */
@@ -22,8 +31,8 @@ const DURATION_SLACK_MS = 5_000;
 const OPENAI_STYLE_APIS: readonly string[] = ["openai-completions", "openai-responses"];
 
 export const DEFAULT_VOICE: VoiceSettings = {
-  providerId: null,
-  model: DEFAULT_VOICE_MODEL,
+  providerId: LOCAL_VOICE_PROVIDER,
+  model: DEFAULT_LOCAL_VOICE_MODEL,
   language: "app",
 };
 
@@ -77,28 +86,46 @@ export function readVoiceSettings(raw: unknown): VoiceSettings {
   const value = raw as Record<string, unknown>;
   if (typeof value.providerId === "string" && value.providerId.trim())
     voice.providerId = value.providerId.trim();
-  if (typeof value.model === "string") {
-    const model = value.model.trim();
-    if (model && model.length <= VOICE_LIMITS.maxModelLength) voice.model = model;
-  }
   if (typeof value.language === "string") {
     const language = value.language.trim().toLowerCase();
     if (language === "app" || language === "auto" || /^[a-z]{2,3}$/.test(language))
       voice.language = language;
   }
+  // The model falls back to the default of the chosen provider, and must fit it: a local
+  // provider takes a preset or a ggml file path, a service takes its model name.
+  let model = "";
+  if (typeof value.model === "string") {
+    const trimmed = value.model.trim();
+    const limit =
+      voice.providerId === LOCAL_VOICE_PROVIDER
+        ? VOICE_LIMITS.maxModelPathLength
+        : VOICE_LIMITS.maxModelLength;
+    if (trimmed && trimmed.length <= limit) model = trimmed;
+  }
+  const fits = voice.providerId === LOCAL_VOICE_PROVIDER ? isModelFileSetting(model) : model !== "";
+  voice.model = fits
+    ? model
+    : voice.providerId === LOCAL_VOICE_PROVIDER
+      ? DEFAULT_LOCAL_VOICE_MODEL
+      : DEFAULT_VOICE_MODEL;
   return voice;
 }
 
 /** Voice settings a person typed; throws a message for the person when they do not fit. */
 export function validateVoiceSettings(input: VoiceSettings): VoiceSettings {
   const model = (input.model ?? "").trim();
-  if (!model) throw new Error(t("voice.errors.modelRequired"));
-  if (model.length > VOICE_LIMITS.maxModelLength)
-    throw new Error(t("voice.errors.modelTooLong", { max: VOICE_LIMITS.maxModelLength }));
+  const providerId = input.providerId?.trim() || null;
   const language = (input.language ?? "").trim().toLowerCase();
   if (language !== "app" && language !== "auto" && !/^[a-z]{2,3}$/.test(language))
     throw new Error(t("voice.errors.languageInvalid"));
-  const providerId = input.providerId?.trim() || null;
+  if (providerId === LOCAL_VOICE_PROVIDER) {
+    if (!isModelFileSetting(model) || model.length > VOICE_LIMITS.maxModelPathLength)
+      throw new Error(t("voice.errors.localModelInvalid"));
+    return { providerId, model, language };
+  }
+  if (!model) throw new Error(t("voice.errors.modelRequired"));
+  if (model.length > VOICE_LIMITS.maxModelLength)
+    throw new Error(t("voice.errors.modelTooLong", { max: VOICE_LIMITS.maxModelLength }));
   return { providerId, model, language };
 }
 
@@ -175,6 +202,8 @@ export class VoiceService {
   constructor(
     private readonly runtime: ModelRuntime,
     private readonly settings: SettingsStore,
+    /** Folder holding the downloaded local whisper models (`models/` next to settings.json). */
+    private readonly modelsDir: string,
   ) {}
 
   /** Connected providers and gateways with an OpenAI-style address. */
@@ -195,16 +224,21 @@ export class VoiceService {
   async view(): Promise<VoiceView> {
     const config = this.settings.get().voice;
     const providers = await this.options();
-    return {
-      config,
-      providers,
-      ready: config.providerId !== null && providers.some((item) => item.id === config.providerId),
-    };
+    const local = localVoiceStatus(config.model, this.modelsDir);
+    const ready =
+      config.providerId === LOCAL_VOICE_PROVIDER
+        ? local.binary && local.model
+        : config.providerId !== null && providers.some((item) => item.id === config.providerId);
+    return { config, providers, local, ready };
   }
 
   async save(input: VoiceSettings): Promise<VoiceView> {
     const config = validateVoiceSettings(input);
-    if (config.providerId && !(await this.options()).some((item) => item.id === config.providerId))
+    if (
+      config.providerId &&
+      config.providerId !== LOCAL_VOICE_PROVIDER &&
+      !(await this.options()).some((item) => item.id === config.providerId)
+    )
       throw new Error(t("voice.errors.providerUnavailable"));
     this.settings.update((draft) => {
       draft.voice = config;
@@ -212,10 +246,26 @@ export class VoiceService {
     return this.view();
   }
 
+  /** Downloads a local whisper model; the answer is the fresh view (the model is now there). */
+  async installModel(model: VoiceModelPreset): Promise<VoiceView> {
+    await downloadVoiceModel(model, this.modelsDir);
+    return this.view();
+  }
+
   async transcribe(data: string, mimeType: string, durationMs: number): Promise<string> {
     const config = this.settings.get().voice;
     if (!config.providerId) throw new Error(t("voice.errors.notConfigured"));
     validateRecording(data, mimeType, durationMs);
+    const audio = new Uint8Array(Buffer.from(data, "base64"));
+    if (config.providerId === LOCAL_VOICE_PROVIDER) {
+      return transcribeWithWhisper({
+        audio,
+        extension: audioExtension(mimeType) ?? "wav",
+        language: transcriptionLanguage(config.language, currentLanguage()) ?? "auto",
+        modelsDir: this.modelsDir,
+        model: config.model,
+      });
+    }
     const providerId = config.providerId;
     await this.runtime.getAvailable();
     const model = openAiStyleModel(this.runtime, providerId);
@@ -225,7 +275,6 @@ export class VoiceService {
     if (!auth) throw new Error(t("voice.errors.providerUnavailable"));
     const baseUrl = auth.auth.baseUrl ?? model.baseUrl;
 
-    const audio = new Uint8Array(Buffer.from(data, "base64"));
     const headers = new Headers();
     for (const [name, value] of Object.entries(auth.auth.headers ?? {})) {
       if (value !== null) headers.set(name, value);

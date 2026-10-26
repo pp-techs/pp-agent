@@ -22,7 +22,7 @@ Coding agents are powerful but built for developers. PP Agent puts the same engi
 ## Features
 
 - **Chat with documents.** Attach or drop files and paste images. The agent reads PDF, Word, Excel, PowerPoint, OpenDocument, RTF, EPUB, HTML, and CSV.
-- **Web search.** The agent can search the web and read pages, PDFs, and Office files from the internet. Pick and order the search services in **Settings › Tools**: SearXNG (self-hosted), Serper, Tavily, Brave Search, Exa, or webclaw; it falls back to the next one when a service fails. Pages on private networks are never opened.
+- **Web search.** The agent can search the web and read pages, PDFs, and Office files from the internet. Pick and order the search services in **Settings › Tools › Web search**: SearXNG (self-hosted), Serper, Tavily, Brave Search, Exa, or webclaw; it falls back to the next one when a service fails. Pages on private networks are never opened.
 - **Agents.** Profiles with their own rules, icon, tools, MCP servers, skills, model, starter prompts, and workspace folder. Switch mid-conversation; share them as `.json` files.
 - **Any model.** Sign in to Pi's built-in providers (Anthropic, OpenAI, Google, OpenRouter, Mistral, Groq, and more) with an API key, or add your own OpenAI- or Anthropic-compatible gateways. Choose the model and thinking level per conversation.
 - **Business systems through MCP.** Add, edit, and monitor [MCP](https://modelcontextprotocol.io) servers in Settings, including OAuth sign-in. Paste configurations from Claude Desktop or Cursor.
@@ -31,7 +31,7 @@ Coding agents are powerful but built for developers. PP Agent puts the same engi
 - **Chat history.** Search past chats, pin them, export to Markdown or HTML, copy, edit and resend a message, regenerate an answer, branch a chat, and see token use and estimated cost.
 - **Memory, checklists, helpers.** The agent keeps notes between chats (view and edit them in **Settings › Memory**), tracks multi-step work in a checklist, and hands research to a read-only helper.
 - **Scheduled tasks.** Run a prompt daily, weekly, or at an interval; each run is saved as a chat. Actions that need approval are skipped, since nobody is there to approve them.
-- **Voice input.** Dictate into the message box with a speech-to-text service you choose.
+- **Voice input.** Dictate into the message box: a whisper model on your own computer, or a speech-to-text service you choose.
 - **Background and Telegram.** **Settings › Background** keeps the agent running after you close or quit the app (it starts when you sign in), and **Settings › Channels** lets you chat with it from Telegram: pair your account with a one-time code, and approvals are asked in the chat. Scheduled tasks keep running too.
 - **Desktop.** Notifications when an answer is ready, an optional tray icon, and a global shortcut.
 - **Languages.** English and Tiếng Việt, chosen in **Settings › General** or following your system language. Errors, approvals, and dialogs are translated too.

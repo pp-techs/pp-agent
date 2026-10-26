@@ -77,9 +77,14 @@
     "builtIn": "Built-in"
   },
   "webSearch": {
-    "legend": "Web search",
+    "title": "Web search",
     "description": "Pick the search services the agent can use. It tries them in order and moves on to the next when one fails. Keys stay encrypted on this computer.",
+    "summary": "Tried in order: {{providers}}",
+    "summaryEmpty": "No search service turned on.",
+    "manage": "Manage",
+    "setUp": "Set up",
     "needsSetup": "Needs setup",
+    "loadError": "Couldn't load the web search settings.",
     "tryEarlier": "Try {{provider}} earlier",
     "tryLater": "Try {{provider}} later",
     "use": "Use {{provider}}",

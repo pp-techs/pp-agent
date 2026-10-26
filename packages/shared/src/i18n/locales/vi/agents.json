@@ -238,6 +238,12 @@
       "description": "Tác nhân mà chat mới trong không gian làm việc này bắt đầu cùng. Bạn vẫn đổi được ngay trong chat.",
       "agent": "Agent",
       "agentInherit": "Agent bạn chọn gần nhất"
+    },
+    "memory": {
+      "legend": "Bộ nhớ",
+      "description": "Những ghi chú agent chỉ ghi nhớ trong các chat của không gian làm việc này. Ghi chú ghi nhớ ở mọi nơi được quản lý trong Cài đặt › Bộ nhớ.",
+      "add": "Thêm ghi chú",
+      "empty": "Chưa có ghi chú nào."
     }
   }
 }

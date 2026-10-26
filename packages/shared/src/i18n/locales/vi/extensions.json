@@ -77,9 +77,14 @@
     "builtIn": "Có sẵn"
   },
   "webSearch": {
-    "legend": "Tìm kiếm web",
+    "title": "Tìm kiếm web",
     "description": "Chọn các dịch vụ tìm kiếm mà Agent có thể dùng. Agent thử lần lượt theo thứ tự và chuyển sang dịch vụ tiếp theo khi một dịch vụ lỗi. Khóa API được mã hóa và lưu trên máy tính này.",
+    "summary": "Thử theo thứ tự: {{providers}}",
+    "summaryEmpty": "Chưa bật dịch vụ tìm kiếm nào.",
+    "manage": "Quản lý",
+    "setUp": "Thiết lập",
     "needsSetup": "Cần thiết lập",
+    "loadError": "Không tải được cài đặt tìm kiếm web.",
     "tryEarlier": "Thử {{provider}} sớm hơn",
     "tryLater": "Thử {{provider}} muộn hơn",
     "use": "Dùng {{provider}}",

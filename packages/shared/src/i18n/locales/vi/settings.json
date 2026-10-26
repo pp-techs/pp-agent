@@ -77,12 +77,29 @@
     },
     "voice": {
       "legend": "Nhập bằng giọng nói",
-      "description": "Nói thay vì gõ: nút micro trong ô nhập tin nhắn chuyển bản ghi âm của bạn thành văn bản. Bản ghi âm được gửi đến dịch vụ bạn chọn ở đây.",
+      "description": "Nói thay vì gõ: nút micro trong ô nhập tin nhắn chuyển bản ghi âm của bạn thành văn bản. whisper.cpp chạy ngay trên máy tính này, hoặc bản ghi âm được gửi đến dịch vụ bạn chọn ở đây.",
       "provider": {
         "label": "Nhà cung cấp",
         "none": "Chưa thiết lập",
-        "help": "Chọn nhà cung cấp hoặc cổng đã có khóa trong Mô hình. Dịch vụ này phải hỗ trợ chuyển giọng nói thành văn bản, như OpenAI.",
-        "empty": "Chưa có nhà cung cấp nào có khóa. Hãy thêm một nhà cung cấp trong Mô hình trước."
+        "local": "Máy tính này (whisper.cpp)",
+        "help": "Nhập bằng giọng nói cục bộ không cần khóa và không gửi dữ liệu đi đâu. Nhà cung cấp hoặc cổng từ Mô hình chỉ được dùng khi bạn chọn tại đây.",
+        "empty": "Chưa có nhà cung cấp nào có khóa. Nhập bằng giọng nói cục bộ vẫn hoạt động mà không cần khóa."
+      },
+      "local": {
+        "modelLabel": "Mô hình cục bộ",
+        "modelHelp": "Mô hình whisper chạy trên máy tính này. Mô hình nhỏ nhanh hơn; mô hình lớn nhận diện giọng và âm thanh nhiễu tốt hơn.",
+        "models": {
+          "tiny": "Tiny (74 MB)",
+          "base": "Base (141 MB)",
+          "small": "Small (465 MB)",
+          "medium": "Medium (1,4 GB)"
+        },
+        "download": "Tải xuống",
+        "downloading": "Đang tải xuống…",
+        "downloaded": "Đã tải xuống",
+        "notDownloaded": "Chưa tải xuống",
+        "missingBinary": "Chưa cài whisper.cpp. Hãy cài (ví dụ `brew install whisper-cpp`) rồi khởi động lại PP Agent.",
+        "privacy": "Bản ghi âm nằm lại trên máy tính này."
       },
       "model": {
         "label": "Mô hình",
@@ -95,7 +112,7 @@
         "help": "Cho dịch vụ biết ngôn ngữ giúp văn bản chính xác hơn."
       },
       "ready": "Sẵn sàng: nút micro đang hoạt động.",
-      "notReady": "Chưa sẵn sàng: hãy chọn nhà cung cấp có khóa.",
+      "notReady": "Chưa sẵn sàng: hãy tải mô hình cục bộ, hoặc chọn nhà cung cấp có khóa.",
       "save": "Lưu",
       "saved": "Đã lưu cài đặt nhập bằng giọng nói.",
       "loadError": "Không tải được cài đặt nhập bằng giọng nói"
@@ -103,7 +120,7 @@
   },
   "memory": {
     "title": "Bộ nhớ",
-    "description": "Những ghi chú ngắn mà agent giữ lại giữa các cuộc trò chuyện, ví dụ sở thích của bạn. Chúng được thêm vào mỗi cuộc trò chuyện mới như thông tin tham khảo, không phải chỉ dẫn.",
+    "description": "Những ghi chú ngắn mà agent giữ lại giữa các cuộc trò chuyện, ví dụ sở thích của bạn. Chúng được thêm vào mỗi cuộc trò chuyện mới như thông tin tham khảo, không phải chỉ dẫn. Mỗi ghi chú được ghi nhớ ở mọi nơi hoặc chỉ trong một workspace.",
     "enable": {
       "legend": "Bộ nhớ dài hạn",
       "label": "Ghi nhớ ghi chú giữa các cuộc trò chuyện",
@@ -115,11 +132,15 @@
       "text": "Ghi chú",
       "textPlaceholder": "Ví dụ: Tôi thích câu trả lời ngắn gọn bằng tiếng Việt.",
       "tag": "Nhãn (không bắt buộc)",
-      "tagPlaceholder": "sở thích"
+      "tagPlaceholder": "sở thích",
+      "scope": "Ghi nhớ trong",
+      "scopeGlobal": "Mọi nơi",
+      "scopeWorkspace": "Chỉ trong {{name}}"
     },
     "errors": {
       "textRequired": "Hãy nhập ghi chú.",
-      "textTooLong": "Một ghi chú tối đa {{max}} ký tự."
+      "textTooLong": "Một ghi chú tối đa {{max}} ký tự.",
+      "scopeFull": "Nơi đó đã có {{max}} ghi chú. Hãy xóa bớt một ghi chú."
     },
     "editLabel": "Sửa ghi chú",
     "deleteLabel": "Xóa ghi chú",
@@ -139,7 +160,9 @@
       "title": "Chưa có ghi chú",
       "description": "Agent lưu ghi chú khi bạn nhờ nó ghi nhớ điều gì đó. Bạn cũng có thể thêm ghi chú tại đây."
     },
-    "count_other": "{{count}} / {{max}} ghi chú"
+    "groupGlobal": "Mọi nơi",
+    "groupOther": "Nơi khác",
+    "count_other": "{{count}} ghi chú · tối đa {{max}} mỗi nơi"
   },
   "scheduledTasks": {
     "title": "Tác vụ định kỳ",

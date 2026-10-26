@@ -1,5 +1,6 @@
 /**
- * Long-term memory: short notes (facts, preferences) that persist across conversations. Stored in
+ * Long-term memory: short notes (facts, preferences) that persist across conversations. Each note
+ * lives either everywhere (every workspace) or in one workspace only. Stored in
  * `<user-data>/memory.json`, owned by the agent process. The first half of this file is pure logic
  * (limits, de-duplication, search, prompt text); `MemoryStore` adds the file; the tools expose it
  * to the model.
@@ -37,6 +38,8 @@ export interface MemoryState {
 export interface NoteInput {
   text: string;
   tag?: string | null;
+  /** Where the note lives: null = every workspace, else one workspace. Omitted on an edit keeps it. */
+  workspaceId?: string | null;
 }
 
 export type NoteProblem = "empty" | "too-long" | "full" | "duplicate" | "missing";
@@ -74,7 +77,21 @@ export function byRecency(entries: readonly MemoryEntry[]): MemoryEntry[] {
   return [...entries].sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt);
 }
 
-/** Adds a note unless the same note exists (then that note is refreshed instead). */
+/** The notes a conversation in `workspaceId` sees: every workspace's notes plus its own. */
+export function visibleNotes(
+  entries: readonly MemoryEntry[],
+  workspaceId: string | null,
+): MemoryEntry[] {
+  return byRecency(
+    entries.filter((entry) => entry.workspaceId === null || entry.workspaceId === workspaceId),
+  );
+}
+
+/**
+ * Adds a note to its place (`input.workspaceId`) unless that place already holds the same note
+ * (then that note is refreshed instead). Places hold `maxEntries` notes each and are kept apart:
+ * the same note may live in one place and in another.
+ */
 export function addNote(
   entries: readonly MemoryEntry[],
   input: NoteInput,
@@ -86,7 +103,9 @@ export function addNote(
   if (text.length > MEMORY_LIMITS.maxEntryLength) return { ok: false, problem: "too-long" };
   const tag = cleanTag(input.tag);
   const key = noteKey(text);
-  const existing = entries.find((entry) => noteKey(entry.text) === key);
+  const scope = input.workspaceId ?? null;
+  const inPlace = entries.filter((entry) => entry.workspaceId === scope);
+  const existing = inPlace.find((entry) => noteKey(entry.text) === key);
   if (existing) {
     const entry: MemoryEntry = { ...existing, tag: tag ?? existing.tag, updatedAt: now };
     return {
@@ -96,12 +115,22 @@ export function addNote(
       status: "same",
     };
   }
-  if (entries.length >= MEMORY_LIMITS.maxEntries) return { ok: false, problem: "full" };
-  const entry: MemoryEntry = { id: newId(), text, tag, createdAt: now, updatedAt: now };
+  if (inPlace.length >= MEMORY_LIMITS.maxEntries) return { ok: false, problem: "full" };
+  const entry: MemoryEntry = {
+    id: newId(),
+    text,
+    tag,
+    workspaceId: scope,
+    createdAt: now,
+    updatedAt: now,
+  };
   return { ok: true, entry, entries: [...entries, entry], status: "added" };
 }
 
-/** Replaces the text and tag of note `id`. */
+/**
+ * Replaces the text and tag of note `id`. `input.workspaceId` moves the note to another place
+ * (omitted keeps it); the note must stay unique in the place it ends up in.
+ */
 export function editNote(
   entries: readonly MemoryEntry[],
   id: string,
@@ -113,10 +142,26 @@ export function editNote(
   const text = cleanText(input.text);
   if (!text) return { ok: false, problem: "empty" };
   if (text.length > MEMORY_LIMITS.maxEntryLength) return { ok: false, problem: "too-long" };
+  const scope = input.workspaceId === undefined ? current.workspaceId : input.workspaceId;
   const key = noteKey(text);
-  if (entries.some((entry) => entry.id !== id && noteKey(entry.text) === key))
+  if (
+    entries.some(
+      (entry) => entry.id !== id && entry.workspaceId === scope && noteKey(entry.text) === key,
+    )
+  )
     return { ok: false, problem: "duplicate" };
-  const entry: MemoryEntry = { ...current, text, tag: cleanTag(input.tag), updatedAt: now };
+  if (
+    scope !== current.workspaceId &&
+    entries.filter((entry) => entry.workspaceId === scope).length >= MEMORY_LIMITS.maxEntries
+  )
+    return { ok: false, problem: "full" };
+  const entry: MemoryEntry = {
+    ...current,
+    text,
+    tag: cleanTag(input.tag),
+    workspaceId: scope,
+    updatedAt: now,
+  };
   return {
     ok: true,
     entry,
@@ -193,28 +238,33 @@ export function parseMemory(raw: unknown): MemoryState {
   if (value.enabled === false) state.enabled = false;
   if (!Array.isArray(value.entries)) return state;
   const seenIds = new Set<string>();
-  const seenKeys = new Set<string>();
+  const perPlace = new Map<string | null, Set<string>>();
   for (const item of value.entries) {
     if (typeof item !== "object" || item === null) continue;
     const entry = item as Partial<Record<keyof MemoryEntry, unknown>>;
     if (typeof entry.id !== "string" || !entry.id || seenIds.has(entry.id)) continue;
     if (typeof entry.text !== "string") continue;
+    const workspaceId =
+      typeof entry.workspaceId === "string" && entry.workspaceId ? entry.workspaceId : null;
     const text = cleanText(entry.text).slice(0, MEMORY_LIMITS.maxEntryLength);
     const key = noteKey(text);
-    if (!text || seenKeys.has(key)) continue;
+    // Notes are kept apart per place: the same note may live in one place and in another.
+    const keys = perPlace.get(workspaceId) ?? new Set<string>();
+    if (!text || keys.has(key) || keys.size >= MEMORY_LIMITS.maxEntries) continue;
     const createdAt = typeof entry.createdAt === "number" ? entry.createdAt : 0;
     const updatedAt = typeof entry.updatedAt === "number" ? entry.updatedAt : createdAt;
     seenIds.add(entry.id);
-    seenKeys.add(key);
+    keys.add(key);
+    perPlace.set(workspaceId, keys);
     state.entries.push({
       id: entry.id,
       text,
       tag: cleanTag(typeof entry.tag === "string" ? entry.tag : null),
+      workspaceId,
       createdAt,
       updatedAt,
     });
   }
-  state.entries = state.entries.slice(0, MEMORY_LIMITS.maxEntries);
   return state;
 }
 
@@ -244,6 +294,17 @@ export class MemoryStore {
   /** Newest first. */
   entries(): MemoryEntry[] {
     return byRecency(this.state.entries);
+  }
+
+  /** Newest first: every workspace's notes plus the notes of `workspaceId`. */
+  entriesFor(workspaceId: string | null): MemoryEntry[] {
+    return visibleNotes(this.state.entries, workspaceId);
+  }
+
+  /** Forgets the notes of a deleted workspace. */
+  removeWorkspace(workspaceId: string): void {
+    const entries = this.state.entries.filter((entry) => entry.workspaceId !== workspaceId);
+    if (entries.length !== this.state.entries.length) this.write({ ...this.state, entries });
   }
 
   view(): MemoryView {
@@ -300,8 +361,8 @@ export class MemoryStore {
 const PROBLEM_TEXT: Record<NoteProblem, string> = {
   empty: "The note is empty.",
   "too-long": `The note is too long (at most ${MEMORY_LIMITS.maxEntryLength} characters). Shorten it.`,
-  full: `Memory is full (${MEMORY_LIMITS.maxEntries} notes). Tell the user, or forget a note that is no longer needed with memory_forget.`,
-  duplicate: "Another note already says this.",
+  full: `This place is full (${MEMORY_LIMITS.maxEntries} notes: every workspace or one workspace). Tell the user, or forget a note that is no longer needed with memory_forget.`,
+  duplicate: "Another note in the same place already says this.",
   missing: "There is no note with this id.",
 };
 
@@ -317,11 +378,13 @@ export interface MemoryToolOptions {
   store: MemoryStore;
   /** Memory is on in Settings and for the active agent. */
   isEnabled: () => boolean;
+  /** Workspace of the conversation, where "workspace" notes live. */
+  workspaceId: () => string | null;
   /** Called after a tool changed the notes, so the Settings view can refresh. */
   onChanged: () => void;
 }
 
-export function createMemoryTools({ store, isEnabled, onChanged }: MemoryToolOptions) {
+export function createMemoryTools({ store, isEnabled, workspaceId, onChanged }: MemoryToolOptions) {
   const requireEnabled = () => {
     if (!isEnabled()) throw new Error("Memory is turned off (in Settings or for this agent).");
   };
@@ -345,14 +408,23 @@ export function createMemoryTools({ store, isEnabled, onChanged }: MemoryToolOpt
             description: 'Optional short label, for example "preference" or "project"',
           }),
         ),
+        scope: Type.Union([Type.Literal("global"), Type.Literal("workspace")], {
+          description:
+            '"global" for personal facts and preferences that hold everywhere; "workspace" for facts that belong to the current project only.',
+        }),
       }),
       async execute(_toolCallId, params) {
         requireEnabled();
-        const result = store.add({ text: params.text, tag: params.tag });
+        const result = store.add({
+          text: params.text,
+          tag: params.tag,
+          workspaceId: params.scope === "workspace" ? workspaceId() : null,
+        });
         if (!result.ok) throw new Error(PROBLEM_TEXT[result.problem]);
         onChanged();
+        const place = params.scope === "workspace" ? "this project only" : "everywhere";
         return textResult(
-          `${result.status === "added" ? "Saved" : "Already saved"}: ${describeNote(result.entry)}`,
+          `${result.status === "added" ? "Saved" : "Already saved"} (${place}): ${describeNote(result.entry)}`,
         );
       },
     }),
@@ -374,7 +446,9 @@ export function createMemoryTools({ store, isEnabled, onChanged }: MemoryToolOpt
       async execute(_toolCallId, params) {
         requireEnabled();
         const tag = cleanTag(params.tag);
-        const matching = store.entries().filter((entry) => !tag || entry.tag === tag);
+        const matching = store
+          .entriesFor(workspaceId())
+          .filter((entry) => !tag || entry.tag === tag);
         const shown = matching.slice(0, params.limit ?? DEFAULT_LIST_LIMIT);
         if (shown.length === 0) return textResult("No notes saved.");
         const more = matching.length - shown.length;
@@ -399,7 +473,11 @@ export function createMemoryTools({ store, isEnabled, onChanged }: MemoryToolOpt
       }),
       async execute(_toolCallId, params) {
         requireEnabled();
-        const found = searchNotes(store.entries(), params.query, params.limit ?? 10);
+        const found = searchNotes(
+          store.entriesFor(workspaceId()),
+          params.query,
+          params.limit ?? 10,
+        );
         return textResult(
           found.length === 0 ? "No matching notes." : found.map(describeNote).join("\n"),
         );
@@ -416,10 +494,14 @@ export function createMemoryTools({ store, isEnabled, onChanged }: MemoryToolOpt
       }),
       async execute(_toolCallId, params) {
         requireEnabled();
-        const removed = store.remove(params.id.trim());
-        if (!removed) throw new Error(PROBLEM_TEXT.missing);
+        const id = params.id.trim();
+        const note = store.find(id);
+        // Notes of another workspace are not this conversation's to forget.
+        if (!note || (note.workspaceId !== null && note.workspaceId !== workspaceId()))
+          throw new Error(PROBLEM_TEXT.missing);
+        store.remove(id);
         onChanged();
-        return textResult(`Forgot: ${describeNote(removed)}`);
+        return textResult(`Forgot: ${describeNote(note)}`);
       },
     }),
   ];

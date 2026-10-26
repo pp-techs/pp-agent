@@ -25,6 +25,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { OptionGroup } from "@/components/settings/option-group";
+import { WorkspaceMemoryGroup } from "@/components/settings/memory-section";
 import { useSettingsSubPage } from "@/components/settings/settings-subpage";
 import { useSaveWorkspace } from "@/lib/extension-queries";
 import { agentsQuery, workspacesQuery } from "@/lib/queries";
@@ -345,6 +346,8 @@ export function WorkspaceEditor({
           onDone={onDone}
         />
       )}
+      {/* A note form is a form of its own, so it sits outside the workspace's form. */}
+      {workspace && <WorkspaceMemoryGroup bridge={bridge} workspaceId={workspace.id} />}
     </div>
   );
 }

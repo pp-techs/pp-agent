@@ -124,7 +124,7 @@ import { pruneToolOutputs } from "./context.ts";
 import { VaultCredentialStore } from "./credentials.ts";
 import { createReadDocumentTool } from "./documents.ts";
 import { createOfficeTools } from "./office/tools.ts";
-import { configureResourcesDir, resourcePath } from "./office/run.ts";
+import { configureResourcesDir, resourcePath } from "./resources.ts";
 import { conversationToHtml, conversationToMarkdown, exportFileName } from "./export.ts";
 import {
   branchEntries,
@@ -440,7 +440,7 @@ export class AgentHost {
         skills,
         webSearch: new WebSearchService(settings, this.credentials),
         mcpConfig,
-        voice: new VoiceService(runtime, settings),
+        voice: new VoiceService(runtime, settings, join(dirname(paths.settingsFile), "models")),
         memory: new MemoryStore(join(dirname(paths.settingsFile), "memory.json")),
         chatSessions: new ChatSessionMap(join(dirname(paths.settingsFile), "channels.json")),
         mcpServers: new McpRegistrations(mcpConfig, (name) => {
@@ -648,7 +648,12 @@ export class AgentHost {
       case "set_memory_enabled":
         return this.setMemoryEnabled(command.enabled);
       case "save_memory_entry":
-        return this.saveMemoryEntry(command.id, command.text, command.tag ?? null);
+        return this.saveMemoryEntry(
+          command.id,
+          command.text,
+          command.tag ?? null,
+          command.workspaceId,
+        );
       case "delete_memory_entry":
         return this.deleteMemoryEntry(command.id);
       case "clear_memory":
@@ -669,6 +674,8 @@ export class AgentHost {
         return services.voice.view();
       case "save_voice":
         return this.saveVoice(command.config);
+      case "install_voice_model":
+        return this.requireServices().voice.installModel(command.model);
       case "transcribe_audio":
         return {
           text: await services.voice.transcribe(command.data, command.mimeType, command.durationMs),
@@ -1217,6 +1224,7 @@ export class AgentHost {
         ...createMemoryTools({
           store: memory,
           isEnabled: () => memory.enabled && scope.agent().memory,
+          workspaceId: () => scope.workspace().id,
           onChanged: () => emit({ type: "settings_changed", scopes: ["memory"] }),
         }),
         createTodoTool(),
@@ -1415,7 +1423,7 @@ export class AgentHost {
         if (scope.systemNote) sections[scope.systemNote.section] = scope.systemNote.text;
         const memory = this.services?.memory;
         if (memory && this.memoryOn(scope.agent()))
-          sections.memory = memorySection(memory.entries());
+          sections.memory = memorySection(memory.entriesFor(scope.workspace().id));
         else delete sections.memory;
         const planning = planningSection(pi.getActiveTools());
         if (planning) sections.planning = planning;
@@ -2038,10 +2046,12 @@ export class AgentHost {
     settings.update((draft) => {
       draft.workspaces = draft.workspaces.filter((entry) => entry.id !== id);
     });
-    // Its conversations stay on disk and show up in the default workspace.
+    // Its notes are forgotten with it; its conversations stay on disk and show up in the
+    // default workspace.
+    this.requireServices().memory.removeWorkspace(id);
     const open = this.workspaceId === id;
     if (open) this.workspaceId = DEFAULT_WORKSPACE_ID;
-    this.changed(["workspaces"], { workspace: open });
+    this.changed(["workspaces", "memory"], { workspace: open });
     emit({ type: "sessions_changed" });
   }
 
@@ -2644,9 +2654,20 @@ export class AgentHost {
     return memory.view();
   }
 
-  private saveMemoryEntry(id: string | undefined, text: string, tag: string | null): MemoryEntry {
+  private saveMemoryEntry(
+    id: string | undefined,
+    text: string,
+    tag: string | null,
+    workspaceId: string | null | undefined,
+  ): MemoryEntry {
     const { memory } = this.requireServices();
-    const result = id === undefined ? memory.add({ text, tag }) : memory.edit(id, { text, tag });
+    if (typeof workspaceId === "string") this.requireWorkspace(workspaceId);
+    // A new note lands in `workspaceId` (null = every workspace); an edit keeps its place
+    // unless the caller moves it.
+    const result =
+      id === undefined
+        ? memory.add({ text, tag, workspaceId: workspaceId ?? null })
+        : memory.edit(id, { text, tag, workspaceId });
     if (!result.ok) throw new Error(t(`memory.problems.${result.problem}`));
     this.changed(["memory"], {});
     return result.entry;
