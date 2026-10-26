@@ -22,6 +22,13 @@ import {
 } from "@workspace/ui/components/item";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { Spinner } from "@workspace/ui/components/spinner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@workspace/ui/components/select";
 import { Textarea } from "@workspace/ui/components/textarea";
 import { useQuery } from "@tanstack/react-query";
 import { BrainIcon, PencilIcon, PlusIcon, Trash2Icon, TriangleAlertIcon } from "lucide-react";
@@ -32,36 +39,68 @@ import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { OptionGroup, SwitchRow } from "@/components/settings/option-group";
 import { SectionHeading } from "@/components/settings/section-heading";
 import { memoryQuery, useMemoryCommands } from "@/lib/extension-queries";
+import { workspacesQuery } from "@/lib/queries";
 
 /** A note being added (`id` omitted) or edited. */
-type Draft = { id?: string; text: string; tag: string };
+type Draft = { id?: string; text: string; tag: string; workspaceId: string | null };
+
+/** Select value of a note's place: `global` or `ws:` + workspace id (ids may say anything). */
+function scopeValue(workspaceId: string | null): string {
+  return workspaceId === null ? "global" : "ws:" + workspaceId;
+}
+
+/** The workspace a select value names; null = every workspace. */
+function scopeWorkspaceId(value: string): string | null {
+  return value === "global" ? null : value.slice(3);
+}
 
 function NoteForm({
   bridge,
   draft,
+  entries,
+  fixedWorkspaceId,
   onDone,
 }: {
   bridge: DesktopBridge;
   draft: Draft;
+  entries: MemoryEntry[];
+  /** The notes' place when the picker is left out (workspace editor): this workspace's. */
+  fixedWorkspaceId?: string;
   onDone: () => void;
 }) {
   const { t } = useTranslation(["settings", "common"]);
   const { save } = useMemoryCommands(bridge);
+  const workspaces = useQuery(workspacesQuery(bridge));
   const [text, setText] = React.useState(draft.text);
   const [tag, setTag] = React.useState(draft.tag);
+  const [scope, setScope] = React.useState(scopeValue(draft.workspaceId));
   const [touched, setTouched] = React.useState(false);
   const trimmed = text.trim();
+  const target = fixedWorkspaceId ?? scopeWorkspaceId(scope);
+  const inPlace = entries.filter((entry) => entry.workspaceId === target && entry.id !== draft.id);
   const error = !trimmed
     ? t("memory.errors.textRequired")
     : trimmed.length > MEMORY_LIMITS.maxEntryLength
       ? t("memory.errors.textTooLong", { max: MEMORY_LIMITS.maxEntryLength })
-      : null;
+      : inPlace.length >= MEMORY_LIMITS.maxEntries
+        ? t("memory.errors.scopeFull", { max: MEMORY_LIMITS.maxEntries })
+        : null;
+  const scopeItems = [
+    { value: "global", label: t("memory.form.scopeGlobal") },
+    ...(workspaces.data ?? []).map((workspace) => ({
+      value: "ws:" + workspace.id,
+      label: t("memory.form.scopeWorkspace", { name: workspace.icon + " " + workspace.name }),
+    })),
+  ];
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setTouched(true);
     if (error) return;
-    save.mutate({ id: draft.id, text: trimmed, tag: tag.trim() || null }, { onSuccess: onDone });
+    save.mutate(
+      { id: draft.id, text: trimmed, tag: tag.trim() || null, workspaceId: target },
+      { onSuccess: onDone },
+    );
   }
 
   return (
@@ -90,6 +129,27 @@ function NoteForm({
             placeholder={t("memory.form.tagPlaceholder")}
           />
         </Field>
+        {fixedWorkspaceId === undefined && (
+          <Field>
+            <FieldLabel htmlFor="memory-scope">{t("memory.form.scope")}</FieldLabel>
+            <Select
+              items={scopeItems}
+              value={scope}
+              onValueChange={(next) => next !== null && setScope(next)}
+            >
+              <SelectTrigger id="memory-scope" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {scopeItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        )}
       </FieldGroup>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onDone}>
@@ -163,6 +223,7 @@ function NoteRow({
 
 export function MemorySection({ bridge }: { bridge: DesktopBridge }) {
   const memory = useQuery(memoryQuery(bridge));
+  const workspaces = useQuery(workspacesQuery(bridge));
   const { setEnabled, clear } = useMemoryCommands(bridge);
   const [draft, setDraft] = React.useState<Draft | null>(null);
   const { t } = useTranslation(["settings", "common"]);
@@ -178,7 +239,28 @@ export function MemorySection({ bridge }: { bridge: DesktopBridge }) {
   }
 
   const entries = memory.data?.entries ?? [];
-  const full = entries.length >= MEMORY_LIMITS.maxEntries;
+  // Notes are grouped by the place they live in. Notes of a workspace that is gone (a
+  // hand-edited file) still get a group, so they can be deleted here.
+  const groups = [
+    {
+      id: null,
+      title: t("memory.groupGlobal"),
+      entries: entries.filter((entry) => entry.workspaceId === null),
+    },
+    ...(workspaces.data ?? []).map((workspace) => ({
+      id: workspace.id,
+      title: workspace.icon + " " + workspace.name,
+      entries: entries.filter((entry) => entry.workspaceId === workspace.id),
+    })),
+  ];
+  const orphaned = entries.filter(
+    (entry) =>
+      entry.workspaceId !== null &&
+      !(workspaces.data ?? []).some((w) => w.id === entry.workspaceId),
+  );
+  if (orphaned.length > 0)
+    groups.push({ id: "other", title: t("memory.groupOther"), entries: orphaned });
+  const lists = groups.filter((group) => group.entries.length > 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -190,8 +272,8 @@ export function MemorySection({ bridge }: { bridge: DesktopBridge }) {
           </Button>
         )}
         <Button
-          disabled={!memory.data || full || draft !== null}
-          onClick={() => setDraft({ text: "", tag: "" })}
+          disabled={!memory.data || draft !== null}
+          onClick={() => setDraft({ text: "", tag: "", workspaceId: null })}
         >
           <PlusIcon />
           {t("memory.add")}
@@ -214,6 +296,7 @@ export function MemorySection({ bridge }: { bridge: DesktopBridge }) {
           key={draft.id ?? "new"}
           bridge={bridge}
           draft={draft}
+          entries={entries}
           onDone={() => setDraft(null)}
         />
       )}
@@ -230,7 +313,7 @@ export function MemorySection({ bridge }: { bridge: DesktopBridge }) {
           <AlertTitle>{t("memory.loadError")}</AlertTitle>
           <AlertDescription>{memory.error.message}</AlertDescription>
         </Alert>
-      ) : entries.length === 0 ? (
+      ) : lists.length === 0 ? (
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -242,21 +325,105 @@ export function MemorySection({ bridge }: { bridge: DesktopBridge }) {
         </Empty>
       ) : (
         <>
-          <ItemGroup>
-            {entries.map((entry) => (
-              <NoteRow
-                key={entry.id}
-                bridge={bridge}
-                entry={entry}
-                onEdit={() => setDraft({ id: entry.id, text: entry.text, tag: entry.tag ?? "" })}
-              />
-            ))}
-          </ItemGroup>
+          {lists.map((group) => (
+            <div key={group.id ?? "global"} className="flex flex-col gap-2.5">
+              <h3 className="text-sm font-medium text-muted-foreground">{group.title}</h3>
+              <ItemGroup>
+                {group.entries.map((entry) => (
+                  <NoteRow
+                    key={entry.id}
+                    bridge={bridge}
+                    entry={entry}
+                    onEdit={() =>
+                      setDraft({
+                        id: entry.id,
+                        text: entry.text,
+                        tag: entry.tag ?? "",
+                        workspaceId: entry.workspaceId,
+                      })
+                    }
+                  />
+                ))}
+              </ItemGroup>
+            </div>
+          ))}
           <p className="text-xs text-muted-foreground">
             {t("memory.count", { count: entries.length, max: MEMORY_LIMITS.maxEntries })}
           </p>
         </>
       )}
     </div>
+  );
+}
+
+/** The notes of one workspace, managed from the workspace editor. */
+export function WorkspaceMemoryGroup({
+  bridge,
+  workspaceId,
+}: {
+  bridge: DesktopBridge;
+  workspaceId: string;
+}) {
+  const memory = useQuery(memoryQuery(bridge));
+  const [draft, setDraft] = React.useState<Draft | null>(null);
+  const { t } = useTranslation(["agents", "settings", "common"]);
+  const entries = (memory.data?.entries ?? []).filter((entry) => entry.workspaceId === workspaceId);
+
+  return (
+    <OptionGroup
+      legend={t("workspaceEditor.memory.legend")}
+      description={t("workspaceEditor.memory.description")}
+    >
+      {memory.isPending ? (
+        <Skeleton className="h-14 w-full rounded-2xl" />
+      ) : (
+        <>
+          {entries.length > 0 && (
+            <ItemGroup>
+              {entries.map((entry) => (
+                <NoteRow
+                  key={entry.id}
+                  bridge={bridge}
+                  entry={entry}
+                  onEdit={() =>
+                    setDraft({
+                      id: entry.id,
+                      text: entry.text,
+                      tag: entry.tag ?? "",
+                      workspaceId: entry.workspaceId,
+                    })
+                  }
+                />
+              ))}
+            </ItemGroup>
+          )}
+          {draft ? (
+            <NoteForm
+              key={draft.id ?? "new"}
+              bridge={bridge}
+              draft={draft}
+              entries={entries}
+              fixedWorkspaceId={workspaceId}
+              onDone={() => setDraft(null)}
+            />
+          ) : (
+            <>
+              {entries.length === 0 && (
+                <p className="text-sm text-muted-foreground">{t("workspaceEditor.memory.empty")}</p>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!memory.data}
+                onClick={() => setDraft({ text: "", tag: "", workspaceId })}
+              >
+                <PlusIcon />
+                {t("workspaceEditor.memory.add")}
+              </Button>
+            </>
+          )}
+        </>
+      )}
+    </OptionGroup>
   );
 }

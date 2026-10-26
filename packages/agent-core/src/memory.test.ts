@@ -9,10 +9,17 @@ import {
   noteKey,
   parseMemory,
   searchNotes,
+  visibleNotes,
 } from "./memory.ts";
 
-function note(id: string, text: string, updatedAt: number, tag: string | null = null): MemoryEntry {
-  return { id, text, tag, createdAt: updatedAt, updatedAt };
+function note(
+  id: string,
+  text: string,
+  updatedAt: number,
+  tag: string | null = null,
+  workspaceId: string | null = null,
+): MemoryEntry {
+  return { id, text, tag, workspaceId, createdAt: updatedAt, updatedAt };
 }
 
 let counter = 0;
@@ -57,6 +64,31 @@ describe("addNote", () => {
     );
     expect(addNote(full, { text: "one more" }, 1, newId)).toEqual({ ok: false, problem: "full" });
   });
+
+  test("the same note in another place is a second note", () => {
+    const existing = [note("a", "Deploy target is Fly.io.", 1, null, "ws1")];
+    const result = addNote(existing, { text: "deploy target is fly.io" }, 9, newId);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.entries).toHaveLength(2);
+    expect(result.entry.workspaceId).toBeNull();
+  });
+
+  test("a full place does not block another one", () => {
+    const full = Array.from({ length: MEMORY_LIMITS.maxEntries }, (_, i) =>
+      note(`n${i}`, `note ${i}`, i, null, "ws1"),
+    );
+    expect(addNote(full, { text: "one more", workspaceId: "ws1" }, 1, newId)).toEqual({
+      ok: false,
+      problem: "full",
+    });
+    expect(addNote(full, { text: "one more", workspaceId: null }, 1, newId).ok).toBe(true);
+  });
+
+  test("a new note carries the place it was saved in", () => {
+    const result = addNote([], { text: "project fact", workspaceId: "ws1" }, 5, newId);
+    expect(result.ok && result.entry.workspaceId).toBe("ws1");
+  });
 });
 
 describe("editNote", () => {
@@ -76,6 +108,31 @@ describe("editNote", () => {
     expect(editNote(entries, "b", { text: "One." }, 3)).toEqual({
       ok: false,
       problem: "duplicate",
+    });
+  });
+
+  test("keeps the note's place, or moves it when asked", () => {
+    const entries = [note("a", "old", 1, "x", "ws1")];
+    const kept = editNote(entries, "a", { text: "new" }, 2);
+    expect(kept.ok && kept.entry.workspaceId).toBe("ws1");
+    const moved = editNote(entries, "a", { text: "new", workspaceId: null }, 2);
+    expect(moved.ok && moved.entry.workspaceId).toBeNull();
+  });
+
+  test("the same note in another place is not a clash", () => {
+    const entries = [note("a", "One.", 1, null, "ws1"), note("b", "two", 2)];
+    expect(editNote(entries, "b", { text: "one" }, 3).ok).toBe(true);
+  });
+
+  test("a move into a full place is rejected", () => {
+    const full = Array.from({ length: MEMORY_LIMITS.maxEntries }, (_, i) =>
+      note(`n${i}`, `note ${i}`, i, null, "ws1"),
+    );
+    expect(
+      editNote([...full, note("m", "mine", 1)], "m", { text: "mine", workspaceId: "ws1" }, 2),
+    ).toEqual({
+      ok: false,
+      problem: "full",
     });
   });
 });
@@ -137,6 +194,19 @@ describe("memorySection", () => {
   });
 });
 
+describe("visibleNotes", () => {
+  test("shows every workspace's notes plus its own, newest first", () => {
+    const entries = [
+      note("a", "global", 1),
+      note("b", "mine", 2, null, "ws1"),
+      note("c", "other", 3, null, "ws2"),
+    ];
+    expect(visibleNotes(entries, "ws1").map((entry) => entry.id)).toEqual(["b", "a"]);
+    // Without a workspace (null) only the notes of every workspace are seen.
+    expect(visibleNotes(entries, null).map((entry) => entry.id)).toEqual(["a"]);
+  });
+});
+
 describe("parseMemory", () => {
   test("keeps valid entries, drops bad and duplicate ones, and caps the length", () => {
     const state = parseMemory({
@@ -153,8 +223,24 @@ describe("parseMemory", () => {
     });
     expect(state.enabled).toBe(false);
     expect(state.entries.map((e) => e.id)).toEqual(["a", "d"]);
-    expect(state.entries[0]).toMatchObject({ tag: "work", updatedAt: 2 });
+    expect(state.entries[0]).toMatchObject({ tag: "work", updatedAt: 2, workspaceId: null });
     expect(state.entries[1]?.text).toHaveLength(MEMORY_LIMITS.maxEntryLength);
+  });
+
+  test("reads the place of each note and keeps the same note in two places", () => {
+    const state = parseMemory({
+      entries: [
+        { id: "a", text: "same", workspaceId: "ws1" },
+        { id: "b", text: "Same.", workspaceId: null },
+        { id: "c", text: "same", workspaceId: "ws1" },
+        { id: "d", text: "other", workspaceId: 7 },
+      ],
+    });
+    expect(state.entries.map((entry) => [entry.id, entry.workspaceId])).toEqual([
+      ["a", "ws1"],
+      ["b", null],
+      ["d", null],
+    ]);
   });
 
   test("anything that is not an object gives an empty, enabled memory", () => {

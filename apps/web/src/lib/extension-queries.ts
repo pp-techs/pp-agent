@@ -11,6 +11,7 @@ import type {
   TelegramStatus,
   ToolPolicy,
   ToolSummary,
+  VoiceModelPreset,
   VoiceSettings,
 } from "@workspace/shared";
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -39,8 +40,12 @@ export function useMemoryCommands(bridge: DesktopBridge) {
     onError: showError,
   });
   const save = useMutation({
-    mutationFn: (input: { id?: string; text: string; tag: string | null }) =>
-      bridge.agent.command({ type: "save_memory_entry", ...input }),
+    mutationFn: (input: {
+      id?: string;
+      text: string;
+      tag: string | null;
+      workspaceId: string | null;
+    }) => bridge.agent.command({ type: "save_memory_entry", ...input }),
     onSuccess: invalidate,
     onError: showError,
   });
@@ -103,6 +108,17 @@ export function useSaveVoice(bridge: DesktopBridge) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (config: VoiceSettings) => bridge.agent.command({ type: "save_voice", config }),
+    onSuccess: (view) => queryClient.setQueryData(queryKeys.voice, view),
+    onError: showError,
+  });
+}
+
+/** Downloads a local whisper model; the answer refreshes the voice view (the model is there). */
+export function useInstallVoiceModel(bridge: DesktopBridge) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (model: VoiceModelPreset) =>
+      bridge.agent.command({ type: "install_voice_model", model }),
     onSuccess: (view) => queryClient.setQueryData(queryKeys.voice, view),
     onError: showError,
   });

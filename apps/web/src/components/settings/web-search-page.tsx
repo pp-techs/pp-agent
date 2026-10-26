@@ -6,6 +6,7 @@ import type {
   WebSearchTestResult,
   WebSearchView,
 } from "@workspace/shared";
+import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
@@ -14,9 +15,9 @@ import { Skeleton } from "@workspace/ui/components/skeleton";
 import { Switch } from "@workspace/ui/components/switch";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon, TriangleAlertIcon } from "lucide-react";
 
-import { OptionGroup } from "@/components/settings/option-group";
+import { useSettingsSubPage } from "@/components/settings/settings-subpage";
 import { useSaveWebSearch, useTestWebSearch, webSearchQuery } from "@/lib/extension-queries";
 
 interface Draft {
@@ -268,19 +269,26 @@ function WebSearchForm({ bridge, view }: { bridge: DesktopBridge; view: WebSearc
   );
 }
 
-export function WebSearchGroup({ bridge }: { bridge: DesktopBridge }) {
+/** Settings › Tools › Web search: pick and order the search services the agent may use. */
+export function WebSearchPage({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation(["extensions", "common"]);
+  useSettingsSubPage(t("webSearch.title"));
   const query = useQuery(webSearchQuery(bridge));
   return (
-    <OptionGroup legend={t("webSearch.legend")} description={t("webSearch.description")}>
+    <div className="flex flex-col gap-6">
+      <p className="text-sm text-muted-foreground">{t("webSearch.description")}</p>
       {query.isPending ? (
         <Skeleton className="h-24 w-full rounded-2xl" />
       ) : query.isError ? (
-        <p className="text-sm text-destructive">{query.error.message}</p>
+        <Alert variant="destructive">
+          <TriangleAlertIcon />
+          <AlertTitle>{t("webSearch.loadError")}</AlertTitle>
+          <AlertDescription>{query.error.message}</AlertDescription>
+        </Alert>
       ) : (
         // A saved change brings a new view; remounting resets the form to it.
         <WebSearchForm key={JSON.stringify(query.data)} bridge={bridge} view={query.data} />
       )}
-    </OptionGroup>
+    </div>
   );
 }

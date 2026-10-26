@@ -8,6 +8,7 @@ import {
   blobToBase64,
   MIN_RECORDING_MS,
   RECORDING_TYPES,
+  toWavBlob,
 } from "@/lib/voice-input";
 
 export type VoiceState = "idle" | "recording" | "transcribing";
@@ -70,16 +71,26 @@ export function useVoiceRecorder(bridge: DesktopBridge, onText: (text: string) =
         toast.error(translate("composer.voice.errors.tooShort"));
         return;
       }
-      const blob = new Blob(current.chunks, { type: current.recorder.mimeType || "audio/webm" });
-      if (blob.size > VOICE_LIMITS.maxBytes) {
+      const recording = new Blob(current.chunks, {
+        type: current.recorder.mimeType || "audio/webm",
+      });
+      // Whisper reads wav directly, and services accept it; the recorder's own format (webm/opus,
+      // ogg/opus, mp4) is decoded and resampled in the renderer.
+      let wav: Blob;
+      try {
+        wav = await toWavBlob(recording);
+      } catch {
+        throw new Error(translate("composer.voice.errors.unreadable"));
+      }
+      if (wav.size > VOICE_LIMITS.maxBytes) {
         toast.error(translate("composer.voice.errors.tooLarge"));
         return;
       }
-      const data = await blobToBase64(blob);
+      const data = await blobToBase64(wav);
       const { text } = await bridge.agent.command({
         type: "transcribe_audio",
         data,
-        mimeType: blob.type,
+        mimeType: "audio/wav",
         durationMs,
       });
       if (mine === attempt.current) latest.current.onText(text.trim());

@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vite-plus/test";
 import { validateOfficeCall } from "./args.ts";
 import { resolveInWorkspace } from "./files.ts";
-import { officeCliEnv, platformKey, runOfficeCli } from "./run.ts";
+import { officeCliEnv, runOfficeCli } from "./run.ts";
+import { platformKey } from "../resources.ts";
 
 let root: string;
 let workspace: string;

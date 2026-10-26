@@ -1,6 +1,8 @@
 import * as React from "react";
 import type { DesktopBridge, ToolPolicy, ToolSummary, ToolWarning } from "@workspace/shared";
 import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert";
+import { Badge } from "@workspace/ui/components/badge";
+import { Button } from "@workspace/ui/components/button";
 import {
   Empty,
   EmptyDescription,
@@ -15,6 +17,7 @@ import {
   ItemContent,
   ItemDescription,
   ItemGroup,
+  ItemMedia,
   ItemTitle,
 } from "@workspace/ui/components/item";
 import {
@@ -34,8 +37,13 @@ import { SearchIcon, TriangleAlertIcon, WrenchIcon } from "lucide-react";
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { OptionGroup, SwitchRow } from "@/components/settings/option-group";
 import { SectionHeading } from "@/components/settings/section-heading";
-import { WebSearchGroup } from "@/components/settings/web-search-group";
-import { toolsQuery, useSetShellEnabled, useSetToolPolicy } from "@/lib/extension-queries";
+import { WebSearchPage } from "@/components/settings/web-search-page";
+import {
+  toolsQuery,
+  useSetShellEnabled,
+  useSetToolPolicy,
+  webSearchQuery,
+} from "@/lib/extension-queries";
 import { settingsQuery } from "@/lib/queries";
 
 type T = TFunction<"extensions">;
@@ -170,6 +178,51 @@ function ShellGroup({ bridge }: { bridge: DesktopBridge }) {
   );
 }
 
+/** Compact stand-in for the full configuration, which lives in its own page. */
+function WebSearchRow({ bridge, onOpen }: { bridge: DesktopBridge; onOpen: () => void }) {
+  const { t } = useTranslation("extensions");
+  const query = useQuery(webSearchQuery(bridge));
+  const providers = query.data?.providers ?? [];
+  const enabled = providers.filter((provider) => provider.enabled);
+  const needsSetup = enabled.some(
+    (provider) =>
+      (provider.keyRequired && !provider.hasKey) ||
+      (provider.endpointRequired && provider.endpoint.trim() === ""),
+  );
+
+  return (
+    <Item variant="outline">
+      <ItemMedia variant="icon">
+        <SearchIcon />
+      </ItemMedia>
+      <ItemContent>
+        <ItemTitle>
+          {t("webSearch.title")}
+          {enabled.length > 0 && needsSetup && (
+            <Badge variant="destructive">{t("webSearch.needsSetup")}</Badge>
+          )}
+        </ItemTitle>
+        <ItemDescription>
+          {query.isPending ? (
+            <Skeleton className="h-4 w-40" />
+          ) : enabled.length > 0 ? (
+            t("webSearch.summary", {
+              providers: enabled.map((provider) => provider.label).join(", "),
+            })
+          ) : (
+            t("webSearch.summaryEmpty")
+          )}
+        </ItemDescription>
+      </ItemContent>
+      <ItemActions>
+        <Button variant="outline" size="sm" disabled={query.isPending} onClick={onOpen}>
+          {enabled.length > 0 ? t("webSearch.manage") : t("webSearch.setUp")}
+        </Button>
+      </ItemActions>
+    </Item>
+  );
+}
+
 function PolicyControl({ bridge, tool }: { bridge: DesktopBridge; tool: ToolSummary }) {
   const { t } = useTranslation("extensions");
   const setPolicy = useSetToolPolicy(bridge);
@@ -275,10 +328,16 @@ function ToolsSkeleton() {
   );
 }
 
+/** The web search configuration opens as its own page, like a Channels setup page. */
+type View = { kind: "list" } | { kind: "webSearch" };
+
 export function ToolsSection({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("extensions");
   const tools = useQuery(toolsQuery(bridge));
   const [search, setSearch] = React.useState("");
+  const [view, setView] = React.useState<View>({ kind: "list" });
+
+  if (view.kind === "webSearch") return <WebSearchPage bridge={bridge} />;
 
   const all = tools.data ?? [];
   const query = search.trim().toLowerCase();
@@ -299,7 +358,9 @@ export function ToolsSection({ bridge }: { bridge: DesktopBridge }) {
 
       <ShellGroup bridge={bridge} />
 
-      <WebSearchGroup bridge={bridge} />
+      <ItemGroup>
+        <WebSearchRow bridge={bridge} onOpen={() => setView({ kind: "webSearch" })} />
+      </ItemGroup>
 
       <p className="text-sm text-muted-foreground">
         <Trans

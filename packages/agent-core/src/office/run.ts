@@ -4,67 +4,14 @@
  * (`OFFICECLI_NO_AUTO_RESIDENT`), so there is nothing to clean up when a run ends or is stopped.
  */
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { platformKey, resourcePath, scrubbedEnv } from "../resources.ts";
 
 /** Wall-clock limit for one command. */
 const TIMEOUT_MS = 120_000;
 /** Bytes kept from the command's output; the rest is dropped and the command stopped. */
 const MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
-
-/** Variables a command may inherit. Credentials, proxies and API keys are not among them. */
-const INHERITED_ENV = [
-  "PATH",
-  "LANG",
-  "LC_ALL",
-  "LC_CTYPE",
-  "TMPDIR",
-  "TEMP",
-  "TMP",
-  "SystemRoot",
-  "SYSTEMROOT",
-  "windir",
-  "COMSPEC",
-  "PATHEXT",
-  "DISPLAY",
-  "WAYLAND_DISPLAY",
-];
-
-/** `mac-arm64`, `win-x64`, `linux-x64`: the folder name under `resources/officecli/`. */
-export function platformKey(
-  platform: NodeJS.Platform = process.platform,
-  arch: string = process.arch,
-): string {
-  const os = platform === "darwin" ? "mac" : platform === "win32" ? "win" : "linux";
-  return `${os}-${arch}`;
-}
-
-let configuredResourcesDir: string | null = null;
-
-/** Folder the host was told holds the app's resources (`AgentPaths.resourcesDir`). */
-export function configureResourcesDir(dir: string | undefined): void {
-  configuredResourcesDir = dir ?? null;
-}
-
-/**
- * A folder shipped with the app (`extraResources`): the configured resources folder first, then
- * `process.resourcesPath` (Electron), then `apps/desktop/resources` when running from a bundle in
- * `apps/desktop/dist` or from source in development.
- */
-export function resourcePath(...parts: string[]): string | null {
-  // Set by Electron only; this package does not depend on its types.
-  const { resourcesPath } = process as NodeJS.Process & { resourcesPath?: string };
-  const roots = [
-    configuredResourcesDir ? join(configuredResourcesDir, ...parts) : null,
-    resourcesPath ? join(resourcesPath, ...parts) : null,
-    // Bundled: dist/daemon.mjs sits next to apps/desktop/resources.
-    join(import.meta.dirname, "..", "resources", ...parts),
-    // From source: packages/agent-core/src/office.
-    join(import.meta.dirname, "..", "..", "..", "..", "apps", "desktop", "resources", ...parts),
-  ];
-  return roots.find((root): root is string => root !== null && existsSync(root)) ?? null;
-}
 
 export function officeCliBinary(): string | null {
   const name = process.platform === "win32" ? "officecli.exe" : "officecli";
@@ -92,8 +39,7 @@ export interface OfficeCliResult {
 }
 
 export function officeCliEnv(homeDir: string, base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
-  for (const name of INHERITED_ENV) if (base[name] !== undefined) env[name] = base[name];
+  const env = scrubbedEnv(base);
   return {
     ...env,
     HOME: homeDir,
