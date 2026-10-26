@@ -12,6 +12,8 @@ import {
   renderTaskCommand,
   renderWindowsLauncher,
   windowsLauncherPath,
+  windowsTaskXmlPath,
+  renderWindowsTask,
 } from "./windows-task.ts";
 
 let dir: string;
@@ -34,6 +36,12 @@ const spec = (logFile: string) => ({
 });
 
 describe("windows task rendering", () => {
+  it("escapes non-ASCII user names and launcher paths in XML", () => {
+    const task = renderWindowsTask("C:\\café & tea\\launch.ps1", "DOMAIN\\O'Neil & Co");
+    expect(task).toContain("café &amp; tea");
+    expect(task).toContain("O&apos;Neil &amp; Co");
+    expect(task).toContain("&quot;C:");
+  });
   it("quotes PowerShell literals", () => {
     expect(powershellQuote("it's")).toBe("'it''s'");
   });
@@ -58,15 +66,13 @@ describe("windows task rendering", () => {
       'powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\\Users\\me\\PP Agent\\pp-agentd-launch.ps1"',
     );
     expect(command.length).toBeLessThan(261);
-    expect(createTaskArguments("PP Agent Daemon", "C:\\x.ps1").slice(0, 8)).toEqual([
+    expect(createTaskArguments("PP Agent Daemon", "C:\\task.xml")).toEqual([
       "/Create",
-      "/SC",
-      "ONLOGON",
-      "/RL",
-      "LIMITED",
       "/F",
       "/TN",
       "PP Agent Daemon",
+      "/XML",
+      "C:\\task.xml",
     ]);
   });
 });
@@ -82,8 +88,25 @@ describe("windows task service", () => {
     const content = await readFile(launcher, "utf8");
     expect(content.startsWith("\uFEFF")).toBe(true);
     expect(content).toContain("$env:ELECTRON_RUN_AS_NODE = '1'");
+    const xmlPath = windowsTaskXmlPath(spec(join(dir, "daemon.log")));
+    const bytes = await readFile(xmlPath);
+    expect([...bytes.subarray(0, 2)]).toEqual([0xff, 0xfe]);
+    const task = bytes.toString("utf16le");
+    expect(task).toContain("<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>");
+    expect(task).toContain("<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>");
+    expect(task).toContain("<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>");
+    expect(task).toContain(
+      "<RestartOnFailure><Interval>PT1M</Interval><Count>255</Count></RestartOnFailure>",
+    );
+    const count = Number(/<Count>(\d+)<\/Count>/.exec(task)?.[1]);
+    // Task Scheduler schema: xs:unsignedByte with minInclusive=1.
+    expect(count).toBeGreaterThanOrEqual(1);
+    expect(count).toBeLessThanOrEqual(255);
+    expect(task).toContain("<LogonType>InteractiveToken</LogonType>");
+    expect(task).toContain("<RunLevel>LeastPrivilege</RunLevel>");
+    expect(task).toContain("<Command>powershell.exe</Command>");
     expect(calls).toEqual([
-      `schtasks ${createTaskArguments("PP Agent Daemon", launcher).join(" ")}`,
+      `schtasks ${createTaskArguments("PP Agent Daemon", xmlPath).join(" ")}`,
       "schtasks /Run /TN PP Agent Daemon",
     ]);
   });

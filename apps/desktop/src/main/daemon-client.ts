@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+import { proof, validNonce, validateUnixEndpoint, verifyProof } from "@workspace/daemon/auth";
 import { spawn } from "node:child_process";
 import { closeSync, mkdirSync, openSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -36,6 +38,9 @@ interface Connection {
   closed: PromiseWithResolvers<void>;
   /** Frames that arrived with the handshake reply, delivered once the connection is adopted. */
   early: DaemonFrame[];
+  token: string;
+  nonce: string;
+  challenge: string | null;
 }
 
 export interface DaemonClientOptions {
@@ -222,6 +227,15 @@ export class DaemonClient {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw error;
     }
+    if (process.platform !== "win32") {
+      try {
+        await validateUnixEndpoint(this.paths.endpoint);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw error;
+      }
+    }
+    if (!validNonce(token)) throw new Error("The daemon token is invalid.");
     const socket = connect(this.paths.endpoint);
     const opened = Promise.withResolvers<void>();
     socket.once("connect", opened.resolve);
@@ -241,6 +255,9 @@ export class DaemonClient {
       hello: Promise.withResolvers<Hello>(),
       closed: Promise.withResolvers<void>(),
       early: [],
+      token,
+      nonce: randomBytes(32).toString("hex"),
+      challenge: null,
     };
     // A failed handshake is reported by `greet`; this only keeps the rejection from being unhandled.
     conn.hello.promise.catch(() => undefined);
@@ -261,25 +278,46 @@ export class DaemonClient {
       if (this.conn === conn) this.lose();
       conn.closed.resolve();
     });
-    socket.write(
-      encodeFrame({
-        kind: "hello",
-        protocol: DAEMON_PROTOCOL,
-        token,
-        appVersion: this.options.appVersion,
-      } satisfies ClientFrame),
-    );
     return conn;
   }
 
   private async greet(conn: Connection): Promise<Hello> {
     const timedOut = Promise.withResolvers<never>();
     const timer = setTimeout(
-      () => timedOut.reject(new Error("pp-agentd did not answer the handshake.")),
+      () =>
+        timedOut.reject(
+          new Error(
+            "pp-agentd did not answer the handshake. Restart an older daemon before reconnecting.",
+          ),
+        ),
       HELLO_TIMEOUT_MS,
     );
     try {
-      return await Promise.race([conn.hello.promise, timedOut.promise]);
+      const hello = await Promise.race([conn.hello.promise, timedOut.promise]);
+      if (
+        conn.challenge === null ||
+        typeof hello.protocol !== "number" ||
+        typeof hello.appVersion !== "string" ||
+        !Number.isSafeInteger(hello.pid) ||
+        hello.pid <= 0 ||
+        !verifyProof(
+          hello.proof,
+          proof(
+            conn.token,
+            "daemon",
+            conn.challenge,
+            conn.nonce,
+            hello.protocol,
+            hello.appVersion,
+            hello.pid,
+          ),
+        )
+      )
+        throw new Error(
+          "The daemon authentication proof is invalid. Restart an older daemon before reconnecting.",
+        );
+      conn.token = "";
+      return hello;
     } catch (error) {
       conn.socket.destroy();
       throw error;
@@ -320,6 +358,30 @@ export class DaemonClient {
 
   private receive(conn: Connection, frame: DaemonFrame): void {
     switch (frame.kind) {
+      case "challenge":
+        if (conn.challenge !== null || !validNonce(frame.nonce)) {
+          conn.hello.reject(new Error("Invalid daemon challenge."));
+          conn.socket.destroy();
+          return;
+        }
+        conn.challenge = frame.nonce;
+        conn.socket.write(
+          encodeFrame({
+            kind: "hello",
+            protocol: DAEMON_PROTOCOL,
+            appVersion: this.options.appVersion,
+            nonce: conn.nonce,
+            proof: proof(
+              conn.token,
+              "client",
+              frame.nonce,
+              conn.nonce,
+              DAEMON_PROTOCOL,
+              this.options.appVersion,
+            ),
+          } satisfies ClientFrame),
+        );
+        return;
       case "hello_ok":
         conn.hello.resolve(frame);
         return;

@@ -50,6 +50,9 @@ export function renderSystemdUnit(spec: ServiceSpec): string {
   const environment = Object.entries(spec.env)
     .map(([key, value]) => `Environment=${quoteSystemdEnvironment(key, value)}`)
     .join("\n");
+  if (/[\r\n\0]/.test(spec.logFile) || spec.logFile.endsWith("\\")) {
+    throw new Error("The systemd log path cannot contain CR, LF, NUL, or a trailing backslash.");
+  }
   const logTarget = `append:${escapeSpecifiers(spec.logFile, false)}`;
   return `[Unit]
 Description=PP Agent background daemon

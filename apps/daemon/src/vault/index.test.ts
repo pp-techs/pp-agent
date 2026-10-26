@@ -111,14 +111,56 @@ describe("vault", () => {
     expect(await vault.read("a")).toEqual(credential);
   });
 
-  it("fails to read with a different key, and a write replaces the entry", async () => {
+  it("rejects a changed key before any credential can be overwritten", async () => {
     const first = await createVaultBackend(home, { env: {}, loadKeyring: fakeKeyring().load });
     await first.write("a", credential);
-    const second = await createVaultBackend(home, { env: {}, loadKeyring: fakeKeyring().load });
-    await expect(second.read("a")).rejects.toThrow(/could not be decrypted/);
-    expect(await second.list()).toEqual(["a"]);
-    await second.write("a", other);
-    expect(await second.read("a")).toEqual(other);
+    const original = await readFile(join(home, "vault.json"), "utf8");
+    await expect(
+      createVaultBackend(home, { env: { PP_AGENT_MASTER_KEY: "b".repeat(64) } }),
+    ).rejects.toThrow(/does not match/);
+    expect(await readFile(join(home, "vault.json"), "utf8")).toBe(original);
+    expect(await first.read("a")).toEqual(credential);
+  });
+
+  it("keeps a file key when the keyring becomes available", async () => {
+    const first = await createVaultBackend(home, { env: {}, loadKeyring: noKeyring });
+    await first.write("a", credential);
+    const keyring = fakeKeyring();
+    const second = await createVaultBackend(home, { env: {}, loadKeyring: keyring.load });
+    expect(second.keySource).toBe("file");
+    expect(keyring.state.sets).toBe(0);
+    expect(await second.read("a")).toEqual(credential);
+  });
+
+  it.each([noKeyring, fakeKeyring().load])(
+    "never creates a key for an existing vault when its original key is missing",
+    async (loadKeyring) => {
+      const first = await createVaultBackend(home, { env: {}, loadKeyring: fakeKeyring().load });
+      await first.write("a", credential);
+      await expect(createVaultBackend(home, { env: {}, loadKeyring })).rejects.toThrow(
+        /master key is unavailable/,
+      );
+      await expect(stat(join(home, "vault.key"))).rejects.toThrow();
+    },
+  );
+
+  it("validates legacy entries before storing a key check", async () => {
+    const keyring = fakeKeyring();
+    const first = await createVaultBackend(home, { env: {}, loadKeyring: keyring.load });
+    await first.write("a", credential);
+    const file = await readVaultFile();
+    await writeFile(
+      join(home, "vault.json"),
+      JSON.stringify({ version: 1, entries: file.entries }),
+    );
+    await expect(
+      createVaultBackend(home, { env: { PP_AGENT_MASTER_KEY: "b".repeat(64) } }),
+    ).rejects.toThrow(/could not be decrypted/);
+    const second = await createVaultBackend(home, { env: {}, loadKeyring: keyring.load });
+    expect(await second.read("a")).toEqual(credential);
+    expect(JSON.parse(await readFile(join(home, "vault.json"), "utf8")).keyCheck).toMatch(
+      /^[0-9a-f]{64}$/,
+    );
   });
 
   it("prefers the env key over the keyring, as hex or base64", async () => {
@@ -237,7 +279,11 @@ describe("vault file handling", () => {
     ["a non-string entry", JSON.stringify({ version: 1, entries: { a: 1 } })],
   ])("throws on a malformed vault (%s) and leaves it untouched", async (_name, content) => {
     await writeFile(join(home, "vault.json"), content);
+    await expect(open()).rejects.toThrow(/vault/);
+    expect(await readFile(join(home, "vault.json"), "utf8")).toBe(content);
+    await writeFile(join(home, "vault.json"), "");
     const vault = await open();
+    await writeFile(join(home, "vault.json"), content);
     await expect(vault.read("a")).rejects.toThrow(/vault/);
     await expect(vault.list()).rejects.toThrow(/vault/);
     await expect(vault.write("a", credential)).rejects.toThrow(/vault/);
@@ -262,7 +308,6 @@ describe("vault file handling", () => {
 
   it("throws when vault.json is a directory", async () => {
     await mkdir(join(home, "vault.json"));
-    const vault = await open();
-    await expect(vault.list()).rejects.toThrow(/cannot be read/);
+    await expect(open()).rejects.toThrow(/cannot be read/);
   });
 });

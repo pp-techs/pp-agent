@@ -38,6 +38,7 @@ export function renderWindowsLauncher(spec: ServiceSpec): string {
     ...env,
     `$daemonArgs = @(${args})`,
     `& ${powershellQuote(spec.execPath)} @daemonArgs 2>&1 | Out-File -FilePath ${powershellQuote(spec.logFile)} -Append -Encoding utf8`,
+    "exit $LASTEXITCODE",
     "",
   ].join("\r\n");
 }
@@ -47,24 +48,52 @@ export function renderTaskCommand(launcherPath: string): string {
   return `powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "${launcherPath}"`;
 }
 
-export function createTaskArguments(taskName: string, launcherPath: string): string[] {
-  return [
-    "/Create",
-    "/SC",
-    "ONLOGON",
-    "/RL",
-    "LIMITED",
-    "/F",
-    "/TN",
-    taskName,
-    "/TR",
-    renderTaskCommand(launcherPath),
-  ];
+function xml(value: string): string {
+  // XML 1.0 forbids these control characters.
+  // oxlint-disable-next-line no-control-regex
+  if (/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(value)) throw new Error("Invalid character in task XML.");
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+export function windowsTaskXmlPath(spec: ServiceSpec): string {
+  return join(dirname(spec.logFile), "pp-agentd-task.xml");
+}
+
+/** Interactive, least-privilege logon task that can run continuously, including on battery. */
+export function renderWindowsTask(launcherPath: string, username: string): string {
+  const user = xml(username);
+  const args = xml(renderTaskCommand(launcherPath).slice("powershell.exe ".length));
+  return `<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <Triggers><LogonTrigger><Enabled>true</Enabled><UserId>${user}</UserId></LogonTrigger></Triggers>
+  <Principals><Principal id="Author"><UserId>${user}</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <RestartOnFailure><Interval>PT1M</Interval><Count>255</Count></RestartOnFailure>
+  </Settings>
+  <Actions Context="Author"><Exec><Command>powershell.exe</Command><Arguments>${args}</Arguments></Exec></Actions>
+</Task>
+`;
+}
+
+export function createTaskArguments(taskName: string, xmlPath: string): string[] {
+  return ["/Create", "/F", "/TN", taskName, "/XML", xmlPath];
 }
 
 export const createWindowsTaskService: ServiceBackend = (spec, deps) => {
   const taskName = windowsTaskName(spec.label);
   const launcherPath = windowsLauncherPath(spec);
+  const xmlPath = windowsTaskXmlPath(spec);
 
   async function query() {
     return deps.runner("schtasks", ["/Query", "/TN", taskName]);
@@ -98,7 +127,12 @@ export const createWindowsTaskService: ServiceBackend = (spec, deps) => {
       await mkdir(dirname(launcherPath), { recursive: true });
       // A BOM makes Windows PowerShell read the script as UTF-8, so non-ASCII paths survive.
       await writeFile(launcherPath, `\uFEFF${renderWindowsLauncher(spec)}`, "utf8");
-      const created = await deps.runner("schtasks", createTaskArguments(taskName, launcherPath));
+      await writeFile(
+        xmlPath,
+        `\uFEFF${renderWindowsTask(launcherPath, deps.username)}`,
+        "utf16le",
+      );
+      const created = await deps.runner("schtasks", createTaskArguments(taskName, xmlPath));
       if (created.code !== 0) {
         throw new Error(`Windows could not register the PP Agent task: ${firstLine(created)}`);
       }
@@ -117,6 +151,7 @@ export const createWindowsTaskService: ServiceBackend = (spec, deps) => {
         }
       }
       await rm(launcherPath, { force: true });
+      await rm(xmlPath, { force: true });
     },
   };
 };

@@ -1038,7 +1038,7 @@ export const IPC = {
 // ---------------------------------------------------------------------------------------------
 
 /** Bump when a frame below changes incompatibly; a client talking to another version shuts the daemon down. */
-export const DAEMON_PROTOCOL = 1;
+export const DAEMON_PROTOCOL = 2;
 
 export interface AgentPaths {
   /** Folder of the built-in workspace; other workspaces use their own folder. */
@@ -1064,8 +1064,9 @@ export type ClientFrame =
   | {
       kind: "hello";
       protocol: number;
-      /** Contents of the daemon's token file, readable only by the same user. */
-      token: string;
+      /** Fresh client nonce and HMAC of the server challenge and hello fields; never the token. */
+      nonce: string;
+      proof: string;
       appVersion: string;
     }
   | { kind: "command"; id: number; command: AgentCommand }
@@ -1075,7 +1076,8 @@ export type ClientFrame =
   | { kind: "shutdown" };
 
 export type DaemonFrame =
-  | { kind: "hello_ok"; protocol: number; appVersion: string; pid: number }
+  | { kind: "challenge"; nonce: string }
+  | { kind: "hello_ok"; protocol: number; appVersion: string; pid: number; proof: string }
   | { kind: "hello_error"; error: string }
   | { kind: "event"; event: AgentEvent }
   | { kind: "result"; id: number; ok: true; data: unknown }

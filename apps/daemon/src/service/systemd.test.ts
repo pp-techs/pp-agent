@@ -53,6 +53,14 @@ describe("systemd quoting", () => {
 });
 
 describe("renderSystemdUnit", () => {
+  it.each(["a\rb", "a\nb", "a\0b", "trailing\\"])("rejects unsafe log path %j", (logFile) => {
+    expect(() => renderSystemdUnit({ ...spec, logFile })).toThrow(/log path/);
+  });
+  it("preserves specifier escaping in accepted log paths", () => {
+    expect(renderSystemdUnit({ ...spec, logFile: "/logs/100% done.log" })).toContain(
+      "StandardOutput=append:/logs/100%% done.log",
+    );
+  });
   const unit = renderSystemdUnit(spec);
   it("renders the sections", () => {
     expect(unit).toContain(

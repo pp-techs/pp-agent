@@ -121,7 +121,7 @@ A pending approval blocks the run, so `abort`, `new_chat`, `open_session` and `d
 
 ## Chat channel turns (Telegram)
 
-A message from the paired person on Telegram becomes a turn without the window. The channel (`packages/agent-core/src/channels/telegram/`) long-polls the Bot API and talks to the agent only through `AgentHost.gateway` (`ChannelGateway`: `runTurn`, `newConversation`, `abort`, `transcribe`). Each chat key (`telegram:<chatId>`) has its own Pi session, separate from the conversation open in the window, built with the agent and workspace chosen in Settings › Background. Turns of one chat run one at a time; up to 5 more messages wait, and the rest get a "busy" reply.
+A message from the paired person on Telegram becomes a turn without the window. The channel (`packages/agent-core/src/channels/telegram/`) long-polls the Bot API and talks to the agent only through `AgentHost.gateway` (`ChannelGateway`: `runTurn`, `newConversation`, `abort`, `transcribe`). Each chat key (`telegram:<chatId>`) has its own Pi session, separate from the conversation open in the window, built with the agent and workspace chosen in Settings › Channels › Telegram. Either can also be selected in chat with `/agent` and `/workspace`. Turns of one chat run one at a time; up to 5 more messages wait, and the rest get a "busy" reply.
 
 ```mermaid
 sequenceDiagram

@@ -13,12 +13,19 @@ export interface FormattedChunk {
 // Splitting
 // ---------------------------------------------------------------------------------------------
 
-const FENCE = /^ {0,3}(`{3,}|~{3,})\s*([^\s`]*)/;
+const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
 const FENCE_CLOSE = /^ {0,3}(`{3,}|~{3,})\s*$/;
 
 interface Fence {
   marker: string;
   lang: string;
+}
+
+/** Backtick info strings cannot contain backticks (including after the language word). */
+function openingFence(line: string): Fence | null {
+  const match = FENCE.exec(line);
+  if (!match || (match[1]![0] === "`" && match[2]!.includes("`"))) return null;
+  return { marker: match[1]!, lang: match[2]!.trim().split(/[\s`]/)[0]! };
 }
 
 /** Text of an opening fence line, such as "```ts". */
@@ -33,8 +40,8 @@ function advanceFence(line: string, open: Fence | null): Fence | null {
       ? null
       : open;
   }
-  const start = FENCE.exec(line);
-  return start ? { marker: start[1]!, lang: start[2]!.slice(0, 20) } : null;
+  const start = openingFence(line);
+  return start ? { ...start, lang: start.lang.slice(0, 20) } : null;
 }
 
 interface Candidate {
@@ -46,7 +53,11 @@ interface Candidate {
 }
 
 /** Picks where to end the next chunk inside `window` (the text that fits). */
-function chooseCut(window: string, start: Fence | null): Candidate {
+function chooseCut(window: string, start: Fence | null, source: string): Candidate {
+  const fullLine = (offset: number) => {
+    const end = source.indexOf("\n", offset);
+    return source.slice(offset, end < 0 ? source.length : end);
+  };
   const candidates: Candidate[] = [];
   let fence = start;
   let offset = 0;
@@ -55,7 +66,7 @@ function chooseCut(window: string, start: Fence | null): Candidate {
     const lineEnd = newline === -1 ? window.length : newline;
     const line = window.slice(offset, lineEnd);
     const before = fence;
-    fence = advanceFence(line, fence);
+    fence = advanceFence(fullLine(offset), fence);
     if (newline !== -1) {
       const paragraph = line.trim() === "" && !fence;
       // A cut after the line `offset..newline`; the fence state is the one after that line.
@@ -88,7 +99,11 @@ function chooseCut(window: string, start: Fence | null): Candidate {
   const last = window.charCodeAt(cut - 1);
   if (last >= 0xd800 && last <= 0xdbff && cut > 1) cut--;
   let fenceAtCut = start;
-  for (const line of window.slice(0, cut).split("\n")) fenceAtCut = advanceFence(line, fenceAtCut);
+  let lineOffset = 0;
+  for (const line of window.slice(0, cut).split("\n")) {
+    fenceAtCut = advanceFence(fullLine(lineOffset), fenceAtCut);
+    lineOffset += line.length + 1;
+  }
   return { cut, rank: 0, fence: fenceAtCut };
 }
 
@@ -111,7 +126,7 @@ export function splitText(text: string, limit = MESSAGE_LIMIT): string[] {
     // Room for a closing fence ("\n" + marker) in case this chunk ends inside a code block.
     const budget = limit - prefix.length - 1 - (fence?.marker.length ?? 3) - 8;
     const window = rest.slice(0, Math.max(budget, 1));
-    const chosen = chooseCut(window, fence);
+    const chosen = chooseCut(window, fence, rest);
     let body = rest.slice(0, chosen.cut);
     if (chosen.fence) {
       body = `${body.endsWith("\n") ? body : `${body}\n`}${chosen.fence.marker}`;
@@ -201,16 +216,16 @@ export function markdownToTelegramHtml(markdown: string): string {
   const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
-    const fence = FENCE.exec(line);
+    const fence = openingFence(line);
     if (fence) {
       const body: string[] = [];
-      let open: Fence | null = { marker: fence[1]!, lang: fence[2]! };
+      let open: Fence | null = fence;
       for (i++; i < lines.length; i++) {
         open = advanceFence(lines[i]!, open);
         if (!open) break;
         body.push(lines[i]!);
       }
-      out.push(codeBlock(body, fence[2]!));
+      out.push(codeBlock(body, fence.lang));
       continue;
     }
     if (/^\s*\|.*\|\s*$/.test(line) && /^\s*\|.*\|\s*$/.test(lines[i + 1] ?? "")) {

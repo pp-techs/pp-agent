@@ -1,4 +1,10 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { VaultBackend } from "@workspace/agent-core";
@@ -6,7 +12,7 @@ import type { StoredCredential } from "@workspace/shared";
 
 /**
  * Credentials of every provider, search key and MCP sign-in, kept in `<home>/vault.json`.
- * File shape: `{ version: 1, entries: { [id]: base64(iv(12) | tag(16) | ciphertext) } }`, each
+ * File shape: `{ version: 1, keyCheck, entries: { [id]: base64(iv(12) | tag(16) | ciphertext) } }`, each
  * entry AES-256-GCM encrypted with the id as additional authenticated data, so an entry copied
  * under another id fails to decrypt. One random master key encrypts them all.
  */
@@ -61,7 +67,10 @@ function message(error: unknown): string {
 }
 
 /** Reads the key from the OS keyring, creating it on first use; null when the keyring is unusable. */
-async function keyringKey(load: () => Promise<KeyringModule>): Promise<Buffer | null> {
+async function keyringKey(
+  load: () => Promise<KeyringModule>,
+  create: boolean,
+): Promise<Buffer | null> {
   try {
     const { Entry } = await load();
     const entry = new Entry(KEYRING_SERVICE, KEYRING_ACCOUNT);
@@ -71,6 +80,7 @@ async function keyringKey(load: () => Promise<KeyringModule>): Promise<Buffer | 
       if (!key) throw new Error("the stored master key is not a 32-byte key");
       return key;
     }
+    if (!create) return null;
     const key = randomBytes(KEY_BYTES);
     entry.setPassword(key.toString("base64"));
     // A real read-back proves the keyring keeps what it was given, not just that the call returned.
@@ -80,13 +90,15 @@ async function keyringKey(load: () => Promise<KeyringModule>): Promise<Buffer | 
     }
     return key;
   } catch (error) {
-    console.warn(`The OS keyring cannot hold the vault key, using a key file: ${message(error)}`);
+    console.warn(
+      `The OS keyring cannot hold the vault key, checking for a key file: ${message(error)}`,
+    );
     return null;
   }
 }
 
 /** Reads `<home>/vault.key`, creating it (mode 0600) on first use. */
-async function fileKey(home: string): Promise<Buffer> {
+async function fileKey(home: string, create: boolean): Promise<Buffer | null> {
   const path = join(home, KEY_FILE);
   const read = async (): Promise<Buffer | null> => {
     try {
@@ -99,7 +111,7 @@ async function fileKey(home: string): Promise<Buffer> {
     }
   };
   const existing = await read();
-  if (existing) return existing;
+  if (existing || !create) return existing;
   const key = randomBytes(KEY_BYTES);
   try {
     await writeFile(path, `${key.toString("hex")}\n`, { mode: 0o600, flag: "wx" });
@@ -116,6 +128,7 @@ async function fileKey(home: string): Promise<Buffer> {
 async function resolveMasterKey(
   home: string,
   options: VaultOptions,
+  create: boolean,
 ): Promise<{ key: Buffer; source: KeySource }> {
   const fromEnv = (options.env ?? process.env)[MASTER_KEY_ENV];
   if (fromEnv !== undefined && fromEnv.trim() !== "") {
@@ -123,9 +136,15 @@ async function resolveMasterKey(
     if (!key) throw new Error(`${MASTER_KEY_ENV} must be 32 bytes written as hex or base64.`);
     return { key, source: "env" };
   }
-  const fromKeyring = await keyringKey(options.loadKeyring ?? loadNativeKeyring);
+  const fromFile = await fileKey(home, false);
+  if (fromFile) return { key: fromFile, source: "file" };
+  const fromKeyring = await keyringKey(options.loadKeyring ?? loadNativeKeyring, create);
   if (fromKeyring) return { key: fromKeyring, source: "keyring" };
-  return { key: await fileKey(home), source: "file" };
+  if (!create)
+    throw new Error(
+      "The existing vault master key is unavailable. Restore its original key before opening the vault.",
+    );
+  return { key: (await fileKey(home, true))!, source: "file" };
 }
 
 function encrypt(key: Buffer, id: string, credential: StoredCredential): string {
@@ -163,15 +182,20 @@ function decrypt(key: Buffer, id: string, entry: string): StoredCredential {
 /** Entries by id; a Map so an id such as `__proto__` is just another key. */
 type Entries = Map<string, string>;
 
-async function readEntries(path: string): Promise<Entries> {
+interface VaultFile {
+  entries: Entries;
+  keyCheck?: string;
+}
+
+async function readVault(path: string): Promise<VaultFile> {
   let text: string;
   try {
     text = await readFile(path, "utf8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return new Map();
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { entries: new Map() };
     throw new Error(`The vault ${path} cannot be read: ${message(error)}`, { cause: error });
   }
-  if (text.trim() === "") return new Map();
+  if (text.trim() === "") return { entries: new Map() };
   const invalid = (reason: string): Error =>
     new Error(`The vault ${path} is not valid (${reason}); it was left untouched.`);
   let parsed: unknown;
@@ -184,7 +208,13 @@ async function readEntries(path: string): Promise<Entries> {
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
     throw invalid("not an object");
-  const { version, entries } = parsed as { version?: unknown; entries?: unknown };
+  const { version, entries, keyCheck } = parsed as {
+    version?: unknown;
+    entries?: unknown;
+    keyCheck?: unknown;
+  };
+  if (keyCheck !== undefined && (typeof keyCheck !== "string" || !/^[0-9a-f]{64}$/.test(keyCheck)))
+    throw invalid("invalid key check");
   if (version !== VERSION) throw invalid(`unsupported version ${String(version)}`);
   if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
     throw invalid("entries is not an object");
@@ -194,13 +224,17 @@ async function readEntries(path: string): Promise<Entries> {
     if (typeof value !== "string") throw invalid(`entry "${id}" is not a string`);
     result.set(id, value);
   }
-  return result;
+  return { entries: result, keyCheck: keyCheck as string | undefined };
 }
 
-async function writeEntries(path: string, entries: Entries): Promise<void> {
+async function writeEntries(path: string, entries: Entries, keyCheck: string): Promise<void> {
   // Write a sibling file and rename it so a crash never leaves a truncated vault behind.
   const temp = `${path}.tmp`;
-  const body = JSON.stringify({ version: VERSION, entries: Object.fromEntries(entries) }, null, 2);
+  const body = JSON.stringify(
+    { version: VERSION, keyCheck, entries: Object.fromEntries(entries) },
+    null,
+    2,
+  );
   try {
     await writeFile(temp, body, { mode: 0o600 });
     await rename(temp, path);
@@ -212,7 +246,7 @@ async function writeEntries(path: string, entries: Entries): Promise<void> {
 
 /**
  * Opens the credential vault under `home`. The master key comes from `PP_AGENT_MASTER_KEY`, else
- * the OS keyring, else `<home>/vault.key`. `available()` is true for every source: the file key
+ * an existing `<home>/vault.key`, else the OS keyring or a new key file for an empty vault. `available()` is true for every source: the file key
  * is weaker, but the vault still works, and MCP sign-ins are refused when it reports false.
  */
 export async function createVaultBackend(
@@ -220,8 +254,30 @@ export async function createVaultBackend(
   options: VaultOptions = {},
 ): Promise<DaemonVault> {
   await mkdir(home, { recursive: true });
-  const { key, source } = await resolveMasterKey(home, options);
   const path = join(home, VAULT_FILE);
+  const initial = await readVault(path);
+  const { key, source } = await resolveMasterKey(
+    home,
+    options,
+    initial.entries.size === 0 && initial.keyCheck === undefined,
+  );
+  const keyCheck = createHmac("sha256", key).update("PP Agent vault key check v1").digest("hex");
+  const validate = (file: VaultFile): Entries => {
+    if (file.keyCheck !== undefined) {
+      if (!timingSafeEqual(Buffer.from(file.keyCheck, "hex"), Buffer.from(keyCheck, "hex")))
+        throw new Error(
+          "The resolved master key does not match this vault. Restore its original key; the vault was left untouched.",
+        );
+    } else {
+      // Legacy vaults have no check: authenticate every entry before adding one or allowing writes.
+      for (const [id, entry] of file.entries) decrypt(key, id, entry);
+    }
+    return file.entries;
+  };
+  validate(initial);
+  if (initial.keyCheck === undefined && initial.entries.size > 0)
+    await writeEntries(path, initial.entries, keyCheck);
+  const readEntries = async (file: string): Promise<Entries> => validate(await readVault(file));
 
   /** Every operation runs after the previous one, so a read never sees a half-applied write. */
   let queue: Promise<unknown> = Promise.resolve();
@@ -243,12 +299,12 @@ export async function createVaultBackend(
       serialize(async () => {
         const entries = await readEntries(path);
         entries.set(id, encrypt(key, id, credential));
-        await writeEntries(path, entries);
+        await writeEntries(path, entries, keyCheck);
       }),
     delete: (id) =>
       serialize(async () => {
         const entries = await readEntries(path);
-        if (entries.delete(id)) await writeEntries(path, entries);
+        if (entries.delete(id)) await writeEntries(path, entries, keyCheck);
       }),
     available: async () => true,
   };

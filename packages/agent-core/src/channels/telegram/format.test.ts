@@ -165,3 +165,24 @@ describe("plain-text fallback", () => {
     await expect(sendFormatted(api, 5, { html: "a", plain: "a" })).rejects.toThrow("down");
   });
 });
+
+describe("fence opener validation", () => {
+  test("inline triple backticks remain inline", () => {
+    expect(html("```inline code```\nnext")).toBe("<code>inline code</code>\nnext");
+    expect(html("```ts extra ` invalid\nnext")).not.toContain("<pre>");
+  });
+  test("tilde fences still allow backticks in their info string", () => {
+    expect(html("~~~abcdefghijklmnopqrstuvwxy\ncode\n~~~")).toContain(
+      'class="language-abcdefghijklmnopqrstuvwxy"',
+    );
+    expect(html("~~~ts extra ` info\nconst n = 1;\n~~~")).toBe(
+      '<pre><code class="language-ts">const n = 1;</code></pre>',
+    );
+  });
+  test("splitting checks the entire info string, including beyond the cut", () => {
+    const text = "```" + "x".repeat(300) + "```\nnext";
+    const chunks = splitText(text, 100);
+    expect(chunks.join("")).toBe(text);
+    expect(chunks.every((chunk) => !chunk.includes("\n```"))).toBe(true);
+  });
+});

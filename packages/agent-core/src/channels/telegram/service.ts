@@ -1,4 +1,9 @@
-import type { ChannelState, SaveTelegramInput, TelegramStatus } from "@workspace/shared";
+import {
+  DEFAULT_WORKSPACE_ID,
+  type ChannelState,
+  type SaveTelegramInput,
+  type TelegramStatus,
+} from "@workspace/shared";
 import type { VaultCredentialStore } from "../../credentials.ts";
 import type { SettingsStore } from "../../settings-store.ts";
 import { TELEGRAM_TOKEN_KEY } from "../names.ts";
@@ -60,12 +65,6 @@ export class TelegramService implements TelegramControl {
   save(input: SaveTelegramInput): Promise<TelegramStatus> {
     return this.serial(async () => {
       const { settings, credentials, t } = this.deps;
-      const current = settings.get();
-      if (input.agentId !== null && !current.agents.some((agent) => agent.id === input.agentId))
-        throw new Error(t("channels.telegram.unknownAgent"));
-      if (!current.workspaces.some((workspace) => workspace.id === input.workspaceId))
-        throw new Error(t("channels.telegram.unknownWorkspace"));
-
       let token: string | undefined;
       let username: string | null = null;
       if (input.token !== undefined) {
@@ -85,8 +84,10 @@ export class TelegramService implements TelegramControl {
         draft.channels.telegram = {
           ...draft.channels.telegram,
           enabled: input.enabled,
-          agentId: input.agentId,
-          workspaceId: input.workspaceId,
+          agentId: draft.agents.some((agent) => agent.id === input.agentId) ? input.agentId : null,
+          workspaceId: draft.workspaces.some((workspace) => workspace.id === input.workspaceId)
+            ? input.workspaceId
+            : DEFAULT_WORKSPACE_ID,
         };
       });
       await this.reconcile();

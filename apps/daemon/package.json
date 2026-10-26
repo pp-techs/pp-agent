@@ -8,7 +8,8 @@
   "main": "dist/daemon.mjs",
   "exports": {
     "./paths": "./src/paths.ts",
-    "./framing": "./src/framing.ts"
+    "./framing": "./src/framing.ts",
+    "./auth": "./src/auth.ts"
   },
   "scripts": {
     "build": "vp pack"

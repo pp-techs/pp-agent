@@ -55,8 +55,9 @@ sequenceDiagram
     D->>D: resolve login-shell PATH, open vault, new AgentHost
     M->>D: dial again
   end
-  M->>D: hello { protocol, token, appVersion }
-  D-->>M: hello_ok { protocol, appVersion, pid }
+  D-->>M: challenge { nonce }
+  M->>D: hello { protocol, nonce, proof, appVersion }
+  D-->>M: hello_ok { protocol, appVersion, pid, proof }
   M->>D: command get_snapshot (onConnected)
   D->>D: host.init: folders, SettingsStore, ModelRuntime, syncGateways, startSession, scheduler, Telegram
   D-->>M: snapshot event and result
@@ -88,8 +89,9 @@ Details:
 
 ## The daemon socket
 
+- Unix startup holds an exclusive per-endpoint PID lock until shutdown, reclaiming it only when its recorded process is dead. Main validates the socket and its parent before connecting. Windows pipe instances inherit a restricted process default DACL granting access only to the current user and SYSTEM; failure to set it aborts startup.
 - Endpoint: `<home>/agentd.sock` (a Unix socket, mode 0600, in a folder that must belong to the current user); when that path is longer than 100 characters, `/tmp/pp-agent-<uid>/agentd.sock`. On Windows a named pipe `\\.\pipe\pp-agentd-<12 hex of sha1(home)>`.
-- Authentication: the first frame must be `hello` with the contents of `<home>/agentd.token` (64 hex characters, mode 0600, created by the daemon); a wrong token or no `hello` within 5 s closes the connection. The frame protocol is in [IPC and message flow](ipc-and-messages.md).
+- Authentication (protocol 2): the daemon sends a fresh challenge, and the client replies with `hello` containing a fresh nonce and an HMAC proof over both nonces and its version fields. The daemon replies with its own HMAC over both nonces, version fields and pid; main verifies it before adopting the connection. The shared secret in `<home>/agentd.token` (64 hex characters, mode 0600) is never sent. Invalid proofs or no `hello` within 5 s close the connection. Protocol 1 daemons must be restarted manually after upgrading. The frame protocol is in [IPC and message flow](ipc-and-messages.md).
 - A client that stops reading (more than twice the 64 MiB frame limit queued) is dropped rather than waited for.
 - The daemon listens only on this local endpoint. There is no network listener and no remote UI.
 

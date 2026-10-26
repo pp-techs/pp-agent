@@ -111,14 +111,27 @@ describe("save", () => {
     expect(settings.get().channels.telegram.agentId).toBeNull();
   });
 
-  test("rejects unknown agents and workspaces and an empty token", async () => {
+  test("normalizes deleted agent and workspace IDs on save", async () => {
     const { service, settings } = setup();
-    await expect(service.save({ ...input, agentId: "nope" })).rejects.toThrow(
-      "channels.telegram.unknownAgent",
-    );
-    await expect(service.save({ ...input, workspaceId: "nope" })).rejects.toThrow(
-      "channels.telegram.unknownWorkspace",
-    );
+    settings.update((draft) => {
+      draft.channels.telegram.agentId = "deleted-agent";
+      draft.channels.telegram.workspaceId = "deleted-workspace";
+    });
+    const saved = await service.save({
+      ...input,
+      agentId: "deleted-agent",
+      workspaceId: "deleted-workspace",
+    });
+    expect(saved.agentId).toBeNull();
+    expect(saved.workspaceId).toBe(DEFAULT_WORKSPACE_ID);
+    expect(settings.get().channels.telegram).toMatchObject({
+      agentId: null,
+      workspaceId: DEFAULT_WORKSPACE_ID,
+    });
+  });
+
+  test("rejects an empty token", async () => {
+    const { service, settings } = setup();
     await expect(service.save({ ...input, token: "  " })).rejects.toThrow(
       "channels.telegram.tokenRequired",
     );

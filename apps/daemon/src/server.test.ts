@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+import { proof } from "./auth.ts";
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { connect, type Socket } from "node:net";
 import { tmpdir } from "node:os";
@@ -27,6 +29,8 @@ class FakeHost implements DaemonHost {
 /** A test client that queues the frames it receives. */
 class TestClient {
   readonly frames: DaemonFrame[] = [];
+  challenge = "";
+  nonce = "";
   private readonly waiting: ((frame: DaemonFrame) => void)[] = [];
   readonly closed = Promise.withResolvers<void>();
   private readonly decoder = new FrameDecoder();
@@ -49,7 +53,11 @@ class TestClient {
     socket.once("connect", () => opened.resolve());
     socket.once("error", opened.reject);
     await opened.promise;
-    return new TestClient(socket);
+    const client = new TestClient(socket);
+    const challenge = await client.next();
+    if (challenge.kind !== "challenge") throw new Error("Expected server challenge");
+    client.challenge = challenge.nonce;
+    return client;
   }
 
   send(frame: unknown): void {
@@ -65,7 +73,14 @@ class TestClient {
   }
 
   async hello(token = TOKEN, protocol = DAEMON_PROTOCOL): Promise<DaemonFrame> {
-    this.send({ kind: "hello", protocol, token, appVersion: "1.0.0" });
+    this.nonce = randomBytes(32).toString("hex");
+    this.send({
+      kind: "hello",
+      protocol,
+      nonce: this.nonce,
+      proof: proof(token, "client", this.challenge, this.nonce, protocol, "1.0.0"),
+      appVersion: "1.0.0",
+    });
     return this.next();
   }
 
@@ -119,6 +134,29 @@ afterEach(async () => {
 });
 
 describe("DaemonServer", () => {
+  it("allows exactly one concurrent listener", async () => {
+    const contenders = Array.from({ length: 12 }, () => createServer());
+    const results = await Promise.all(contenders.map((server) => server.listen()));
+    expect(results.filter((result) => result === "listening")).toHaveLength(1);
+    const client = await openClient();
+    expect((await client.hello()).kind).toBe("hello_ok");
+  });
+
+  it("rejects a client proof replayed on a new connection", async () => {
+    await startServer();
+    const first = await openClient();
+    await first.hello();
+    const second = await openClient();
+    second.send({
+      kind: "hello",
+      protocol: DAEMON_PROTOCOL,
+      appVersion: "1.0.0",
+      nonce: first.nonce,
+      proof: proof(TOKEN, "client", first.challenge, first.nonce, DAEMON_PROTOCOL, "1.0.0"),
+    });
+    expect((await second.next()).kind).toBe("hello_error");
+  });
+
   it("answers hello with the protocol, version and pid", async () => {
     await startServer();
     const client = await openClient();
@@ -127,6 +165,15 @@ describe("DaemonServer", () => {
       protocol: DAEMON_PROTOCOL,
       appVersion: "1.2.3",
       pid: process.pid,
+      proof: proof(
+        TOKEN,
+        "daemon",
+        client.challenge,
+        client.nonce,
+        DAEMON_PROTOCOL,
+        "1.2.3",
+        process.pid,
+      ),
     });
   });
 

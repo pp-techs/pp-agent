@@ -1,5 +1,5 @@
-import { randomBytes, timingSafeEqual } from "node:crypto";
-import { chmod, lstat, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { dirname } from "node:path";
 import type { HostOutput } from "@workspace/agent-core";
@@ -11,6 +11,10 @@ import {
   type StoredCredential,
 } from "@workspace/shared";
 import { encodeFrame, FrameDecoder, FrameError, MAX_FRAME_BYTES } from "./framing.ts";
+
+import { proof, validNonce, validateSocketDirectory, verifyProof } from "./auth.ts";
+import { acquireEndpointLock } from "./endpoint-lock.ts";
+import { restrictWindowsPipeAccess } from "./windows-pipe.ts";
 
 const HELLO_TIMEOUT_MS = 5_000;
 const CLOSE_GRACE_MS = 1_000;
@@ -26,7 +30,7 @@ export interface DaemonHost {
 export interface DaemonServerOptions {
   /** Unix socket path, or a named pipe name on Windows. */
   endpoint: string;
-  /** Secret a client must present in `hello`. */
+  /** Shared secret used for mutual HMAC authentication; never sent on the socket. */
   token: string;
   appVersion: string;
   /** A client asked the daemon to exit. */
@@ -42,6 +46,7 @@ interface Client {
   socket: Socket;
   decoder: FrameDecoder;
   authenticated: boolean;
+  nonce: string;
   helloTimer: NodeJS.Timeout | null;
 }
 
@@ -59,12 +64,6 @@ export async function ensureToken(file: string): Promise<string> {
   // `mode` only applies when the file is created.
   await chmod(file, 0o600).catch(() => undefined);
   return token;
-}
-
-function sameToken(given: string, expected: string): boolean {
-  const a = Buffer.from(given);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 /** Whether something accepts connections at the endpoint. */
@@ -97,6 +96,7 @@ export class DaemonServer {
   };
 
   private server: Server | null = null;
+  private releaseLock: (() => Promise<void>) | null = null;
   /** Settles once the host is attached; commands that arrive while the host starts wait for it. */
   private hostReady = Promise.withResolvers<DaemonHost>();
   private readonly clients = new Set<Client>();
@@ -114,8 +114,24 @@ export class DaemonServer {
   async listen(): Promise<ListenResult> {
     const { endpoint } = this.options;
     const isPipe = process.platform === "win32";
-    if (!isPipe) await this.prepareSocketDir(dirname(endpoint));
+    if (!isPipe) {
+      await this.prepareSocketDir(dirname(endpoint));
+      this.releaseLock = await acquireEndpointLock(`${endpoint}.lock`);
+      if (!this.releaseLock) return "already-running";
+    }
+    try {
+      return await this.listenLocked(endpoint, isPipe);
+    } finally {
+      if (!this.server) {
+        await this.releaseLock?.();
+        this.releaseLock = null;
+      }
+    }
+  }
+
+  private async listenLocked(endpoint: string, isPipe: boolean): Promise<ListenResult> {
     if (await answers(endpoint)) return "already-running";
+    if (isPipe) await restrictWindowsPipeAccess();
     // Nothing answers: a socket file left by a daemon that died.
     if (!isPipe) await unlink(endpoint).catch(() => undefined);
 
@@ -123,16 +139,28 @@ export class DaemonServer {
     try {
       const listening = Promise.withResolvers<void>();
       server.once("error", listening.reject);
-      server.listen(endpoint, () => {
-        server.off("error", listening.reject);
-        listening.resolve();
-      });
+      const mask = !isPipe ? process.umask(0o077) : null;
+      try {
+        server.listen(endpoint, () => {
+          server.off("error", listening.reject);
+          listening.resolve();
+        });
+      } finally {
+        if (mask !== null) process.umask(mask);
+      }
       await listening.promise;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") return "already-running";
       throw error;
     }
-    if (!isPipe) await chmod(endpoint, 0o600);
+    if (!isPipe) {
+      try {
+        await chmod(endpoint, 0o600);
+      } catch (error) {
+        server.close();
+        throw error;
+      }
+    }
     server.on("error", (error) => this.options.log?.(`Server error: ${error.message}`));
     this.server = server;
     return "listening";
@@ -156,13 +184,13 @@ export class DaemonServer {
     await closed.promise;
     // Closing a Unix server removes its socket file; this covers a socket that was replaced.
     if (process.platform !== "win32") await unlink(this.options.endpoint).catch(() => undefined);
+    await this.releaseLock?.();
+    this.releaseLock = null;
   }
 
   private async prepareSocketDir(dir: string): Promise<void> {
     await mkdir(dir, { recursive: true, mode: 0o700 });
-    const stats = await lstat(dir);
-    if (stats.uid !== (process.getuid?.() ?? stats.uid))
-      throw new Error(`${dir} belongs to another user.`);
+    await validateSocketDirectory(dir);
   }
 
   private accept(socket: Socket): void {
@@ -170,9 +198,11 @@ export class DaemonServer {
       socket,
       decoder: new FrameDecoder(this.options.maxFrameBytes),
       authenticated: false,
+      nonce: randomBytes(32).toString("hex"),
       helloTimer: null,
     };
     this.clients.add(client);
+    this.send(client, { kind: "challenge", nonce: client.nonce });
     client.helloTimer = setTimeout(() => {
       this.options.log?.("Closing a client that sent no hello.");
       socket.destroy();
@@ -241,11 +271,26 @@ export class DaemonServer {
 
   /**
    * A wrong protocol number still gets `hello_ok` with the daemon's own, so a newer app can see
-   * the mismatch and ask this daemon to shut down. Only a bad token is turned away.
+   * the mismatch and ask this daemon to shut down. Only a bad authentication proof is turned away.
    */
   private hello(client: Client, frame: Extract<ClientFrame, { kind: "hello" }>): void {
-    if (typeof frame.token !== "string" || !sameToken(frame.token, this.options.token)) {
-      this.reject(client, "Wrong token.");
+    if (
+      !validNonce(frame.nonce) ||
+      typeof frame.protocol !== "number" ||
+      typeof frame.appVersion !== "string" ||
+      !verifyProof(
+        frame.proof,
+        proof(
+          this.options.token,
+          "client",
+          client.nonce,
+          frame.nonce,
+          frame.protocol,
+          frame.appVersion,
+        ),
+      )
+    ) {
+      this.reject(client, "Invalid authentication proof.");
       return;
     }
     clearTimeout(client.helloTimer ?? undefined);
@@ -256,6 +301,15 @@ export class DaemonServer {
       protocol: DAEMON_PROTOCOL,
       appVersion: this.options.appVersion,
       pid: process.pid,
+      proof: proof(
+        this.options.token,
+        "daemon",
+        client.nonce,
+        frame.nonce,
+        DAEMON_PROTOCOL,
+        this.options.appVersion,
+        process.pid,
+      ),
     });
   }
 
