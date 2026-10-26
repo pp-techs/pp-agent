@@ -1,5 +1,16 @@
 # @workspace/desktop
 
+## 0.9.0
+
+### Minor Changes
+
+- 7da39e8: Voice input now prefers a local model: the microphone button turns speech into text with whisper.cpp on your own computer, with nothing sent anywhere and no key needed. Settings › General › Voice input offers "This computer (whisper.cpp)" by default with a model to download (tiny to medium, 74 MB–1.4 GB); whisper.cpp is found on the PATH (`brew install whisper-cpp`) or bundled with the app. A transcription service with a key is still available as a choice. Recordings are converted to 16 kHz wav in the app, and formats whisper cannot read itself (Telegram voice notes) go through ffmpeg when it is installed. Telegram voice messages use the same setting.
+- 7da39e8: Long-term memory is now scoped: every note lives either everywhere or in one workspace only, so project facts no longer leak into other projects. `memory_save` takes a `scope` (`global` or `workspace`), the tools and the `## Memory` prompt section show a conversation every workspace's notes plus its own, and Settings › Memory groups the notes by place with a place picker when adding (editing can move a note). The workspace editor manages that workspace's notes directly. Each place holds its own 200 notes; deleting a workspace forgets its notes.
+
+### Patch Changes
+
+- 7da39e8: Settings › Tools keeps a short page again: the web search services now live in their own page, Settings › Tools › Web search, which opens from a summary row showing which services are on and which still need setup — like the Telegram setup in Settings › Channels.
+
 ## 0.8.1
 
 ### Patch Changes
