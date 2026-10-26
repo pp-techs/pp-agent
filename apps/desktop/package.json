@@ -21,7 +21,7 @@
   "dependencies": {
     "@earendil-works/pi-coding-agent": "catalog:",
     "@napi-rs/keyring": "^2.1.2",
-    "electron-updater": "^6.8.9",
+    "electron-updater": "^6.8.11",
     "fflate": "catalog:",
     "i18next": "catalog:",
     "officeparser": "catalog:",
