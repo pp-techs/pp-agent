@@ -47,13 +47,13 @@ export function resolveHome(
 
 /** Where the daemon listens: a socket in home/run, a short path when that is too long, a pipe on Windows. */
 export function endpointFor(home: string, system: Platform = currentPlatform()): string {
+  const id = createHash("sha1").update(home).digest("hex").slice(0, 12);
   if (system.platform === "win32") {
-    const id = createHash("sha1").update(home).digest("hex").slice(0, 12);
     return `\\\\.\\pipe\\pp-agentd-${id}`;
   }
   const socket = join(home, "run", "agentd.sock");
   return socket.length > MAX_SOCKET_PATH
-    ? join("/tmp", `pp-agent-${system.uid}`, "agentd.sock")
+    ? join("/tmp", `pp-agent-${system.uid}`, `agentd-${id}.sock`)
     : socket;
 }
 

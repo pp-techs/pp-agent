@@ -13,8 +13,22 @@ describe("endpointFor", () => {
   it("keeps the private temporary fallback for long Unix paths", () => {
     const home = `/${"x".repeat(83)}`;
     expect(endpointFor(home, linux)).toBe(join(home, "run", "agentd.sock"));
-    expect(endpointFor(`${home}x`, linux)).toBe("/tmp/pp-agent-1000/agentd.sock");
+    expect(endpointFor(`${home}x`, linux)).toMatch(
+      /^\/tmp\/pp-agent-1000\/agentd-[0-9a-f]{12}\.sock$/,
+    );
   });
+
+  it.each(["linux", "darwin"] as const)(
+    "keeps long-home fallbacks stable, distinct and short on %s",
+    (platform) => {
+      const system = { platform, uid: 1000 };
+      const home = `/${"x".repeat(200)}`;
+      const endpoint = endpointFor(home, system);
+      expect(endpoint).toBe(endpointFor(home, system));
+      expect(endpoint).not.toBe(endpointFor(`${home}y`, system));
+      expect(Buffer.byteLength(endpoint)).toBeLessThanOrEqual(100);
+    },
+  );
 
   it("keeps a stable, home-specific named pipe on Windows", () => {
     const windows = { platform: "win32", uid: 0 } as const;
