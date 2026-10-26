@@ -235,22 +235,9 @@
     },
     "defaults": {
       "legend": "Defaults for new chats",
-      "description": "What a new chat in this workspace starts with. You can still change them in the chat.",
+      "description": "The agent a new chat in this workspace starts with. You can still change it in the chat.",
       "agent": "Agent",
-      "agentInherit": "The agent picked last",
-      "modelInherit": "The default model",
-      "modelHelp": "The agent's own model, when it has one, comes first.",
-      "thinking": "Thinking",
-      "thinkingInherit": "The level picked last"
-    },
-    "thinkingLevels": {
-      "off": "Off",
-      "minimal": "Minimal",
-      "low": "Low",
-      "medium": "Medium",
-      "high": "High",
-      "xhigh": "Extra high",
-      "max": "Max"
+      "agentInherit": "The agent picked last"
     }
   }
 }

@@ -2,11 +2,11 @@
 
 ## Contract first
 
-Every new capability starts in `packages/shared/src/index.ts`, the contract for main process, agent process, and renderer:
+Every new capability starts in `packages/shared/src/index.ts`, the contract for main process, daemon, and renderer:
 
 1. Add the agent command to `AgentCommandMap` (request shape and result type) and/or a variant to `AgentEvent`.
 2. Add IPC channel names to `IPC` and methods to `DesktopBridge` only when the main process itself must act (file pickers, reveal, external links).
-3. Implement the handler in `apps/desktop/src/agent/index.ts` (or main), then the renderer call.
+3. Implement the handler in `packages/agent-core/src/index.ts` (or main), then the renderer call.
 
 `vp check` type-checks all three sides against the contract.
 
@@ -14,15 +14,15 @@ Every new capability starts in `packages/shared/src/index.ts`, the contract for 
 
 - The renderer calls `bridge.agent.command({ type: … })` through the preload bridge (`window.ppAgent`). Commands return a result or throw; long-running effects (streaming, settings applied, tool approvals) arrive as agent events.
 - Commands such as `prompt` are fire-and-forget: do not wait on them for UI state. State flows back through `snapshot`, streaming, and `settings_changed` events.
-- When settings change, the agent process emits `settings_changed` with the affected `SettingsScope`s; the renderer invalidates those query keys.
+- When settings change, the daemon emits `settings_changed` with the affected `SettingsScope`s; the renderer invalidates those query keys.
 
 ```mermaid
 sequenceDiagram
   participant R as Renderer
   participant M as Main process
-  participant A as Agent process
+  participant A as Daemon
   R->>M: bridge.agent.command(cmd)
-  M->>A: postMessage {kind: "command"}
+  M->>A: command frame {kind: "command"}
   A-->>M: result
   M-->>R: resolved promise
   A-->>M: AgentEvent (settings_changed, snapshot, …)

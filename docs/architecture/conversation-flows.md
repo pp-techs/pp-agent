@@ -1,17 +1,17 @@
 # Conversation flows
 
-How a prompt becomes a streamed reply, and how tool calls are gated. Code: `AgentHost` in `apps/desktop/src/agent/index.ts`, `apps/desktop/src/agent/attachments.ts`, `apps/desktop/src/agent/transcript.ts`, `apps/desktop/src/agent/tools.ts`.
+How a prompt becomes a streamed reply, and how tool calls are gated. Code: `AgentHost` in `packages/agent-core/src/index.ts`, `packages/agent-core/src/attachments.ts`, `packages/agent-core/src/transcript.ts`, `packages/agent-core/src/tools.ts`.
 
 ## Sending a prompt with attachments
 
-Attachments reach the agent process as `Attachment` objects with either a `path` (picked with `files.pick()` or dropped, resolved by `files.pathFor`) or base64 `data` (pasted images).
+Attachments reach the daemon as `Attachment` objects with either a `path` (picked with `files.pick()` or dropped, resolved by `files.pathFor`) or base64 `data` (pasted images).
 
 ```mermaid
 sequenceDiagram
   actor U as Person
   participant R as Renderer
   participant M as Main process
-  participant A as Agent process
+  participant A as Daemon
   participant Pi as Pi AgentSession
   participant LLM as Model provider
   U->>R: Send text + attachments
@@ -55,7 +55,7 @@ Message actions (`regenerate`, `edit_message`, `branch_session`) throw "Wait for
 
 ## Approval gate
 
-Renderer ↔ agent process arrows in the diagrams below are relayed by the preload bridge and the main process.
+Renderer ↔ daemon arrows in the diagrams below are relayed by the preload bridge and the main process.
 
 Every tool call passes through the `approval-gate` extension registered first in `startSession`. It listens to Pi's `tool_call` event and either lets the call run, blocks it with a reason the model sees, or waits for the person.
 
@@ -118,3 +118,33 @@ sequenceDiagram
 ### Abort and pending approvals
 
 A pending approval blocks the run, so `abort`, `new_chat`, `open_session` and `delete_session` of the open conversation first deny every pending approval (`denyAllApprovals`) and then abort the session. Pending approvals are part of the snapshot, so a renderer reload shows them again.
+
+## Chat channel turns (Telegram)
+
+A message from the paired person on Telegram becomes a turn without the window. The channel (`packages/agent-core/src/channels/telegram/`) long-polls the Bot API and talks to the agent only through `AgentHost.gateway` (`ChannelGateway`: `runTurn`, `newConversation`, `abort`, `transcribe`). Each chat key (`telegram:<chatId>`) has its own Pi session, separate from the conversation open in the window, built with the agent and workspace chosen in Settings › Background. Turns of one chat run one at a time; up to 5 more messages wait, and the rest get a "busy" reply.
+
+```mermaid
+sequenceDiagram
+  actor U as Person (Telegram)
+  participant T as Telegram channel
+  participant H as AgentHost.gateway
+  participant Pi as Chat's Pi session
+  U->>T: text, photo, document or voice
+  T->>T: owner check (others get no answer)
+  T->>H: runTurn("telegram:<id>", { text, attachments }, hooks)
+  H->>Pi: prompt (session from channels.json, or a new one)
+  Pi-->>T: onText / onTool (reply edited live)
+  Pi->>H: tool_call that needs approval
+  H->>T: askApproval(request)
+  T->>U: message with Approve / Deny buttons
+  U->>T: tap (or no answer for 10 minutes = deny)
+  T-->>H: approved or denied
+  Pi-->>T: final text
+  T->>U: reply (split to fit Telegram's limit)
+```
+
+- **Who.** Only the paired owner is answered; strangers are ignored. A tap on Approve or Deny counts only from the owner. `/pair CODE` works while a pairing window (10 minutes, one use, 5 wrong tries lock it for 15 minutes) is open.
+- **Same gate as the window.** The chat session uses the agent's tool list and the same `approval-gate`. Requests are asked in the chat instead of the window; an unanswered one is denied after 10 minutes, and `/stop` or `/new` denies all pending ones.
+- **Input.** Text, photos (sent as images), documents (copied to the workspace's `attachments/`, up to 20 MiB), and voice or audio (transcribed with the voice input provider set up in Settings; without one the reply says why it failed). Other message kinds get an "unsupported" reply.
+- **Commands.** `/new` starts a fresh conversation for the chat (drops its entry in `channels.json`), `/stop` aborts the turn and clears the queue, `/help`, `/start`. `/model` and `/thinking` call `gateway.pickOptions` / `gateway.pick`, which open the chat's own session and call `session.setModel` / `setThinkingLevel` (Pi saves them with the conversation). `/agent` and `/workspace` call `gateway.options` / `gateway.choose`: the pick is stored per chat in `channels.json` (`choices`), the session is closed and reopened on the next turn; a workspace change also drops the chat's conversation, an agent change appends an agent entry to it.
+- **History.** Each chat conversation is a saved session titled `💬 Telegram – <date>`, so it also shows in the window's history. After a restart the daemon reopens the session named in `channels.json`; a chat session idle for 30 minutes is released from memory (not deleted).

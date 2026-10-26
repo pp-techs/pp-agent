@@ -15,7 +15,8 @@ Everyone may edit everything in Settings; there is no admin lock (product owner'
 
 - Let business users work with their documents and business systems in plain language, without a terminal.
 - Keep the user in control of anything that changes data: every non-read-only action passes the approval gate unless Settings allows it.
-- Keep secrets safe: API keys are encrypted with the OS keychain and only handed to the agent process.
+- Keep secrets safe: API keys are encrypted in the daemon's vault (master key in the OS keyring when one exists) and never sent to the window.
+- Keep working when the window is closed: the agent can run as a background service on the person's own computer, so scheduled tasks run on time and the person can talk to the agent from their phone through Telegram, with approvals asked in the chat (see `use-case-background-and-telegram.md`).
 - Let the tech team package know-how as agents and skills that business users pick from a menu.
 - Work with any model: Pi built-in providers or custom gateways.
 
@@ -24,6 +25,7 @@ Everyone may edit everything in Settings; there is no admin lock (product owner'
 - No subscription OAuth sign-in for LLM providers; providers use API keys (product owner's decision).
 - No separate "chat mode"; agents cover that need (see `key-decisions.md`).
 - The renderer has no network access; all I/O goes through the preload bridge (`README.md`).
+- No remote UI for now, and no network listener for the daemon: it is reachable only through its local socket. Remote access is Telegram only, for one paired person.
 
 ## Use cases
 
@@ -34,5 +36,6 @@ Everyone may edit everything in Settings; there is no admin lock (product owner'
 - `use-case-skills.md`
 - `use-case-chat-history.md`
 - `use-case-thinking-and-slash-commands.md`
+- `use-case-background-and-telegram.md`
 
 Rules across all use cases: `business-rules.md`. Known limits: `constraints-and-limitations.md`. Rationale: `key-decisions.md`.

@@ -6,15 +6,16 @@ const shared: PackUserConfig = {
   target: "node24",
   outDir: "dist",
   sourcemap: true,
-  // Electron is provided by the runtime; pi stays in node_modules (it loads assets and wasm at runtime).
-  deps: { neverBundle: ["electron"] },
+  // Electron is provided by the runtime; pi stays in node_modules (it loads assets and wasm at runtime),
+  // and so does the keyring (a native addon).
+  deps: { neverBundle: ["electron", "@napi-rs/keyring"] },
 };
 
 export default defineConfig({
   pack: [
     {
       ...shared,
-      entry: { main: "src/main/index.ts", agent: "src/agent/index.ts" },
+      entry: { main: "src/main/index.ts", daemon: "../daemon/src/index.ts" },
       format: "esm",
     },
     {

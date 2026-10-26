@@ -5,7 +5,7 @@
 ## Configure
 
 - **Settings › MCP servers** adds, edits, removes, enables/disables servers, shows status, reconnects, and signs in/out of OAuth servers.
-- A raw JSON editor accepts configurations pasted from Claude Desktop or Cursor; the file is `<user-data>/agent/mcp.json` (`mcpServers` format). Keys the app does not edit (`oauth`, `toolExposure`, …) are preserved on save (`apps/desktop/src/agent/mcp.ts`).
+- A raw JSON editor accepts configurations pasted from Claude Desktop or Cursor; the file is `<user-data>/agent/mcp.json` (`mcpServers` format). Keys the app does not edit (`oauth`, `toolExposure`, …) are preserved on save (`packages/agent-core/src/mcp.ts`).
 - `exposure: "direct"` declares tools to the model; the default `codemode` lets the model call them from a sandboxed script, suited to large servers.
 - HTTP servers without an `Authorization` header can sign in with OAuth from Settings.
 
@@ -18,7 +18,7 @@
 ```mermaid
 sequenceDiagram
   participant U as User
-  participant A as Agent process
+  participant A as Daemon
   participant S as MCP server
   A->>A: tool call mcp__server__tool
   alt readOnlyHint and policy auto, or policy allow
@@ -33,4 +33,4 @@ sequenceDiagram
   S-->>A: result
 ```
 
-Discovery tools (`codemode`, `tool_search`, MCP resource tools) are always allowed; each tool call they make passes the gate on its own (`apps/desktop/src/agent/tools.ts`).
+Discovery tools (`codemode`, `tool_search`, MCP resource tools) are always allowed; each tool call they make passes the gate on its own (`packages/agent-core/src/tools.ts`).

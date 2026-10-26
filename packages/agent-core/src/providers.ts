@@ -10,7 +10,7 @@ import type {
 } from "@workspace/shared";
 import type { AuthPrompts } from "./auth-prompts.ts";
 import { t } from "./i18n.ts";
-import { emit, send } from "./ipc.ts";
+import { emit, openUrl } from "./ipc.ts";
 
 type ProviderConfigInput = Parameters<ModelRuntime["registerProvider"]>[1];
 
@@ -348,7 +348,7 @@ export function authInteraction(prompts: AuthPrompts, flowTitle: string): AuthIn
           info(event.message);
           break;
         case "auth_url":
-          send({ kind: "open_url", url: event.url });
+          openUrl(event.url);
           info(event.instructions ?? t("providers.continueInBrowser"), event.url);
           break;
         case "device_code":

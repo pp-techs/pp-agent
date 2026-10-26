@@ -1,12 +1,12 @@
 /**
- * Agent utility process. Runs the pi SDK session off the main thread so a slow tool or a crash
- * never freezes the window. Talks to the main process over `process.parentPort`.
+ * The agent host: runs the Pi SDK session and every command the UI can send. It knows nothing of
+ * the process around it; `HostEnvironment` supplies the event sink, the vault, and service control.
  */
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import type { Api, AssistantMessage, Model } from "@earendil-works/pi-ai";
+import type { Api, AssistantMessage, Credential, Model } from "@earendil-works/pi-ai";
 import {
   type AgentSession,
   type AgentSessionEvent,
@@ -37,6 +37,7 @@ import {
   type SaveScheduledTaskInput,
   type ScheduledTask,
   type ScheduledTaskView,
+  type ServiceStatus,
   type TaskRun,
   type VoiceSettings,
   type VoiceView,
@@ -47,7 +48,7 @@ import {
   type GatewayConfig,
   type GatewayModel,
   type GatewayView,
-  type MainToAgentMessage,
+  type StoredCredential,
   type McpServerSettings,
   type MemoryEntry,
   type MemoryView,
@@ -97,13 +98,33 @@ import {
   workspaceForCwd,
   workspacePromptSection,
 } from "./workspaces.ts";
+import {
+  CHAT_IDLE_MS,
+  channelTitle,
+  ChatSessionMap,
+  idleChats,
+  KeyedQueue,
+  turnResult,
+  assistantText,
+  chatAgentId,
+} from "./channel-sessions.ts";
+import { TelegramService } from "./channels/telegram/index.ts";
+import type {
+  ChannelGateway,
+  ChannelInput,
+  ChatChoices,
+  ChatPick,
+  ChatPickKind,
+  TurnHooks,
+  TurnResult,
+} from "./channels/types.ts";
 import { buildPrompt, splitAttachedFiles, withAttachedFiles } from "./attachments.ts";
 import { AuthPrompts } from "./auth-prompts.ts";
 import { pruneToolOutputs } from "./context.ts";
 import { VaultCredentialStore } from "./credentials.ts";
 import { createReadDocumentTool } from "./documents.ts";
 import { createOfficeTools } from "./office/tools.ts";
-import { resourcePath } from "./office/run.ts";
+import { configureResourcesDir, resourcePath } from "./office/run.ts";
 import { conversationToHtml, conversationToMarkdown, exportFileName } from "./export.ts";
 import {
   branchEntries,
@@ -116,7 +137,8 @@ import {
   userContent,
 } from "./history.ts";
 import { configureLanguage, currentLanguage, t } from "./i18n.ts";
-import { emit, errorMessage, send } from "./ipc.ts";
+import type { HostEnvironment, ServiceControl } from "./host-io.ts";
+import { configureOutput, emit, errorMessage, openUrl } from "./ipc.ts";
 import { buildOverview, McpCommands, McpConfigFile, McpRegistrations } from "./mcp.ts";
 import { VaultMcpAuthStore } from "./mcp-auth.ts";
 import {
@@ -210,6 +232,8 @@ interface Services {
   mcpServers: McpRegistrations;
   /** Speech to text for the message box. */
   voice: VoiceService;
+  /** Which saved conversation each chat of a channel continues (`channels.json`). */
+  chatSessions: ChatSessionMap;
 }
 
 /**
@@ -222,8 +246,47 @@ interface SessionScope {
   workspace: () => WorkspaceProfile;
   mcpServers: McpRegistrations;
   approvalGate: ExtensionFactory;
-  /** Extra system prompt section (headless runs tell the model nobody is watching). */
-  systemNote?: string;
+  /** Extra system prompt section: headless runs tell the model nobody is watching, chats where it replies. */
+  systemNote?: { section: string; text: string };
+}
+
+/** What a chat's turn is doing right now; the session events and the approval gate read it. */
+interface ChatTurn {
+  hooks: TurnHooks;
+  /** Finished assistant messages' text, in order; the streamed text is these plus the live one. */
+  texts: string[];
+  /** The last assistant message of the turn. */
+  reply?: AssistantMessage;
+}
+
+interface ChatRuntime {
+  turn: ChatTurn | null;
+  /** Approvals waiting on the person in the chat; `false` is sent when the turn stops. */
+  pending: Set<(approved: boolean) => void>;
+  /** The person stopped the turn. */
+  stopped: boolean;
+}
+
+/** A chat's own Pi session, apart from the conversation open in the window. */
+type ChatSession = ChatRuntime & {
+  session: AgentSession;
+  mcpServers: McpRegistrations;
+  unsubscribe: () => void;
+  /** Agent and workspace the session was built for; a change in Settings rebuilds it. */
+  agentId: string;
+  workspaceId: string;
+};
+
+/** How often idle chat sessions are looked for. */
+const CHAT_SWEEP_MS = 60_000;
+
+/** System prompt section of a chat session: where the answer is shown. */
+function channelNote(label: string): string {
+  return [
+    `You are replying to the person through ${label}, in a chat on their phone.`,
+    "Keep answers short and plain; avoid long tables and heavy formatting.",
+    "Tools that need the person's approval will ask them in this chat; wait for the answer.",
+  ].join("\n");
 }
 
 /** Pi's error when the messages it keeps already cover the whole conversation. */
@@ -246,10 +309,10 @@ function scheduledTaskNote(name: string): string {
   ].join("\n");
 }
 
-class AgentHost {
+export class AgentHost {
   private services: Services | null = null;
   private readonly ready = Promise.withResolvers<Services>();
-  readonly credentials = new VaultCredentialStore();
+  readonly credentials: VaultCredentialStore;
   /**
    * Encrypted home of MCP sign-in tokens; null when the OS cannot encrypt, and Pi keeps its plain
    * `mcp-auth.json` (the MCP section tells the person).
@@ -278,14 +341,71 @@ class AgentHost {
   private scheduler: Scheduler | null = null;
   /** Session of the scheduled task being run, by task id, so deleting the task can stop it. */
   private readonly taskSessions = new Map<string, AgentSession>();
+  /** Telegram bot; null until the services are ready. */
+  private telegram: TelegramService | null = null;
+  /** Open Pi sessions of chats by chat key (`telegram:<id>`); idle ones are released. */
+  private readonly chats = new Map<string, ChatSession>();
+  /** When each open chat session last finished a turn. */
+  private readonly chatUsed = new Map<string, number>();
+  /** One turn at a time per chat. */
+  private readonly chatQueue = new KeyedQueue();
+  /** Turns of each chat that are running or waiting; a model or level cannot change meanwhile. */
+  private readonly turnsPending = new Map<string, number>();
+  private chatSweep: NodeJS.Timeout | null = null;
 
-  constructor() {
+  /** What chat channels use to talk to the agent. */
+  readonly gateway: ChannelGateway = {
+    runTurn: (chatKey, input, hooks) => {
+      this.turnsPending.set(chatKey, (this.turnsPending.get(chatKey) ?? 0) + 1);
+      return this.chatQueue
+        .run(chatKey, () => this.chatTurn(chatKey, input, hooks))
+        .finally(() => {
+          const left = (this.turnsPending.get(chatKey) ?? 1) - 1;
+          if (left > 0) this.turnsPending.set(chatKey, left);
+          else this.turnsPending.delete(chatKey);
+        });
+    },
+    newConversation: (chatKey) => this.newChat(chatKey),
+    abort: (chatKey) => this.abortChat(chatKey),
+    options: async (chatKey) => this.chatOptions(chatKey),
+    choose: (chatKey, choice) => this.chooseForChat(chatKey, choice),
+    pickOptions: (chatKey, kind) => this.chatPickOptions(chatKey, kind),
+    pick: (chatKey, kind, id) => this.chatPick(chatKey, kind, id),
+    // The size limit applies; the length of a Telegram voice note is not known here.
+    transcribe: (data, mimeType) =>
+      this.requireServices().voice.transcribe(Buffer.from(data).toString("base64"), mimeType, 0),
+  };
+
+  /** Registers the daemon with the OS as a login service; the service commands call it. */
+  readonly service: ServiceControl;
+
+  constructor(environment: HostEnvironment) {
+    configureOutput(environment.output);
+    this.credentials = new VaultCredentialStore(environment.vault);
+    this.service = environment.service;
     // Commands wait for `ready`; a failed init must not also surface as an unhandled rejection.
     this.ready.promise.catch(() => undefined);
   }
 
+  /**
+   * Stores credentials from the old desktop vault that the vault does not have yet; nothing already
+   * saved is overwritten. Goes through the credential store so its cache stays accurate.
+   */
+  async importCredentials(entries: Record<string, StoredCredential>): Promise<void> {
+    let imported = false;
+    for (const [id, credential] of Object.entries(entries)) {
+      await this.credentials.modify(id, async (current) => {
+        if (current !== undefined) return undefined;
+        imported = true;
+        return credential as Credential;
+      });
+    }
+    if (imported) this.changed(["providers", "models"], { model: true });
+  }
+
   async init(paths: AgentPaths, systemLocale: string): Promise<void> {
     try {
+      configureResourcesDir(paths.resourcesDir);
       // Pi's built-in extensions (MCP config, MCP OAuth tokens, logs) resolve the agent directory
       // from this variable rather than the session options; point them at the app's folder.
       process.env.PI_CODING_AGENT_DIR = paths.agentDir;
@@ -322,6 +442,7 @@ class AgentHost {
         mcpConfig,
         voice: new VoiceService(runtime, settings),
         memory: new MemoryStore(join(dirname(paths.settingsFile), "memory.json")),
+        chatSessions: new ChatSessionMap(join(dirname(paths.settingsFile), "channels.json")),
         mcpServers: new McpRegistrations(mcpConfig, (name) => {
           const { mcpServers } = this.currentAgent();
           return mcpServers === null || mcpServers.includes(name);
@@ -339,13 +460,42 @@ class AgentHost {
         });
       }
       await this.startSession(this.newSessionManager());
+      this.telegram = new TelegramService({
+        settings,
+        credentials: this.credentials,
+        gateway: this.gateway,
+        changed: () => emit({ type: "settings_changed", scopes: ["background"] }),
+        t: (key, vars) => t(key, vars),
+      });
       this.ready.resolve(services);
       emit({ type: "snapshot", snapshot: this.snapshot() });
       this.startScheduler();
+      if (settings.get().channels.telegram.enabled)
+        this.telegram
+          .start()
+          .catch((error: unknown) => emit({ type: "error", message: errorMessage(error) }));
     } catch (error) {
       this.ready.reject(error);
       throw error;
     }
+  }
+
+  /**
+   * Stops everything the host started: the Telegram bot, the scheduler, running scheduled tasks,
+   * chat sessions, and the open conversation. The process may exit afterwards.
+   */
+  async dispose(): Promise<void> {
+    await this.telegram?.stop().catch((error: unknown) => console.error(error));
+    this.scheduler?.stop();
+    for (const session of this.taskSessions.values()) void session.abort().catch(() => undefined);
+    for (const chat of this.chats.values()) {
+      chat.stopped = true;
+      this.denyChatApprovals(chat);
+    }
+    await Promise.allSettled([...this.chats.values()].map((chat) => chat.session.abort()));
+    for (const chatKey of [...this.chats.keys()]) this.closeChat(chatKey);
+    await this.abort().catch(() => undefined);
+    this.disposeSession();
   }
 
   async handle(command: AgentCommand): Promise<unknown> {
@@ -523,6 +673,20 @@ class AgentHost {
         return {
           text: await services.voice.transcribe(command.data, command.mimeType, command.durationMs),
         };
+
+      case "get_service_status":
+        return this.service.status();
+      case "set_service_installed":
+        return this.setServiceInstalled(command.installed);
+
+      case "get_telegram_status":
+        return this.requireTelegram().status();
+      case "save_telegram":
+        return this.requireTelegram().save(command.config);
+      case "start_telegram_pairing":
+        return this.requireTelegram().startPairing();
+      case "forget_telegram":
+        return this.requireTelegram().forget();
 
       default: {
         const unknown: never = command;
@@ -939,7 +1103,7 @@ class AgentHost {
 
   /**
    * Model for a conversation: `preferred` (a saved chat's own model) when still usable, else the
-   * agent's model, else the workspace's, else the default model, else the first available one.
+   * agent's model, else the default model, else the first available one.
    */
   private chooseModel(
     preferred: ModelRef | null,
@@ -954,7 +1118,6 @@ class AgentHost {
     return (
       findAvailable(runtime, preferred) ??
       findAvailable(runtime, scope.agent().model) ??
-      findAvailable(runtime, scope.workspace().model) ??
       findAvailable(runtime, settings.get().defaultModel) ??
       first
     );
@@ -1016,7 +1179,7 @@ class AgentHost {
         // Pi's own mcp.json loading is off: the agent extension registers the agent's servers.
         createMcpExtension({
           loadConfig: () => ({ servers: [], errors: [] }),
-          openUrl: (url) => send({ kind: "open_url", url }),
+          openUrl,
           ...(this.mcpAuth ? { credentials: this.mcpAuth.asPiStore() } : {}),
         }),
       ],
@@ -1047,7 +1210,7 @@ class AgentHost {
       thinkingLevel:
         sessionManager.buildSessionContext().messages.length > 0
           ? undefined
-          : (scope.workspace().thinkingLevel ?? settings.get().thinkingLevel),
+          : settings.get().thinkingLevel,
       tools: toolSelection(settings.get(), scope.agent().tools),
       customTools: [
         ...appTools,
@@ -1249,7 +1412,7 @@ class AgentHost {
         const workspaceSection = workspacePromptSection(scope.workspace());
         if (workspaceSection) sections.workspace = workspaceSection;
         else delete sections.workspace;
-        if (scope.systemNote) sections.scheduled_task = scope.systemNote;
+        if (scope.systemNote) sections[scope.systemNote.section] = scope.systemNote.text;
         const memory = this.services?.memory;
         if (memory && this.memoryOn(scope.agent()))
           sections.memory = memorySection(memory.entries());
@@ -1474,16 +1637,15 @@ class AgentHost {
       scopes.push("tools");
       apply.tools = true;
     }
-    // A conversation that has not started yet follows the new default model, unless its agent or
-    // workspace brings its own.
+    // A conversation that has not started yet follows the new default model, unless its agent
+    // brings its own.
     const session = this.session;
     if (
       patch.defaultModel &&
       session &&
       !this.running &&
       session.messages.length === 0 &&
-      !findAvailable(runtime, this.currentAgent().model) &&
-      !findAvailable(runtime, this.currentWorkspace().model)
+      !findAvailable(runtime, this.currentAgent().model)
     ) {
       const model = findAvailable(runtime, patch.defaultModel);
       if (model) {
@@ -2038,7 +2200,7 @@ class AgentHost {
           },
           SCHEDULED_DENIED_REASON,
         ),
-        systemNote: scheduledTaskNote(task.name),
+        systemNote: { section: "scheduled_task", text: scheduledTaskNote(task.name) },
       });
       if (!session.model) throw new Error(t("models.noneChosen"));
       this.taskSessions.set(task.id, session);
@@ -2082,6 +2244,387 @@ class AgentHost {
     });
     emit({ type: "settings_changed", scopes: ["scheduledTasks"] });
     emit({ type: "sessions_changed" });
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Background service and chat channels
+  // -------------------------------------------------------------------------------------------
+
+  private async setServiceInstalled(installed: boolean): Promise<ServiceStatus> {
+    if (installed) await this.service.install();
+    else await this.service.uninstall();
+    const status = await this.service.status();
+    emit({ type: "settings_changed", scopes: ["background"] });
+    return status;
+  }
+
+  private requireTelegram(): TelegramService {
+    if (!this.telegram) throw new Error(t("app.starting"));
+    return this.telegram;
+  }
+
+  /**
+   * Label, agent, and workspace of a chat (key `telegram:<id>`). Workspace: what the person picked
+   * in the chat with `/workspace`, else the channel's own choice in Settings. Agent: what they
+   * picked with `/agent`, else the one pinned for the channel, else the workspace's own agent,
+   * else the built-in one. A pick whose agent or workspace was deleted is ignored.
+   */
+  private channelOf(chatKey: string): { label: string; agentId: string; workspaceId: string } {
+    if (chatKey.startsWith("telegram:")) {
+      const { settings, chatSessions } = this.requireServices();
+      const { agents, workspaces, channels } = settings.get();
+      const pick = chatSessions.choice(chatKey);
+      const known = (id: string) => agents.some((agent) => agent.id === id);
+      const workspaceId =
+        pick.workspaceId && workspaces.some((workspace) => workspace.id === pick.workspaceId)
+          ? pick.workspaceId
+          : channels.telegram.workspaceId;
+      const workspace = findWorkspace(workspaces, workspaceId);
+      return {
+        label: "Telegram",
+        agentId: chatAgentId(
+          [pick.agentId, channels.telegram.agentId, workspace.agentId],
+          known,
+          DEFAULT_AGENT_ID,
+        ),
+        workspaceId,
+      };
+    }
+    throw new Error(`Unknown chat channel: ${chatKey}`);
+  }
+
+  private chatOptions(chatKey: string): ChatChoices {
+    const { agents, workspaces } = this.requireServices().settings.get();
+    const channel = this.channelOf(chatKey);
+    return {
+      agents: agents.map((agent) => ({ id: agent.id, label: `${agent.icon} ${agent.name}` })),
+      workspaces: workspaces.map((workspace) => ({
+        id: workspace.id,
+        label: `${workspace.icon} ${workspace.name}`,
+      })),
+      // A deleted default falls back to the built-in one when the session opens.
+      agentId: findAgent(agents, channel.agentId).id,
+      workspaceId: findWorkspace(workspaces, channel.workspaceId).id,
+    };
+  }
+
+  /** Models that can run, or the thinking levels of the chat's current model. */
+  private chatPickOptions(chatKey: string, kind: ChatPickKind): Promise<ChatPick> {
+    if (this.turnsPending.has(chatKey)) throw new Error(t("conversations.waitForAnswer"));
+    return this.chatQueue.run(chatKey, async () => {
+      const { session } = await this.chatSession(chatKey);
+      if (kind === "thinking") {
+        if (!session.model || !session.supportsThinking()) return { options: [], currentId: null };
+        return {
+          options: session
+            .getAvailableThinkingLevels()
+            .map((level) => ({ id: level, label: level })),
+          currentId: session.thinkingLevel,
+        };
+      }
+      const models = await availableModels(this.requireServices().runtime, this.gatewayIds);
+      const current = session.model;
+      return {
+        options: models
+          .filter((model) => !model.needsKey)
+          .map((model) => ({
+            id: modelPickId(model),
+            label: `${model.name} · ${model.providerName}`,
+          })),
+        currentId: current
+          ? modelPickId({ provider: current.provider, modelId: current.id })
+          : null,
+      };
+    });
+  }
+
+  /** Changes the model or thinking level of this chat's conversation (not the app's defaults). */
+  private chatPick(chatKey: string, kind: ChatPickKind, id: string): Promise<void> {
+    if (this.turnsPending.has(chatKey)) throw new Error(t("conversations.waitForAnswer"));
+    return this.chatQueue.run(chatKey, async () => {
+      const { session } = await this.chatSession(chatKey);
+      if (kind === "thinking") {
+        const levels: readonly string[] = session.supportsThinking()
+          ? session.getAvailableThinkingLevels()
+          : [];
+        if (!levels.includes(id))
+          throw new Error(t("settings.unknownThinkingLevel", { level: id }));
+        session.setThinkingLevel(id as ThinkingLevel);
+        return;
+      }
+      const { runtime } = this.requireServices();
+      const ref = parseModelPickId(id);
+      let model = ref ? findAvailable(runtime, ref) : undefined;
+      if (ref && !model) {
+        await runtime.getAvailable();
+        model = findAvailable(runtime, ref);
+      }
+      if (!model) throw new Error(t("models.notAvailableInSettings"));
+      await session.setModel(model);
+    });
+  }
+
+  /** A new agent continues the conversation; a new workspace starts a new one. */
+  private chooseForChat(
+    chatKey: string,
+    choice: { agentId?: string; workspaceId?: string },
+  ): Promise<void> {
+    return this.chatQueue.run(chatKey, async () => {
+      const { settings, paths, chatSessions, runtime } = this.requireServices();
+      const { agents, workspaces } = settings.get();
+      if (choice.agentId !== undefined && !agents.some((agent) => agent.id === choice.agentId))
+        throw new Error(t("channels.telegram.unknownAgent"));
+      if (
+        choice.workspaceId !== undefined &&
+        !workspaces.some((workspace) => workspace.id === choice.workspaceId)
+      )
+        throw new Error(t("channels.telegram.unknownWorkspace"));
+      const now = this.chatOptions(chatKey);
+      const agentId =
+        choice.agentId !== undefined && choice.agentId !== now.agentId ? choice.agentId : undefined;
+      const workspaceId =
+        choice.workspaceId !== undefined && choice.workspaceId !== now.workspaceId
+          ? choice.workspaceId
+          : undefined;
+      if (agentId === undefined && workspaceId === undefined) return;
+      chatSessions.setChoice(chatKey, {
+        ...(agentId !== undefined && { agentId }),
+        ...(workspaceId !== undefined && { workspaceId }),
+      });
+      // The next turn opens the session again with the new pick.
+      this.closeChat(chatKey);
+      if (workspaceId !== undefined) {
+        chatSessions.drop(chatKey);
+        return;
+      }
+      const file = chatSessions.get(chatKey);
+      if (agentId !== undefined && file && existsSync(file)) {
+        // As in the window, the conversation moves to the new agent and to its model, if it has one.
+        const manager = SessionManager.open(file, paths.sessionDir);
+        manager.appendCustomEntry(AGENT_ENTRY_TYPE, { agentId });
+        const model = findAvailable(runtime, findAgent(agents, agentId).model);
+        if (model) manager.appendModelChange(model.provider, model.id);
+      }
+    });
+  }
+
+  /** The chat's session, built on the chat's saved conversation or a new one. */
+  private async chatSession(chatKey: string): Promise<ChatSession> {
+    const channel = this.channelOf(chatKey);
+    const existing = this.chats.get(chatKey);
+    if (existing) {
+      if (existing.agentId === channel.agentId && existing.workspaceId === channel.workspaceId) {
+        // Edits to the agent's tools apply from the next turn, as in the window.
+        this.applyActiveTools(existing.session, this.chatScope(existing, chatKey));
+        return existing;
+      }
+      this.closeChat(chatKey);
+    }
+    const chat = await this.openChat(chatKey, channel);
+    this.chats.set(chatKey, chat);
+    this.chatUsed.set(chatKey, Date.now());
+    this.chatSweep ??= setInterval(() => this.releaseIdleChats(), CHAT_SWEEP_MS).unref();
+    return chat;
+  }
+
+  /** Agent and workspace are read from settings on use, so edits and deletions apply live. */
+  private chatScope(
+    chat: Pick<ChatRuntime, "turn" | "pending"> & { agentId: string; workspaceId: string },
+    chatKey: string,
+    mcpServers: McpRegistrations = this.requireServices().mcpServers,
+  ): SessionScope {
+    const { settings } = this.requireServices();
+    const agent = () => findAgent(settings.get().agents, chat.agentId);
+    return {
+      agent,
+      workspace: () => findWorkspace(settings.get().workspaces, chat.workspaceId),
+      mcpServers,
+      approvalGate: this.gateFor(agent, (request) => this.askInChat(chat, request)),
+      systemNote: { section: "channel", text: channelNote(this.channelOf(chatKey).label) },
+    };
+  }
+
+  private async openChat(
+    chatKey: string,
+    channel: { label: string; agentId: string; workspaceId: string },
+  ): Promise<ChatSession> {
+    const { settings, paths, mcpConfig, chatSessions } = this.requireServices();
+    const agent = findAgent(settings.get().agents, channel.agentId);
+    const workspace = findWorkspace(settings.get().workspaces, channel.workspaceId);
+    const cwd = this.workspaceFor(workspace);
+    const file = chatSessions.get(chatKey);
+    let manager: SessionManager;
+    if (file && existsSync(file)) {
+      manager = SessionManager.open(file, paths.sessionDir);
+      if (manager.getCwd() !== cwd) manager = SessionManager.open(file, paths.sessionDir, cwd);
+    } else {
+      manager = SessionManager.create(cwd, paths.sessionDir);
+      manager.appendCustomEntry(AGENT_ENTRY_TYPE, { agentId: agent.id });
+      manager.appendSessionInfo(channelTitle(channel.label, new Date(), currentLanguage()));
+    }
+    const mcpServers = new McpRegistrations(mcpConfig, (name) => {
+      const { mcpServers: allowed } = findAgent(settings.get().agents, agent.id);
+      return allowed === null || allowed.includes(name);
+    });
+    const runtime: ChatRuntime & { agentId: string; workspaceId: string } = {
+      turn: null,
+      pending: new Set(),
+      stopped: false,
+      agentId: agent.id,
+      workspaceId: workspace.id,
+    };
+    const session = await this.buildSession(
+      manager,
+      manager.buildSessionContext().model,
+      this.chatScope(runtime, chatKey, mcpServers),
+    );
+    if (!session.model) {
+      mcpServers.detach();
+      session.dispose();
+      throw new Error(t("models.noneChosen"));
+    }
+    // The agent's MCP servers connect in the background; wait for them to settle.
+    if (mcpServers.hasServers()) await this.mcp.status(session).catch(() => undefined);
+    const unsubscribe = session.subscribe((event) => this.onChatEvent(runtime, event));
+    return Object.assign(runtime, { session, mcpServers, unsubscribe });
+  }
+
+  /** Streams the turn in progress to its channel. */
+  private onChatEvent(chat: ChatRuntime, event: AgentSessionEvent): void {
+    const turn = chat.turn;
+    if (!turn) return;
+    try {
+      switch (event.type) {
+        case "message_update":
+          if (event.message.role === "assistant")
+            turn.hooks.onText(
+              [...turn.texts, assistantText(event.message)].filter(Boolean).join("\n\n"),
+            );
+          break;
+        case "message_end":
+          if (event.message.role === "assistant") {
+            turn.texts.push(assistantText(event.message));
+            turn.reply = event.message;
+          }
+          break;
+        case "tool_execution_start":
+          turn.hooks.onTool(describeToolCall(event.toolName, event.args ?? {}).title);
+          break;
+      }
+    } catch (error) {
+      // A channel that fails to show progress must not break the turn.
+      console.error("Chat channel callback failed:", error);
+    }
+  }
+
+  /** Gate `ask` of a chat: the person answers in the chat; with nobody to ask, deny. */
+  private askInChat(chat: Pick<ChatRuntime, "turn" | "pending">, request: ApprovalRequest) {
+    const hooks = chat.turn?.hooks;
+    if (!hooks) return Promise.resolve(false);
+    const { promise, resolve } = Promise.withResolvers<boolean>();
+    chat.pending.add(resolve);
+    const settle = (approved: boolean) => {
+      if (chat.pending.delete(resolve)) resolve(approved);
+    };
+    try {
+      hooks.askApproval(request).then(settle, () => settle(false));
+    } catch {
+      settle(false);
+    }
+    return promise;
+  }
+
+  private denyChatApprovals(chat: Pick<ChatRuntime, "pending">): void {
+    for (const resolve of chat.pending) resolve(false);
+    chat.pending.clear();
+  }
+
+  /** Releases the chat's session (the conversation stays on disk). */
+  private closeChat(chatKey: string): void {
+    const chat = this.chats.get(chatKey);
+    if (!chat) return;
+    this.chats.delete(chatKey);
+    this.chatUsed.delete(chatKey);
+    this.denyChatApprovals(chat);
+    chat.unsubscribe();
+    chat.mcpServers.detach();
+    chat.session.dispose();
+    if (this.chats.size === 0 && this.chatSweep) {
+      clearInterval(this.chatSweep);
+      this.chatSweep = null;
+    }
+  }
+
+  private releaseIdleChats(): void {
+    for (const chatKey of idleChats(this.chatUsed, (key) => this.chatQueue.busy(key), Date.now())) {
+      // Queued behind any turn that started since, which then keeps the session.
+      this.chatQueue
+        .run(chatKey, async () => {
+          if (Date.now() - (this.chatUsed.get(chatKey) ?? 0) >= CHAT_IDLE_MS)
+            this.closeChat(chatKey);
+        })
+        .catch(() => undefined);
+    }
+  }
+
+  private async chatTurn(
+    chatKey: string,
+    input: ChannelInput,
+    hooks: TurnHooks,
+  ): Promise<TurnResult> {
+    const text = input.text.trim();
+    if (!text && input.attachments.length === 0) return { text: "", status: "done" };
+    let chat: ChatSession;
+    try {
+      chat = await this.chatSession(chatKey);
+    } catch (error) {
+      return { text: "", status: "error", error: errorMessage(error) };
+    }
+    const { chatSessions } = this.requireServices();
+    chat.stopped = false;
+    chat.turn = { hooks, texts: [] };
+    try {
+      // Copy files and encode images before the run, so a bad attachment fails the turn.
+      const message = await buildPrompt(
+        text || ATTACHMENTS_ONLY_PROMPT,
+        input.attachments,
+        chat.session.sessionManager.getCwd(),
+      );
+      if (chat.stopped) return { text: "", status: "aborted" };
+      await chat.session.prompt(message.text, { images: message.images });
+      await chat.session.waitForIdle();
+      const file = chat.session.sessionFile;
+      if (file && existsSync(file)) chatSessions.set(chatKey, file);
+      return turnResult(chat.turn.reply, chat.stopped, {
+        failed: t("scheduler.errors.runFailed"),
+        noAnswer: t("scheduler.errors.noAnswer"),
+      });
+    } catch (error) {
+      if (chat.stopped) return { text: "", status: "aborted" };
+      return { text: "", status: "error", error: errorMessage(error) };
+    } finally {
+      chat.turn = null;
+      this.denyChatApprovals(chat);
+      this.chatUsed.set(chatKey, Date.now());
+      emit({ type: "sessions_changed" });
+    }
+  }
+
+  private async abortChat(chatKey: string): Promise<void> {
+    const chat = this.chats.get(chatKey);
+    if (!chat?.turn) return;
+    chat.stopped = true;
+    // Pending approvals block the run; deny them first or abort() would wait forever.
+    this.denyChatApprovals(chat);
+    await chat.session.abort();
+  }
+
+  private async newChat(chatKey: string): Promise<void> {
+    await this.abortChat(chatKey);
+    await this.chatQueue.run(chatKey, async () => {
+      this.closeChat(chatKey);
+      this.requireServices().chatSessions.drop(chatKey);
+    });
   }
 
   // -------------------------------------------------------------------------------------------
@@ -2202,6 +2745,27 @@ function appSettings(store: SettingsStore): AppSettings {
   };
 }
 
+/** Id of a model in `/model`'s list; the provider and model id may contain any character. */
+function modelPickId(ref: ModelRef): string {
+  return JSON.stringify([ref.provider, ref.modelId]);
+}
+
+function parseModelPickId(id: string): ModelRef | null {
+  try {
+    const parsed: unknown = JSON.parse(id);
+    if (
+      Array.isArray(parsed) &&
+      parsed.length === 2 &&
+      typeof parsed[0] === "string" &&
+      typeof parsed[1] === "string"
+    )
+      return { provider: parsed[0], modelId: parsed[1] };
+  } catch {
+    // Not one of our ids.
+  }
+  return null;
+}
+
 /** Agent recorded on the conversation's branch (the latest `pp-agent` entry), if any. */
 function conversationAgentId(manager: SessionManager): string | null {
   const branch = manager.getBranch();
@@ -2262,25 +2826,5 @@ function cleanGatewayModels(models: readonly GatewayModel[]): GatewayModel[] {
   return clean;
 }
 
-const host = new AgentHost();
-
-process.parentPort.on("message", ({ data }) => {
-  const message = data as MainToAgentMessage;
-  switch (message.kind) {
-    case "init":
-      host.init(message.paths, message.systemLocale).catch((error: unknown) => {
-        emit({ type: "error", message: t("app.couldNotStart", { error: errorMessage(error) }) });
-      });
-      break;
-    case "command":
-      host.handle(message.command).then(
-        (result) => send({ kind: "result", id: message.id, ok: true, data: result }),
-        (error: unknown) =>
-          send({ kind: "result", id: message.id, ok: false, error: errorMessage(error) }),
-      );
-      break;
-    case "vault_result":
-      host.credentials.resolve(message);
-      break;
-  }
-});
+export type { HostEnvironment, HostOutput, ServiceControl, VaultBackend } from "./host-io.ts";
+export type * from "./channels/types.ts";

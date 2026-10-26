@@ -1,36 +1,27 @@
 import type { Credential, CredentialInfo, CredentialStore } from "@earendil-works/pi-ai";
-import type { MainToAgentMessage, StoredCredential, VaultRequest } from "@workspace/shared";
+import type { StoredCredential } from "@workspace/shared";
+import { CHANNEL_KEY_PREFIX } from "./channels/names.ts";
+import type { VaultBackend } from "./host-io.ts";
 import { t } from "./i18n.ts";
-import { send } from "./ipc.ts";
+import { errorMessage } from "./ipc.ts";
 import { WEB_KEY_PREFIX } from "./web/names.ts";
-
-type VaultResult = Extract<MainToAgentMessage, { kind: "vault_result" }>;
 
 /** Vault id prefix of the MCP OAuth state; Pi's provider list skips it like search keys. */
 export const MCP_AUTH_KEY_PREFIX = "mcp-auth:";
 
 /**
- * Pi's credential store, backed by the encrypted vault in the main process. Every provider
- * credential (built-in providers and gateways) lives there; this process only keeps a cache. Only
- * this process writes the vault, so the cache stays accurate once an entry has been read.
+ * Pi's credential store, backed by the daemon's vault. Every provider credential (built-in
+ * providers and gateways) lives there; this class only keeps a cache. Only the host writes the
+ * vault, so the cache stays accurate once an entry has been read.
  */
 export class VaultCredentialStore implements CredentialStore {
-  private nextId = 0;
-  private readonly pending = new Map<number, PromiseWithResolvers<unknown>>();
   /** Provider id → credential, or null when the vault has none. */
   private readonly cache = new Map<string, Credential | null>();
   private providerIds: Promise<Set<string>> | null = null;
   /** Tail of the operation chain per provider, so writes to one provider never interleave. */
   private readonly locks = new Map<string, Promise<unknown>>();
 
-  /** Feeds a `vault_result` message from the main process. */
-  resolve(message: VaultResult): void {
-    const request = this.pending.get(message.id);
-    if (!request) return;
-    this.pending.delete(message.id);
-    if (message.ok) request.resolve(message.data);
-    else request.reject(new Error(t("app.secureStorage", { error: message.error })));
-  }
+  constructor(private readonly backend: VaultBackend) {}
 
   async read(providerId: string): Promise<Credential | undefined> {
     return (await this.load(providerId)) ?? undefined;
@@ -44,15 +35,15 @@ export class VaultCredentialStore implements CredentialStore {
     const cached = this.cache.get(providerId);
     if (cached !== undefined) return cached ?? undefined;
     if (!(await this.ids()).has(providerId)) return undefined;
-    const credential = (await this.request({ op: "read", providerId })) as Credential | null;
+    const credential = (await this.guard(this.backend.read(providerId))) as Credential | null;
     // A write may have landed while the read was in flight; it wins.
     if (!this.cache.has(providerId)) this.cache.set(providerId, credential);
     return this.cache.get(providerId) ?? undefined;
   }
 
-  /** Whether the OS keychain can encrypt what the vault holds. */
+  /** Whether the vault really protects what it holds. */
   async secureStorageAvailable(): Promise<boolean> {
-    return (await this.request({ op: "available" })) === true;
+    return this.guard(this.backend.available());
   }
 
   async list(): Promise<readonly CredentialInfo[]> {
@@ -60,7 +51,11 @@ export class VaultCredentialStore implements CredentialStore {
     const infos: CredentialInfo[] = [];
     for (const providerId of ids) {
       // Search keys share the vault but are not providers.
-      if (providerId.startsWith(WEB_KEY_PREFIX) || providerId.startsWith(MCP_AUTH_KEY_PREFIX))
+      if (
+        providerId.startsWith(WEB_KEY_PREFIX) ||
+        providerId.startsWith(MCP_AUTH_KEY_PREFIX) ||
+        providerId.startsWith(CHANNEL_KEY_PREFIX)
+      )
         continue;
       const credential = await this.load(providerId);
       if (credential) infos.push({ providerId, type: credential.type });
@@ -76,11 +71,7 @@ export class VaultCredentialStore implements CredentialStore {
       const current = (await this.load(providerId)) ?? undefined;
       const next = await fn(current);
       if (next === undefined) return current;
-      await this.request({
-        op: "write",
-        providerId,
-        credential: next as StoredCredential,
-      });
+      await this.guard(this.backend.write(providerId, next as StoredCredential));
       this.cache.set(providerId, next);
       (await this.ids()).add(providerId);
       return next;
@@ -89,7 +80,7 @@ export class VaultCredentialStore implements CredentialStore {
 
   delete(providerId: string): Promise<void> {
     return this.withLock(providerId, async () => {
-      await this.request({ op: "delete", providerId });
+      await this.guard(this.backend.delete(providerId));
       this.cache.set(providerId, null);
       (await this.ids()).delete(providerId);
     });
@@ -102,7 +93,7 @@ export class VaultCredentialStore implements CredentialStore {
     if (!ids.has(providerId)) return null;
     let credential: Credential | null;
     try {
-      credential = (await this.request({ op: "read", providerId })) as Credential | null;
+      credential = (await this.guard(this.backend.read(providerId))) as Credential | null;
     } catch (error) {
       // An entry the keychain can no longer decrypt counts as missing; signing in again replaces it.
       console.error(`The saved sign-in for ${providerId} could not be read:`, error);
@@ -115,7 +106,7 @@ export class VaultCredentialStore implements CredentialStore {
 
   private ids(): Promise<Set<string>> {
     if (!this.providerIds) {
-      const load = this.request({ op: "list" }).then((ids) => new Set(ids as string[]));
+      const load = this.guard(this.backend.list()).then((ids) => new Set(ids));
       // A failed load is retried on the next call.
       load.catch(() => {
         if (this.providerIds === load) this.providerIds = null;
@@ -136,12 +127,12 @@ export class VaultCredentialStore implements CredentialStore {
     return run;
   }
 
-  private request(request: VaultRequest): Promise<unknown> {
-    this.nextId += 1;
-    const id = this.nextId;
-    const resolvers = Promise.withResolvers<unknown>();
-    this.pending.set(id, resolvers);
-    send({ kind: "vault", id, request });
-    return resolvers.promise;
+  /** Backend failures reach the person as "Secure storage: …". */
+  private async guard<T>(operation: Promise<T>): Promise<T> {
+    try {
+      return await operation;
+    } catch (error) {
+      throw new Error(t("app.secureStorage", { error: errorMessage(error) }));
+    }
   }
 }

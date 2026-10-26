@@ -1,6 +1,6 @@
 # Use case: memory, checklists and helpers
 
-Three features that make the agent more useful over long or repeated work. Paths are under `apps/desktop/src/agent/` unless noted. Limits and tiers are listed in [business-rules.md](business-rules.md).
+Three features that make the agent more useful over long or repeated work. Paths are under `packages/agent-core/src/` unless noted. Limits and tiers are listed in [business-rules.md](business-rules.md).
 
 ## Long-term memory
 

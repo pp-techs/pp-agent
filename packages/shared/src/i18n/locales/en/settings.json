@@ -14,7 +14,9 @@
       "skills": "Skills",
       "mcp": "MCP servers",
       "memory": "Memory",
-      "scheduledTasks": "Scheduled tasks"
+      "scheduledTasks": "Scheduled tasks",
+      "background": "Background",
+      "channels": "Channels"
     }
   },
   "general": {
@@ -62,7 +64,7 @@
       },
       "tray": {
         "label": "Tray icon",
-        "description": "Keep an icon in the menu bar or system tray. Closing the window then hides it and the app keeps running."
+        "description": "Keep an icon in the menu bar or system tray. Closing the window then hides it and the app keeps running. To keep working with the app fully closed, use Settings › Background."
       },
       "shortcut": {
         "label": "Global shortcut",
@@ -239,6 +241,108 @@
       },
       "create": "Create task",
       "saved": "Task “{{name}}” saved."
+    }
+  },
+  "background": {
+    "title": "Background",
+    "description": "Keep the agent running after you close the window or quit the app.",
+    "loadError": "Couldn't load this page",
+    "service": {
+      "title": "Run in background",
+      "description": "The agent keeps running when you close the window or quit the app. It answers your messages and carries out scheduled tasks on time. It starts by itself when you sign in to your computer.",
+      "switchLabel": "Run in background",
+      "manager": "Managed by {{manager}}",
+      "managers": {
+        "launchd": "macOS (launchd)",
+        "systemd": "Linux (systemd)",
+        "windows-task": "Windows Task Scheduler"
+      },
+      "on": "On: the agent keeps running without the window.",
+      "off": "Off: the agent stops when you quit the app.",
+      "unsupported": {
+        "title": "Not available on this computer",
+        "fallback": "This computer can't start the agent in the background."
+      }
+    }
+  },
+  "channels": {
+    "title": "Channels",
+    "description": "Chat with the agent from messaging apps. Each channel answers only the one person you pair with it.",
+    "loadError": "Couldn't load this page",
+    "needsBackground": {
+      "title": "The agent has to be running to answer",
+      "description": "Channels answer while PP Agent is open. To keep answering with the app closed, turn on Settings › Background."
+    },
+    "approval": {
+      "title": "Approvals happen in the chat",
+      "description": "While Telegram is on, anything the agent does that needs your approval is asked in the Telegram chat. Tools set to “Always ask” in Settings › Tools can be approved there. Only the paired person can answer or give orders to the bot."
+    },
+    "telegram": {
+      "title": "Telegram",
+      "description": "Chat with the agent from the Telegram app on your phone, even when this window is closed.",
+      "state": {
+        "off": "Off",
+        "connecting": "Connecting…",
+        "online": "Online",
+        "error": "Problem"
+      },
+      "bot": "Bot",
+      "botUnknown": "Not connected yet",
+      "owner": "Paired with",
+      "notPaired": "Not paired",
+      "enabled": {
+        "label": "Answer messages on Telegram",
+        "description": "When off, the bot stays silent. Your settings are kept."
+      },
+      "token": {
+        "label": "Bot token",
+        "placeholder": "Saved. Paste a new token to replace it.",
+        "placeholderEmpty": "Paste the token from BotFather",
+        "help": "To get one, open Telegram, start a chat with @BotFather, send /newbot and follow the steps. It then gives you a token: paste it here.",
+        "required": "Paste a bot token to turn Telegram on."
+      },
+      "agent": "Agent",
+      "agentHelp": "Who answers. “The workspace's agent” uses the agent set in the workspace, or the built-in one. /agent in the chat changes it.",
+      "workspace": "Workspace",
+      "workspaceHelp": "Where the agent works. /workspace in the chat changes it and starts a new conversation.",
+      "saved": "Telegram settings saved.",
+      "pairing": {
+        "start": "Pair",
+        "again": "Pair again",
+        "needsSetup": "Save a bot token and turn Telegram on first.",
+        "instruction": "In Telegram, send {{command}} to @{{bot}}.",
+        "instructionNoBot": "In Telegram, send {{command}} to your bot.",
+        "copy": "Copy message",
+        "copied": "Copied",
+        "expiresIn": "Expires in {{time}}",
+        "expired": "This code has expired. Pair again to get a new one."
+      },
+      "forget": {
+        "button": "Forget Telegram",
+        "title": "Forget Telegram?",
+        "description": "The saved bot token and the paired person are removed, and the bot stops answering. You can set it up again at any time.",
+        "confirm": "Forget",
+        "done": "Telegram was removed."
+      },
+      "summary": "Bot {{bot}} · Paired with {{owner}}",
+      "summaryEmpty": "Not set up yet",
+      "steps": {
+        "connect": {
+          "title": "1. Connect your bot",
+          "description": "Create a bot with @BotFather in Telegram, then paste its token here."
+        },
+        "pair": {
+          "title": "2. Pair your account",
+          "description": "Only the person who pairs can talk to the bot. Anyone else is ignored."
+        },
+        "replies": {
+          "title": "3. Choose how it answers",
+          "description": "Choose where it works and who answers."
+        }
+      },
+      "setUp": "Set up",
+      "manage": "Manage",
+      "agentFollow": "The workspace's agent"
     }
   }
 }

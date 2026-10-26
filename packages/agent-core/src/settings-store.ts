@@ -18,6 +18,7 @@ import { readAgents } from "./agents.ts";
 import { readWorkspaces } from "./workspaces.ts";
 import { readScheduledTasks } from "./scheduled-tasks.ts";
 import { DEFAULT_VOICE, readVoiceSettings } from "./transcription.ts";
+import { readChannelsSettings } from "./channels/telegram/settings.ts";
 
 const ModelRefSchema = Type.Object({ provider: Type.String(), modelId: Type.String() });
 const GatewaySchema = Type.Object({
@@ -64,6 +65,7 @@ function parse(raw: unknown): SettingsFile {
     pinnedSessions: [],
     scheduledTasks: [],
     voice: { ...DEFAULT_VOICE },
+    channels: readChannelsSettings(null),
   };
   if (typeof raw !== "object" || raw === null) return settings;
   const value = raw as Partial<Record<keyof SettingsFile, unknown>>;
@@ -105,6 +107,7 @@ function parse(raw: unknown): SettingsFile {
     ];
   settings.scheduledTasks = readScheduledTasks(value.scheduledTasks);
   settings.voice = readVoiceSettings(value.voice);
+  settings.channels = readChannelsSettings(value.channels);
   return settings;
 }
 

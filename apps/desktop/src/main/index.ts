@@ -2,21 +2,12 @@ import { isAbsolute, join } from "node:path";
 import {
   type AgentCommand,
   type AgentEvent,
-  type AgentToMainMessage,
+  type AgentSnapshot,
   EXPORT_FORMATS,
   IPC,
-  type MainToAgentMessage,
-  type VaultRequest,
 } from "@workspace/shared";
-import {
-  app,
-  BrowserWindow,
-  ipcMain,
-  session,
-  shell,
-  type UtilityProcess,
-  utilityProcess,
-} from "electron";
+import { app, BrowserWindow, ipcMain, session, shell } from "electron";
+import { DaemonClient } from "./daemon-client.ts";
 import {
   isInside,
   openAgentFile,
@@ -33,17 +24,15 @@ import { restrictPermissions } from "./permissions.ts";
 import { readShellSettings } from "./settings.ts";
 import { releaseShortcut, syncShortcut } from "./shortcut.ts";
 import { destroyTray, refreshTray, syncTray, trayActive } from "./tray.ts";
-import { resolveShellPath } from "./shell-path.ts";
 import { migrateLegacyProvider } from "./legacy.ts";
+import { migrateLegacyVault } from "./legacy-vault.ts";
 import { createUpdater } from "./updates.ts";
-import { handleVaultRequest } from "./vault.ts";
 
 const DIST_DIR = import.meta.dirname;
 /** Unpackaged runs load the renderer dev server (`vp dev` in apps/web); packaged builds load bundled files. */
 const RENDERER_URL = app.isPackaged
   ? null
   : (process.env.ELECTRON_RENDERER_URL ?? "http://localhost:47821");
-const RESTART_DELAY_MS = 1_000;
 /** Folder the agent reads and writes; attachments are copied here too. */
 const WORKSPACE_DIR = join(app.getPath("documents"), "PP Agent");
 const USER_DATA_DIR = app.getPath("userData");
@@ -55,17 +44,7 @@ const updater = createUpdater((state) => window?.webContents.send(IPC.updatesEve
 let window: BrowserWindow | null = null;
 /** The shortcut fired while no page was loaded to receive the event; the renderer asks on mount. */
 let pendingFocus = false;
-let agent: UtilityProcess | null = null;
-let nextCommandId = 0;
 let quitting = false;
-/** Resolves once the legacy provider.json has been migrated; the agent starts after it. */
-let migration: Promise<void> | null = null;
-/** Resolved once: asking the login shell takes a moment and the answer does not change. */
-let shellPath: Promise<string | undefined> | null = null;
-const pending = new Map<
-  number,
-  { resolve: (data: unknown) => void; reject: (error: Error) => void }
->();
 
 function sendToRenderer(event: AgentEvent): void {
   window?.webContents.send(IPC.agentEvent, event);
@@ -147,11 +126,6 @@ function applyShellSettings(): void {
   }
 }
 
-function postToAgent(message: MainToAgentMessage): void {
-  if (!agent) throw new Error(translator()("app.notRunning"));
-  agent.postMessage(message);
-}
-
 /** Opens http(s) URLs in the default browser; anything else is refused. */
 async function openExternal(url: string): Promise<void> {
   const protocol = URL.canParse(url) ? new URL(url).protocol : "";
@@ -160,103 +134,63 @@ async function openExternal(url: string): Promise<void> {
   await shell.openExternal(url);
 }
 
-function answerVault(child: UtilityProcess, id: number, request: VaultRequest): void {
-  handleVaultRequest(request).then(
-    (data) => {
-      const message: MainToAgentMessage = { kind: "vault_result", id, ok: true, data };
-      child.postMessage(message);
-    },
-    (error: unknown) => {
-      const message: MainToAgentMessage = {
-        kind: "vault_result",
-        id,
-        ok: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
-      child.postMessage(message);
-    },
-  );
+/** Folder with OfficeCLI and the built-in skills, for the daemon. */
+const RESOURCES_DIR = app.isPackaged ? process.resourcesPath : join(DIST_DIR, "..", "resources");
+
+const daemon = new DaemonClient({
+  home: USER_DATA_DIR,
+  daemonScript: join(DIST_DIR, "daemon.mjs"),
+  resourcesDir: RESOURCES_DIR,
+  appVersion: app.getVersion(),
+  onEvent(event) {
+    sendToRenderer(event);
+    notifier.handle(event);
+    if (event.type === "settings_changed" && event.scopes.includes("settings"))
+      applyShellSettings();
+  },
+  onOpenUrl(url) {
+    openExternal(url).catch((error: unknown) => {
+      console.error("Could not open link:", error);
+    });
+  },
+  onLost() {
+    sendToRenderer({ type: "error", message: translator()("app.stoppedUnexpectedly") });
+    sendToRenderer({ type: "status", status: "starting" });
+  },
+  onStartFailed(error) {
+    sendToRenderer({ type: "error", message: error.message });
+    sendToRenderer({ type: "status", status: "starting" });
+  },
+  onConnected() {
+    void syncWithDaemon();
+  },
+});
+
+/** After every (re)connection: show the daemon's state, and hand over a leftover old vault. */
+async function syncWithDaemon(): Promise<void> {
+  try {
+    const snapshot = (await daemon.command({ type: "get_snapshot" })) as AgentSnapshot;
+    sendToRenderer({ type: "snapshot", snapshot });
+  } catch (error) {
+    console.error("Could not read the agent's state:", error);
+  }
+  try {
+    await migrateLegacyVault((entries) => daemon.importCredentials(entries));
+  } catch (error) {
+    console.error("Could not move the saved sign-ins to the background service:", error);
+  }
 }
 
-async function startAgent(): Promise<void> {
-  migration ??= migrateLegacyProvider(SETTINGS_FILE).catch((error: unknown) => {
+async function startDaemon(): Promise<void> {
+  // Before the daemon starts, so it reads the settings.json this writes.
+  await migrateLegacyProvider(SETTINGS_FILE).catch((error: unknown) => {
     console.error("Settings migration failed:", error);
   });
-  await migration;
-
-  const PATH = await (shellPath ??= resolveShellPath());
-  const child = utilityProcess.fork(join(DIST_DIR, "agent.mjs"), [], {
-    serviceName: "PP Agent",
-    stdio: "inherit",
-    env: PATH ? { ...process.env, PATH } : process.env,
-  });
-  agent = child;
-
-  child.on("message", (message: AgentToMainMessage) => {
-    switch (message.kind) {
-      case "event":
-        sendToRenderer(message.event);
-        notifier.handle(message.event);
-        if (message.event.type === "settings_changed" && message.event.scopes.includes("settings"))
-          applyShellSettings();
-        return;
-      case "vault":
-        answerVault(child, message.id, message.request);
-        return;
-      case "open_url":
-        openExternal(message.url).catch((error: unknown) => {
-          console.error("Could not open link:", error);
-        });
-        return;
-      case "result": {
-        const request = pending.get(message.id);
-        if (!request) return;
-        pending.delete(message.id);
-        if (message.ok) request.resolve(message.data);
-        else request.reject(new Error(message.error));
-      }
-    }
-  });
-
-  child.on("exit", (code) => {
-    if (agent !== child) return;
-    agent = null;
-    const t = translator();
-    for (const request of pending.values()) request.reject(new Error(t("app.stoppedUnexpectedly")));
-    pending.clear();
-    if (quitting) return;
-    sendToRenderer({
-      type: "error",
-      message: t("app.stoppedRestarting", { code }),
-    });
-    sendToRenderer({ type: "status", status: "starting" });
-    setTimeout(() => void startAgent(), RESTART_DELAY_MS);
-  });
-
-  postToAgent({
-    kind: "init",
-    paths: {
-      workspaceDir: WORKSPACE_DIR,
-      agentDir: join(USER_DATA_DIR, "agent"),
-      sessionDir: join(USER_DATA_DIR, "sessions"),
-      settingsFile: SETTINGS_FILE,
-    },
-    systemLocale: app.getLocale(),
-  });
+  daemon.start();
 }
 
 function commandAgent(command: AgentCommand): Promise<unknown> {
-  nextCommandId += 1;
-  const id = nextCommandId;
-  const { promise, resolve, reject } = Promise.withResolvers<unknown>();
-  pending.set(id, { resolve, reject });
-  try {
-    postToAgent({ kind: "command", id, command });
-  } catch (error) {
-    pending.delete(id);
-    reject(error);
-  }
-  return promise;
+  return daemon.command(command);
 }
 
 function createWindow(): void {
@@ -355,7 +289,7 @@ ipcMain.handle(IPC.updatesInstall, () => updater.install());
 
 app.on("before-quit", () => {
   quitting = true;
-  agent?.kill();
+  daemon.dispose();
 });
 
 app.on("will-quit", () => {
@@ -375,7 +309,7 @@ app.on("activate", () => {
 // No top-level await: Electron emits `ready` only after the ESM main module finishes evaluating.
 void app.whenReady().then(() => {
   restrictPermissions(session.defaultSession, () => window);
-  void startAgent();
+  void startDaemon();
   createWindow();
   applyShellSettings();
   updater.start();

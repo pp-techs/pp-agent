@@ -177,8 +177,6 @@ export function ChatSidebar({ bridge }: { bridge: DesktopBridge }) {
         dir,
         instructions: "",
         agentId: null,
-        model: null,
-        thinkingLevel: null,
       });
       newChat.mutate(created.id, { onError });
     } catch (error) {

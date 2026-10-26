@@ -14,7 +14,9 @@
       "skills": "Kỹ năng",
       "mcp": "Máy chủ MCP",
       "memory": "Bộ nhớ",
-      "scheduledTasks": "Tác vụ định kỳ"
+      "scheduledTasks": "Tác vụ định kỳ",
+      "background": "Chạy nền",
+      "channels": "Kênh chat"
     }
   },
   "general": {
@@ -62,7 +64,7 @@
       },
       "tray": {
         "label": "Biểu tượng khay hệ thống",
-        "description": "Giữ một biểu tượng trên thanh menu hoặc khay hệ thống. Đóng cửa sổ sẽ chỉ ẩn nó và ứng dụng vẫn chạy."
+        "description": "Giữ một biểu tượng trên thanh menu hoặc khay hệ thống. Đóng cửa sổ sẽ chỉ ẩn nó và ứng dụng vẫn chạy. Để tác nhân vẫn làm việc khi đã đóng hẳn ứng dụng, hãy dùng Cài đặt › Chạy nền."
       },
       "shortcut": {
         "label": "Phím tắt toàn cục",
@@ -234,6 +236,108 @@
       },
       "create": "Tạo tác vụ",
       "saved": "Đã lưu tác vụ “{{name}}”."
+    }
+  },
+  "background": {
+    "title": "Chạy nền",
+    "description": "Giữ tác nhân tiếp tục chạy sau khi bạn đóng cửa sổ hoặc thoát ứng dụng.",
+    "loadError": "Không tải được trang này",
+    "service": {
+      "title": "Chạy nền",
+      "description": "Tác nhân tiếp tục chạy khi bạn đóng cửa sổ hoặc thoát ứng dụng. Nó vẫn trả lời tin nhắn và thực hiện các tác vụ định kỳ đúng giờ. Nó tự khởi động khi bạn đăng nhập vào máy tính.",
+      "switchLabel": "Chạy nền",
+      "manager": "Do {{manager}} quản lý",
+      "managers": {
+        "launchd": "macOS (launchd)",
+        "systemd": "Linux (systemd)",
+        "windows-task": "Windows Task Scheduler"
+      },
+      "on": "Đang bật: tác nhân vẫn chạy khi không có cửa sổ.",
+      "off": "Đang tắt: tác nhân dừng khi bạn thoát ứng dụng.",
+      "unsupported": {
+        "title": "Không dùng được trên máy tính này",
+        "fallback": "Máy tính này không thể khởi động tác nhân chạy nền."
+      }
+    }
+  },
+  "channels": {
+    "title": "Kênh chat",
+    "description": "Trò chuyện với tác nhân từ các ứng dụng nhắn tin. Mỗi kênh chỉ trả lời một người mà bạn đã ghép nối.",
+    "loadError": "Không tải được trang này",
+    "needsBackground": {
+      "title": "Tác nhân phải đang chạy mới trả lời được",
+      "description": "Các kênh trả lời khi PP Agent đang mở. Muốn tiếp tục trả lời khi đã đóng ứng dụng, hãy bật Cài đặt › Chạy nền."
+    },
+    "approval": {
+      "title": "Việc cần duyệt được hỏi trong cuộc trò chuyện",
+      "description": "Khi Telegram bật, mọi việc tác nhân làm mà cần bạn duyệt sẽ được hỏi ngay trong cuộc trò chuyện Telegram. Các công cụ đặt là “Luôn hỏi” trong Cài đặt › Công cụ có thể được duyệt ở đó. Chỉ người đã ghép nối mới trả lời hoặc ra lệnh cho bot được."
+    },
+    "telegram": {
+      "title": "Telegram",
+      "description": "Trò chuyện với tác nhân bằng ứng dụng Telegram trên điện thoại, kể cả khi cửa sổ này đã đóng.",
+      "state": {
+        "off": "Tắt",
+        "connecting": "Đang kết nối…",
+        "online": "Trực tuyến",
+        "error": "Có sự cố"
+      },
+      "bot": "Bot",
+      "botUnknown": "Chưa kết nối",
+      "owner": "Đã ghép nối với",
+      "notPaired": "Chưa ghép nối",
+      "enabled": {
+        "label": "Trả lời tin nhắn trên Telegram",
+        "description": "Khi tắt, bot sẽ im lặng. Các thiết lập vẫn được giữ."
+      },
+      "token": {
+        "label": "Mã bot (token)",
+        "placeholder": "Đã lưu. Dán mã mới để thay thế.",
+        "placeholderEmpty": "Dán mã nhận từ BotFather",
+        "help": "Để lấy mã, mở Telegram, trò chuyện với @BotFather, gửi /newbot rồi làm theo hướng dẫn. Sau đó nó đưa cho bạn một mã: hãy dán vào đây.",
+        "required": "Hãy dán mã bot để bật Telegram."
+      },
+      "agent": "Agent",
+      "agentHelp": "Ai trả lời. “Tác nhân của không gian làm việc” dùng tác nhân đặt trong không gian đó, hoặc tác nhân có sẵn. Lệnh /agent trong chat sẽ đổi lại.",
+      "workspace": "Không gian làm việc",
+      "workspaceHelp": "Nơi tác nhân làm việc. Lệnh /workspace trong chat sẽ đổi và bắt đầu cuộc trò chuyện mới.",
+      "saved": "Đã lưu cài đặt Telegram.",
+      "pairing": {
+        "start": "Ghép nối",
+        "again": "Ghép nối lại",
+        "needsSetup": "Hãy lưu mã bot và bật Telegram trước.",
+        "instruction": "Trong Telegram, gửi {{command}} cho @{{bot}}.",
+        "instructionNoBot": "Trong Telegram, gửi {{command}} cho bot của bạn.",
+        "copy": "Sao chép tin nhắn",
+        "copied": "Đã sao chép",
+        "expiresIn": "Hết hạn sau {{time}}",
+        "expired": "Mã đã hết hạn. Hãy ghép nối lại để lấy mã mới."
+      },
+      "forget": {
+        "button": "Quên Telegram",
+        "title": "Quên Telegram?",
+        "description": "Mã bot đã lưu và người đã ghép nối sẽ bị xóa, và bot ngừng trả lời. Bạn có thể thiết lập lại bất cứ lúc nào.",
+        "confirm": "Quên",
+        "done": "Đã gỡ Telegram."
+      },
+      "summary": "Bot {{bot}} · Đã ghép nối với {{owner}}",
+      "summaryEmpty": "Chưa thiết lập",
+      "steps": {
+        "connect": {
+          "title": "1. Kết nối bot",
+          "description": "Tạo bot bằng @BotFather trong Telegram, rồi dán token của bot vào đây."
+        },
+        "pair": {
+          "title": "2. Ghép nối tài khoản",
+          "description": "Chỉ người đã ghép nối mới trò chuyện được với bot. Người khác bị bỏ qua."
+        },
+        "replies": {
+          "title": "3. Chọn cách trả lời",
+          "description": "Chọn nơi làm việc và ai trả lời."
+        }
+      },
+      "setUp": "Thiết lập",
+      "manage": "Quản lý",
+      "agentFollow": "Tác nhân của không gian làm việc"
     }
   }
 }

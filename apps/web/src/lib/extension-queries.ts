@@ -4,9 +4,11 @@ import type {
   SaveAgentInput,
   SaveScheduledTaskInput,
   SaveSkillInput,
+  SaveTelegramInput,
   SaveWebSearchInput,
   SaveWorkspaceInput,
   SearchProviderId,
+  TelegramStatus,
   ToolPolicy,
   ToolSummary,
   VoiceSettings,
@@ -104,6 +106,50 @@ export function useSaveVoice(bridge: DesktopBridge) {
     onSuccess: (view) => queryClient.setQueryData(queryKeys.voice, view),
     onError: showError,
   });
+}
+
+/** Whether the agent is registered to run in the background (at login, without the window). */
+export const serviceStatusQuery = (bridge: DesktopBridge) =>
+  queryOptions({
+    queryKey: queryKeys.serviceStatus,
+    queryFn: () => bridge.agent.command({ type: "get_service_status" }),
+  });
+
+/** Telegram connection, bot, paired person and the open pairing code, if any. */
+export const telegramStatusQuery = (bridge: DesktopBridge) =>
+  queryOptions({
+    queryKey: queryKeys.telegramStatus,
+    queryFn: () => bridge.agent.command({ type: "get_telegram_status" }),
+  });
+
+/** Mutations of Settings › Background; each stores the status it returns. */
+export function useBackgroundCommands(bridge: DesktopBridge) {
+  const queryClient = useQueryClient();
+  const setInstalled = useMutation({
+    mutationFn: (installed: boolean) =>
+      bridge.agent.command({ type: "set_service_installed", installed }),
+    onSuccess: (status) => queryClient.setQueryData(queryKeys.serviceStatus, status),
+    onError: showError,
+  });
+  const telegramDone = (status: TelegramStatus) =>
+    queryClient.setQueryData(queryKeys.telegramStatus, status);
+  const saveTelegram = useMutation({
+    mutationFn: (config: SaveTelegramInput) =>
+      bridge.agent.command({ type: "save_telegram", config }),
+    onSuccess: telegramDone,
+    onError: showError,
+  });
+  const startPairing = useMutation({
+    mutationFn: () => bridge.agent.command({ type: "start_telegram_pairing" }),
+    onSuccess: telegramDone,
+    onError: showError,
+  });
+  const forgetTelegram = useMutation({
+    mutationFn: () => bridge.agent.command({ type: "forget_telegram" }),
+    onSuccess: telegramDone,
+    onError: showError,
+  });
+  return { setInstalled, saveTelegram, startPairing, forgetTelegram };
 }
 
 /** Tools the agent can use, including those of connected MCP servers. */

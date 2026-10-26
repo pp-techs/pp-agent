@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "catalog:",
+    "@napi-rs/keyring": "^2.1.2",
     "electron-updater": "^6.8.9",
     "fflate": "catalog:",
     "i18next": "catalog:",
@@ -31,6 +32,8 @@
     "@earendil-works/pi-agent-core": "catalog:",
     "@earendil-works/pi-ai": "catalog:",
     "@types/node": "catalog:",
+    "@workspace/agent-core": "workspace:*",
+    "@workspace/daemon": "workspace:*",
     "@workspace/shared": "workspace:*",
     "electron": "catalog:",
     "electron-builder": "catalog:",

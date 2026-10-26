@@ -99,7 +99,8 @@ export type SettingsScope =
   | "sessions"
   | "memory"
   | "scheduledTasks"
-  | "voice";
+  | "voice"
+  | "background";
 
 export type AgentEvent =
   | { type: "status"; status: AgentStatus }
@@ -429,10 +430,6 @@ export interface WorkspaceProfile extends WorkspaceSummary {
   instructions: string;
   /** Agent for new conversations here; null = the agent picked last. */
   agentId: string | null;
-  /** Model for new conversations here (after the agent's own model); null = the default model. */
-  model: ModelRef | null;
-  /** Thinking level for new conversations here; null = the level picked last. */
-  thinkingLevel: ThinkingLevel | null;
 }
 
 /** Omit `id` to create a workspace. */
@@ -478,6 +475,61 @@ export interface SettingsFile extends AppSettings {
   pinnedSessions: string[];
   scheduledTasks: ScheduledTask[];
   voice: VoiceSettings;
+  channels: ChannelsSettings;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Background service and chat channels
+// ---------------------------------------------------------------------------------------------
+
+export type ServiceManagerKind = "launchd" | "systemd" | "windows-task";
+
+/** Whether the daemon is registered to start at login and keep running without the window. */
+export interface ServiceStatus {
+  /** False where no supported service manager exists (the reason is in `detail`). */
+  supported: boolean;
+  manager: ServiceManagerKind | null;
+  installed: boolean;
+  /** Why the service is unsupported, or the last failure, for the person to read. */
+  detail: string | null;
+}
+
+/** Telegram settings in settings.json. The bot token is in the vault, never here. */
+export interface TelegramSettings {
+  enabled: boolean;
+  /** Workspace of new Telegram conversations; the agent is the workspace's own unless pinned here. */
+  workspaceId: string;
+  /** Agent pinned for Telegram; null = the workspace's agent, else the built-in agent. */
+  agentId: string | null;
+  /** Telegram user id that paired with the bot; only this person is answered. */
+  ownerId: number | null;
+  ownerName: string | null;
+}
+
+export interface ChannelsSettings {
+  telegram: TelegramSettings;
+}
+
+export type ChannelState = "off" | "connecting" | "online" | "error";
+
+export interface TelegramStatus extends TelegramSettings {
+  hasToken: boolean;
+  /** Without the leading `@`; known once the token has been accepted by Telegram. */
+  botUsername: string | null;
+  state: ChannelState;
+  error: string | null;
+  /** One-time code to send to the bot as `/pair <code>`, while a pairing is open. */
+  pairingCode: string | null;
+  pairingExpiresAt: number | null;
+}
+
+export interface SaveTelegramInput {
+  /** A new bot token; omitted keeps the stored one. */
+  token?: string;
+  enabled: boolean;
+  /** null = follow the workspace's agent. */
+  agentId: string | null;
+  workspaceId: string;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -872,6 +924,16 @@ export interface AgentCommandMap {
     params: { data: string; mimeType: string; durationMs: number };
     result: { text: string };
   };
+
+  get_service_status: { params: NoParams; result: ServiceStatus };
+  /** Registers (or removes) the daemon with the OS service manager. */
+  set_service_installed: { params: { installed: boolean }; result: ServiceStatus };
+  get_telegram_status: { params: NoParams; result: TelegramStatus };
+  save_telegram: { params: { config: SaveTelegramInput }; result: TelegramStatus };
+  /** Opens a pairing window and returns the status with the one-time code. */
+  start_telegram_pairing: { params: NoParams; result: TelegramStatus };
+  /** Removes the token and the paired owner and turns the channel off. */
+  forget_telegram: { params: NoParams; result: TelegramStatus };
 }
 
 export type AgentCommandType = keyof AgentCommandMap;
@@ -972,16 +1034,21 @@ export const IPC = {
 } as const;
 
 // ---------------------------------------------------------------------------------------------
-// Main ↔ agent process
+// Client ↔ daemon (pp-agentd)
 // ---------------------------------------------------------------------------------------------
+
+/** Bump when a frame below changes incompatibly; a client talking to another version shuts the daemon down. */
+export const DAEMON_PROTOCOL = 1;
 
 export interface AgentPaths {
   /** Folder of the built-in workspace; other workspaces use their own folder. */
   workspaceDir: string;
   agentDir: string;
   sessionDir: string;
-  /** App settings file (SettingsFile: settings, gateways, agents), owned by the agent process. */
+  /** App settings file (SettingsFile: settings, gateways, agents), owned by the daemon. */
   settingsFile: string;
+  /** Folder with files shipped with the app (OfficeCLI, built-in skills); overrides the lookup next to the bundle. */
+  resourcesDir?: string;
 }
 
 /** Stored credential for one provider, same shape as pi's auth.json entries. */
@@ -990,33 +1057,29 @@ export type StoredCredential =
   | { type: "oauth"; refresh: string; access: string; expires: number; [key: string]: unknown };
 
 /**
- * Credentials are encrypted with the OS keychain (safeStorage), which only the main process can
- * use, so the agent keeps them through this vault.
+ * Frames are newline-delimited JSON over the daemon's local socket (a Unix socket, or a named pipe
+ * on Windows). The first frame a client sends is `hello`.
  */
-export type VaultRequest =
-  | { op: "read"; providerId: string }
-  | { op: "list" }
-  /** Whether the OS keychain can protect the vault (false: no keychain, or a plain-text fallback). */
-  | { op: "available" }
-  | { op: "write"; providerId: string; credential: StoredCredential }
-  | { op: "delete"; providerId: string };
-
-export type MainToAgentMessage =
+export type ClientFrame =
   | {
-      kind: "init";
-      paths: AgentPaths;
-      /** `app.getLocale()`, e.g. `vi` or `en-US`. */ systemLocale: string;
+      kind: "hello";
+      protocol: number;
+      /** Contents of the daemon's token file, readable only by the same user. */
+      token: string;
+      appVersion: string;
     }
   | { kind: "command"; id: number; command: AgentCommand }
-  | { kind: "vault_result"; id: number; ok: true; data: unknown }
-  | { kind: "vault_result"; id: number; ok: false; error: string };
+  /** One-time import of credentials the old desktop vault held; answered with a `result`. */
+  | { kind: "vault_import"; id: number; entries: Record<string, StoredCredential> }
+  /** Asks the daemon to exit (an update replaced it, or the desktop app started it and is quitting). */
+  | { kind: "shutdown" };
 
-export type AgentToMainMessage =
+export type DaemonFrame =
+  | { kind: "hello_ok"; protocol: number; appVersion: string; pid: number }
+  | { kind: "hello_error"; error: string }
   | { kind: "event"; event: AgentEvent }
   | { kind: "result"; id: number; ok: true; data: unknown }
   | { kind: "result"; id: number; ok: false; error: string }
-  /** `read` resolves StoredCredential | null, `list` resolves string[] (provider ids). */
-  | { kind: "vault"; id: number; request: VaultRequest }
   | { kind: "open_url"; url: string };
 
 /** Workspace folder (relative) that attached files are copied into. */

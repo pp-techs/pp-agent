@@ -235,22 +235,9 @@
     },
     "defaults": {
       "legend": "Mặc định cho cuộc trò chuyện mới",
-      "description": "Những gì một cuộc trò chuyện mới trong không gian làm việc này bắt đầu với. Bạn vẫn có thể thay đổi ngay trong cuộc trò chuyện.",
+      "description": "Tác nhân mà chat mới trong không gian làm việc này bắt đầu cùng. Bạn vẫn đổi được ngay trong chat.",
       "agent": "Agent",
-      "agentInherit": "Agent bạn chọn gần nhất",
-      "modelInherit": "Mô hình mặc định",
-      "modelHelp": "Nếu Agent có mô hình riêng thì mô hình đó được ưu tiên.",
-      "thinking": "Mức suy luận",
-      "thinkingInherit": "Mức bạn chọn gần nhất"
-    },
-    "thinkingLevels": {
-      "off": "Tắt",
-      "minimal": "Tối thiểu",
-      "low": "Thấp",
-      "medium": "Trung bình",
-      "high": "Cao",
-      "xhigh": "Rất cao",
-      "max": "Tối đa"
+      "agentInherit": "Agent bạn chọn gần nhất"
     }
   }
 }

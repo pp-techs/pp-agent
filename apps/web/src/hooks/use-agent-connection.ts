@@ -25,6 +25,7 @@ const SCOPE_KEYS: Record<SettingsScope, QueryKey[]> = {
   memory: [queryKeys.memory],
   scheduledTasks: [queryKeys.scheduledTasks],
   voice: [queryKeys.voice],
+  background: [queryKeys.serviceStatus, queryKeys.telegramStatus],
 };
 
 /** Mirrors the agent process into the chat store: live events first, then a snapshot to catch up. */

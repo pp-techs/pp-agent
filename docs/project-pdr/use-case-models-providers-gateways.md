@@ -4,16 +4,16 @@
 
 ## Providers
 
-Sign in to any of Pi's built-in providers (Anthropic, OpenAI, Google, OpenRouter, …) with an API key. Sign-in prompts appear as an auth dialog; disconnecting removes the key. Only configured providers contribute models to the picker (`apps/desktop/src/agent/providers.ts`, `availableModels`).
+Sign in to any of Pi's built-in providers (Anthropic, OpenAI, Google, OpenRouter, …) with an API key. Sign-in prompts appear as an auth dialog; disconnecting removes the key. Only configured providers contribute models to the picker (`packages/agent-core/src/providers.ts`, `availableModels`).
 
 ## Gateways
 
 A gateway is a custom OpenAI- or Anthropic-compatible endpoint: name, API type, URL, API key, models.
 
 - "This gateway needs an API key" (default on). Turn it off for local endpoints such as Ollama, LM Studio or vLLM: the key field becomes optional, models load without a key, and the gateway's models are available right away. A key saved anyway overrides the placeholder. A gateway that needs a key and has none shows "Needs API key" on its row; its models are listed in the picker marked "Needs key" and cannot be selected (a toast offers to open Settings › Models).
-- The model list is fetched from the gateway (OpenAI-compatible: `GET {base}/models` with a Bearer key; Anthropic: `GET {base}/v1/models` with `x-api-key`), from the agent process because the renderer has no network access.
+- The model list is fetched from the gateway (OpenAI-compatible: `GET {base}/models` with a Bearer key; Anthropic: `GET {base}/v1/models` with `x-api-key`), from the daemon because the renderer has no network access.
 - Models are picked with a multi-select (checkbox rows showing the context window, "N of M selected", Select all / Clear on the filtered list); each selected model has an editable display name (prefilled with the name the gateway reports), a context window field, and image and reasoning toggles. A blank context window means the size the gateway reported or Pi knows for that model.
-- Gateway ids are `gw-<slug of name>`, made unique. Model defaults when nothing reports a size: images on, context window 128000, max tokens 16384, reasoning off, zero cost (`apps/desktop/src/agent/providers.ts`).
+- Gateway ids are `gw-<slug of name>`, made unique. Model defaults when nothing reports a size: images on, context window 128000, max tokens 16384, reasoning off, zero cost (`packages/agent-core/src/providers.ts`).
 
 ## Picking a model
 
@@ -25,4 +25,4 @@ A gateway is a custom OpenAI- or Anthropic-compatible endpoint: name, API type, 
 
 ## Keys
 
-Every key lives in the vault (`credentials.json`), encrypted with Electron safeStorage and decrypted only by the main process. A legacy single-gateway `provider.json` is migrated once at startup into gateway `gw-gateway` and then deleted (`apps/desktop/src/main/legacy.ts`).
+Every key lives in the vault (`vault.json`, AES-256-GCM, owned by the daemon; the master key is in the OS keyring, or `PP_AGENT_MASTER_KEY`, or the `vault.key` file as the last resort). The window never receives a key. Credentials that earlier versions kept in `credentials.json` (Electron safeStorage) are imported once, after the first connection to the daemon, and the old file is deleted. A legacy single-gateway `provider.json` is migrated once at startup into gateway `gw-gateway` and then deleted (`apps/desktop/src/main/legacy.ts`). See [Data storage](../architecture/data-storage.md).
