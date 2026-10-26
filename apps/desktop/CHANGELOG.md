@@ -1,5 +1,11 @@
 # @workspace/desktop
 
+## 0.8.1
+
+### Patch Changes
+
+- 7d19406: PP Agent now has its own logo: app icon, tray icon, browser favicon, and a light/dark mark on the empty chat screen.
+
 ## 0.8.0
 
 ### Minor Changes

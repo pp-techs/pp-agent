@@ -1,6 +1,6 @@
 {
   "name": "pp-agent",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": true,
   "description": "Desktop AI agent for business teams: chat with documents, use business systems through MCP, and switch between purpose-built agents.",
   "homepage": "https://github.com/pp-techs/pp-agent#readme",
