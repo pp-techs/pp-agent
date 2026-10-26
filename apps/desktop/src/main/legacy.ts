@@ -3,7 +3,7 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { GATEWAY_APIS, type GatewayApi, type SettingsFile } from "@workspace/shared";
 import { app, safeStorage } from "electron";
-import { storeCredential } from "./vault.ts";
+import { storeCredential } from "./legacy-vault.ts";
 
 /** Single-gateway settings written by earlier versions. */
 interface LegacyProviderFile {

@@ -11,7 +11,7 @@ sequenceDiagram
   participant U as Person
   participant R as Renderer (prompt-composer)
   participant M as Main process
-  participant A as Agent process
+  participant A as Daemon
   participant S as Transcription service
   U->>R: click microphone
   R->>R: voice not set up? toast + open Settings › General
@@ -19,7 +19,7 @@ sequenceDiagram
   M-->>R: permission granted (app window only)
   U->>R: speak, then Stop (or 5 min limit)
   R->>A: transcribe_audio {base64 audio, mimeType, durationMs}
-  A->>M: vault request for the provider's key
+  A->>A: read the provider's key from the vault
   A->>S: POST {base}/audio/transcriptions (multipart)
   S-->>A: { text }
   A-->>R: { text }
@@ -44,7 +44,7 @@ sequenceDiagram
 ## Provider and key handling
 
 - `settings.json` holds only `voice: { providerId, model, language }` (default: no provider, `whisper-1`, language `app`).
-- The key stays in the vault. The renderer sends the audio to the agent over the existing `transcribe_audio` command; the agent asks the main process for the key, calls the service and returns only the text. The key never reaches the renderer, and the audio is not written to disk.
+- The key stays in the vault. The renderer sends the audio to the daemon over the existing `transcribe_audio` command; the daemon reads the key from its vault, calls the service and returns only the text. The key never reaches the renderer, and the audio is not written to disk. Voice messages sent to the Telegram bot use the same provider and settings (see [Background and Telegram](use-case-background-and-telegram.md)).
 - The service address is the provider's own base address plus `/audio/transcriptions`. Failures are translated: key rejected, service without speech-to-text (404), usage limit (429), unreachable, too large, nothing heard.
 - The recording leaves the computer for the service the person chose; the Settings text says so.
 

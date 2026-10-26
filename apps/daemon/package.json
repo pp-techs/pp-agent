@@ -1,0 +1,27 @@
+{
+  "name": "@workspace/daemon",
+  "version": "0.7.1",
+  "private": true,
+  "description": "PP Agent background daemon (pp-agentd)",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/daemon.mjs",
+  "exports": {
+    "./paths": "./src/paths.ts",
+    "./framing": "./src/framing.ts",
+    "./auth": "./src/auth.ts"
+  },
+  "scripts": {
+    "build": "vp pack"
+  },
+  "dependencies": {
+    "@napi-rs/keyring": "^2.1.2",
+    "@workspace/agent-core": "workspace:*",
+    "@workspace/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

@@ -24,6 +24,9 @@ extraResources:
   - from: resources/skills
     to: skills
 asar: true
+# Native addons cannot load from inside the asar archive (the daemon's OS keyring binding).
+asarUnpack:
+  - node_modules/@napi-rs/**
 # Space-free names for release assets, e.g. pp-agent-0.1.0-mac-arm64.dmg.
 artifactName: pp-agent-${version}-${os}-${arch}.${ext}
 # Installers are attached to GitHub Releases by .github/workflows/release.yml (always run with

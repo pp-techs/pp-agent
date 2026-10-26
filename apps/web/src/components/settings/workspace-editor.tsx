@@ -1,12 +1,5 @@
 import * as React from "react";
-import {
-  DEFAULT_WORKSPACE_ID,
-  THINKING_LEVELS,
-  type DesktopBridge,
-  type ModelRef,
-  type ThinkingLevel,
-  type WorkspaceProfile,
-} from "@workspace/shared";
+import { DEFAULT_WORKSPACE_ID, type DesktopBridge, type WorkspaceProfile } from "@workspace/shared";
 import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert";
 import { Button } from "@workspace/ui/components/button";
 import {
@@ -20,9 +13,7 @@ import { Input } from "@workspace/ui/components/input";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select";
@@ -36,8 +27,7 @@ import { toast } from "sonner";
 import { OptionGroup } from "@/components/settings/option-group";
 import { useSettingsSubPage } from "@/components/settings/settings-subpage";
 import { useSaveWorkspace } from "@/lib/extension-queries";
-import { groupByProvider, modelKey, modelLabeler } from "@/lib/models";
-import { agentsQuery, modelsQuery, workspacesQuery } from "@/lib/queries";
+import { agentsQuery, workspacesQuery } from "@/lib/queries";
 
 const NAME_MAX = 60;
 const ICON_MAX = 8;
@@ -119,13 +109,10 @@ function WorkspaceForm({
   const [dir, setDir] = React.useState(workspace?.dir ?? null);
   const [instructions, setInstructions] = React.useState(workspace?.instructions ?? "");
   const [agentId, setAgentId] = React.useState(workspace?.agentId ?? null);
-  const [model, setModel] = React.useState<ModelRef | null>(workspace?.model ?? null);
-  const [thinkingLevel, setThinkingLevel] = React.useState(workspace?.thinkingLevel ?? null);
   const [touched, setTouched] = React.useState(false);
   const { t, i18n } = useTranslation(["agents", "common"]);
   const save = useSaveWorkspace(bridge);
   const agents = useQuery(agentsQuery(bridge));
-  const models = useQuery(modelsQuery(bridge));
   const isDefault = workspace?.id === DEFAULT_WORKSPACE_ID;
   const fixedFolder = workspace !== undefined;
 
@@ -156,28 +143,6 @@ function WorkspaceForm({
       label: `${agent.icon} ${agent.name}`,
     })),
   ];
-  const available = models.data ?? [];
-  const label = modelLabeler(available);
-  const modelValue = model ? modelKey(model) : INHERIT;
-  const modelMissing = model !== null && !available.some((item) => modelKey(item) === modelValue);
-  const modelItems = [
-    { value: INHERIT, label: t("workspaceEditor.defaults.modelInherit") },
-    ...(modelMissing && model
-      ? [{ value: modelValue, label: t("shared.modelUnavailable", { modelId: model.modelId }) }]
-      : []),
-    ...available.map((item) => ({
-      value: modelKey(item),
-      label: `${label(item)} · ${item.providerName}`,
-    })),
-  ];
-  const thinkingItems = [
-    { value: INHERIT, label: t("workspaceEditor.defaults.thinkingInherit") },
-    ...THINKING_LEVELS.map((level) => ({
-      value: level,
-      label: t(`workspaceEditor.thinkingLevels.${level}`),
-    })),
-  ];
-
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setTouched(true);
@@ -190,8 +155,6 @@ function WorkspaceForm({
         dir,
         instructions: instructions.trim(),
         agentId,
-        model,
-        thinkingLevel,
       },
       {
         onSuccess: (saved) => {
@@ -290,72 +253,6 @@ function WorkspaceForm({
               </SelectTrigger>
               <SelectContent>
                 {agentItems.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="workspace-model">{t("shared.model")}</FieldLabel>
-            <Select
-              items={modelItems}
-              value={modelValue}
-              onValueChange={(next) => {
-                if (next === null || next === modelValue) return;
-                const picked = available.find((item) => modelKey(item) === next);
-                setModel(picked ? { provider: picked.provider, modelId: picked.modelId } : null);
-              }}
-            >
-              <SelectTrigger id="workspace-model" className="w-full" disabled={models.isPending}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={INHERIT}>
-                  {t("workspaceEditor.defaults.modelInherit")}
-                </SelectItem>
-                {modelMissing && model && (
-                  <SelectItem value={modelValue} disabled>
-                    {t("shared.modelUnavailable", { modelId: model.modelId })}
-                  </SelectItem>
-                )}
-                {groupByProvider(available).map(([provider, group]) => (
-                  <SelectGroup key={provider}>
-                    <SelectLabel>{group.name}</SelectLabel>
-                    {group.models.map((item) => (
-                      <SelectItem
-                        key={modelKey(item)}
-                        value={modelKey(item)}
-                        disabled={item.needsKey}
-                      >
-                        {item.needsKey
-                          ? t("shared.modelNeedsKey", { name: label(item) })
-                          : label(item)}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                ))}
-              </SelectContent>
-            </Select>
-            <FieldDescription>{t("workspaceEditor.defaults.modelHelp")}</FieldDescription>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="workspace-thinking">
-              {t("workspaceEditor.defaults.thinking")}
-            </FieldLabel>
-            <Select
-              items={thinkingItems}
-              value={thinkingLevel ?? INHERIT}
-              onValueChange={(next) =>
-                next !== null && setThinkingLevel(next === INHERIT ? null : (next as ThinkingLevel))
-              }
-            >
-              <SelectTrigger id="workspace-thinking" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {thinkingItems.map((item) => (
                   <SelectItem key={item.value} value={item.value}>
                     {item.label}
                   </SelectItem>

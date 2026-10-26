@@ -10,12 +10,9 @@ import {
   type AgentProfile,
   DEFAULT_WORKSPACE_ID,
   type SaveWorkspaceInput,
-  THINKING_LEVELS,
-  type ThinkingLevel,
   type WorkspaceProfile,
   type WorkspaceSummary,
 } from "@workspace/shared";
-import { modelRef } from "./agents.ts";
 import { t } from "./i18n.ts";
 
 const MAX_NAME_LENGTH = 60;
@@ -31,8 +28,6 @@ export const DEFAULT_WORKSPACE: WorkspaceProfile = {
   dir: null,
   instructions: "",
   agentId: null,
-  model: null,
-  thinkingLevel: null,
 };
 
 /** Workspace fields a person edits (everything but id and folder). */
@@ -91,10 +86,6 @@ function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function thinkingLevel(value: unknown): ThinkingLevel | null {
-  return THINKING_LEVELS.includes(value as ThinkingLevel) ? (value as ThinkingLevel) : null;
-}
-
 /**
  * The editable fields from untrusted input. `strict` throws plain-English errors for values a
  * person typed; otherwise values that do not fit are shortened or dropped.
@@ -115,8 +106,6 @@ function editableFields(value: Loose, strict: boolean): EditableFields {
     icon: icon && icon.length <= MAX_ICON_LENGTH ? icon : DEFAULT_ICON,
     instructions: instructions.slice(0, MAX_INSTRUCTIONS_LENGTH),
     agentId: agentId || null,
-    model: modelRef(value.model),
-    thinkingLevel: thinkingLevel(value.thinkingLevel),
   };
 }
 

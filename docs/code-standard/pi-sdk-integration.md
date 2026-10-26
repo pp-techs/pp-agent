@@ -1,6 +1,6 @@
 # Pi SDK integration rules
 
-The Pi session runs in the agent process (`apps/desktop/src/agent/index.ts`).
+The Pi session runs in the daemon process, inside `AgentHost` (`packages/agent-core/src/index.ts`). `packages/agent-core` must stay free of Electron imports: anything process-specific (where events go, the vault, the service installer) comes in through `HostEnvironment` (`packages/agent-core/src/host-io.ts`). `AgentHost.init` sets `PI_CODING_AGENT_DIR`.
 
 - **Own config dir:** set `process.env.PI_CODING_AGENT_DIR` to `<user-data>/agent` before using the SDK, so the app never reads or writes the user's own Pi setup.
 - **No discovered extensions:** the resource loader uses `noExtensions: true` and passes `extensionFactories` explicitly (MCP, approval gate, …). Add behaviour as a factory there, not as a file Pi would discover.

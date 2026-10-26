@@ -1,6 +1,6 @@
 # Use case: skills authoring and usage
 
-A skill is an [Agent Skills](https://agentskills.io) folder with a `SKILL.md`, stored under `<user-data>/agent/skills/<name>/`. Only skills in this folder are loaded (`apps/desktop/src/agent/skills.ts`).
+A skill is an [Agent Skills](https://agentskills.io) folder with a `SKILL.md`, stored under `<user-data>/agent/skills/<name>/`. Only skills in this folder are loaded (`packages/agent-core/src/skills.ts`).
 
 ## Author (Settings › Skills)
 

@@ -2,7 +2,7 @@
 
 **Goal.** A person asks the agent to do the same job regularly ("every Friday at 16:00, summarize the files in Reports") without opening a chat. Each run is saved as a normal conversation they can read later from the sidebar.
 
-Paths are under `apps/desktop/src/agent/` unless noted. Limits are also listed in [business-rules.md](business-rules.md).
+Paths are under `packages/agent-core/src/` unless noted. Limits are also listed in [business-rules.md](business-rules.md).
 
 ## What a task is
 
@@ -38,7 +38,7 @@ sequenceDiagram
 - The conversation is titled `⏰ <task name> – <date>` and is listed in the sidebar like any other. `lastRun.sessionPath` points to it.
 - A run that takes longer than 30 minutes is stopped and recorded as failed. Deleting a task stops its run in progress; the conversation stays.
 - The scheduler (`scheduler.ts`) is pure local-time arithmetic: a day's slot is built from calendar fields, never by adding 24 hours, so daylight-saving changes do not shift "daily at 09:00". One timer points at the earliest next run and wakes at least once a minute, so a computer that slept does not run tasks much too late. It is re-armed after every run and on every settings change.
-- **Catch-up.** The app has to be running: nothing runs while it is closed (the tray option keeps it running with the window closed, see the shell settings). When the app starts, or the computer wakes, a slot missed within the last 24 hours runs **once**; older slots are skipped and counting restarts from now. A task created, switched on, or whose schedule changed is counted from that moment, so it never "catches up" for the time before.
+- **Catch-up.** Tasks run while the **daemon** runs, not only while the window is open. With **Run in background** on (Settings › Background, see [Background and Telegram](use-case-background-and-telegram.md)) the daemon starts when the person signs in and keeps running with the app closed. Without it, the app starts the daemon and stops it when the app quits, so nothing runs after that; the tray option keeps the app, and so the daemon, running with the window closed (see the shell settings). When the daemon starts, or the computer wakes, a slot missed within the last 24 hours runs **once**; older slots are skipped and counting restarts from now. A task created, switched on, or whose schedule changed is counted from that moment, so it never "catches up" for the time before.
 
 ## Headless approval rule
 

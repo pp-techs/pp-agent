@@ -40,16 +40,28 @@ export function platformKey(
   return `${os}-${arch}`;
 }
 
+let configuredResourcesDir: string | null = null;
+
+/** Folder the host was told holds the app's resources (`AgentPaths.resourcesDir`). */
+export function configureResourcesDir(dir: string | undefined): void {
+  configuredResourcesDir = dir ?? null;
+}
+
 /**
- * A folder shipped with the app (`extraResources`): next to the app in a packaged build, under
- * `apps/desktop/resources` when running from `dist/` in development.
+ * A folder shipped with the app (`extraResources`): the configured resources folder first, then
+ * `process.resourcesPath` (Electron), then `apps/desktop/resources` when running from a bundle in
+ * `apps/desktop/dist` or from source in development.
  */
 export function resourcePath(...parts: string[]): string | null {
+  // Set by Electron only; this package does not depend on its types.
+  const { resourcesPath } = process as NodeJS.Process & { resourcesPath?: string };
   const roots = [
-    process.resourcesPath ? join(process.resourcesPath, ...parts) : null,
-    // Bundled: dist/agent.mjs sits next to apps/desktop/resources. From source: src/agent/office.
+    configuredResourcesDir ? join(configuredResourcesDir, ...parts) : null,
+    resourcesPath ? join(resourcesPath, ...parts) : null,
+    // Bundled: dist/daemon.mjs sits next to apps/desktop/resources.
     join(import.meta.dirname, "..", "resources", ...parts),
-    join(import.meta.dirname, "..", "..", "..", "resources", ...parts),
+    // From source: packages/agent-core/src/office.
+    join(import.meta.dirname, "..", "..", "..", "..", "apps", "desktop", "resources", ...parts),
   ];
   return roots.find((root): root is string => root !== null && existsSync(root)) ?? null;
 }

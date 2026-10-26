@@ -8,17 +8,17 @@
 
 ## Daily commands
 
-| Command                           | What it does                                                           |
-| --------------------------------- | ---------------------------------------------------------------------- |
-| `vp install`                      | Install dependencies (run after every pull).                           |
-| `vp install --no-frozen-lockfile` | Needed in non-TTY shells (agents, CI scripts) when the lockfile moves. |
-| `vp run dev`                      | Renderer dev server (`apps/web`) + Electron (`apps/desktop`).          |
-| `vp check`                        | oxfmt formatting + oxlint with type-aware rules and type checking.     |
-| `vp check --fix`                  | Same, applying fixes. Runs on staged files (`staged` in config).       |
-| `vp test`                         | Vitest.                                                                |
-| `vp run build` / `vp run ready`   | Build all packages / check then build.                                 |
-| `vp run dist`                     | Build web, then pack the desktop app with electron-builder.            |
-| `vp run changeset`                | Add a changeset for the next release (see `release-process.md`).       |
+| Command                           | What it does                                                                           |
+| --------------------------------- | -------------------------------------------------------------------------------------- |
+| `vp install`                      | Install dependencies (run after every pull).                                           |
+| `vp install --no-frozen-lockfile` | Needed in non-TTY shells (agents, CI scripts) when the lockfile moves.                 |
+| `vp run dev`                      | Renderer dev server (`apps/web`) + Electron (`apps/desktop`), which starts the daemon. |
+| `vp check`                        | oxfmt formatting + oxlint with type-aware rules and type checking.                     |
+| `vp check --fix`                  | Same, applying fixes. Runs on staged files (`staged` in config).                       |
+| `vp test`                         | Vitest.                                                                                |
+| `vp run build` / `vp run ready`   | Build all packages / check then build.                                                 |
+| `vp run dist`                     | Build web, then pack the desktop app with electron-builder.                            |
+| `vp run changeset`                | Add a changeset for the next release (see `release-process.md`).                       |
 
 `vp <name>` is a built-in; `vp run <name>` runs a `package.json` script. `vp dev` and `vp run dev` differ — use `vp run dev`.
 
@@ -39,5 +39,5 @@
 ## Adding a dependency
 
 1. Add the package with its latest version to `catalog:` in `pnpm-workspace.yaml`.
-2. Reference it as `"catalog:"` in the consuming `package.json`. Runtime deps of the desktop app go in `dependencies` (they ship in the package); build-only ones in `devDependencies`.
+2. Reference it as `"catalog:"` in the consuming `package.json`. Runtime deps of the agent go in `dependencies` of `packages/agent-core` **and** of `apps/desktop` (the daemon bundle is built by `apps/desktop` and leaves its dependencies external, and electron-builder ships only the desktop app's `dependencies`); `@napi-rs/keyring` is listed in `apps/desktop` and `apps/daemon`. Build-only ones go in `devDependencies`.
 3. Run `vp install` (`--no-frozen-lockfile` if non-interactive), then `vp check`.

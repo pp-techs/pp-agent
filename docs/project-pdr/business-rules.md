@@ -1,6 +1,6 @@
 # Business rules
 
-Rules enforced in code. Paths are under `apps/desktop/src/agent/` unless noted.
+Rules enforced in code. Paths are under `packages/agent-core/src/` unless noted.
 
 ## Approvals and tools (`tools.ts`)
 
@@ -35,10 +35,10 @@ Rules enforced in code. Paths are under `apps/desktop/src/agent/` unless noted.
 
 ## Workspaces (`workspaces.ts`)
 
-- A workspace is a folder plus defaults and rules for the chats started in it: name, icon, folder, instructions, agent, model, thinking level. The built-in workspace (id `default`, "Personal", 📁) uses the app's folder, can be edited, and cannot be deleted.
+- A workspace is a folder plus defaults and rules for the chats started in it: name, icon, folder, instructions, and the agent new chats start with. (Earlier versions also kept a model and a thinking level per workspace; they were removed, and files that still have them are read without them.) The built-in workspace (id `default`, "Personal", 📁) uses the app's folder, can be edited, and cannot be deleted.
 - A chat belongs to the workspace whose folder is its working directory. The folder is set when the workspace is created and cannot change afterwards; it must be an absolute path, is created when missing, files are refused, and no two workspaces share a folder. If it cannot be used at runtime, the default folder is used with a notice.
 - Names are unique (case-insensitive), at most 60 characters. Icon ≤ 8 characters. Instructions ≤ 20000 characters. Ids are `ws-<slug>`.
-- New chats in a workspace start with its agent (else the agent picked last), its thinking level (else the level picked last), and a model chosen in this order: the agent's model, the workspace's model, the default model.
+- New chats in a workspace start with its agent (else the agent picked last), the thinking level picked last, and a model chosen in this order: the agent's model, the default model.
 - Its instructions are added to the system prompt as `## Workspace: <icon> <name>`, next to the agent's section, from the next prompt.
 - Deleting a workspace removes only the profile: its chats and files stay, and its chats are listed under the built-in workspace. Agents are not affected; deleting an agent clears it from the workspaces that started with it.
 

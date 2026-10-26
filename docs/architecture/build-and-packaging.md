@@ -1,6 +1,6 @@
 # Build and packaging
 
-The monorepo is driven by Vite+ (`vp`) with pnpm workspaces and a version catalog (`pnpm-workspace.yaml`). Two apps produce build output: `apps/web` (renderer, `vp build`) and `apps/desktop` (Electron bundles, `vp pack`, then electron-builder). `packages/shared` and `packages/ui` are consumed from source and bundled into those outputs.
+The monorepo is driven by Vite+ (`vp`) with pnpm workspaces and a version catalog (`pnpm-workspace.yaml`). Three packages produce build output: `apps/web` (renderer, `vp build`), `apps/desktop` (Electron bundles, `vp pack`, then electron-builder) and `apps/daemon` (`vp pack` to its own `dist/daemon.mjs`; the app ships the copy bundled by `apps/desktop`). `packages/shared`, `packages/agent-core` and `packages/ui` are consumed from source and bundled into those outputs.
 
 ## Scripts
 
@@ -15,17 +15,17 @@ The monorepo is driven by Vite+ (`vp`) with pnpm workspaces and a version catalo
 
 ## Desktop bundles (`vp pack`)
 
-`apps/desktop/vite.config.ts` defines two pack entries, both `platform: "node"`, `target: "node24"`, output `dist/`, with source maps and `electron` never bundled:
+`apps/desktop/vite.config.ts` defines two pack configs, both `platform: "node"`, `target: "node24"`, output `dist/`, with source maps and `electron` and `@napi-rs/keyring` (a native addon) never bundled:
 
-| Output             | Source                 | Format | Why                                              |
-| ------------------ | ---------------------- | ------ | ------------------------------------------------ |
-| `dist/main.mjs`    | `src/main/index.ts`    | ESM    | Main process; `package.json` `main` points here. |
-| `dist/agent.mjs`   | `src/agent/index.ts`   | ESM    | Forked by main with `utilityProcess.fork`.       |
-| `dist/preload.cjs` | `src/preload/index.ts` | CJS    | Sandboxed preload scripts must be CommonJS.      |
+| Output             | Source                   | Format | Why                                                                                                                  |
+| ------------------ | ------------------------ | ------ | -------------------------------------------------------------------------------------------------------------------- |
+| `dist/main.mjs`    | `src/main/index.ts`      | ESM    | Main process; `package.json` `main` points here.                                                                     |
+| `dist/daemon.mjs`  | `../daemon/src/index.ts` | ESM    | `pp-agentd`. Main spawns it (`node` mode via `ELECTRON_RUN_AS_NODE`), a service manager runs it, or a terminal does. |
+| `dist/preload.cjs` | `src/preload/index.ts`   | CJS    | Sandboxed preload scripts must be CommonJS.                                                                          |
 
 The preload entry uses `clean: false` so it does not wipe the ESM outputs. The Pi SDK is kept out of the bundle and loaded from `node_modules` at runtime because it loads assets and wasm itself.
 
-The other runtime `dependencies` of `apps/desktop` (`fflate`, `officeparser`, `typebox`, `yaml`) are left external too (`dist/agent.mjs` imports them), while `@workspace/shared` (a devDependency) is inlined.
+The other runtime `dependencies` of `apps/desktop` (`fflate`, `officeparser`, `typebox`, `yaml`, `@napi-rs/keyring`) are left external too (`dist/daemon.mjs` imports them), while `@workspace/shared`, `@workspace/agent-core` and `@workspace/daemon` (devDependencies) are inlined.
 
 ## Renderer bundle (`vp build`)
 
@@ -43,6 +43,7 @@ The other runtime `dependencies` of `apps/desktop` (`fflate`, `officeparser`, `t
 - Ships `dist/**` and `package.json` inside an asar archive; production `dependencies` (including the Pi SDK) come along from `node_modules`.
 - `extraResources` copies `../web/dist` to `resources/renderer`. In a packaged app main loads `process.resourcesPath/renderer/index.html`, which is why `dist` builds the web app first.
 - Targets: macOS `dmg` + `zip` (category productivity), Windows `nsis` (assisted installer, install folder selectable), Linux `AppImage` + `deb`. `publish: null`: the release workflow uploads installers itself (see [Release process](../code-standard/release-process.md)).
+- `asarUnpack: node_modules/@napi-rs/**`: a native addon cannot load from inside the asar archive, and the daemon needs the OS keyring binding.
 
 ```mermaid
 flowchart LR
@@ -50,7 +51,7 @@ flowchart LR
     W1["src + packages/ui + packages/shared"] -- "vp build" --> W2["dist/ (index.html, assets)"]
   end
   subgraph desktop["apps/desktop"]
-    D1["src/main, src/agent, src/preload + packages/shared"] -- "vp pack" --> D2["dist/main.mjs, agent.mjs, preload.cjs"]
+    D1["src/main, src/preload, ../daemon/src, packages/agent-core + packages/shared"] -- "vp pack" --> D2["dist/main.mjs, daemon.mjs, preload.cjs"]
   end
   D2 --> EB["electron-builder"]
   W2 -- "extraResources → resources/renderer" --> EB
@@ -73,7 +74,7 @@ sequenceDiagram
   Web-->>E: renderer with HMR
 ```
 
-- The renderer hot-reloads; main, preload and agent process changes need Electron restarted (the dev task packs once and launches).
+- The renderer hot-reloads; main, preload and daemon changes need Electron restarted (the dev task packs once and launches). The daemon the app spawned stops when the app quits. A daemon that is already running with the same protocol and app version (a login service, or one started from a terminal) is reused, not replaced, so stop it before testing daemon changes.
 - The desktop `dev` task is declared with `cache: false`: Vite Task's cache tracking injects a file-access hook into child processes, which crashes Electron's sandboxed renderer (blank window).
 - Port 47821 is fixed on both sides: `strictPort` in `apps/web/vite.config.ts` and the fallback `RENDERER_URL` in `apps/desktop/src/main/index.ts`. Set `ELECTRON_RENDERER_URL` to point Electron elsewhere.
 - In dev the renderer has no CSP meta tag (the dev server needs inline scripts); the sandbox and navigation rules still apply.

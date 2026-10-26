@@ -1,8 +1,8 @@
 # Providers, gateways and MCP servers
 
-Both model access and business systems run entirely in the agent process; the renderer has no network access. Sign-in flows that need input from the person are routed through the same auth prompt mechanism. Code: `apps/desktop/src/agent/providers.ts`, `apps/desktop/src/agent/auth-prompts.ts`, `apps/desktop/src/agent/mcp.ts`.
+Both model access and business systems run entirely in the daemon; the renderer has no network access. Sign-in flows that need input from the person are routed through the same auth prompt mechanism. Code: `packages/agent-core/src/providers.ts`, `packages/agent-core/src/auth-prompts.ts`, `packages/agent-core/src/mcp.ts`.
 
-In the diagrams below, renderer ↔ agent process arrows are relayed by the preload bridge and the main process (see [IPC and message flow](ipc-and-messages.md)).
+In the diagrams below, renderer ↔ daemon arrows are relayed by the preload bridge and the main process (see [IPC and message flow](ipc-and-messages.md)).
 
 ## Auth prompts
 
@@ -10,16 +10,16 @@ In the diagrams below, renderer ↔ agent process arrows are relayed by the prel
 
 ## Connecting a provider
 
-Providers are Pi's built-in catalog. The app signs in with an API key: `connect_provider` runs `runtime.login(providerId, "api_key", authInteraction(...))`, and Pi stores the result through `VaultCredentialStore`, i.e. in the vault owned by main.
+Providers are Pi's built-in catalog. The app signs in with an API key: `connect_provider` runs `runtime.login(providerId, "api_key", authInteraction(...))`, and Pi stores the result through `VaultCredentialStore`, i.e. in the daemon's vault (`vault.json`).
 
 ```mermaid
 sequenceDiagram
   actor U as Person
   participant R as Renderer
-  participant A as Agent process
+  participant A as Daemon
   participant Pi as Pi ModelRuntime
   participant M as Main process
-  participant V as credentials.json
+  participant V as vault.json
   U->>R: Settings › Models › Connect
   R->>A: agent command connect_provider { providerId }
   A->>Pi: runtime.login(providerId, "api_key", authInteraction)
@@ -35,9 +35,7 @@ sequenceDiagram
     A-->>R: auth_info { message, url }
   end
   Pi->>A: store the credential (VaultCredentialStore.modify)
-  A->>M: vault write
-  M->>V: encrypt with safeStorage, atomic write
-  M-->>A: vault_result ok
+  A->>V: encrypt (AES-256-GCM), atomic write
   A->>A: changed(["providers","models"], { model: true })
   A-->>R: settings_changed, result ProviderSummary
 ```
@@ -54,7 +52,7 @@ A gateway is a custom endpoint speaking one of `GATEWAY_APIS` (OpenAI- or Anthro
 - `syncGateways` registers every gateway with `runtime.registerProvider` (unregistering first, because re-registration merges with the old config), drops deleted ones, then refreshes availability without network access. It runs at `init` and after each `save_gateway` / `delete_gateway`.
 - Gateway model defaults: name = the name set on the model, else the name in Pi's catalog, else the id; `reasoning` false, image input on, zero cost. Context window and max tokens come from the model's own setting, else from Pi's built-in catalog (matched by id, also without a `vendor/` prefix, preferring the provider that matches the gateway's API), else 128,000 and 16,384.
 - `normalizeBaseUrl` drops a trailing `/v1` for Anthropic gateways (the client appends `/v1/messages`) and keeps it for OpenAI-compatible ones.
-- `fetch_gateway_models` lists the gateway's models (`GET {base}/models` with a Bearer key, or `GET {base}/v1/models?limit=1000` with `x-api-key` for Anthropic) in the agent process, with a 15 s timeout, and returns each model's display name (`display_name` from Anthropic, `name` from OpenRouter; an id-like name such as `models/x` is ignored) and limits. The response is read for `max_input_tokens`, `context_length`, `context_window`, `max_model_len`, `max_context_length` or `inputTokenLimit` (context) and `max_tokens`, `max_output_tokens`, `max_completion_tokens` or `top_provider.max_completion_tokens` (reply); what the gateway omits is filled from Pi's catalog. It uses the key typed in the form or, if omitted, the stored key.
+- `fetch_gateway_models` lists the gateway's models (`GET {base}/models` with a Bearer key, or `GET {base}/v1/models?limit=1000` with `x-api-key` for Anthropic) in the daemon, with a 15 s timeout, and returns each model's display name (`display_name` from Anthropic, `name` from OpenRouter; an id-like name such as `models/x` is ignored) and limits. The response is read for `max_input_tokens`, `context_length`, `context_window`, `max_model_len`, `max_context_length` or `inputTokenLimit` (context) and `max_tokens`, `max_output_tokens`, `max_completion_tokens` or `top_provider.max_completion_tokens` (reply); what the gateway omits is filled from Pi's catalog. It uses the key typed in the form or, if omitted, the stored key.
 - Deleting a gateway also clears `defaultModel` when it pointed at that gateway.
 
 ## MCP servers
@@ -90,7 +88,7 @@ sequenceDiagram
 - `sync()` compares each entry's JSON with what is registered, so an `mcp.json` edit or an agent switch only touches servers that changed.
 - If Pi refuses a config, the reason is kept (`failure(name)`) and shown in the MCP overview as `failed`.
 - MCP tools are named `mcp__<server>__<tool>`. Their exposure (`codemode` default, `deferred`, `direct`, `hidden`) is handled by Pi's MCP, codemode and tool search extensions; `hidden` tools are not listed in Settings › Tools.
-- OAuth sign-in URLs from Pi's MCP extension go to main as `open_url` (`createMcpExtension({ openUrl })`). Tokens are kept in the safeStorage vault (`VaultMcpAuthStore`), falling back to Pi's `agent/mcp-auth.json` only when the OS cannot encrypt.
+- OAuth sign-in URLs from Pi's MCP extension go to the window as `open_url` frames (`createMcpExtension({ openUrl })`), and main opens them in the browser. Tokens are kept in the vault (`VaultMcpAuthStore`, entry `mcp-auth:state`), falling back to Pi's `agent/mcp-auth.json` only when the vault cannot be read.
 
 ### Status via `/mcp`
 

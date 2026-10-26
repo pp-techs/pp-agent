@@ -25,6 +25,8 @@ import {
   ChevronRightIcon,
   BrainIcon,
   FolderKanbanIcon,
+  MessagesSquareIcon,
+  MoonStarIcon,
   SlidersHorizontalIcon,
   SparklesIcon,
   WrenchIcon,
@@ -33,6 +35,8 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { AgentsSection } from "@/components/settings/agents-section";
+import { BackgroundSection } from "@/components/settings/background-section";
+import { ChannelsSection } from "@/components/settings/channels-section";
 import { GeneralSection } from "@/components/settings/general-section";
 import { McpSection } from "@/components/settings/mcp-section";
 import { MemorySection } from "@/components/settings/memory-section";
@@ -52,6 +56,8 @@ export type SettingsSection =
   | "skills"
   | "memory"
   | "scheduledTasks"
+  | "background"
+  | "channels"
   | "mcp";
 
 const SECTIONS: {
@@ -67,6 +73,8 @@ const SECTIONS: {
   { id: "skills", icon: BookOpenIcon, Component: SkillsSection },
   { id: "memory", icon: BrainIcon, Component: MemorySection },
   { id: "scheduledTasks", icon: AlarmClockIcon, Component: ScheduledTasksSection },
+  { id: "background", icon: MoonStarIcon, Component: BackgroundSection },
+  { id: "channels", icon: MessagesSquareIcon, Component: ChannelsSection },
   { id: "mcp", icon: BlocksIcon, Component: McpSection },
 ];
 

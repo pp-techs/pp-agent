@@ -37,6 +37,8 @@ export const queryKeys = {
   memory: ["memory"] as const,
   scheduledTasks: ["scheduled-tasks"] as const,
   voice: ["voice"] as const,
+  serviceStatus: ["service-status"] as const,
+  telegramStatus: ["telegram-status"] as const,
 };
 
 export const settingsQuery = (bridge: DesktopBridge) =>

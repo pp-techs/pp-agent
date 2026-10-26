@@ -18,7 +18,7 @@
 
 ## Areas affected
 
-- [ ] Agent process (`apps/desktop/src/agent`)
+- [ ] Agent core (`packages/agent-core`) or daemon (`apps/daemon`)
 - [ ] Main process / preload (`apps/desktop/src/main`, `apps/desktop/src/preload`)
 - [ ] Renderer (`apps/web`)
 - [ ] Shared contract (`packages/shared`)

@@ -32,10 +32,11 @@ Coding agents are powerful but built for developers. PP Agent puts the same engi
 - **Memory, checklists, helpers.** The agent keeps notes between chats (view and edit them in **Settings › Memory**), tracks multi-step work in a checklist, and hands research to a read-only helper.
 - **Scheduled tasks.** Run a prompt daily, weekly, or at an interval; each run is saved as a chat. Actions that need approval are skipped, since nobody is there to approve them.
 - **Voice input.** Dictate into the message box with a speech-to-text service you choose.
+- **Background and Telegram.** **Settings › Background** keeps the agent running after you close or quit the app (it starts when you sign in), and **Settings › Channels** lets you chat with it from Telegram: pair your account with a one-time code, and approvals are asked in the chat. Scheduled tasks keep running too.
 - **Desktop.** Notifications when an answer is ready, an optional tray icon, and a global shortcut.
 - **Languages.** English and Tiếng Việt, chosen in **Settings › General** or following your system language. Errors, approvals, and dialogs are translated too.
 - **Skills.** Import [Agent Skills](https://agentskills.io), write your own in the app, and invoke them with `/skill:<name>`. Slash commands `/new` and `/compact` keep long chats manageable.
-- **Private by design.** API keys (model providers and search services) are encrypted with your operating system's keychain; conversations and files stay on your computer except what you send to the providers, search services, and MCP servers you configure. Search queries go to the search service you choose.
+- **Private by design.** API keys (model providers, search services, and the Telegram bot token) are encrypted with a master key kept in your operating system's keychain; conversations and files stay on your computer except what you send to the providers, search services, and MCP servers you configure. Search queries go to the search service you choose.
 
 ## Install
 
@@ -69,14 +70,28 @@ The agent works in `~/Documents/PP Agent` unless an agent has its own folder. Se
 
 ```mermaid
 flowchart LR
-  R[Renderer<br/>React UI] -- "preload bridge" --> M[Main process<br/>windows, dialogs, key vault]
-  M -- messages --> A[Agent process<br/>Pi SDK session]
-  A --> T[Tools<br/>files, documents, web, shell]
-  A --> X[MCP servers]
-  A --> P[Model providers<br/>and gateways]
+  R[Renderer<br/>React UI] -- "preload bridge" --> M[Main process<br/>windows, dialogs]
+  M -- "local socket" --> D[pp-agentd daemon<br/>Pi SDK sessions, key vault]
+  TG[Telegram] <-- "polling" --> D
+  D --> T[Tools<br/>files, documents, web, shell]
+  D --> X[MCP servers]
+  D --> P[Model providers<br/>and gateways]
 ```
 
-The agent runs in its own Electron utility process so a slow tool never freezes the window; every tool call passes an approval gate. Read more in the [architecture docs](docs/SUMMARY.md#architecture).
+The agent runs in a separate background process (`pp-agentd`) so a slow tool never freezes the window and the agent can outlive it; every tool call passes an approval gate. Read more in the [architecture docs](docs/SUMMARY.md#architecture).
+
+### Running the daemon without the app
+
+The desktop app starts the daemon itself. To run it on its own (for example on a server), build with `vp pack` in `apps/desktop` and use:
+
+```sh
+node apps/desktop/dist/daemon.mjs run         # foreground; PP_AGENT_HOME picks the data folder
+node apps/desktop/dist/daemon.mjs install     # start at login (launchd, systemd user unit, Task Scheduler)
+node apps/desktop/dist/daemon.mjs status
+node apps/desktop/dist/daemon.mjs uninstall
+```
+
+Telegram is set up in **Settings › Channels › Telegram**: paste the token from @BotFather, turn it on, press **Pair**, and send `/pair CODE` to the bot. Only the paired account is answered. Set `PP_AGENT_MASTER_KEY` (32 bytes, hex or base64) to keep the vault key out of the keychain, e.g. in Docker.
 
 ## Development
 

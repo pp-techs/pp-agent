@@ -1,8 +1,8 @@
 # Agents and live settings
 
-Settings changes and agent switches apply to the open conversation without closing it. Changes that touch the session are collected as pending changes and applied only when no run is active. Code: `AgentHost.changed`, `applyPending`, `switchAgent`, `moveToWorkspace` in `apps/desktop/src/agent/index.ts`.
+Settings changes and agent switches apply to the open conversation without closing it. Changes that touch the session are collected as pending changes and applied only when no run is active. Code: `AgentHost.changed`, `applyPending`, `switchAgent`, `moveToWorkspace` in `packages/agent-core/src/index.ts`.
 
-In the diagrams below, arrows between the renderer and the agent process are relayed by the preload bridge and the main process (see [IPC and message flow](ipc-and-messages.md)).
+In the diagrams below, arrows between the renderer and the daemon are relayed by the preload bridge and the main process (see [IPC and message flow](ipc-and-messages.md)).
 
 ## Pending changes
 
@@ -69,13 +69,13 @@ Notes:
 
 ## Agent switch mid-conversation
 
-An agent is a profile in `settings.json` (`AgentProfile`): rules, icon, description, app tools, MCP servers, skills, model, starter prompts. `set_agent` records the agent on the open conversation and makes it the agent for new conversations (`activeAgentId`). The renderer disables the agent picker while running; the agent process still defers the session changes if a run is active.
+An agent is a profile in `settings.json` (`AgentProfile`): rules, icon, description, app tools, MCP servers, skills, model, starter prompts. `set_agent` records the agent on the open conversation and makes it the agent for new conversations (`activeAgentId`). The renderer disables the agent picker while running; the daemon still defers the session changes if a run is active.
 
 ```mermaid
 sequenceDiagram
   actor U as Person
   participant R as Renderer
-  participant A as Agent process
+  participant A as Daemon
   participant SM as SessionManager
   participant Pi as AgentSession
   U->>R: pick agent B in the top bar
