@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.9.2] — 2026-10-27
+
+"Restart to update" now really restarts: with the tray icon on, the app hid itself instead of quitting, so the update never installed and the app never came back. If an update is already stuck this way, quit the app from its tray icon and install this version once by hand; the next updates restart on their own.
+
 ## [0.9.1] — 2026-10-27
 
 A sent message now appears in the chat right away, with a "Sending" note until the conversation takes it and a "Thinking" note until the agent starts answering, so a slow start no longer looks like the message never left.
