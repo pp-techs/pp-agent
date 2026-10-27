@@ -148,14 +148,14 @@ export function ThemeProvider({
   );
 
   return (
-    <ThemeProviderContext.Provider {...props} value={value}>
+    <ThemeProviderContext {...props} value={value}>
       {children}
-    </ThemeProviderContext.Provider>
+    </ThemeProviderContext>
   );
 }
 
 export const useTheme = () => {
-  const context = React.useContext(ThemeProviderContext);
+  const context = React.use(ThemeProviderContext);
 
   if (context === undefined) {
     throw new Error("useTheme must be used within a ThemeProvider");

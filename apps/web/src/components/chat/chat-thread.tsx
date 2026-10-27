@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { DesktopBridge, QuestionAnswer } from "@workspace/shared";
+import type { DesktopBridge } from "@workspace/shared";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -11,7 +11,11 @@ import { Spinner } from "@workspace/ui/components/spinner";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import { ChatMessageView } from "@/components/chat/chat-message";
+import { ChatMessageView, PendingMessageView } from "@/components/chat/chat-message";
+import {
+  ChatThreadProvider,
+  type ChatThreadContextValue,
+} from "@/components/chat/chat-thread-context";
 import { useAgentCommands } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
 
@@ -20,25 +24,27 @@ export function ChatThread({ bridge }: { bridge: DesktopBridge }) {
   const pending = useChatStore((state) => state.pending);
   const approvalsById = useChatStore((state) => state.approvals);
   const approvals = React.useMemo(() => Object.values(approvalsById), [approvalsById]);
-  const questionsById = useChatStore((state) => state.questions);
-  const questions = React.useMemo(() => Object.values(questionsById), [questionsById]);
   const running = useChatStore((state) => state.status === "running");
   const { t } = useTranslation("chat");
-  const { respondApproval, respondQuestion, regenerate, branchSession, editMessage } =
-    useAgentCommands(bridge);
-  const commands = { regenerate, branchSession, editMessage };
+  const { respondApproval, regenerate, branchSession, editMessage } = useAgentCommands(bridge);
+  const respondToApproval = respondApproval.mutate;
+  const responding = respondApproval.isPending;
 
-  const onRespond = (requestId: string, approved: boolean) =>
-    respondApproval.mutate(
-      { requestId, approved },
-      { onError: (error) => toast.error(error.message) },
-    );
-
-  const onAnswer = (requestId: string, answers: QuestionAnswer[] | null) =>
-    respondQuestion.mutate(
-      { requestId, answers },
-      { onError: (error) => toast.error(error.message) },
-    );
+  // Mutation results change with their state, so the value is rebuilt each render, as the props were.
+  const thread: ChatThreadContextValue = {
+    state: { busy: running, approvals, responding },
+    actions: {
+      respondApproval: (requestId, approved) =>
+        respondToApproval(
+          { requestId, approved },
+          { onError: (error) => toast.error(error.message) },
+        ),
+      regenerate,
+      branchSession,
+      editMessage,
+    },
+    meta: { bridge },
+  };
 
   const sending = pending !== null;
   // The run has nothing on screen yet while the answer is still just a working agent: no reply
@@ -57,60 +63,41 @@ export function ChatThread({ bridge }: { bridge: DesktopBridge }) {
           lastPart.status === "denied")));
 
   return (
-    <MessageScroller>
-      <MessageScrollerViewport>
-        <MessageScrollerContent
-          aria-busy={running}
-          className="mx-auto w-full max-w-3xl gap-6 px-6 py-6"
-        >
-          {messages.map((message, index) => (
-            <MessageScrollerItem
-              key={message.id}
-              messageId={message.id}
-              scrollAnchor={message.role === "user"}
-            >
-              <ChatMessageView
-                bridge={bridge}
-                commands={commands}
-                message={message}
-                last={index === messages.length - 1}
-                busy={running}
-                streaming={running && index === messages.length - 1}
-                approvals={approvals}
-                onRespond={onRespond}
-                questions={questions}
-                onAnswer={onAnswer}
-                responding={respondApproval.isPending || respondQuestion.isPending}
-              />
-            </MessageScrollerItem>
-          ))}
-          {pending && (
-            <MessageScrollerItem key={pending.id} messageId={pending.id} scrollAnchor>
-              <ChatMessageView
-                bridge={bridge}
-                commands={commands}
-                message={pending}
-                last={false}
-                busy={false}
-                streaming={false}
-                pending
-                approvals={approvals}
-                onRespond={onRespond}
-                questions={questions}
-                onAnswer={onAnswer}
-                responding={respondApproval.isPending || respondQuestion.isPending}
-              />
-            </MessageScrollerItem>
-          )}
-          {(sending || waiting) && (
-            <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Spinner className="size-4" />
-              <span>{sending ? t("message.sending") : t("message.thinking")}</span>
-            </div>
-          )}
-        </MessageScrollerContent>
-      </MessageScrollerViewport>
-      <MessageScrollerButton />
-    </MessageScroller>
+    <ChatThreadProvider value={thread}>
+      <MessageScroller>
+        <MessageScrollerViewport>
+          <MessageScrollerContent
+            aria-busy={running}
+            className="mx-auto w-full max-w-3xl gap-6 px-6 py-6"
+          >
+            {messages.map((message, index) => (
+              <MessageScrollerItem
+                key={message.id}
+                messageId={message.id}
+                scrollAnchor={message.role === "user"}
+              >
+                <ChatMessageView
+                  message={message}
+                  last={index === messages.length - 1}
+                  streaming={running && index === messages.length - 1}
+                />
+              </MessageScrollerItem>
+            ))}
+            {pending && (
+              <MessageScrollerItem key={pending.id} messageId={pending.id} scrollAnchor>
+                <PendingMessageView message={pending} />
+              </MessageScrollerItem>
+            )}
+            {(sending || waiting) && (
+              <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Spinner className="size-4" />
+                <span>{sending ? t("message.sending") : t("message.thinking")}</span>
+              </div>
+            )}
+          </MessageScrollerContent>
+        </MessageScrollerViewport>
+        <MessageScrollerButton />
+      </MessageScroller>
+    </ChatThreadProvider>
   );
 }

@@ -40,6 +40,7 @@ import {
   useSlashItems,
 } from "@/lib/slash-commands";
 import { insertTranscript } from "@/lib/voice-input";
+import { QuestionCard } from "@/components/chat/question-card";
 import { useChatStore } from "@/stores/chat-store";
 import { toAttachments, useComposerStore } from "@/stores/composer-store";
 
@@ -54,7 +55,10 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
   const draft = useComposerStore((state) => state.draft);
   const attachments = useComposerStore((state) => state.attachments);
   const { setDraft, add, remove } = useComposerStore.getState();
-  const { abort } = useAgentCommands(bridge);
+  const { abort, respondQuestion } = useAgentCommands(bridge);
+  // The agent's question takes the place of the composer until it is answered.
+  const question = useChatStore((state) => Object.values(state.questions)[0]);
+  const asking = question !== undefined;
   const send = useSendMessage(bridge);
   const { t } = useTranslation(["chat", "common"]);
   const { commands, skills } = useSlashItems(bridge);
@@ -85,7 +89,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
     const view = voice.data ?? (await voice.refetch()).data;
     if (!view?.ready) {
       toast.info(t("composer.voice.notConfigured"));
-      void SettingsModal.show({ bridge, section: "general" });
+      void SettingsModal.show({ bridge, section: "voice" });
       return;
     }
     void recorder.start();
@@ -172,116 +176,145 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
     }
   }
 
+  // Hidden rather than removed, so the draft and attachments are still there after the answer.
+  const wasAsking = React.useRef(false);
+  React.useEffect(() => {
+    if (wasAsking.current && !asking) textareaRef.current?.focus();
+    wasAsking.current = asking;
+  }, [asking]);
+
   return (
-    <form ref={formRef} onSubmit={onSubmit} className="relative mx-auto w-full max-w-3xl px-6 pb-6">
-      {showSuggestions && (
-        <SlashSuggestions
-          items={suggestions}
-          activeIndex={active}
-          onHover={setActiveIndex}
-          onPick={pickItem}
-        />
+    <>
+      {question && (
+        <div className="mx-auto w-full max-w-3xl px-6 pb-6">
+          <QuestionCard
+            key={question.requestId}
+            request={question}
+            responding={respondQuestion.isPending}
+            onRespond={(requestId, answers) =>
+              respondQuestion.mutate(
+                { requestId, answers },
+                { onError: (error) => toast.error(error.message) },
+              )
+            }
+          />
+        </div>
       )}
-      <InputGroup className="h-auto flex-col rounded-[28px] bg-muted/60 has-[[data-slot=input-group-control]:focus-visible]:border-transparent has-[[data-slot=input-group-control]:focus-visible]:ring-0 dark:bg-input/40">
-        {attachments.length > 0 && (
-          <InputGroupAddon align="block-start" className="flex-wrap gap-2">
-            {attachments.map((attachment) => (
-              <Attachment key={attachment.id} size="sm">
-                <AttachmentMedia variant={attachment.data ? "image" : "icon"}>
-                  {attachment.data ? (
-                    <img src={`data:${attachment.mimeType};base64,${attachment.data}`} alt="" />
-                  ) : (
-                    <FileTextIcon />
-                  )}
-                </AttachmentMedia>
-                <AttachmentContent>
-                  <AttachmentTitle>{attachment.name}</AttachmentTitle>
-                </AttachmentContent>
-                <AttachmentActions>
-                  <AttachmentAction
-                    aria-label={t("composer.removeAttachment", { name: attachment.name })}
-                    onClick={() => remove(attachment.id)}
-                  >
-                    <XIcon />
-                  </AttachmentAction>
-                </AttachmentActions>
-              </Attachment>
-            ))}
-          </InputGroupAddon>
-        )}
-        <div className="flex w-full flex-wrap items-end gap-1 p-2">
-          <ComposerMenu
-            bridge={bridge}
-            disabled={disabled}
-            commands={commands}
-            skills={skills}
-            onAttach={() => void pick()}
+      <form
+        ref={formRef}
+        onSubmit={onSubmit}
+        hidden={asking}
+        className="relative mx-auto w-full max-w-3xl px-6 pb-6"
+      >
+        {showSuggestions && (
+          <SlashSuggestions
+            items={suggestions}
+            activeIndex={active}
+            onHover={setActiveIndex}
             onPick={pickItem}
           />
-          <InputGroupTextarea
-            ref={textareaRef}
-            value={draft}
-            onChange={(event) => {
-              const { value, scrollHeight } = event.target;
-              setDraft(value);
-              setActiveIndex(0);
-              setExpanded(
-                (was) => value.length > 0 && (was || value.includes("\n") || scrollHeight > 44),
-              );
-            }}
-            onPaste={(event) => void onPaste(event)}
-            placeholder={
-              disabled ? t("composer.placeholderDisconnected") : t("composer.placeholder")
-            }
-            aria-label={t("composer.ariaLabel")}
-            data-composer-input
-            aria-controls={showSuggestions ? "slash-suggestions" : undefined}
-            aria-activedescendant={showSuggestions ? `slash-option-${active}` : undefined}
-            className={cn(
-              "max-h-52 min-h-9 px-2 py-2",
-              isExpanded && "order-first basis-full px-3",
-            )}
-            disabled={disabled}
-            onKeyDown={onKeyDown}
-          />
-          {isExpanded && <div className="flex-1" />}
-          <ModelPicker bridge={bridge} />
-          <ThinkingPicker bridge={bridge} disabled={disabled} />
-          <VoiceControls
-            state={recorder.state}
-            startedAt={recorder.startedAt}
-            disabled={disabled}
-            onStart={() => void onMicrophone()}
-            onStop={recorder.stop}
-            onCancel={recorder.cancel}
-          />
-          {running ? (
-            <InputGroupButton
-              type="button"
-              variant="default"
-              size="icon-sm"
-              className="size-9 rounded-full"
-              aria-label={t("common:actions.stop")}
-              onClick={() =>
-                abort.mutate(undefined, { onError: (error) => toast.error(error.message) })
-              }
-            >
-              <SquareIcon className="fill-current" />
-            </InputGroupButton>
-          ) : (
-            <InputGroupButton
-              type="submit"
-              variant="default"
-              size="icon-sm"
-              disabled={!canSend || sending}
-              className="size-9 rounded-full"
-              aria-label={t("common:actions.send")}
-            >
-              <ArrowUpIcon />
-            </InputGroupButton>
+        )}
+        <InputGroup className="h-auto flex-col rounded-[28px] bg-muted/60 has-[[data-slot=input-group-control]:focus-visible]:border-transparent has-[[data-slot=input-group-control]:focus-visible]:ring-0 dark:bg-input/40">
+          {attachments.length > 0 && (
+            <InputGroupAddon align="block-start" className="flex-wrap gap-2">
+              {attachments.map((attachment) => (
+                <Attachment key={attachment.id} size="sm">
+                  <AttachmentMedia variant={attachment.data ? "image" : "icon"}>
+                    {attachment.data ? (
+                      <img src={`data:${attachment.mimeType};base64,${attachment.data}`} alt="" />
+                    ) : (
+                      <FileTextIcon />
+                    )}
+                  </AttachmentMedia>
+                  <AttachmentContent>
+                    <AttachmentTitle>{attachment.name}</AttachmentTitle>
+                  </AttachmentContent>
+                  <AttachmentActions>
+                    <AttachmentAction
+                      aria-label={t("composer.removeAttachment", { name: attachment.name })}
+                      onClick={() => remove(attachment.id)}
+                    >
+                      <XIcon />
+                    </AttachmentAction>
+                  </AttachmentActions>
+                </Attachment>
+              ))}
+            </InputGroupAddon>
           )}
-        </div>
-      </InputGroup>
-    </form>
+          <div className="@container flex w-full flex-wrap items-end gap-1 p-2">
+            <ComposerMenu
+              bridge={bridge}
+              disabled={disabled}
+              commands={commands}
+              skills={skills}
+              onAttach={() => void pick()}
+              onPick={pickItem}
+            />
+            <InputGroupTextarea
+              ref={textareaRef}
+              value={draft}
+              onChange={(event) => {
+                const { value, scrollHeight } = event.target;
+                setDraft(value);
+                setActiveIndex(0);
+                setExpanded(
+                  (was) => value.length > 0 && (was || value.includes("\n") || scrollHeight > 44),
+                );
+              }}
+              onPaste={(event) => void onPaste(event)}
+              placeholder={
+                disabled ? t("composer.placeholderDisconnected") : t("composer.placeholder")
+              }
+              aria-label={t("composer.ariaLabel")}
+              data-composer-input
+              aria-controls={showSuggestions ? "slash-suggestions" : undefined}
+              aria-activedescendant={showSuggestions ? `slash-option-${active}` : undefined}
+              className={cn(
+                "max-h-52 min-h-9 px-2 py-2 @max-2xl:order-first @max-2xl:basis-full @max-2xl:px-3",
+                isExpanded && "order-first basis-full px-3",
+              )}
+              disabled={disabled}
+              onKeyDown={onKeyDown}
+            />
+            <div className={cn("hidden flex-1 @max-2xl:block", isExpanded && "block")} />
+            <ModelPicker bridge={bridge} />
+            <ThinkingPicker bridge={bridge} disabled={disabled} />
+            <VoiceControls
+              state={recorder.state}
+              startedAt={recorder.startedAt}
+              disabled={disabled}
+              onStart={() => void onMicrophone()}
+              onStop={recorder.stop}
+              onCancel={recorder.cancel}
+            />
+            {running ? (
+              <InputGroupButton
+                type="button"
+                variant="default"
+                size="icon-sm"
+                className="size-9 rounded-full"
+                aria-label={t("common:actions.stop")}
+                onClick={() =>
+                  abort.mutate(undefined, { onError: (error) => toast.error(error.message) })
+                }
+              >
+                <SquareIcon className="fill-current" />
+              </InputGroupButton>
+            ) : (
+              <InputGroupButton
+                type="submit"
+                variant="default"
+                size="icon-sm"
+                disabled={!canSend || sending}
+                className="size-9 rounded-full"
+                aria-label={t("common:actions.send")}
+              >
+                <ArrowUpIcon />
+              </InputGroupButton>
+            )}
+          </div>
+        </InputGroup>
+      </form>
+    </>
   );
 }

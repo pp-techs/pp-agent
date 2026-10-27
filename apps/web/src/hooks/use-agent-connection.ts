@@ -3,7 +3,7 @@ import type { DesktopBridge, SettingsScope } from "@workspace/shared";
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { useAuthPromptStore } from "@/components/modals/auth-prompt-modal";
+import { askAuthPrompt, withdrawAuthPrompt } from "@/components/modals/auth-prompt-modal";
 import { i18n } from "@/lib/i18n";
 import { queryKeys } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
@@ -51,10 +51,10 @@ export function useAgentConnection(bridge: DesktopBridge) {
           for (const scope of event.scopes) SCOPE_KEYS[scope].forEach(invalidate);
           break;
         case "auth_prompt":
-          useAuthPromptStore.getState().push(event.prompt);
+          askAuthPrompt(bridge, event.prompt);
           break;
         case "auth_prompt_closed":
-          useAuthPromptStore.getState().remove(event.promptId);
+          withdrawAuthPrompt(event.promptId);
           break;
         case "auth_info": {
           const { url } = event;

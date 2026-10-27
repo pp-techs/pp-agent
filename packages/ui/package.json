@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@base-ui/react": "catalog:",
-    "@fontsource-variable/inter": "catalog:",
+    "@fontsource-variable/geist": "catalog:",
+    "@fontsource-variable/geist-mono": "catalog:",
     "@shadcn/react": "catalog:",
     "class-variance-authority": "catalog:",
     "cmdk": "catalog:",

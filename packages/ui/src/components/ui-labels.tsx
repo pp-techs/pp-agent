@@ -29,12 +29,12 @@ const UiLabelsContext = React.createContext<UiLabels>(defaultUiLabels);
 
 /** Supplies translated texts to every UI component below it. */
 function UiLabelsProvider({ labels, children }: { labels: UiLabels; children: React.ReactNode }) {
-  return <UiLabelsContext.Provider value={labels}>{children}</UiLabelsContext.Provider>;
+  return <UiLabelsContext value={labels}>{children}</UiLabelsContext>;
 }
 
 /** The current labels; English defaults without a provider. */
 function useUiLabels(): UiLabels {
-  return React.useContext(UiLabelsContext);
+  return React.use(UiLabelsContext);
 }
 
 export { UiLabelsProvider, useUiLabels };
