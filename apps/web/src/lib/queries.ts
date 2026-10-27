@@ -6,6 +6,7 @@ import type {
   GatewayView,
   ModelRef,
   ProviderSummary,
+  QuestionAnswer,
   SaveGatewayInput,
   SettingsPatch,
   ThinkingLevel,
@@ -191,6 +192,10 @@ export function useAgentCommands(bridge: DesktopBridge) {
     mutationFn: (input: { requestId: string; approved: boolean }) =>
       bridge.agent.command({ type: "respond_approval", ...input }),
   });
+  const respondQuestion = useMutation({
+    mutationFn: (input: { requestId: string; answers: QuestionAnswer[] | null }) =>
+      bridge.agent.command({ type: "respond_question", ...input }),
+  });
   const openSession = useMutation({
     mutationFn: (path: string) => bridge.agent.command({ type: "open_session", path }),
   });
@@ -237,6 +242,7 @@ export function useAgentCommands(bridge: DesktopBridge) {
     abort,
     newChat,
     respondApproval,
+    respondQuestion,
     openSession,
     renameSession,
     deleteSession,

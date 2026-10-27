@@ -15,6 +15,7 @@ import {
   type TelegramUser,
 } from "./api.ts";
 import { TelegramApprovals } from "./approvals.ts";
+import { TelegramQuestions } from "./questions.ts";
 import { splitText } from "./format.ts";
 import { LiveMessage } from "./live-message.ts";
 import type { PairingGuard } from "./pairing.ts";
@@ -127,6 +128,7 @@ function parseCommand(text: string): { name: string; argument: string } | null {
 export class TelegramChannel {
   private readonly api: TelegramApi;
   private readonly approvals: TelegramApprovals;
+  private readonly questions: TelegramQuestions;
   private readonly chats = new Map<number, ChatQueue>();
   /** The lists behind the buttons of `/agent` and `/workspace`, by `<chat>:<message>`. */
   private readonly offers = new Map<string, { kind: ChoiceKind; options: ChatOption[] }>();
@@ -138,6 +140,7 @@ export class TelegramChannel {
   constructor(private readonly deps: TelegramChannelDeps) {
     this.api = deps.api ?? new HttpTelegramApi(deps.token);
     this.approvals = new TelegramApprovals(this.api, deps.t);
+    this.questions = new TelegramQuestions(this.api, deps.t);
   }
 
   /**
@@ -169,6 +172,7 @@ export class TelegramChannel {
     this.loop = null;
     await loop;
     this.approvals.denyAll();
+    this.questions.skipAll();
     for (const [chatId, queue] of this.chats) {
       queue.waiting.length = 0;
       if (queue.running) void this.deps.gateway.abort(`telegram:${chatId}`).catch(() => {});
@@ -272,7 +276,10 @@ export class TelegramChannel {
   private async handleUpdate(update: TelegramUpdate): Promise<void> {
     if (update.callback_query) {
       const ownerId = this.deps.owner()?.id ?? null;
-      if (!(await this.approvals.handleCallback(update.callback_query, ownerId)))
+      if (
+        !(await this.approvals.handleCallback(update.callback_query, ownerId)) &&
+        !(await this.questions.handleCallback(update.callback_query, ownerId))
+      )
         await this.handleChoiceCallback(update.callback_query, ownerId);
       return;
     }
@@ -332,6 +339,11 @@ export class TelegramChannel {
         }
         return;
     }
+
+    // The turn in progress waits for this text (the person tapped "Other"); queued, it would wait
+    // behind the very turn that waits for it.
+    const plain = !message.photo && !message.document && !message.voice && !message.audio;
+    if (plain && message.text && this.questions.handleText(chatId, message.text)) return;
 
     const queue = this.queue(chatId);
     if (queue.waiting.length >= MAX_QUEUED_MESSAGES) {
@@ -477,6 +489,7 @@ export class TelegramChannel {
     const queue = this.chats.get(chatId);
     if (queue) queue.waiting.length = 0;
     this.approvals.denyAll(chatId);
+    this.questions.skipAll(chatId);
     try {
       await this.deps.gateway.abort(`telegram:${chatId}`);
     } catch (error) {
@@ -610,6 +623,7 @@ export class TelegramChannel {
         },
         onTool: (summary) => live.setStatus(summary),
         askApproval: (request) => this.approvals.ask(chatId, request),
+        askQuestion: (request) => this.questions.ask(chatId, request),
       });
     } catch (error) {
       live.dispose();

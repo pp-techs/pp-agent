@@ -1,6 +1,6 @@
-# Use case: memory, checklists and helpers
+# Use case: memory, checklists, questions and helpers
 
-Three features that make the agent more useful over long or repeated work. Paths are under `packages/agent-core/src/` unless noted. Limits and tiers are listed in [business-rules.md](business-rules.md).
+Four features that make the agent more useful over long or repeated work. Paths are under `packages/agent-core/src/` unless noted. Limits and tiers are listed in [business-rules.md](business-rules.md).
 
 ## Long-term memory
 
@@ -25,6 +25,10 @@ Three features that make the agent more useful over long or repeated work. Paths
 ## Checklist (`todo_write`)
 
 For work with three or more steps the model writes a checklist and updates it as it goes. The chat shows the newest list as a card with one icon per status and a "done of total" count; older versions of the list collapse to one-line steps. The list is the tool call's own arguments, so nothing extra is stored and it reappears when a saved conversation is reopened. The tool needs no approval.
+
+## Questions (`ask_user`)
+
+When a request has several reasonable answers that lead to different results, the model asks instead of guessing: one to five questions with two to six options each, an optional suggested option (badge "Recommended"), and multi-select where it fits. The chat shows a card in place of the step. The person picks, or chooses **Other** and types their own answer, then presses **Send**; **Skip** declines and the model carries on with its best judgment or says what it needs. After the answer the step shows what was chosen. The prompt tells the model to ask only when the choice really matters, to put related questions in one call, and never to offer "Other" itself. In Telegram the same questions arrive as buttons (see [Background and Telegram](use-case-background-and-telegram.md)); scheduled tasks and helpers never ask. A desktop notification tells the person when a question waits while the window is in the background. The tool needs no approval; the card is not stored, so a question left open when the app closes shows as interrupted.
 
 ## Helpers (`delegate_task`)
 

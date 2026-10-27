@@ -51,20 +51,20 @@ Conventions, naming rules, tech stack versions, and development workflows.
 
 Product goals, use cases, business rules, and constraints.
 
-| File                                                                                           | Description                                                                               |
-| ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| [product-goals.md](project-pdr/product-goals.md)                                               | Goals, target users, non-goals, use case index                                            |
-| [use-case-documents-and-attachments.md](project-pdr/use-case-documents-and-attachments.md)     | Attaching files and images, reading office documents and PDFs                             |
-| [use-case-business-systems-mcp.md](project-pdr/use-case-business-systems-mcp.md)               | MCP server setup, exposure, OAuth, approvals                                              |
-| [use-case-models-providers-gateways.md](project-pdr/use-case-models-providers-gateways.md)     | Built-in providers, gateways, per-conversation model, vault keys, migration               |
-| [use-case-agents.md](project-pdr/use-case-agents.md)                                           | Agent fields, building, import/export, switching                                          |
-| [use-case-skills.md](project-pdr/use-case-skills.md)                                           | Importing, writing, enabling, and invoking skills                                         |
-| [use-case-chat-history.md](project-pdr/use-case-chat-history.md)                               | Saved conversations and what each remembers                                               |
-| [use-case-memory-and-planning.md](project-pdr/use-case-memory-and-planning.md)                 | Long-term memory, the `todo_write` checklist, `delegate_task` helpers                     |
-| [use-case-scheduled-tasks.md](project-pdr/use-case-scheduled-tasks.md)                         | Tasks that run on a schedule while the daemon runs, headless approval rule                |
-| [use-case-background-and-telegram.md](project-pdr/use-case-background-and-telegram.md)         | Login service for the daemon, Telegram bot: pairing, messages, approvals in chat          |
-| [use-case-voice-input.md](project-pdr/use-case-voice-input.md)                                 | Microphone button and speech to text (local model or a service)                           |
-| [use-case-thinking-and-slash-commands.md](project-pdr/use-case-thinking-and-slash-commands.md) | Thinking levels, `/new`, `/compact`, `/skill:<name>`                                      |
-| [business-rules.md](project-pdr/business-rules.md)                                             | Tool tiers and policies, defaults, name and size limits, Settings ∩ agent                 |
-| [constraints-and-limitations.md](project-pdr/constraints-and-limitations.md)                   | Known limitations and their evidence (local-only, Telegram, service, vault key)           |
-| [key-decisions.md](project-pdr/key-decisions.md)                                               | Architecture and product decisions with rationale (daemon, socket, vault, Telegram owner) |
+| File                                                                                           | Description                                                                                 |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| [product-goals.md](project-pdr/product-goals.md)                                               | Goals, target users, non-goals, use case index                                              |
+| [use-case-documents-and-attachments.md](project-pdr/use-case-documents-and-attachments.md)     | Attaching files and images, reading office documents and PDFs                               |
+| [use-case-business-systems-mcp.md](project-pdr/use-case-business-systems-mcp.md)               | MCP server setup, exposure, OAuth, approvals                                                |
+| [use-case-models-providers-gateways.md](project-pdr/use-case-models-providers-gateways.md)     | Built-in providers, gateways, per-conversation model, vault keys, migration                 |
+| [use-case-agents.md](project-pdr/use-case-agents.md)                                           | Agent fields, building, import/export, switching                                            |
+| [use-case-skills.md](project-pdr/use-case-skills.md)                                           | Importing, writing, enabling, and invoking skills                                           |
+| [use-case-chat-history.md](project-pdr/use-case-chat-history.md)                               | Saved conversations and what each remembers                                                 |
+| [use-case-memory-and-planning.md](project-pdr/use-case-memory-and-planning.md)                 | Long-term memory, the `todo_write` checklist, `ask_user` questions, `delegate_task` helpers |
+| [use-case-scheduled-tasks.md](project-pdr/use-case-scheduled-tasks.md)                         | Tasks that run on a schedule while the daemon runs, headless approval rule                  |
+| [use-case-background-and-telegram.md](project-pdr/use-case-background-and-telegram.md)         | Login service for the daemon, Telegram bot: pairing, messages, approvals in chat            |
+| [use-case-voice-input.md](project-pdr/use-case-voice-input.md)                                 | Microphone button and speech to text (local model or a service)                             |
+| [use-case-thinking-and-slash-commands.md](project-pdr/use-case-thinking-and-slash-commands.md) | Thinking levels, `/new`, `/compact`, `/skill:<name>`                                        |
+| [business-rules.md](project-pdr/business-rules.md)                                             | Tool tiers and policies, defaults, name and size limits, Settings ∩ agent                   |
+| [constraints-and-limitations.md](project-pdr/constraints-and-limitations.md)                   | Known limitations and their evidence (local-only, Telegram, service, vault key)             |
+| [key-decisions.md](project-pdr/key-decisions.md)                                               | Architecture and product decisions with rationale (daemon, socket, vault, Telegram owner)   |

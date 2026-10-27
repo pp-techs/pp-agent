@@ -6,6 +6,7 @@ import type {
   AgentStatus,
   ApprovalRequest,
   ChatMessage,
+  QuestionRequest,
   ModelSummary,
   WorkspaceSummary,
 } from "@workspace/shared";
@@ -22,6 +23,8 @@ interface ChatState {
   setPending: (message: ChatMessage | null) => void;
   /** Pending approvals keyed by request id. */
   approvals: Record<string, ApprovalRequest>;
+  /** Pending questions of `ask_user` keyed by request id. */
+  questions: Record<string, QuestionRequest>;
   /** Model of the open conversation. */
   model: ModelSummary | null;
   /** Agent of the open conversation. */
@@ -44,6 +47,7 @@ export const useChatStore = create<ChatState>()((set) => ({
   pending: null,
   setPending: (message) => set({ pending: message }),
   approvals: {},
+  questions: {},
   model: null,
   agent: null,
   thinking: { level: "off", available: [] },
@@ -65,6 +69,9 @@ export const useChatStore = create<ChatState>()((set) => ({
             pending: null,
             approvals: Object.fromEntries(
               snapshot.approvals.map((request) => [request.requestId, request]),
+            ),
+            questions: Object.fromEntries(
+              snapshot.questions.map((request) => [request.requestId, request]),
             ),
             model: snapshot.model,
             agent: snapshot.agent,
@@ -91,6 +98,14 @@ export const useChatStore = create<ChatState>()((set) => ({
         case "approval_resolved": {
           const { [event.requestId]: _resolved, ...approvals } = state.approvals;
           return { approvals };
+        }
+        case "question_requested":
+          return {
+            questions: { ...state.questions, [event.request.requestId]: event.request },
+          };
+        case "question_resolved": {
+          const { [event.requestId]: _resolved, ...questions } = state.questions;
+          return { questions };
         }
         case "context":
           return { context: event.context };

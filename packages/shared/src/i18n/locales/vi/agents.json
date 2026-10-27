@@ -84,6 +84,10 @@
       "label": "Giao việc tra cứu",
       "description": "Giao một việc tra cứu chỉ-đọc cho trợ lý phụ và nhận lại bản tóm tắt."
     },
+    "ask_user": {
+      "label": "Hỏi bạn khi cần quyết định",
+      "description": "Hỏi bạn chọn giữa các phương án khi cần bạn quyết định."
+    },
     "office_read": {
       "label": "Xem tệp Word, Excel, PowerPoint",
       "description": "Xem cấu trúc và nội dung tệp Office mà không thay đổi chúng."

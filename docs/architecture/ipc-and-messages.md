@@ -103,6 +103,7 @@ The daemon never sends a stored secret to a client: views such as `GatewayView` 
 | `message`                                  | Upserts a `ChatMessage` by id (streaming replaces the same id repeatedly).                 |
 | `snapshot`                                 | Replaces the whole chat store; refetches sessions and tools.                               |
 | `approval_requested` / `approval_resolved` | Adds / removes a pending approval in the chat store.                                       |
+| `question_requested` / `question_resolved` | Adds / removes a pending `ask_user` question in the chat store.                            |
 | `sessions_changed`                         | Refetches the conversation list.                                                           |
 | `context { context }`                      | Updates the context window gauge in the chat store (after each reply and after `compact`). |
 | `settings_changed { scopes }`              | Invalidates the TanStack queries mapped from each `SettingsScope`.                         |
@@ -125,6 +126,6 @@ Scope → query mapping (`SCOPE_KEYS`):
 
 ## Renderer state split
 
-- **Zustand chat store** holds the live conversation: status, messages, approvals, model, agent, thinking, workspace, session path. It is fed only by agent events and the initial `get_snapshot`.
+- **Zustand chat store** holds the live conversation: status, messages, approvals, questions, model, agent, thinking, workspace, session path. It is fed only by agent events and the initial `get_snapshot`.
 - **TanStack Query** holds everything requested on demand (settings, providers, models, tools, skills, MCP, agents, sessions, memory, scheduled tasks, voice input, background service and Telegram status) and runs commands as mutations (`useAgentCommands` in `apps/web/src/lib/queries.ts`). The daemon tells it what is stale through `settings_changed` and `sessions_changed`; the renderer does not guess.
 - **Composer store** (`apps/web/src/stores/composer-store.ts`) holds the draft and attachments; a failed `prompt` restores both.

@@ -34,6 +34,9 @@ import {
   type FetchedGatewayModel,
   type ApprovalRequest,
   type Attachment,
+  type Question,
+  type QuestionAnswer,
+  type QuestionRequest,
   type SaveScheduledTaskInput,
   type ScheduledTask,
   type ScheduledTaskView,
@@ -183,6 +186,7 @@ import {
   toolTier,
 } from "./tools.ts";
 import { createTodoTool } from "./todo.ts";
+import { ASK_TOOL, askSection, checkAnswers, createAskTool, type AskUser } from "./ask.ts";
 import { Transcript } from "./transcript.ts";
 import { createWebFetchTool, createWebSearchTool } from "./web/tools.ts";
 import { WebSearchService } from "./web/search.ts";
@@ -246,6 +250,11 @@ interface SessionScope {
   workspace: () => WorkspaceProfile;
   mcpServers: McpRegistrations;
   approvalGate: ExtensionFactory;
+  /**
+   * How `ask_user` reaches the person. Absent when nobody can answer (a scheduled run): the tool is
+   * then not offered at all.
+   */
+  askUser?: AskUser;
   /** Extra system prompt section: headless runs tell the model nobody is watching, chats where it replies. */
   systemNote?: { section: string; text: string };
 }
@@ -263,6 +272,8 @@ interface ChatRuntime {
   turn: ChatTurn | null;
   /** Approvals waiting on the person in the chat; `false` is sent when the turn stops. */
   pending: Set<(approved: boolean) => void>;
+  /** Questions of `ask_user` waiting on the person in the chat; each settles as skipped. */
+  cancelQuestions: Set<() => void>;
   /** The person stopped the turn. */
   stopped: boolean;
 }
@@ -335,6 +346,11 @@ export class AgentHost {
   private readonly approvals = new Map<
     string,
     { request: ApprovalRequest; resolve: (approved: boolean) => void }
+  >();
+  /** Questions of `ask_user` in the open conversation that wait for an answer. */
+  private readonly questions = new Map<
+    string,
+    { request: QuestionRequest; resolve: (answers: QuestionAnswer[] | null) => void }
   >();
   private readonly transcript = new Transcript((message) => emit({ type: "message", message }));
   /** Runs scheduled tasks one at a time, each in its own Pi session. */
@@ -510,6 +526,8 @@ export class AgentHost {
         return this.openSession(null, command.workspaceId ?? null);
       case "respond_approval":
         return this.resolveApproval(command.requestId, command.approved);
+      case "respond_question":
+        return this.resolveQuestion(command.requestId, command.answers);
       case "list_sessions":
         return this.listSessions();
       case "compact":
@@ -711,6 +729,7 @@ export class AgentHost {
       status: this.status,
       messages: this.transcript.list(),
       approvals: [...this.approvals.values()].map((entry) => entry.request),
+      questions: [...this.questions.values()].map((entry) => entry.request),
       model: this.currentModel(),
       agent: this.services ? summarizeAgent(this.currentAgent()) : null,
       thinking: this.thinking(),
@@ -799,8 +818,9 @@ export class AgentHost {
   }
 
   private async abort(): Promise<void> {
-    // Pending approvals block the run; deny them first or abort() would wait forever.
+    // Pending approvals and questions block the run; settle them first or abort() would wait forever.
     this.denyAllApprovals();
+    this.skipAllQuestions();
     await this.session?.abort();
   }
 
@@ -1137,6 +1157,7 @@ export class AgentHost {
       workspace: () => this.currentWorkspace(),
       mcpServers: this.requireServices().mcpServers,
       approvalGate: this.approvalGate,
+      askUser: (call, signal) => this.requestQuestion(call, signal),
     };
   }
 
@@ -1228,6 +1249,7 @@ export class AgentHost {
           onChanged: () => emit({ type: "settings_changed", scopes: ["memory"] }),
         }),
         createTodoTool(),
+        ...(scope.askUser ? [createAskTool(scope.askUser)] : []),
         createDelegateTool({
           runtime,
           cwd,
@@ -1428,6 +1450,9 @@ export class AgentHost {
         const planning = planningSection(pi.getActiveTools());
         if (planning) sections.planning = planning;
         else delete sections.planning;
+        const ask = askSection(pi.getActiveTools());
+        if (ask) sections.ask = ask;
+        else delete sections.ask;
       });
     };
   }
@@ -1451,6 +1476,51 @@ export class AgentHost {
 
   private denyAllApprovals(): void {
     for (const requestId of [...this.approvals.keys()]) this.resolveApproval(requestId, false);
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Questions (ask_user)
+  // -------------------------------------------------------------------------------------------
+
+  /** Shows the questions in the open conversation; resolves with the answers, or null if skipped. */
+  private requestQuestion(
+    call: { toolCallId: string; questions: Question[] },
+    signal?: AbortSignal,
+  ): Promise<QuestionAnswer[] | null> {
+    if (signal?.aborted) return Promise.resolve(null);
+    const request: QuestionRequest = { requestId: randomUUID(), ...call };
+    this.transcript.setToolStatus(request.toolCallId, "awaiting-answer");
+    emit({ type: "question_requested", request });
+    const { promise, resolve } = Promise.withResolvers<QuestionAnswer[] | null>();
+    const onAbort = () => this.resolveQuestion(request.requestId, null);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    this.questions.set(request.requestId, {
+      request,
+      resolve: (answers) => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve(answers);
+      },
+    });
+    return promise;
+  }
+
+  /**
+   * Settles a question. Answers that do not fit the questions are refused (the command fails and
+   * the card stays open); `null` skips them.
+   */
+  private resolveQuestion(requestId: string, answers: QuestionAnswer[] | null): void {
+    const entry = this.questions.get(requestId);
+    if (!entry) return;
+    const checked = answers === null ? null : checkAnswers(entry.request.questions, answers);
+    this.questions.delete(requestId);
+    // A skipped question is final, as a denied approval: the error the tool ends with must not replace it.
+    this.transcript.setToolStatus(entry.request.toolCallId, checked ? "running" : "denied");
+    emit({ type: "question_resolved", requestId });
+    entry.resolve(checked);
+  }
+
+  private skipAllQuestions(): void {
+    for (const requestId of [...this.questions.keys()]) this.resolveQuestion(requestId, null);
   }
 
   // -------------------------------------------------------------------------------------------
@@ -1536,9 +1606,11 @@ export class AgentHost {
     const agent = scope.agent();
     const allActive = activeToolsFor(current, this.requireServices().settings.get(), agent.tools);
     // Without memory (Settings › Memory or the agent's own switch) the memory tools are not offered.
-    const next = this.memoryOn(agent)
+    const withMemory = this.memoryOn(agent)
       ? allActive
       : allActive.filter((name) => !MEMORY_TOOLS.includes(name));
+    // Where nobody can answer (a scheduled run), ask_user is not registered, so it cannot be active.
+    const next = scope.askUser ? withMemory : withMemory.filter((name) => name !== ASK_TOOL);
     // Only touch the loadout when it changes: replacing it drops MCP tools still connecting.
     const same = next.length === current.length && next.every((name) => current.includes(name));
     if (!same) session.setActiveToolsByName(next);
@@ -2439,7 +2511,10 @@ export class AgentHost {
 
   /** Agent and workspace are read from settings on use, so edits and deletions apply live. */
   private chatScope(
-    chat: Pick<ChatRuntime, "turn" | "pending"> & { agentId: string; workspaceId: string },
+    chat: Pick<ChatRuntime, "turn" | "pending" | "cancelQuestions"> & {
+      agentId: string;
+      workspaceId: string;
+    },
     chatKey: string,
     mcpServers: McpRegistrations = this.requireServices().mcpServers,
   ): SessionScope {
@@ -2450,6 +2525,7 @@ export class AgentHost {
       workspace: () => findWorkspace(settings.get().workspaces, chat.workspaceId),
       mcpServers,
       approvalGate: this.gateFor(agent, (request) => this.askInChat(chat, request)),
+      askUser: (call, signal) => this.askQuestionInChat(chat, call, signal),
       systemNote: { section: "channel", text: channelNote(this.channelOf(chatKey).label) },
     };
   }
@@ -2479,6 +2555,7 @@ export class AgentHost {
     const runtime: ChatRuntime & { agentId: string; workspaceId: string } = {
       turn: null,
       pending: new Set(),
+      cancelQuestions: new Set(),
       stopped: false,
       agentId: agent.id,
       workspaceId: workspace.id,
@@ -2544,9 +2621,36 @@ export class AgentHost {
     return promise;
   }
 
-  private denyChatApprovals(chat: Pick<ChatRuntime, "pending">): void {
+  /** `ask_user` of a chat: the person answers in the chat; with nobody to ask, skip. */
+  private askQuestionInChat(
+    chat: Pick<ChatRuntime, "turn" | "cancelQuestions">,
+    call: { toolCallId: string; questions: Question[] },
+    signal?: AbortSignal,
+  ): Promise<QuestionAnswer[] | null> {
+    const hooks = chat.turn?.hooks;
+    if (!hooks || signal?.aborted) return Promise.resolve(null);
+    const request: QuestionRequest = { requestId: randomUUID(), ...call };
+    const { promise, resolve } = Promise.withResolvers<QuestionAnswer[] | null>();
+    const settle = (answers: QuestionAnswer[] | null) => {
+      if (!chat.cancelQuestions.delete(cancel)) return;
+      signal?.removeEventListener("abort", cancel);
+      resolve(answers);
+    };
+    const cancel = () => settle(null);
+    chat.cancelQuestions.add(cancel);
+    signal?.addEventListener("abort", cancel, { once: true });
+    try {
+      hooks.askQuestion(request).then(settle, () => settle(null));
+    } catch {
+      settle(null);
+    }
+    return promise;
+  }
+
+  private denyChatApprovals(chat: Pick<ChatRuntime, "pending" | "cancelQuestions">): void {
     for (const resolve of chat.pending) resolve(false);
     chat.pending.clear();
+    for (const cancel of [...chat.cancelQuestions]) cancel();
   }
 
   /** Releases the chat's session (the conversation stays on disk). */

@@ -102,7 +102,11 @@ export class Transcript {
       }
       // Calls without a saved result were cut off (app closed or run stopped mid-tool).
       for (const [toolCallId, state] of this.tools) {
-        if (state.status === "running" || state.status === "awaiting-approval")
+        if (
+          state.status === "running" ||
+          state.status === "awaiting-approval" ||
+          state.status === "awaiting-answer"
+        )
           this.setToolStatus(toolCallId, "error", t("conversations.interrupted"));
       }
     } finally {

@@ -1,4 +1,4 @@
-import type { ApprovalRequest } from "@workspace/shared";
+import type { ApprovalRequest, QuestionRequest } from "@workspace/shared";
 import type {
   ChannelGateway,
   ChannelInput,
@@ -206,6 +206,32 @@ export function approvalRequest(requestId = "req1"): ApprovalRequest {
     tier: "exec",
     title: "Run a command",
     detail: "rm -rf <tmp>",
+  };
+}
+
+/** One single-select question and one multi-select question. */
+export function questionRequest(requestId = "q1"): QuestionRequest {
+  return {
+    requestId,
+    toolCallId: "call1",
+    questions: [
+      {
+        id: "scope",
+        question: "Which <period>?",
+        options: [
+          { label: "Q3", description: "July to September" },
+          { label: "Q4" },
+          { label: "Year" },
+        ],
+        recommended: 1,
+      },
+      {
+        id: "formats",
+        question: "Which formats?",
+        multi: true,
+        options: [{ label: "PDF" }, { label: "Excel" }],
+      },
+    ],
   };
 }
 

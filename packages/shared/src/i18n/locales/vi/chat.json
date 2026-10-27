@@ -293,11 +293,26 @@
         "done": "Đã cập nhật danh sách việc",
         "notDone": "Cập nhật danh sách việc"
       },
+      "ask": {
+        "active": "Đang hỏi bạn một câu",
+        "done": "Đã hỏi bạn một câu",
+        "notDone": "Hỏi bạn một câu"
+      },
       "delegate": {
         "active": "Trợ lý phụ đang tra cứu",
         "done": "Trợ lý phụ đã xong",
         "notDone": "Giao việc tra cứu cho trợ lý phụ"
       }
+    },
+    "ask": {
+      "title": "Agent có một câu hỏi",
+      "other": "Khác",
+      "otherLabel": "Câu trả lời của bạn",
+      "otherPlaceholder": "Nhập câu trả lời của bạn",
+      "recommended": "Đề xuất",
+      "skip": "Bỏ qua",
+      "send": "Gửi",
+      "skipped": "Đã bỏ qua"
     },
     "approval": {
       "question": "{{title}}?",
