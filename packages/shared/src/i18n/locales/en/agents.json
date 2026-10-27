@@ -84,6 +84,10 @@
       "label": "Hand off research",
       "description": "Give a focused read-only task to a helper and get back a summary."
     },
+    "ask_user": {
+      "label": "Ask you questions",
+      "description": "Ask you to choose between options when it needs your decision."
+    },
     "office_read": {
       "label": "Inspect Word, Excel, PowerPoint files",
       "description": "Look at the structure and content of Office files without changing them."

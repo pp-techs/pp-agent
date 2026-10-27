@@ -113,7 +113,9 @@
       "runFinished": "Reply ready",
       "runFinishedBody": "{{title}}",
       "approvalNeeded": "Approval needed",
-      "approvalNeededBody": "{{title}}: {{tool}}"
+      "approvalNeededBody": "{{title}}: {{tool}}",
+      "questionAsked": "The agent has a question",
+      "questionAskedBody": "{{title}}"
     },
     "tray": {
       "tooltip": "PP Agent",
@@ -173,7 +175,8 @@
     "run": "Run {{tool}}",
     "remember": "Remember a note",
     "forget": "Forget a note",
-    "editOffice": "Change {{file}}"
+    "editOffice": "Change {{file}}",
+    "askUser": "Asking you a question"
   },
   "webSearch": {
     "unknownProvider": "Unknown search provider.",
@@ -294,6 +297,17 @@
       "approved": "Approved",
       "denied": "Denied",
       "expired": "Expired, denied automatically",
+      "questionTitle": "The agent has a question",
+      "questionCount": "{{index}} of {{total}}",
+      "questionOther": "✏️ Other…",
+      "questionSkip": "Skip",
+      "questionDone": "✅ Done",
+      "questionRecommended": "(Recommended)",
+      "questionTypeAnswer": "Type your answer in your next message.",
+      "questionPickOne": "Pick at least one option first.",
+      "questionOtherAnswer": "Other: {{text}}",
+      "questionSkipped": "Skipped",
+      "questionExpired": "Expired, skipped automatically",
       "tokenRequired": "Enter the bot token.",
       "tokenInvalid": "Telegram does not accept this bot token.",
       "unreachable": "Telegram could not be reached ({{error}}).",

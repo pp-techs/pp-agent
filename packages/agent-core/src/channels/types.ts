@@ -1,6 +1,8 @@
 import type {
   ApprovalRequest,
   Attachment,
+  QuestionAnswer,
+  QuestionRequest,
   SaveTelegramInput,
   TelegramStatus,
 } from "@workspace/shared";
@@ -20,6 +22,11 @@ export interface TurnHooks {
   onTool(summary: string): void;
   /** Resolves true when the person approved. The channel should settle (deny) on its own timeout. */
   askApproval(request: ApprovalRequest): Promise<boolean>;
+  /**
+   * Resolves with one answer per question, or null when the person skips them. The channel should
+   * settle (skip) on its own timeout.
+   */
+  askQuestion(request: QuestionRequest): Promise<QuestionAnswer[] | null>;
 }
 
 export interface TurnResult {

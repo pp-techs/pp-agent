@@ -1,4 +1,10 @@
-import type { ApprovalRequest, ChatMessage, ChatPart } from "@workspace/shared";
+import type {
+  ApprovalRequest,
+  ChatMessage,
+  ChatPart,
+  QuestionAnswer,
+  QuestionRequest,
+} from "@workspace/shared";
 import { Button } from "@workspace/ui/components/button";
 import { CodeBlock, CodeBlockContent } from "@workspace/ui/components/code-block";
 import {
@@ -32,6 +38,7 @@ import {
   FolderOpenIcon,
   ListChecksIcon,
   type LucideIcon,
+  MessageCircleQuestionIcon,
   SaveIcon,
   SearchIcon,
   ShieldQuestionIcon,
@@ -40,6 +47,7 @@ import {
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
+import { QuestionCard } from "@/components/chat/question-card";
 import { useChatStore } from "@/stores/chat-store";
 
 type ToolPart = Extract<ChatPart, { type: "tool" }>;
@@ -60,6 +68,7 @@ const ICONS: Record<string, LucideIcon> = {
   memory_search: BrainIcon,
   todo_write: ListChecksIcon,
   delegate_task: BotIcon,
+  ask_user: MessageCircleQuestionIcon,
   office_read: FileTextIcon,
   office_edit: SaveIcon,
 };
@@ -75,7 +84,9 @@ type StepState = "active" | "done" | "notDone";
 function stepTitle(part: ToolPart, t: TFunction<"chat">) {
   // In progress, finished, or not done (declined or failed).
   const state: StepState =
-    part.status === "running" || part.status === "awaiting-approval"
+    part.status === "running" ||
+    part.status === "awaiting-approval" ||
+    part.status === "awaiting-answer"
       ? "active"
       : part.status === "done"
         ? "done"
@@ -119,6 +130,8 @@ function stepTitle(part: ToolPart, t: TFunction<"chat">) {
       return t(`toolStep.titles.todo.${state}`);
     case "delegate_task":
       return t(`toolStep.titles.delegate.${state}`);
+    case "ask_user":
+      return t(`toolStep.titles.ask.${state}`);
   }
   // MCP tools are named mcp__<server>__<tool>.
   const mcp = /^mcp__(.+?)__(.+)$/.exec(part.name);
@@ -279,12 +292,18 @@ export function ToolStep({
   part,
   approvals,
   onRespond,
+  questions,
+  onAnswer,
   responding,
 }: {
   part: ToolPart;
   /** Pending approvals anchored to this step: its own call, or calls a script inside it makes. */
   approvals: ApprovalRequest[];
   onRespond: (requestId: string, approved: boolean) => void;
+  /** Pending questions of this step's own call (`ask_user`). */
+  questions: QuestionRequest[];
+  /** `null`: the person skips the questions. */
+  onAnswer: (requestId: string, answers: QuestionAnswer[] | null) => void;
   responding: boolean;
 }) {
   const { t } = useTranslation("chat");
@@ -300,6 +319,21 @@ export function ToolStep({
     />
   ));
 
+  // Questions of the agent are the step itself: the card replaces the line until they are answered.
+  if (questions.length > 0)
+    return (
+      <>
+        {questions.map((request) => (
+          <QuestionCard
+            key={request.requestId}
+            request={request}
+            onRespond={onAnswer}
+            responding={responding}
+          />
+        ))}
+      </>
+    );
+
   // A pending approval for this call is a question to the person, not activity, so it replaces the line.
   if (approvals.some((approval) => approval.toolCallId === part.toolCallId)) return <>{cards}</>;
 
@@ -313,7 +347,11 @@ export function ToolStep({
     <TraceLine status={status}>
       <TraceIcon>{part.status === "denied" ? <BanIcon /> : <Icon />}</TraceIcon>
       <TraceTitle>{stepTitle(part, t)}</TraceTitle>
-      {part.status === "denied" && <TraceDescription>{t("toolStep.declined")}</TraceDescription>}
+      {part.status === "denied" && (
+        <TraceDescription>
+          {part.name === "ask_user" ? t("toolStep.ask.skipped") : t("toolStep.declined")}
+        </TraceDescription>
+      )}
       {part.status === "error" && <TraceDescription>{t("toolStep.failed")}</TraceDescription>}
     </TraceLine>
   );

@@ -100,6 +100,12 @@ export function createNotifier(options: {
               tool: event.request.title,
             }),
           );
+          return;
+        case "question_requested":
+          show(
+            t("shell.notification.questionAsked"),
+            t("shell.notification.questionAskedBody", { title: title ?? "PP Agent" }),
+          );
       }
     },
   };

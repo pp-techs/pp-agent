@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { DesktopBridge } from "@workspace/shared";
+import type { DesktopBridge, QuestionAnswer } from "@workspace/shared";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -20,9 +20,12 @@ export function ChatThread({ bridge }: { bridge: DesktopBridge }) {
   const pending = useChatStore((state) => state.pending);
   const approvalsById = useChatStore((state) => state.approvals);
   const approvals = React.useMemo(() => Object.values(approvalsById), [approvalsById]);
+  const questionsById = useChatStore((state) => state.questions);
+  const questions = React.useMemo(() => Object.values(questionsById), [questionsById]);
   const running = useChatStore((state) => state.status === "running");
   const { t } = useTranslation("chat");
-  const { respondApproval, regenerate, branchSession, editMessage } = useAgentCommands(bridge);
+  const { respondApproval, respondQuestion, regenerate, branchSession, editMessage } =
+    useAgentCommands(bridge);
   const commands = { regenerate, branchSession, editMessage };
 
   const onRespond = (requestId: string, approved: boolean) =>
@@ -31,11 +34,27 @@ export function ChatThread({ bridge }: { bridge: DesktopBridge }) {
       { onError: (error) => toast.error(error.message) },
     );
 
+  const onAnswer = (requestId: string, answers: QuestionAnswer[] | null) =>
+    respondQuestion.mutate(
+      { requestId, answers },
+      { onError: (error) => toast.error(error.message) },
+    );
+
   const sending = pending !== null;
-  // The run has nothing on screen yet while the answer is still just a working agent.
+  // The run has nothing on screen yet while the answer is still just a working agent: no reply
+  // yet, or the last step has finished (a tool, or the person's answer to a question) and the
+  // model has not written anything after it.
   const last = pending ?? messages.at(-1);
+  const lastPart = last?.role === "assistant" ? last.parts.at(-1) : undefined;
   const waiting =
-    running && (last === undefined || last.role !== "assistant" || last.parts.length === 0);
+    running &&
+    (last === undefined ||
+      last.role !== "assistant" ||
+      lastPart === undefined ||
+      (lastPart.type === "tool" &&
+        (lastPart.status === "done" ||
+          lastPart.status === "error" ||
+          lastPart.status === "denied")));
 
   return (
     <MessageScroller>
@@ -59,7 +78,9 @@ export function ChatThread({ bridge }: { bridge: DesktopBridge }) {
                 streaming={running && index === messages.length - 1}
                 approvals={approvals}
                 onRespond={onRespond}
-                responding={respondApproval.isPending}
+                questions={questions}
+                onAnswer={onAnswer}
+                responding={respondApproval.isPending || respondQuestion.isPending}
               />
             </MessageScrollerItem>
           ))}
@@ -75,7 +96,9 @@ export function ChatThread({ bridge }: { bridge: DesktopBridge }) {
                 pending
                 approvals={approvals}
                 onRespond={onRespond}
-                responding={respondApproval.isPending}
+                questions={questions}
+                onAnswer={onAnswer}
+                responding={respondApproval.isPending || respondQuestion.isPending}
               />
             </MessageScrollerItem>
           )}

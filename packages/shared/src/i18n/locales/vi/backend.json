@@ -113,7 +113,9 @@
       "runFinished": "Đã có câu trả lời",
       "runFinishedBody": "{{title}}",
       "approvalNeeded": "Cần bạn phê duyệt",
-      "approvalNeededBody": "{{title}}: {{tool}}"
+      "approvalNeededBody": "{{title}}: {{tool}}",
+      "questionAsked": "Agent có một câu hỏi",
+      "questionAskedBody": "{{title}}"
     },
     "tray": {
       "tooltip": "PP Agent",
@@ -173,7 +175,8 @@
     "run": "Chạy {{tool}}",
     "remember": "Ghi nhớ một ghi chú",
     "forget": "Quên một ghi chú",
-    "editOffice": "Thay đổi {{file}}"
+    "editOffice": "Thay đổi {{file}}",
+    "askUser": "Đang hỏi bạn một câu"
   },
   "webSearch": {
     "unknownProvider": "Nhà cung cấp tìm kiếm không xác định.",
@@ -294,6 +297,17 @@
       "approved": "Đã cho phép",
       "denied": "Đã từ chối",
       "expired": "Đã hết hạn, tự động từ chối",
+      "questionTitle": "Agent có một câu hỏi",
+      "questionCount": "{{index}}/{{total}}",
+      "questionOther": "✏️ Khác…",
+      "questionSkip": "Bỏ qua",
+      "questionDone": "✅ Xong",
+      "questionRecommended": "(Đề xuất)",
+      "questionTypeAnswer": "Hãy gõ câu trả lời của bạn trong tin nhắn tiếp theo.",
+      "questionPickOne": "Hãy chọn ít nhất một phương án trước.",
+      "questionOtherAnswer": "Khác: {{text}}",
+      "questionSkipped": "Đã bỏ qua",
+      "questionExpired": "Đã hết hạn, tự động bỏ qua",
       "tokenRequired": "Hãy nhập token của bot.",
       "tokenInvalid": "Telegram không chấp nhận token bot này.",
       "unreachable": "Không thể kết nối tới Telegram ({{error}}).",

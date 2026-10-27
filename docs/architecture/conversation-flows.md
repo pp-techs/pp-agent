@@ -61,7 +61,7 @@ Every tool call passes through the `approval-gate` extension registered first in
 
 ### Deciding
 
-1. **Tier** (`toolTier`): built-in tools have a fixed tier (`read`, `ls`, `find`, `grep`, `read_document`, `current_datetime`, `web_search`, `web_fetch` → read; `write`, `edit` → write; `bash`, `powershell` → exec; discovery tools `codemode`, `tool_search`, `list_mcp_resources`, `list_mcp_resource_templates`, `read_mcp_resource` → read). MCP tools (`mcp__<server>__<tool>`) are read only when the server annotates them `readOnlyHint`, otherwise write. Any unknown tool is exec.
+1. **Tier** (`toolTier`): built-in tools have a fixed tier (`read`, `ls`, `find`, `grep`, `read_document`, `current_datetime`, `web_search`, `web_fetch`, `ask_user` → read; `write`, `edit` → write; `bash`, `powershell` → exec; discovery tools `codemode`, `tool_search`, `list_mcp_resources`, `list_mcp_resource_templates`, `read_mcp_resource` → read). MCP tools (`mcp__<server>__<tool>`) are read only when the server annotates them `readOnlyHint`, otherwise write. Any unknown tool is exec.
 2. **Rule** (`toolRule`): the shell tool of this platform is `off` (locked) unless shell is enabled in Settings, then `ask`, or `allow` when its own policy is `allow` (the rule then carries a `warning`); the other platform's shell is always `off`; discovery tools are always `allow` (locked). Others use the tool policy from `settings.json`, defaulting to `auto` (`edit` defaults to `off`). `auto` means `allow` for the read tier and `ask` otherwise.
 3. `off` → blocked ("turned off in Settings"). Tools that are off stay registered because codemode can reach any registered tool, so the gate is the enforcement point.
 4. The current agent's tool list (`agentAllowsTool`) → blocked when the agent may not use an app tool. MCP tools follow the agent's MCP servers instead; discovery tools stay available.
@@ -117,7 +117,48 @@ sequenceDiagram
 
 ### Abort and pending approvals
 
-A pending approval blocks the run, so `abort`, `new_chat`, `open_session` and `delete_session` of the open conversation first deny every pending approval (`denyAllApprovals`) and then abort the session. Pending approvals are part of the snapshot, so a renderer reload shows them again.
+A pending approval blocks the run, so `abort`, `new_chat`, `open_session` and `delete_session` of the open conversation first deny every pending approval (`denyAllApprovals`) and skip every open question (`skipAllQuestions`), then abort the session. Pending approvals and questions are part of the snapshot, so a renderer reload shows them again.
+
+## Questions (`ask_user`)
+
+`ask_user` (`packages/agent-core/src/ask.ts`) lets the model ask one to five multiple-choice questions and wait. It is a read-tier tool: it passes the approval gate like `todo_write`, and Settings › Tools or the agent's tool list can still turn it off. The person picks options (one, or several when `multi`) or types their own answer ("Other", added by the app; the model may not offer an option called Other). The call is validated twice: Pi checks the schema (1–5 questions, 2–6 options each, text lengths) and `checkQuestions` checks unique ids and labels.
+
+How a question reaches the person is the session's `SessionScope.askUser`, like `approvalGate`:
+
+| Session                    | `askUser`                                                                                           |
+| -------------------------- | --------------------------------------------------------------------------------------------------- |
+| Open conversation (window) | `requestQuestion`: the tool part becomes `awaiting-answer`, `question_requested` goes to the window |
+| Telegram chat turn         | `askQuestionInChat` → `TurnHooks.askQuestion` → `TelegramQuestions`                                 |
+| Scheduled run              | none: the tool is not registered (and `applyActiveTools` filters it out)                            |
+| `delegate_task` helper     | none: not in `HELPER_TOOLS`                                                                         |
+
+```mermaid
+sequenceDiagram
+  participant LLM as Model
+  participant Pi as Pi AgentSession
+  participant A as AgentHost
+  participant R as Renderer
+  actor U as Person
+  LLM-->>Pi: tool call ask_user { questions }
+  Pi->>A: askUser({ toolCallId, questions }, signal)
+  A->>A: tool part status awaiting-answer
+  A-->>R: question_requested { requestId, toolCallId, questions }
+  R->>U: question card in place of the step
+  U->>R: Send (or Skip)
+  R->>A: agent command respond_question { requestId, answers | null }
+  A->>A: checkAnswers (refused answers keep the card open)
+  A->>A: status running (denied when skipped)
+  A-->>R: question_resolved
+  alt answered
+    A-->>Pi: answers
+    Pi-->>LLM: "User answers: - scope: Q4 …"
+  else skipped, stopped or timed out
+    A-->>Pi: null
+    Pi-->>LLM: error "The user chose not to answer."
+  end
+```
+
+The result the model reads is text: `User answered: Q3` for one question, otherwise `User answers:` followed by `- <id>: <choices>` lines; a typed answer appears as `Other: <text>`. A skipped question is an error result; the step shows "Skipped" (status `denied`, which a later tool error cannot overwrite). The signal passed to `askUser` settles the call when the run is aborted. If the app closes while a question is open, nothing is stored: the reopened conversation shows the step as interrupted.
 
 ## Chat channel turns (Telegram)
 
@@ -145,6 +186,7 @@ sequenceDiagram
 
 - **Who.** Only the paired owner is answered; strangers are ignored. A tap on Approve or Deny counts only from the owner. `/pair CODE` works while a pairing window (10 minutes, one use, 5 wrong tries lock it for 15 minutes) is open.
 - **Same gate as the window.** The chat session uses the agent's tool list and the same `approval-gate`. Requests are asked in the chat instead of the window; an unanswered one is denied after 10 minutes, and `/stop` or `/new` denies all pending ones.
+- **Questions.** `ask_user` works in chat turns too. `TelegramQuestions` (`channels/telegram/questions.ts`) sends each question as its own message, one after the other, with a button per option (a ☐/☑ mark and **Done** for multi-select, **Other** and **Skip** always). Buttons carry `q:<request id>:<question>:<option | o | d | s>` (at most 64 bytes). After **Other**, the owner's next plain text message is the answer: `TelegramChannel` hands it to the question before queueing, because a queued message would wait behind the very turn that waits for it (photos, files and voice are not taken as answers). Skip, 10 minutes without an answer, `/stop`, `/new` or stopping the channel settle the call as skipped.
 - **Input.** Text, photos (sent as images), documents (copied to the workspace's `attachments/`, up to 20 MiB), and voice or audio (transcribed with the voice input provider set up in Settings; without one the reply says why it failed). Other message kinds get an "unsupported" reply.
 - **Commands.** `/new` starts a fresh conversation for the chat (drops its entry in `channels.json`), `/stop` aborts the turn and clears the queue, `/help`, `/start`. `/model` and `/thinking` call `gateway.pickOptions` / `gateway.pick`, which open the chat's own session and call `session.setModel` / `setThinkingLevel` (Pi saves them with the conversation). `/agent` and `/workspace` call `gateway.options` / `gateway.choose`: the pick is stored per chat in `channels.json` (`choices`), the session is closed and reopened on the next turn; a workspace change also drops the chat's conversation, an agent change appends an agent entry to it.
 - **History.** Each chat conversation is a saved session titled `💬 Telegram – <date>`, so it also shows in the window's history. After a restart the daemon reopens the session named in `channels.json`; a chat session idle for 30 minutes is released from memory (not deleted).

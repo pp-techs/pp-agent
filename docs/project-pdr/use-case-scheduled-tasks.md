@@ -48,6 +48,7 @@ Nobody is at the keyboard during a run, so the approval gate cannot ask. For sch
 - Any tool call that would ask for approval is **denied automatically**, never approved. The model receives a plain reason in the tool result and a note in its system prompt saying the run is unattended, so it can explain what it could not do.
 - The run counts denied calls (`lastRun.deniedTools`); Settings shows "N actions skipped".
 - Tools with policy `off` stay unavailable, as always.
+- `ask_user` is not offered at all: nobody can answer, so the model decides by itself.
 
 To let a scheduled task write files or use a business system, set that tool's policy to **Allow** in Settings › Tools (and in the agent's tool list). The editor and the section repeat this rule in an alert.
 

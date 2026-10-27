@@ -4,7 +4,14 @@ import type { ChannelState } from "@workspace/shared";
 import { TelegramApiError, type TelegramMessage, type TelegramUpdate } from "./api.ts";
 import { MAX_QUEUED_MESSAGES, TelegramChannel, type TelegramOwner } from "./channel.ts";
 import { PairingGuard } from "./pairing.ts";
-import { approvalRequest, FakeApi, FakeGateway, fakeT, textUpdate } from "./testing.ts";
+import {
+  approvalRequest,
+  FakeApi,
+  FakeGateway,
+  fakeT,
+  questionRequest,
+  textUpdate,
+} from "./testing.ts";
 
 const OWNER: TelegramOwner = { id: 7, name: "Ann Lee" };
 const channels: TelegramChannel[] = [];
@@ -384,6 +391,72 @@ describe("messages", () => {
     });
     await vi.waitFor(() => expect(shown(api)).toContain("ran it"));
     expect(approved).toBe(true);
+  });
+});
+
+describe("questions of ask_user", () => {
+  test("the owner's text after Other answers the question instead of queueing a turn", async () => {
+    const { api, channel, gateway } = setup();
+    let answers: unknown;
+    gateway.handler = async (_, hooks) => {
+      answers = await hooks.askQuestion({
+        ...questionRequest("q9"),
+        questions: [questionRequest("q9").questions[0]!],
+      });
+      return { text: "got it", status: "done" };
+    };
+    await channel.start();
+    api.push(textUpdate(1, "plan it"));
+    await vi.waitFor(() => expect(api.sent.some((m) => m.options?.replyMarkup)).toBe(true));
+    api.push({
+      update_id: 2,
+      callback_query: { id: "c", from: { id: 7, first_name: "A" }, data: "q:q9:0:o" },
+    });
+    await vi.waitFor(() =>
+      expect(api.plainTexts).toContain("channels.telegram.questionTypeAnswer"),
+    );
+    api.push(textUpdate(3, "the second half"));
+    await vi.waitFor(() => expect(shown(api)).toContain("got it"));
+    expect(answers).toEqual([{ id: "scope", selected: [], custom: "the second half" }]);
+    expect(gateway.turns).toHaveLength(1);
+  });
+
+  test("text from a stranger never answers a question", async () => {
+    const { api, channel, gateway } = setup();
+    let answers: unknown = "unset";
+    gateway.handler = async (_, hooks) => {
+      answers = await hooks.askQuestion(questionRequest("q9"));
+      return { text: "done", status: "done" };
+    };
+    await channel.start();
+    api.push(textUpdate(1, "plan it"));
+    await vi.waitFor(() => expect(api.sent.some((m) => m.options?.replyMarkup)).toBe(true));
+    api.push({
+      update_id: 2,
+      callback_query: { id: "c", from: { id: 7, first_name: "A" }, data: "q:q9:0:o" },
+    });
+    await vi.waitFor(() =>
+      expect(api.plainTexts).toContain("channels.telegram.questionTypeAnswer"),
+    );
+    api.push(textUpdate(3, "hello from a stranger", 99));
+    await channel.stop();
+    expect(gateway.turns).toHaveLength(1);
+    await vi.waitFor(() => expect(answers).toBeNull());
+  });
+
+  test("/stop skips the open question", async () => {
+    const { api, channel, gateway } = setup();
+    let answers: unknown = "unset";
+    gateway.handler = async (_, hooks) => {
+      answers = await hooks.askQuestion(questionRequest("q9"));
+      return { text: "", status: "aborted" };
+    };
+    await channel.start();
+    api.push(textUpdate(1, "plan it"));
+    await vi.waitFor(() => expect(api.sent.some((m) => m.options?.replyMarkup)).toBe(true));
+    api.push(textUpdate(2, "/stop"));
+    await vi.waitFor(() => expect(answers).toBeNull());
+    expect(gateway.aborted).toContain("telegram:7");
   });
 });
 

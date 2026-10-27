@@ -8,7 +8,14 @@ export * from "./accelerator.ts";
 /** Approval tier of a tool, modelled on omp: reads run freely, writes and execution need a person. */
 export type ToolTier = "read" | "write" | "exec";
 
-export type ToolStatus = "running" | "awaiting-approval" | "done" | "error" | "denied";
+export type ToolStatus =
+  | "running"
+  | "awaiting-approval"
+  /** `ask_user` is waiting for the person to answer. */
+  | "awaiting-answer"
+  | "done"
+  | "error"
+  | "denied";
 
 export type ChatPart =
   | { type: "text"; text: string }
@@ -55,6 +62,39 @@ export interface ApprovalRequest {
   detail: string;
 }
 
+/** One choice of a question the agent asks (`ask_user`). */
+export interface QuestionOption {
+  label: string;
+  description?: string;
+}
+
+/** One question the agent asks. The person may also type an answer of their own ("Other"). */
+export interface Question {
+  /** Names the answer in the result the model reads; unique within one call. */
+  id: string;
+  question: string;
+  options: QuestionOption[];
+  /** More than one option may be picked. */
+  multi?: boolean;
+  /** Position (from 0) of the option the agent suggests. */
+  recommended?: number;
+}
+
+/** Questions waiting for the person's answer. */
+export interface QuestionRequest {
+  requestId: string;
+  /** Tool call in the transcript that the card belongs to. */
+  toolCallId: string;
+  questions: Question[];
+}
+
+/** What the person answered to one question. `custom` is the text typed for "Other". */
+export interface QuestionAnswer {
+  id: string;
+  selected: string[];
+  custom?: string;
+}
+
 /** `unconfigured`: no model is available yet (no provider connected or no model chosen). */
 export type AgentStatus = "starting" | "unconfigured" | "idle" | "running";
 
@@ -70,6 +110,8 @@ export interface AgentSnapshot {
   status: AgentStatus;
   messages: ChatMessage[];
   approvals: ApprovalRequest[];
+  /** Questions of `ask_user` that wait for an answer. */
+  questions: QuestionRequest[];
   /** Model of the open conversation. */
   model: ModelSummary | null;
   /** Agent of the open conversation. */
@@ -109,6 +151,9 @@ export type AgentEvent =
   | { type: "snapshot"; snapshot: AgentSnapshot }
   | { type: "approval_requested"; request: ApprovalRequest }
   | { type: "approval_resolved"; requestId: string }
+  | { type: "question_requested"; request: QuestionRequest }
+  /** The questions were answered, skipped, or made obsolete (the run stopped). */
+  | { type: "question_resolved"; requestId: string }
   /** The saved conversation list changed (new, renamed, deleted, or a turn finished). */
   | { type: "sessions_changed" }
   /** The open conversation's context usage changed (a reply finished, or it was compacted). */
@@ -831,6 +876,11 @@ export interface AgentCommandMap {
   /** Without `workspaceId`: in the workspace of the open conversation. */
   new_chat: { params: { workspaceId?: string }; result: void };
   respond_approval: { params: { requestId: string; approved: boolean }; result: void };
+  /** `answers` null: the person chose not to answer. */
+  respond_question: {
+    params: { requestId: string; answers: QuestionAnswer[] | null };
+    result: void;
+  };
   list_sessions: { params: NoParams; result: SessionSummary[] };
   /** Summarizes earlier messages of the open conversation to free up the model's context. */
   compact: { params: NoParams; result: void };

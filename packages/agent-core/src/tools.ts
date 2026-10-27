@@ -13,6 +13,7 @@ import {
 import { DELEGATE_TOOL } from "./subagent.ts";
 import { TODO_TOOL } from "./todo.ts";
 import { OFFICE_EDIT_TOOL, OFFICE_READ_TOOL } from "./office/names.ts";
+import { ASK_TOOL } from "./ask.ts";
 
 /** Example business tool. Replace or extend with tools that reach your own systems. */
 export const currentDateTimeTool = defineTool({
@@ -60,6 +61,7 @@ const MANAGED_TOOLS = [
   ...MEMORY_TOOLS,
   TODO_TOOL,
   DELEGATE_TOOL,
+  ASK_TOOL,
   OFFICE_READ_TOOL,
   OFFICE_EDIT_TOOL,
 ];
@@ -77,6 +79,7 @@ export const AGENT_TOOLS = [
   ...MEMORY_TOOLS,
   TODO_TOOL,
   DELEGATE_TOOL,
+  ASK_TOOL,
   OFFICE_READ_TOOL,
   OFFICE_EDIT_TOOL,
   "write",
@@ -111,6 +114,8 @@ const TIERS: Record<string, ToolTier> = {
   [TODO_TOOL]: "read",
   // The helper it starts can only use read tools and cannot change anything.
   [DELEGATE_TOOL]: "read",
+  // ask_user only waits for the person's answer; nothing changes.
+  [ASK_TOOL]: "read",
   write: "write",
   edit: "write",
   bash: "exec",
@@ -267,6 +272,7 @@ export function describeToolCall(
       detail: preview([command, ...args].join(" ")),
     };
   }
+  if (toolName === ASK_TOOL) return { title: t("approvals.askUser"), detail: "" };
   const mcp = parseMcpToolName(toolName);
   if (mcp) {
     return {

@@ -293,11 +293,26 @@
         "done": "Updated the checklist",
         "notDone": "Update the checklist"
       },
+      "ask": {
+        "active": "Asking you a question",
+        "done": "Asked you a question",
+        "notDone": "Ask you a question"
+      },
       "delegate": {
         "active": "Helper is researching",
         "done": "Helper finished",
         "notDone": "Hand research to a helper"
       }
+    },
+    "ask": {
+      "title": "The agent has a question",
+      "other": "Other",
+      "otherLabel": "Your own answer",
+      "otherPlaceholder": "Type your answer",
+      "recommended": "Recommended",
+      "skip": "Skip",
+      "send": "Send",
+      "skipped": "Skipped"
     },
     "approval": {
       "question": "{{title}}?",

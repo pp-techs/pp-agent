@@ -1,5 +1,12 @@
 import * as React from "react";
-import type { ApprovalRequest, ChatMessage, ChatPart, DesktopBridge } from "@workspace/shared";
+import type {
+  ApprovalRequest,
+  ChatMessage,
+  ChatPart,
+  DesktopBridge,
+  QuestionAnswer,
+  QuestionRequest,
+} from "@workspace/shared";
 import {
   Attachment,
   AttachmentContent,
@@ -318,6 +325,8 @@ export function ChatMessageView({
   pending,
   approvals,
   onRespond,
+  questions,
+  onAnswer,
   responding,
 }: {
   bridge: DesktopBridge;
@@ -332,6 +341,8 @@ export function ChatMessageView({
   pending?: boolean;
   approvals: ApprovalRequest[];
   onRespond: (requestId: string, approved: boolean) => void;
+  questions: QuestionRequest[];
+  onAnswer: (requestId: string, answers: QuestionAnswer[] | null) => void;
   responding: boolean;
 }) {
   if (message.role === "compaction") return <CompactionDivider />;
@@ -376,6 +387,10 @@ export function ChatMessageView({
                       (approval) => approval.anchorToolCallId === part.toolCallId,
                     )}
                     onRespond={onRespond}
+                    questions={questions.filter(
+                      (request) => request.toolCallId === part.toolCallId,
+                    )}
+                    onAnswer={onAnswer}
                     responding={responding}
                   />
                 ),

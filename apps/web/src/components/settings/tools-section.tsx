@@ -95,6 +95,7 @@ const BUILT_IN_TOOL_NAMES = [
   "memory_forget",
   "todo_write",
   "delegate_task",
+  "ask_user",
   "office_read",
   "office_edit",
   "codemode",

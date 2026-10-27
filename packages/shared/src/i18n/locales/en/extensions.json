@@ -49,6 +49,7 @@
       "memory_forget": "Forget notes",
       "todo_write": "Plan with a checklist",
       "delegate_task": "Hand off research",
+      "ask_user": "Ask you questions",
       "office_read": "Inspect Word, Excel, PowerPoint files",
       "office_edit": "Create and edit Word, Excel, PowerPoint files"
     },
