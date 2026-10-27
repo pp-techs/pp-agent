@@ -84,7 +84,10 @@ describe("TelegramQuestions", () => {
     expect(api.plainTexts).toContain("channels.telegram.questionTypeAnswer");
 
     expect(questions.handleText(9, "other chat")).toBe(false);
-    expect(questions.handleText(5, "   ")).toBe(false);
+    // Blank text is taken but does not answer, so it cannot queue behind the waiting turn.
+    const edits = api.edits.length;
+    expect(questions.handleText(5, "   ")).toBe(true);
+    expect(api.edits).toHaveLength(edits);
     expect(questions.handleText(5, " as a CSV ")).toBe(true);
     await expect(answers).resolves.toEqual([
       { id: "formats", selected: ["Excel"], custom: "as a CSV" },

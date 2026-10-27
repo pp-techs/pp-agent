@@ -213,12 +213,16 @@ export class TelegramQuestions {
     return true;
   }
 
-  /** Takes `text` as the answer to "Other". Returns false when no question of the chat waits for it. */
+  /**
+   * Takes `text` as the answer to "Other". Returns false when no question of the chat waits for
+   * it. A blank text is taken (it must not queue behind the turn that waits) but leaves the
+   * question open.
+   */
   handleText(chatId: number, text: string): boolean {
     const custom = text.trim().slice(0, ASK_LIMITS.maxCustomLength);
-    if (custom === "") return false;
     for (const open of this.open.values()) {
       if (open.chatId !== chatId || !open.awaitingText) continue;
+      if (custom === "") return true;
       open.finish({ answer: this.answerOf(open, custom) });
       return true;
     }
