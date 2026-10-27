@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.10.0] — 2026-10-27
+
+The agent can now ask you a question with options to pick from, in the chat window and in Telegram, instead of guessing. You can choose one or several options or type an answer of your own, or skip the question. It asks only when your choice really changes the result. Agents that have their own tool list need "Ask you questions" ticked in the agent's tools; Settings › Tools can switch it off. Scheduled tasks never ask.
+
 ## [0.9.2] — 2026-10-27
 
 "Restart to update" now really restarts: with the tray icon on, the app hid itself instead of quitting, so the update never installed and the app never came back. If an update is already stuck this way, quit the app from its tray icon and install this version once by hand; the next updates restart on their own.
