@@ -168,13 +168,6 @@ export function useProviderCommands(bridge: DesktopBridge): ProviderCommands {
   return { connect, disconnect, saveGateway, deleteGateway, fetchGatewayModels };
 }
 
-export function useRespondAuthPrompt(bridge: DesktopBridge) {
-  return useMutation({
-    mutationFn: (input: { promptId: string; value: string | null }) =>
-      bridge.agent.command({ type: "respond_auth_prompt", ...input }),
-  });
-}
-
 /** Agent commands are fire-and-forget from the UI's view; state changes arrive as events. */
 export function useAgentCommands(bridge: DesktopBridge) {
   const prompt = useMutation({

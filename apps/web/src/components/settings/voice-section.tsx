@@ -27,7 +27,7 @@ import { TriangleAlertIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import { OptionGroup } from "@/components/settings/option-group";
+import { SectionHeading } from "@/components/settings/section-heading";
 import { useInstallVoiceModel, useSaveVoice, voiceQuery } from "@/lib/extension-queries";
 
 /** Select value for "no provider chosen"; real provider ids never equal it. */
@@ -63,7 +63,7 @@ function VoiceForm({ bridge }: { bridge: DesktopBridge }) {
     return (
       <Alert variant="destructive">
         <TriangleAlertIcon />
-        <AlertTitle>{t("general.voice.loadError")}</AlertTitle>
+        <AlertTitle>{t("voice.loadError")}</AlertTitle>
         <AlertDescription>{voice.error.message}</AlertDescription>
       </Alert>
     );
@@ -77,8 +77,8 @@ function VoiceForm({ bridge }: { bridge: DesktopBridge }) {
     providerId !== LOCAL_VOICE_PROVIDER &&
     !providers.some((item) => item.id === providerId);
   const providerItems = [
-    { value: LOCAL_VOICE_PROVIDER, label: t("general.voice.provider.local") },
-    { value: NONE, label: t("general.voice.provider.none") },
+    { value: LOCAL_VOICE_PROVIDER, label: t("voice.provider.local") },
+    { value: NONE, label: t("voice.provider.none") },
     ...(providerMissing && providerId ? [{ value: providerId, label: providerId }] : []),
     ...providers.map((item) => ({ value: item.id, label: item.name })),
   ];
@@ -98,8 +98,8 @@ function VoiceForm({ bridge }: { bridge: DesktopBridge }) {
       ? LANGUAGE_CODES
       : [...LANGUAGE_CODES, language];
   const languageItems = [
-    { value: APP, label: t("general.voice.language.app") },
-    { value: AUTO, label: t("general.voice.language.auto") },
+    { value: APP, label: t("voice.language.app") },
+    { value: AUTO, label: t("voice.language.auto") },
     ...codes.map((code) => ({ value: code, label: names.of(code) ?? code })),
   ];
   const trimmedModel = model.trim();
@@ -117,7 +117,7 @@ function VoiceForm({ bridge }: { bridge: DesktopBridge }) {
 
   const presetItems = VOICE_MODEL_PRESETS.map((preset) => ({
     value: preset,
-    label: t(`general.voice.local.models.${preset}`),
+    label: t(`voice.local.models.${preset}`),
   }));
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -125,14 +125,14 @@ function VoiceForm({ bridge }: { bridge: DesktopBridge }) {
     if (modelInvalid) return;
     save.mutate(
       { providerId, model: trimmedModel, language },
-      { onSuccess: () => toast.success(t("general.voice.saved")) },
+      { onSuccess: () => toast.success(t("voice.saved")) },
     );
   }
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <Field>
-        <FieldLabel htmlFor="voice-provider">{t("general.voice.provider.label")}</FieldLabel>
+        <FieldLabel htmlFor="voice-provider">{t("voice.provider.label")}</FieldLabel>
         <Select
           items={providerItems}
           value={providerId ?? NONE}
@@ -150,20 +150,18 @@ function VoiceForm({ bridge }: { bridge: DesktopBridge }) {
           </SelectContent>
         </Select>
         <FieldDescription>
-          {providers.length === 0
-            ? t("general.voice.provider.empty")
-            : t("general.voice.provider.help")}
+          {providers.length === 0 ? t("voice.provider.empty") : t("voice.provider.help")}
         </FieldDescription>
       </Field>
       {localChosen && !local.binary && (
         <Alert>
           <TriangleAlertIcon />
-          <AlertDescription>{t("general.voice.local.missingBinary")}</AlertDescription>
+          <AlertDescription>{t("voice.local.missingBinary")}</AlertDescription>
         </Alert>
       )}
       {localChosen && presetMode ? (
         <Field>
-          <FieldLabel htmlFor="voice-model">{t("general.voice.local.modelLabel")}</FieldLabel>
+          <FieldLabel htmlFor="voice-model">{t("voice.local.modelLabel")}</FieldLabel>
           <div className="flex items-center gap-2">
             <Select
               items={presetItems}
@@ -190,18 +188,18 @@ function VoiceForm({ bridge }: { bridge: DesktopBridge }) {
             >
               {install.isPending && <Spinner />}
               {local.models[trimmedModel as VoiceModelPreset]
-                ? t("general.voice.local.downloaded")
-                : t("general.voice.local.download")}
+                ? t("voice.local.downloaded")
+                : t("voice.local.download")}
             </Button>
           </div>
           <FieldDescription>
-            {t("general.voice.local.modelHelp")} {t("general.voice.local.privacy")}
+            {t("voice.local.modelHelp")} {t("voice.local.privacy")}
           </FieldDescription>
         </Field>
       ) : (
         <Field data-invalid={modelInvalid}>
           <FieldLabel htmlFor="voice-model">
-            {localChosen ? t("general.voice.local.modelLabel") : t("general.voice.model.label")}
+            {localChosen ? t("voice.local.modelLabel") : t("voice.model.label")}
           </FieldLabel>
           <Input
             id="voice-model"
@@ -212,12 +210,12 @@ function VoiceForm({ bridge }: { bridge: DesktopBridge }) {
             aria-invalid={modelInvalid}
           />
           <FieldDescription>
-            {localChosen ? t("general.voice.local.modelHelp") : t("general.voice.model.help")}
+            {localChosen ? t("voice.local.modelHelp") : t("voice.model.help")}
           </FieldDescription>
         </Field>
       )}
       <Field>
-        <FieldLabel htmlFor="voice-language">{t("general.voice.language.label")}</FieldLabel>
+        <FieldLabel htmlFor="voice-language">{t("voice.language.label")}</FieldLabel>
         <Select
           items={languageItems}
           value={language}
@@ -234,15 +232,15 @@ function VoiceForm({ bridge }: { bridge: DesktopBridge }) {
             ))}
           </SelectContent>
         </Select>
-        <FieldDescription>{t("general.voice.language.help")}</FieldDescription>
+        <FieldDescription>{t("voice.language.help")}</FieldDescription>
       </Field>
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">
-          {voice.data.ready ? t("general.voice.ready") : t("general.voice.notReady")}
+          {voice.data.ready ? t("voice.ready") : t("voice.notReady")}
         </p>
         <Button type="submit" disabled={!dirty || modelInvalid || save.isPending}>
           {save.isPending && <Spinner />}
-          {t("general.voice.save")}
+          {t("voice.save")}
         </Button>
       </div>
     </form>
@@ -250,11 +248,12 @@ function VoiceForm({ bridge }: { bridge: DesktopBridge }) {
 }
 
 /** "Voice input" group of Settings › General: which service turns recordings into text. */
-export function VoiceInputGroup({ bridge }: { bridge: DesktopBridge }) {
+export function VoiceSection({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("settings");
   return (
-    <OptionGroup legend={t("general.voice.legend")} description={t("general.voice.description")}>
+    <div className="flex flex-col gap-6">
+      <SectionHeading title={t("voice.title")} description={t("voice.description")} />
       <VoiceForm bridge={bridge} />
-    </OptionGroup>
+    </div>
   );
 }

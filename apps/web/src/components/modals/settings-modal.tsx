@@ -26,6 +26,7 @@ import {
   BrainIcon,
   FolderKanbanIcon,
   MessagesSquareIcon,
+  MicIcon,
   MoonStarIcon,
   SlidersHorizontalIcon,
   SparklesIcon,
@@ -44,21 +45,23 @@ import { ScheduledTasksSection } from "@/components/settings/scheduled-tasks-sec
 import { ModelsSection } from "@/components/settings/models-section";
 import { SkillsSection } from "@/components/settings/skills-section";
 import { SettingsSubPageProvider } from "@/components/settings/settings-subpage";
+import { VoiceSection } from "@/components/settings/voice-section";
 import { ToolsSection } from "@/components/settings/tools-section";
 import { WorkspacesSection } from "@/components/settings/workspaces-section";
 
 export type SettingsSection =
   | "general"
+  | "voice"
   | "models"
   | "workspaces"
   | "agents"
   | "tools"
+  | "mcp"
   | "skills"
   | "memory"
   | "scheduledTasks"
-  | "background"
   | "channels"
-  | "mcp";
+  | "background";
 
 const SECTIONS: {
   id: SettingsSection;
@@ -66,16 +69,17 @@ const SECTIONS: {
   Component: React.ComponentType<{ bridge: DesktopBridge }>;
 }[] = [
   { id: "general", icon: SlidersHorizontalIcon, Component: GeneralSection },
+  { id: "voice", icon: MicIcon, Component: VoiceSection },
   { id: "models", icon: SparklesIcon, Component: ModelsSection },
   { id: "workspaces", icon: FolderKanbanIcon, Component: WorkspacesSection },
   { id: "agents", icon: BotIcon, Component: AgentsSection },
   { id: "tools", icon: WrenchIcon, Component: ToolsSection },
+  { id: "mcp", icon: BlocksIcon, Component: McpSection },
   { id: "skills", icon: BookOpenIcon, Component: SkillsSection },
   { id: "memory", icon: BrainIcon, Component: MemorySection },
   { id: "scheduledTasks", icon: AlarmClockIcon, Component: ScheduledTasksSection },
-  { id: "background", icon: MoonStarIcon, Component: BackgroundSection },
   { id: "channels", icon: MessagesSquareIcon, Component: ChannelsSection },
-  { id: "mcp", icon: BlocksIcon, Component: McpSection },
+  { id: "background", icon: MoonStarIcon, Component: BackgroundSection },
 ];
 
 type SettingsModalProps = { bridge: DesktopBridge; section?: SettingsSection };

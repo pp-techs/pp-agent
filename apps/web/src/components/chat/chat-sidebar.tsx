@@ -40,6 +40,7 @@ import {
   PencilIcon,
   PinIcon,
   PinOffIcon,
+  SearchIcon,
   SettingsIcon,
   SquarePenIcon,
   Trash2Icon,
@@ -232,10 +233,10 @@ export function ChatSidebar({ bridge }: { bridge: DesktopBridge }) {
           }}
         >
           <span className="min-w-0 flex-1 truncate">{session.title}</span>
-          <span className="shrink-0 text-xs text-muted-foreground tabular-nums group-hover/menu-item:invisible group-focus-within/menu-item:invisible">
-            {relativeTime(session.modified)}
-          </span>
         </SidebarMenuButton>
+        <span className="pointer-events-none absolute inset-y-0 right-1 flex min-w-5 items-center justify-center text-xs text-muted-foreground tabular-nums group-hover/menu-item:invisible group-focus-within/menu-item:invisible">
+          {relativeTime(session.modified)}
+        </span>
         <DropdownMenu>
           <DropdownMenuTrigger
             render={<SidebarMenuAction showOnHover aria-label={t("sidebar.session.actions")} />}
@@ -445,12 +446,13 @@ export function ChatSidebar({ bridge }: { bridge: DesktopBridge }) {
           </SidebarMenuItem>
         </SidebarMenu>
         <div className="relative">
+          <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <SidebarInput
             type="search"
             value={query}
             placeholder={t("sidebar.search.placeholder")}
             aria-label={t("sidebar.search.label")}
-            className="pr-8 [&::-webkit-search-cancel-button]:hidden"
+            className="pr-8 pl-9 [&::-webkit-search-cancel-button]:hidden"
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Escape") setQuery("");

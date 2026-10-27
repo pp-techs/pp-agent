@@ -22,7 +22,6 @@ import { ChatSidebar } from "@/components/chat/chat-sidebar";
 import { ChatThread } from "@/components/chat/chat-thread";
 import { EmptyChat } from "@/components/chat/empty-chat";
 import { PromptComposer } from "@/components/chat/prompt-composer";
-import { AuthPromptModal } from "@/components/modals/auth-prompt-modal";
 import { SettingsModal } from "@/components/modals/settings-modal";
 import { useAgentConnection } from "@/hooks/use-agent-connection";
 import { bridge } from "@/lib/bridge";
@@ -131,7 +130,6 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
           </div>
         )}
       </SidebarInset>
-      <AuthPromptModal bridge={bridge} />
     </SidebarProvider>
   );
 }

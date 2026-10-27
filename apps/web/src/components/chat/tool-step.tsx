@@ -1,10 +1,4 @@
-import type {
-  ApprovalRequest,
-  ChatMessage,
-  ChatPart,
-  QuestionAnswer,
-  QuestionRequest,
-} from "@workspace/shared";
+import type { ApprovalRequest, ChatMessage, ChatPart } from "@workspace/shared";
 import { Button } from "@workspace/ui/components/button";
 import { CodeBlock, CodeBlockContent } from "@workspace/ui/components/code-block";
 import {
@@ -47,7 +41,7 @@ import {
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
-import { QuestionCard } from "@/components/chat/question-card";
+import { useChatThread } from "@/components/chat/chat-thread-context";
 import { useChatStore } from "@/stores/chat-store";
 
 type ToolPart = Extract<ChatPart, { type: "tool" }>;
@@ -140,16 +134,12 @@ function stepTitle(part: ToolPart, t: TFunction<"chat">) {
     : t(`toolStep.titles.other.${state}`, { name: part.name });
 }
 
-function ApprovalCard({
-  approval,
-  onRespond,
-  responding,
-}: {
-  approval: ApprovalRequest;
-  onRespond: (requestId: string, approved: boolean) => void;
-  responding: boolean;
-}) {
+function ApprovalCard({ approval }: { approval: ApprovalRequest }) {
   const { t } = useTranslation("chat");
+  const {
+    state: { responding },
+    actions: { respondApproval },
+  } = useChatThread();
   return (
     <Item variant="outline" size="sm" className="w-full">
       <ItemMedia variant="icon">
@@ -171,11 +161,15 @@ function ApprovalCard({
           size="sm"
           variant="outline"
           disabled={responding}
-          onClick={() => onRespond(approval.requestId, false)}
+          onClick={() => respondApproval(approval.requestId, false)}
         >
           {t("toolStep.approval.deny")}
         </Button>
-        <Button size="sm" disabled={responding} onClick={() => onRespond(approval.requestId, true)}>
+        <Button
+          size="sm"
+          disabled={responding}
+          onClick={() => respondApproval(approval.requestId, true)}
+        >
           {t("toolStep.approval.approve")}
         </Button>
       </ItemActions>
@@ -288,51 +282,19 @@ function HelperProgress({ output }: { output: string }) {
   );
 }
 
-export function ToolStep({
-  part,
-  approvals,
-  onRespond,
-  questions,
-  onAnswer,
-  responding,
-}: {
-  part: ToolPart;
-  /** Pending approvals anchored to this step: its own call, or calls a script inside it makes. */
-  approvals: ApprovalRequest[];
-  onRespond: (requestId: string, approved: boolean) => void;
-  /** Pending questions of this step's own call (`ask_user`). */
-  questions: QuestionRequest[];
-  /** `null`: the person skips the questions. */
-  onAnswer: (requestId: string, answers: QuestionAnswer[] | null) => void;
-  responding: boolean;
-}) {
+export function ToolStep({ part }: { part: ToolPart }) {
   const { t } = useTranslation("chat");
+  const { state } = useChatThread();
+  // Pending approvals anchored to this step: its own call, or calls a script inside it makes.
+  const approvals = state.approvals.filter(
+    (approval) => approval.anchorToolCallId === part.toolCallId,
+  );
   // Only the newest checklist of the chat is a card; earlier versions collapse into a step.
   const latestTodoId = useChatStore(latestTodoCallId);
   const Icon = ICONS[part.name] ?? (part.name.startsWith("mcp__") ? BlocksIcon : WrenchIcon);
   const cards = approvals.map((approval) => (
-    <ApprovalCard
-      key={approval.requestId}
-      approval={approval}
-      onRespond={onRespond}
-      responding={responding}
-    />
+    <ApprovalCard key={approval.requestId} approval={approval} />
   ));
-
-  // Questions of the agent are the step itself: the card replaces the line until they are answered.
-  if (questions.length > 0)
-    return (
-      <>
-        {questions.map((request) => (
-          <QuestionCard
-            key={request.requestId}
-            request={request}
-            onRespond={onAnswer}
-            responding={responding}
-          />
-        ))}
-      </>
-    );
 
   // A pending approval for this call is a question to the person, not activity, so it replaces the line.
   if (approvals.some((approval) => approval.toolCallId === part.toolCallId)) return <>{cards}</>;

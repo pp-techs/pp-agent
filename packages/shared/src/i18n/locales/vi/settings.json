@@ -7,21 +7,22 @@
     "breadcrumbRoot": "Cài đặt",
     "sections": {
       "general": "Chung",
+      "voice": "Nhập bằng giọng nói",
       "models": "Mô hình",
       "workspaces": "Không gian làm việc",
       "agents": "Agent",
       "tools": "Công cụ",
-      "skills": "Kỹ năng",
       "mcp": "Máy chủ MCP",
+      "skills": "Kỹ năng",
       "memory": "Bộ nhớ",
       "scheduledTasks": "Tác vụ định kỳ",
-      "background": "Chạy nền",
-      "channels": "Kênh chat"
+      "channels": "Kênh chat",
+      "background": "Chạy nền"
     }
   },
   "general": {
     "title": "Chung",
-    "description": "Ngôn ngữ, không gian làm việc, giao diện, mô hình mặc định, nhập bằng giọng nói và cập nhật.",
+    "description": "Ngôn ngữ, không gian làm việc, giao diện, mô hình mặc định và cập nhật.",
     "language": {
       "title": "Ngôn ngữ",
       "description": "Ngôn ngữ được dùng trong toàn bộ ứng dụng.",
@@ -74,49 +75,49 @@
         "hint": "Phím bổ trợ và một phím, ví dụ CommandOrControl+Shift+Space.",
         "invalid": "Phím tắt không hợp lệ. Dùng phím bổ trợ và một phím, ví dụ CommandOrControl+Shift+Space."
       }
-    },
-    "voice": {
-      "legend": "Nhập bằng giọng nói",
-      "description": "Nói thay vì gõ: nút micro trong ô nhập tin nhắn chuyển bản ghi âm của bạn thành văn bản. whisper.cpp chạy ngay trên máy tính này, hoặc bản ghi âm được gửi đến dịch vụ bạn chọn ở đây.",
-      "provider": {
-        "label": "Nhà cung cấp",
-        "none": "Chưa thiết lập",
-        "local": "Máy tính này (whisper.cpp)",
-        "help": "Nhập bằng giọng nói cục bộ không cần khóa và không gửi dữ liệu đi đâu. Nhà cung cấp hoặc cổng từ Mô hình chỉ được dùng khi bạn chọn tại đây.",
-        "empty": "Chưa có nhà cung cấp nào có khóa. Nhập bằng giọng nói cục bộ vẫn hoạt động mà không cần khóa."
-      },
-      "local": {
-        "modelLabel": "Mô hình cục bộ",
-        "modelHelp": "Mô hình whisper chạy trên máy tính này. Mô hình nhỏ nhanh hơn; mô hình lớn nhận diện giọng và âm thanh nhiễu tốt hơn.",
-        "models": {
-          "tiny": "Tiny (74 MB)",
-          "base": "Base (141 MB)",
-          "small": "Small (465 MB)",
-          "medium": "Medium (1,4 GB)"
-        },
-        "download": "Tải xuống",
-        "downloading": "Đang tải xuống…",
-        "downloaded": "Đã tải xuống",
-        "notDownloaded": "Chưa tải xuống",
-        "missingBinary": "Chưa cài whisper.cpp. Hãy cài (ví dụ `brew install whisper-cpp`) rồi khởi động lại PP Agent.",
-        "privacy": "Bản ghi âm nằm lại trên máy tính này."
-      },
-      "model": {
-        "label": "Mô hình",
-        "help": "Mô hình chuyển giọng nói thành văn bản, ví dụ whisper-1."
-      },
-      "language": {
-        "label": "Ngôn ngữ nói",
-        "app": "Giống ngôn ngữ ứng dụng",
-        "auto": "Tự nhận diện",
-        "help": "Cho dịch vụ biết ngôn ngữ giúp văn bản chính xác hơn."
-      },
-      "ready": "Sẵn sàng: nút micro đang hoạt động.",
-      "notReady": "Chưa sẵn sàng: hãy tải mô hình cục bộ, hoặc chọn nhà cung cấp có khóa.",
-      "save": "Lưu",
-      "saved": "Đã lưu cài đặt nhập bằng giọng nói.",
-      "loadError": "Không tải được cài đặt nhập bằng giọng nói"
     }
+  },
+  "voice": {
+    "title": "Nhập bằng giọng nói",
+    "description": "Nói thay vì gõ: nút micro trong ô nhập tin nhắn chuyển bản ghi âm của bạn thành văn bản. whisper.cpp chạy ngay trên máy tính này, hoặc bản ghi âm được gửi đến dịch vụ bạn chọn ở đây.",
+    "provider": {
+      "label": "Nhà cung cấp",
+      "none": "Chưa thiết lập",
+      "local": "Máy tính này (whisper.cpp)",
+      "help": "Nhập bằng giọng nói cục bộ không cần khóa và không gửi dữ liệu đi đâu. Nhà cung cấp hoặc cổng từ Mô hình chỉ được dùng khi bạn chọn tại đây.",
+      "empty": "Chưa có nhà cung cấp nào có khóa. Nhập bằng giọng nói cục bộ vẫn hoạt động mà không cần khóa."
+    },
+    "local": {
+      "modelLabel": "Mô hình cục bộ",
+      "modelHelp": "Mô hình whisper chạy trên máy tính này. Mô hình nhỏ nhanh hơn; mô hình lớn nhận diện giọng và âm thanh nhiễu tốt hơn.",
+      "models": {
+        "tiny": "Tiny (74 MB)",
+        "base": "Base (141 MB)",
+        "small": "Small (465 MB)",
+        "medium": "Medium (1,4 GB)"
+      },
+      "download": "Tải xuống",
+      "downloading": "Đang tải xuống…",
+      "downloaded": "Đã tải xuống",
+      "notDownloaded": "Chưa tải xuống",
+      "missingBinary": "Chưa cài whisper.cpp. Hãy cài (ví dụ `brew install whisper-cpp`) rồi khởi động lại PP Agent.",
+      "privacy": "Bản ghi âm nằm lại trên máy tính này."
+    },
+    "model": {
+      "label": "Mô hình",
+      "help": "Mô hình chuyển giọng nói thành văn bản, ví dụ whisper-1."
+    },
+    "language": {
+      "label": "Ngôn ngữ nói",
+      "app": "Giống ngôn ngữ ứng dụng",
+      "auto": "Tự nhận diện",
+      "help": "Cho dịch vụ biết ngôn ngữ giúp văn bản chính xác hơn."
+    },
+    "ready": "Sẵn sàng: nút micro đang hoạt động.",
+    "notReady": "Chưa sẵn sàng: hãy tải mô hình cục bộ, hoặc chọn nhà cung cấp có khóa.",
+    "save": "Lưu",
+    "saved": "Đã lưu cài đặt nhập bằng giọng nói.",
+    "loadError": "Không tải được cài đặt nhập bằng giọng nói"
   },
   "memory": {
     "title": "Bộ nhớ",

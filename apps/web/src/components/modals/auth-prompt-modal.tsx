@@ -1,4 +1,5 @@
 import * as React from "react";
+import { createModal } from "@buiducnhat/better-modal";
 import type { AuthPrompt, DesktopBridge } from "@workspace/shared";
 import { Button } from "@workspace/ui/components/button";
 import {
@@ -14,26 +15,6 @@ import { Input } from "@workspace/ui/components/input";
 import { RadioGroup, RadioGroupItem } from "@workspace/ui/components/radio-group";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { create } from "zustand";
-
-import { useRespondAuthPrompt } from "@/lib/queries";
-
-interface AuthPromptState {
-  /** Questions from sign-in flows, answered one at a time in arrival order. */
-  queue: AuthPrompt[];
-  push: (prompt: AuthPrompt) => void;
-  remove: (promptId: string) => void;
-}
-
-export const useAuthPromptStore = create<AuthPromptState>()((set) => ({
-  queue: [],
-  push: (prompt) =>
-    set((state) => ({
-      queue: [...state.queue.filter((item) => item.promptId !== prompt.promptId), prompt],
-    })),
-  remove: (promptId) =>
-    set((state) => ({ queue: state.queue.filter((item) => item.promptId !== promptId) })),
-}));
 
 function PromptForm({
   prompt,
@@ -102,33 +83,60 @@ function PromptForm({
   );
 }
 
-/** Shows sign-in questions (API keys, MCP codes) from the agent, one at a time. */
-export function AuthPromptModal({ bridge }: { bridge: DesktopBridge }) {
-  const prompt = useAuthPromptStore((state) => state.queue[0]);
-  const respond = useRespondAuthPrompt(bridge);
+type AuthPromptModalProps = { prompt: AuthPrompt };
 
-  function answer(value: string | null) {
-    if (!prompt) return;
-    // The agent also sends `auth_prompt_closed`; removing now keeps the dialog responsive.
-    useAuthPromptStore.getState().remove(prompt.promptId);
-    respond.mutate(
-      { promptId: prompt.promptId, value },
-      { onError: (error) => toast.error(error.message) },
-    );
-  }
-
-  return (
-    <Dialog open={prompt !== undefined} onOpenChange={(open) => !open && answer(null)}>
+/** `await AuthPromptModal.show({ prompt })` resolves to the answer, or null when dismissed. */
+const AuthPromptModal = createModal<AuthPromptModalProps, string | null>(
+  "auth-prompt",
+  ({ prompt, modal }) => (
+    <Dialog open={modal.visible} onOpenChange={(open) => !open && modal.resolve(null)}>
       <DialogContent showCloseButton={false}>
-        {prompt && (
-          <PromptForm
-            key={prompt.promptId}
-            prompt={prompt}
-            onSubmit={answer}
-            onCancel={() => answer(null)}
-          />
-        )}
+        <PromptForm
+          key={prompt.promptId}
+          prompt={prompt}
+          onSubmit={(value) => modal.resolve(value)}
+          onCancel={() => modal.resolve(null)}
+        />
       </DialogContent>
     </Dialog>
-  );
+  ),
+);
+
+/** Prompts the agent withdrew (`auth_prompt_closed`) while they were still waiting in line. */
+const withdrawn = new Set<string>();
+/** The question on screen, and how to dismiss it when the agent withdraws it. */
+let onScreen: { promptId: string; dismiss: () => void } | null = null;
+/** Sign-in questions are answered one at a time, in arrival order. */
+let queue: Promise<void> = Promise.resolve();
+
+/** Asks the person a sign-in question (API key, MCP code) from the agent and sends the answer back. */
+export function askAuthPrompt(bridge: DesktopBridge, prompt: AuthPrompt): void {
+  queue = queue.then(async () => {
+    if (withdrawn.delete(prompt.promptId)) return;
+    const answer = await new Promise<{ value: string | null } | "withdrawn">((resolve) => {
+      onScreen = { promptId: prompt.promptId, dismiss: () => resolve("withdrawn") };
+      AuthPromptModal.show({ prompt }).then(
+        (value) => resolve({ value }),
+        () => resolve({ value: null }),
+      );
+    });
+    onScreen = null;
+    // The agent closed it itself: nothing is waiting for an answer.
+    if (answer === "withdrawn") return;
+    bridge.agent
+      .command({ type: "respond_auth_prompt", promptId: prompt.promptId, value: answer.value })
+      .catch((error: unknown) =>
+        toast.error(error instanceof Error ? error.message : String(error)),
+      );
+  });
+}
+
+/** The agent closed the question itself (e.g. the sign-in was cancelled elsewhere). */
+export function withdrawAuthPrompt(promptId: string): void {
+  if (onScreen?.promptId === promptId) {
+    onScreen.dismiss();
+    AuthPromptModal.hide();
+  } else {
+    withdrawn.add(promptId);
+  }
 }

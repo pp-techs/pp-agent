@@ -312,7 +312,11 @@
       "recommended": "Đề xuất",
       "skip": "Bỏ qua",
       "send": "Gửi",
-      "skipped": "Đã bỏ qua"
+      "skipped": "Đã bỏ qua",
+      "step": "Câu {{current}}/{{total}}",
+      "back": "Quay lại",
+      "next": "Tiếp",
+      "hint": "↑↓ để di chuyển · Enter để chọn · Esc để bỏ qua"
     },
     "approval": {
       "question": "{{title}}?",

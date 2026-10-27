@@ -7,21 +7,22 @@
     "breadcrumbRoot": "Settings",
     "sections": {
       "general": "General",
+      "voice": "Voice input",
       "models": "Models",
       "workspaces": "Workspaces",
       "agents": "Agents",
       "tools": "Tools",
-      "skills": "Skills",
       "mcp": "MCP servers",
+      "skills": "Skills",
       "memory": "Memory",
       "scheduledTasks": "Scheduled tasks",
-      "background": "Background",
-      "channels": "Channels"
+      "channels": "Channels",
+      "background": "Background"
     }
   },
   "general": {
     "title": "General",
-    "description": "Your language, workspace, appearance, default model, voice input, and updates.",
+    "description": "Your language, workspace, appearance, default model, and updates.",
     "language": {
       "title": "Language",
       "description": "The language used across the app.",
@@ -74,49 +75,49 @@
         "hint": "Modifiers and one key, for example CommandOrControl+Shift+Space.",
         "invalid": "Not a valid shortcut. Use modifiers and one key, for example CommandOrControl+Shift+Space."
       }
-    },
-    "voice": {
-      "legend": "Voice input",
-      "description": "Speak instead of typing: the microphone button in the message box turns your recording into text. It runs whisper.cpp on this computer, or sends the recording to a service you choose here.",
-      "provider": {
-        "label": "Provider",
-        "none": "Not set up",
-        "local": "This computer (whisper.cpp)",
-        "help": "Local speech to text needs no key and sends nothing anywhere. A provider or gateway from Models is used only when you pick it here.",
-        "empty": "No provider with a key yet. Local speech to text works without one."
-      },
-      "local": {
-        "modelLabel": "Local model",
-        "modelHelp": "The whisper model to run on this computer. Smaller models are faster; larger ones handle accents and noise better.",
-        "models": {
-          "tiny": "Tiny (74 MB)",
-          "base": "Base (141 MB)",
-          "small": "Small (465 MB)",
-          "medium": "Medium (1.4 GB)"
-        },
-        "download": "Download",
-        "downloading": "Downloading…",
-        "downloaded": "Downloaded",
-        "notDownloaded": "Not downloaded yet",
-        "missingBinary": "whisper.cpp is not installed. Install it (for example `brew install whisper-cpp`) and restart PP Agent.",
-        "privacy": "The recording stays on this computer."
-      },
-      "model": {
-        "label": "Model",
-        "help": "The speech-to-text model, for example whisper-1."
-      },
-      "language": {
-        "label": "Spoken language",
-        "app": "Same as the app",
-        "auto": "Detect automatically",
-        "help": "Telling the service the language makes the text more accurate."
-      },
-      "ready": "Ready: the microphone button works.",
-      "notReady": "Not ready: download the local model, or choose a provider that has a key.",
-      "save": "Save",
-      "saved": "Voice input saved.",
-      "loadError": "Couldn't load voice input"
     }
+  },
+  "voice": {
+    "title": "Voice input",
+    "description": "Speak instead of typing: the microphone button in the message box turns your recording into text. It runs whisper.cpp on this computer, or sends the recording to a service you choose here.",
+    "provider": {
+      "label": "Provider",
+      "none": "Not set up",
+      "local": "This computer (whisper.cpp)",
+      "help": "Local speech to text needs no key and sends nothing anywhere. A provider or gateway from Models is used only when you pick it here.",
+      "empty": "No provider with a key yet. Local speech to text works without one."
+    },
+    "local": {
+      "modelLabel": "Local model",
+      "modelHelp": "The whisper model to run on this computer. Smaller models are faster; larger ones handle accents and noise better.",
+      "models": {
+        "tiny": "Tiny (74 MB)",
+        "base": "Base (141 MB)",
+        "small": "Small (465 MB)",
+        "medium": "Medium (1.4 GB)"
+      },
+      "download": "Download",
+      "downloading": "Downloading…",
+      "downloaded": "Downloaded",
+      "notDownloaded": "Not downloaded yet",
+      "missingBinary": "whisper.cpp is not installed. Install it (for example `brew install whisper-cpp`) and restart PP Agent.",
+      "privacy": "The recording stays on this computer."
+    },
+    "model": {
+      "label": "Model",
+      "help": "The speech-to-text model, for example whisper-1."
+    },
+    "language": {
+      "label": "Spoken language",
+      "app": "Same as the app",
+      "auto": "Detect automatically",
+      "help": "Telling the service the language makes the text more accurate."
+    },
+    "ready": "Ready: the microphone button works.",
+    "notReady": "Not ready: download the local model, or choose a provider that has a key.",
+    "save": "Save",
+    "saved": "Voice input saved.",
+    "loadError": "Couldn't load voice input"
   },
   "memory": {
     "title": "Memory",

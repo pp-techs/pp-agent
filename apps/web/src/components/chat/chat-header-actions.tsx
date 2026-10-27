@@ -11,7 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
-import { DownloadIcon, FolderOpenIcon } from "lucide-react";
+import { DownloadIcon, FileTextIcon, FolderOpenIcon, GlobeIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -247,15 +247,17 @@ function ExportButton({ bridge }: { bridge: DesktopBridge }) {
         </TooltipTrigger>
         <TooltipContent>{t("header.export.label")}</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuItem
           onClick={() => sessionPath && exportSession.mutate({ path: sessionPath, format: "md" })}
         >
+          <FileTextIcon />
           {t("header.export.markdown")}
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => sessionPath && exportSession.mutate({ path: sessionPath, format: "html" })}
         >
+          <GlobeIcon />
           {t("header.export.html")}
         </DropdownMenuItem>
       </DropdownMenuContent>

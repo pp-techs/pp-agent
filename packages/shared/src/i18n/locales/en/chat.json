@@ -312,7 +312,11 @@
       "recommended": "Recommended",
       "skip": "Skip",
       "send": "Send",
-      "skipped": "Skipped"
+      "skipped": "Skipped",
+      "step": "Question {{current}} of {{total}}",
+      "back": "Back",
+      "next": "Next",
+      "hint": "↑↓ to navigate · Enter to select · Esc to skip"
     },
     "approval": {
       "question": "{{title}}?",
