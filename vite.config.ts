@@ -11,6 +11,7 @@ export default defineConfig({
       "**/release/**",
       "pnpm-lock.yaml",
       "apps/desktop/resources/skills/**",
+      ".agents/**",
     ],
   },
   lint: {
@@ -18,7 +19,7 @@ export default defineConfig({
     jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }],
     rules: { "vite-plus/prefer-vite-plus-imports": "error" },
     options: { typeAware: true, typeCheck: true },
-    ignorePatterns: ["**/dist/**", "**/release/**"],
+    ignorePatterns: ["**/dist/**", "**/release/**", ".agents/**"],
     overrides: [
       {
         files: ["apps/web/**", "packages/ui/**"],
