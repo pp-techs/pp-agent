@@ -36,6 +36,7 @@
   "message": {
     "thinking": "Thinking",
     "thought": "Thought",
+    "sending": "Sending",
     "skill": "Skill: {{name}}",
     "attachedImage": "Attached image",
     "compacted": "Earlier messages summarized",

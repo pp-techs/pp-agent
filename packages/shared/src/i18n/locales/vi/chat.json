@@ -36,6 +36,7 @@
   "message": {
     "thinking": "Đang suy luận",
     "thought": "Đã suy luận",
+    "sending": "Đang gửi",
     "skill": "Kỹ năng: {{name}}",
     "attachedImage": "Hình ảnh đính kèm",
     "compacted": "Các tin nhắn trước đó đã được tóm tắt",
