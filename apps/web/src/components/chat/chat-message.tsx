@@ -198,11 +198,14 @@ function UserMessage({
   commands,
   message,
   disabled,
+  pending,
 }: {
   bridge: DesktopBridge;
   commands: MessageCommands;
   message: ChatMessage;
   disabled: boolean;
+  /** Not confirmed by the conversation yet: dimmed, and its actions wait for it. */
+  pending: boolean;
 }) {
   const { parts } = message;
   const [editing, setEditing] = React.useState(false);
@@ -241,7 +244,7 @@ function UserMessage({
   }
   return (
     <Message align="end">
-      <MessageContent>
+      <MessageContent className={pending ? "opacity-70" : undefined}>
         {skills.length > 0 && (
           <div className="flex flex-wrap justify-end gap-1.5 self-end">
             {skills.map((skill, index) => (
@@ -279,13 +282,15 @@ function UserMessage({
             <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
           </Bubble>
         )}
-        <MessageActions
-          commands={commands}
-          message={message}
-          canRegenerate={false}
-          disabled={disabled}
-          onEdit={() => setEditing(true)}
-        />
+        {!pending && (
+          <MessageActions
+            commands={commands}
+            message={message}
+            canRegenerate={false}
+            disabled={disabled}
+            onEdit={() => setEditing(true)}
+          />
+        )}
       </MessageContent>
     </Message>
   );
@@ -310,6 +315,7 @@ export function ChatMessageView({
   last,
   busy,
   streaming,
+  pending,
   approvals,
   onRespond,
   responding,
@@ -322,13 +328,23 @@ export function ChatMessageView({
   /** An answer is being written, so commands that change the conversation wait. */
   busy: boolean;
   streaming: boolean;
+  /** Just sent, not confirmed by the conversation yet. */
+  pending?: boolean;
   approvals: ApprovalRequest[];
   onRespond: (requestId: string, approved: boolean) => void;
   responding: boolean;
 }) {
   if (message.role === "compaction") return <CompactionDivider />;
   if (message.role === "user")
-    return <UserMessage bridge={bridge} commands={commands} message={message} disabled={busy} />;
+    return (
+      <UserMessage
+        bridge={bridge}
+        commands={commands}
+        message={message}
+        disabled={busy}
+        pending={pending ?? false}
+      />
+    );
 
   const blocks = toBlocks(message.parts);
   return (

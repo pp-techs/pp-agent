@@ -49,6 +49,8 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
   const [expanded, setExpanded] = React.useState(false);
   const formRef = React.useRef<HTMLFormElement>(null);
   const running = useChatStore((state) => state.status === "running");
+  /** The last send is not with the conversation yet; a second one would look like it never left. */
+  const sending = useChatStore((state) => state.pending !== null);
   const draft = useComposerStore((state) => state.draft);
   const attachments = useComposerStore((state) => state.attachments);
   const { setDraft, add, remove } = useComposerStore.getState();
@@ -117,7 +119,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
     event.preventDefault();
     const command = attachments.length === 0 ? findTypedCommand(commands, draft) : undefined;
     if (command) pickItem(command);
-    else if (canSend && !running) send(draft);
+    else if (canSend && !running && !sending) send(draft);
   }
 
   async function pick() {
@@ -271,7 +273,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
               type="submit"
               variant="default"
               size="icon-sm"
-              disabled={!canSend}
+              disabled={!canSend || sending}
               className="size-9 rounded-full"
               aria-label={t("common:actions.send")}
             >

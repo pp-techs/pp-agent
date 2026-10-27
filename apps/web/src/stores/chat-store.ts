@@ -14,6 +14,12 @@ import { create } from "zustand";
 interface ChatState {
   status: AgentStatus;
   messages: ChatMessage[];
+  /**
+   * Optimistic copy of the message just sent, shown until the conversation echoes the saved one
+   * back. Cleared when that user message arrives (or on a snapshot, which already contains it).
+   */
+  pending: ChatMessage | null;
+  setPending: (message: ChatMessage | null) => void;
   /** Pending approvals keyed by request id. */
   approvals: Record<string, ApprovalRequest>;
   /** Model of the open conversation. */
@@ -35,6 +41,8 @@ interface ChatState {
 export const useChatStore = create<ChatState>()((set) => ({
   status: "starting",
   messages: [],
+  pending: null,
+  setPending: (message) => set({ pending: message }),
   approvals: {},
   model: null,
   agent: null,
@@ -54,6 +62,7 @@ export const useChatStore = create<ChatState>()((set) => ({
           return {
             status: snapshot.status,
             messages: snapshot.messages,
+            pending: null,
             approvals: Object.fromEntries(
               snapshot.approvals.map((request) => [request.requestId, request]),
             ),
@@ -67,11 +76,13 @@ export const useChatStore = create<ChatState>()((set) => ({
           };
         }
         case "message": {
+          // The conversation's copy of the message just sent: drop the optimistic one with it.
+          const echo = event.message.role === "user" ? { pending: null } : {};
           const index = state.messages.findLastIndex((message) => message.id === event.message.id);
-          if (index === -1) return { messages: [...state.messages, event.message] };
+          if (index === -1) return { messages: [...state.messages, event.message], ...echo };
           const messages = state.messages.slice();
           messages[index] = event.message;
-          return { messages };
+          return { messages, ...echo };
         }
         case "approval_requested":
           return {
@@ -88,8 +99,11 @@ export const useChatStore = create<ChatState>()((set) => ({
         case "auth_prompt":
         case "auth_prompt_closed":
         case "auth_info":
-        case "error":
           return {};
+        // The run died before it echoed the message being sent: drop its optimistic copy so the
+        // composer does not stay blocked behind a send that never happened.
+        case "error":
+          return { pending: null };
       }
     }),
 }));

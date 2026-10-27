@@ -45,7 +45,8 @@ function Header({ bridge }: { bridge: DesktopBridge }) {
 function ChatBody({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("modals");
   const status = useChatStore((state) => state.status);
-  const empty = useChatStore((state) => state.messages.length === 0);
+  // The optimistic copy of a just-sent message counts: it is the thread the person is now in.
+  const empty = useChatStore((state) => state.messages.length === 0 && state.pending === null);
 
   if (status === "starting") {
     return (
