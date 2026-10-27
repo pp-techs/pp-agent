@@ -83,7 +83,8 @@ export interface Updater {
   check(manual: boolean): Promise<void>;
   /** Downloads the update in the app, or opens its release page when it cannot install itself. */
   download(openExternal: (url: string) => Promise<void>): Promise<void>;
-  install(): void;
+  /** Quits into the installer; `beginQuit` runs first so closing the windows cannot be vetoed. */
+  install(beginQuit: () => void): void;
 }
 
 export function createUpdater(onState: (state: UpdateState) => void): Updater {
@@ -190,8 +191,12 @@ export function createUpdater(onState: (state: UpdateState) => void): Updater {
       // Failures arrive through the `error` listener.
       await autoUpdater.downloadUpdate().catch(() => undefined);
     },
-    install() {
+    install(beginQuit: () => void) {
       if (state.status !== "ready") return;
+      // quitAndInstall closes the app's windows itself and quits only once they are all closed.
+      // The window must not veto that close (hide to tray), or the update never installs and the
+      // app never restarts.
+      beginQuit();
       autoUpdater.quitAndInstall();
     },
   };

@@ -292,7 +292,13 @@ ipcMain.handle(IPC.shellTakePendingFocus, () => {
 ipcMain.handle(IPC.updatesState, () => updater.state());
 ipcMain.handle(IPC.updatesCheck, () => updater.check(true));
 ipcMain.handle(IPC.updatesDownload, () => updater.download(openExternal));
-ipcMain.handle(IPC.updatesInstall, () => updater.install());
+ipcMain.handle(IPC.updatesInstall, () =>
+  // Mark the app as quitting before the updater closes the windows: with the tray on, a plain
+  // close hides the window to the tray and the update would never install or restart.
+  updater.install(() => {
+    quitting = true;
+  }),
+);
 
 app.on("before-quit", () => {
   quitting = true;
