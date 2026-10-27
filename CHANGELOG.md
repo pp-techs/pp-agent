@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.10.1] — 2026-10-27
+
+The export menu in the chat header no longer wraps: it is wide enough for "Web page (.html, printable)", and each format shows its own icon. The sidebar search box shows a search icon.
+
+The agent's questions now replace the message box in the chat, one at a time, with numbered options you can pick with the keys 1-9, the arrows, Enter, and Esc to skip. The message box folds into two rows when the window is narrow. The app uses the Geist font. Voice input has its own section in Settings, and the Settings menu is reordered: Tools, MCP servers and Skills now sit together.
+
 ## [0.10.0] — 2026-10-27
 
 The agent can now ask you a question with options to pick from, in the chat window and in Telegram, instead of guessing. You can choose one or several options or type an answer of your own, or skip the question. It asks only when your choice really changes the result. Agents that have their own tool list need "Ask you questions" ticked in the agent's tools; Settings › Tools can switch it off. Scheduled tasks never ask.
