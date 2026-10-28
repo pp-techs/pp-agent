@@ -1,6 +1,6 @@
 {
   "name": "@workspace/desktop",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "private": true,
   "description": "PP Agent desktop app",
   "homepage": "https://github.com/pp-techs/pp-agent",
