@@ -42,6 +42,8 @@ const COMMANDS: Record<string, true> = {
   workspace: true,
   model: true,
   thinking: true,
+  sessions: true,
+  resume: true,
   // Another name for /thinking; the menu lists only the first.
   effort: true,
 };
@@ -449,14 +451,16 @@ export class TelegramChannel implements ChannelAdapter {
     // Busy mode: steer joins the running turn, interrupt stops it, queue waits.
     const busyMode = this.chatSettings(chatId).busyMode ?? "queue";
     const queue = this.queue(chatId);
-    if (queue.running && busyMode === "steer") {
-      await this.deps.gateway
-        .steerTurn(`telegram:${chatId}`, {
-          text: message.text ?? "",
+    if (queue.running && busyMode === "steer" && plain && message.text?.trim()) {
+      try {
+        const accepted = await this.deps.gateway.steerTurn(`telegram:${chatId}`, {
+          text: message.text.trim(),
           attachments: [],
-        })
-        .catch(() => {});
-      return;
+        });
+        if (accepted) return;
+      } catch (error) {
+        console.warn("[telegram] Could not steer the turn; queueing the message:", error);
+      }
     }
     if (queue.running && busyMode === "interrupt") {
       await this.deps.gateway.abort(`telegram:${chatId}`).catch(() => {});
@@ -491,23 +495,23 @@ export class TelegramChannel implements ChannelAdapter {
   private async resumeSession(chatId: number, argument: string): Promise<void> {
     const index = Number(argument.trim());
     if (!Number.isInteger(index) || index < 1) {
-      await this.api.sendMessage(chatId, "Usage: /resume <number>  (see /sessions)");
+      await this.reply(chatId, "resumeUsage");
       return;
     }
     try {
       const sessions = await this.deps.gateway.listChatSessions(`telegram:${chatId}`);
       const target = sessions[index - 1];
       if (!target) {
-        await this.api.sendMessage(chatId, `No session #${index}. See /sessions.`);
+        await this.reply(chatId, "sessionNotFound", { number: index });
         return;
       }
       if (target.isCurrent) {
-        await this.api.sendMessage(chatId, "That session is already current.");
+        await this.reply(chatId, "sessionAlreadyCurrent");
         return;
       }
       await this.interrupt(chatId);
       await this.deps.gateway.resumeChatSession(`telegram:${chatId}`, target.id);
-      await this.api.sendMessage(chatId, `Switched to: ${target.title}`);
+      await this.reply(chatId, "sessionResumed", { title: target.title });
     } catch (error) {
       await this.reply(chatId, "turnFailed", { error: (error as Error).message });
     }

@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
-import type { ChannelState } from "@workspace/shared";
+import type { ChannelState, TelegramChatSettings } from "@workspace/shared";
 import { TelegramApiError, type TelegramMessage, type TelegramUpdate } from "./api.ts";
 import { MAX_QUEUED_MESSAGES, TelegramChannel, type TelegramOwner } from "./channel.ts";
 import { PairingGuard } from "./pairing.ts";
@@ -16,7 +16,10 @@ import {
 const OWNER: TelegramOwner = { id: 7, name: "Ann Lee" };
 const channels: TelegramChannel[] = [];
 
-function setup(initialOwner: TelegramOwner | null = OWNER) {
+function setup(
+  initialOwner: TelegramOwner | null = OWNER,
+  chats?: Record<string, TelegramChatSettings>,
+) {
   const api = new FakeApi();
   const gateway = new FakeGateway();
   const pairing = new PairingGuard();
@@ -35,6 +38,7 @@ function setup(initialOwner: TelegramOwner | null = OWNER) {
     },
     onState: (value, error) => states.push([value, error]),
     t: fakeT,
+    settings: { get: () => ({ channels: { telegram: { chats } } }) },
   });
   channels.push(channel);
   return { api, gateway, pairing, state, paired, states, channel };
@@ -519,6 +523,176 @@ describe("queue and commands", () => {
     await vi.waitFor(() => expect(api.plainTexts).toContain("channels.telegram.newConversation"));
     expect(gateway.fresh).toEqual(["telegram:7"]);
     gates[0]?.resolve();
+  });
+
+  test("/sessions and /resume use gateway history instead of prompting the agent", async () => {
+    const { api, channel, gateway } = setup();
+    gateway.sessions = [
+      { id: "now", title: "Current chat", isCurrent: true },
+      { id: "before", title: "Previous chat", isCurrent: false },
+    ];
+    await channel.start();
+    api.push(textUpdate(1, "/sessions@pp_bot"));
+    await vi.waitFor(() => expect(api.plainTexts).toContain("1. Current chat ←\n2. Previous chat"));
+    api.push(textUpdate(2, "/resume 2"));
+    await vi.waitFor(() =>
+      expect(api.plainTexts).toContain(
+        'channels.telegram.sessionResumed {"title":"Previous chat"}',
+      ),
+    );
+    expect(gateway.resumed).toEqual([{ chatKey: "telegram:7", sessionId: "before" }]);
+    expect(gateway.sessionLists).toEqual(["telegram:7", "telegram:7"]);
+    expect(gateway.aborted).toEqual(["telegram:7"]);
+    expect(gateway.turns).toEqual([]);
+  });
+
+  test("session commands localize empty history, usage, missing and current replies", async () => {
+    const { api, channel, gateway } = setup();
+    await channel.start();
+    api.push(textUpdate(1, "/sessions"));
+    api.push(textUpdate(2, "/resume"));
+    api.push(textUpdate(3, "/resume 2"));
+    await vi.waitFor(() => expect(api.plainTexts).toHaveLength(3));
+    expect(api.plainTexts).toEqual(
+      expect.arrayContaining([
+        "channels.telegram.resumeUsage",
+        "channels.telegram.noSessions",
+        'channels.telegram.sessionNotFound {"number":2}',
+      ]),
+    );
+    gateway.sessions = [{ id: "now", title: "Current", isCurrent: true }];
+    api.push(textUpdate(4, "/resume 1"));
+    await vi.waitFor(() =>
+      expect(api.plainTexts).toContain("channels.telegram.sessionAlreadyCurrent"),
+    );
+    expect(gateway.resumed).toEqual([]);
+    expect(gateway.turns).toEqual([]);
+  });
+
+  test("steers plain text only after the active turn accepts it", async () => {
+    const { api, channel, gateway } = setup(OWNER, { "7": { busyMode: "steer" } });
+    const gate = Promise.withResolvers<void>();
+    gateway.handler = async () => {
+      await gate.promise;
+      return { text: "done", status: "done" };
+    };
+    gateway.steerHandler = async () => true;
+    await channel.start();
+    api.push(textUpdate(1, "first"));
+    await vi.waitFor(() => expect(gateway.turns).toHaveLength(1));
+    api.push(textUpdate(2, "  correction  "));
+    await vi.waitFor(() => expect(gateway.steered).toHaveLength(1));
+    expect(gateway.steered[0]).toEqual({
+      chatKey: "telegram:7",
+      input: { text: "correction", attachments: [] },
+    });
+    gate.resolve();
+    await vi.waitFor(() => expect(shown(api)).toContain("done"));
+    expect(gateway.turns).toHaveLength(1);
+  });
+
+  test.each(["declined", "error"] as const)(
+    "queues plain text when steering is %s",
+    async (outcome) => {
+      const { api, channel, gateway } = setup(OWNER, { "7": { busyMode: "steer" } });
+      const gate = Promise.withResolvers<void>();
+      gateway.handler = async () => {
+        await gate.promise;
+        return { text: "done", status: "done" };
+      };
+      gateway.steerHandler = async () => {
+        if (outcome === "error") throw new Error("steering failed");
+        return false;
+      };
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+      await channel.start();
+      api.push(textUpdate(1, "first"));
+      await vi.waitFor(() => expect(gateway.turns).toHaveLength(1));
+      api.push(textUpdate(2, "correction"));
+      await vi.waitFor(() => expect(gateway.steered).toHaveLength(1));
+      gate.resolve();
+      await vi.waitFor(() => expect(gateway.turns).toHaveLength(2));
+      expect(gateway.turns[1]?.input).toEqual({ text: "correction", attachments: [] });
+      if (outcome === "error")
+        expect(warning).toHaveBeenCalledWith(
+          "[telegram] Could not steer the turn; queueing the message:",
+          expect.any(Error),
+        );
+      warning.mockRestore();
+    },
+  );
+
+  test("queues captions, photos, documents, voice and audio without attempting to steer", async () => {
+    const { api, channel, gateway } = setup(OWNER, { "7": { busyMode: "steer" } });
+    const gate = Promise.withResolvers<void>();
+    gateway.handler = async () => {
+      await gate.promise;
+      return { text: "done", status: "done" };
+    };
+    gateway.steerHandler = async () => true;
+    api.files.set("photo", new Uint8Array([1, 2]));
+    api.files.set("document", new Uint8Array([3]));
+    api.files.set("voice", new Uint8Array([4]));
+    await channel.start();
+    api.push(textUpdate(1, "first"));
+    await vi.waitFor(() => expect(gateway.turns).toHaveLength(1));
+    api.push(
+      message(
+        {
+          photo: [{ file_id: "photo", width: 10, height: 10 }],
+          caption: "photo caption",
+        },
+        2,
+      ),
+    );
+    api.push(
+      message(
+        {
+          document: { file_id: "document", file_name: "notes.txt" },
+          caption: "document caption",
+        },
+        3,
+      ),
+    );
+    api.push(message({ voice: { file_id: "voice" }, caption: "voice caption" }, 4));
+    api.push(message({ audio: { file_id: "voice" }, caption: "audio caption" }, 5));
+    api.push(message({ caption: "caption only" }, 6));
+    api.push(textUpdate(7, "/help"));
+    await vi.waitFor(() => expect(api.plainTexts).toContain("channels.telegram.help"));
+    expect(gateway.steered).toEqual([]);
+    gate.resolve();
+    await vi.waitFor(() => expect(gateway.turns).toHaveLength(6));
+    expect(gateway.turns.map((turn) => turn.input.text)).toEqual([
+      "first",
+      "photo caption",
+      "document caption",
+      "spoken words\n\nvoice caption",
+      "spoken words\n\naudio caption",
+      "caption only",
+    ]);
+    expect(gateway.turns[1]?.input.attachments).toEqual([
+      { name: "photo.jpg", mimeType: "image/jpeg", data: "AQI=" },
+    ]);
+    expect(gateway.turns[2]?.input.attachments[0]).toMatchObject({ name: "notes.txt" });
+    expect(gateway.transcripts).toEqual([
+      { size: 1, mimeType: "audio/ogg" },
+      { size: 1, mimeType: "audio/mpeg" },
+    ]);
+  });
+
+  test("queues text while the previous message is still downloading before its turn", async () => {
+    const { api, channel, gateway } = setup(OWNER, { "7": { busyMode: "steer" } });
+    const download = Promise.withResolvers<{ data: Uint8Array; path: string }>();
+    const downloadFile = vi.spyOn(api, "downloadFile").mockReturnValue(download.promise);
+    await channel.start();
+    api.push(message({ photo: [{ file_id: "photo", width: 10, height: 10 }] }));
+    await vi.waitFor(() => expect(downloadFile).toHaveBeenCalled());
+    expect(gateway.turns).toHaveLength(0);
+    api.push(textUpdate(2, "after download"));
+    await vi.waitFor(() => expect(gateway.steered).toHaveLength(1));
+    download.resolve({ data: new Uint8Array([1]), path: "photo.jpg" });
+    await vi.waitFor(() => expect(gateway.turns).toHaveLength(2));
+    expect(gateway.turns[1]?.input).toEqual({ text: "after download", attachments: [] });
   });
 
   test("/start and /help answer the owner", async () => {

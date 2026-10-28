@@ -426,13 +426,19 @@ export class AgentHost {
       const historyFiles = chatSessions.history(chatKey);
       const allFiles = currentFile ? [currentFile, ...historyFiles] : historyFiles;
       const infos = await SessionManager.listAll(paths.sessionDir);
-      return allFiles.map((file) => {
-        const info = infos.find((i) => i.path === file);
-        return {
-          id: sessionRef(file),
-          title: info ? sessionTitle(info.name, info.firstMessage, this.titleFallbacks()) : file,
-          isCurrent: file === currentFile,
-        };
+      const infoByPath = new Map(infos.map((info) => [info.path, info]));
+      return allFiles.flatMap((file) => {
+        const info = infoByPath.get(file);
+        if (!info && file !== currentFile) return [];
+        return [
+          {
+            id: sessionRef(file),
+            title: info
+              ? sessionTitle(info.name, info.firstMessage, this.titleFallbacks())
+              : t("conversations.untitled"),
+            isCurrent: file === currentFile,
+          },
+        ];
       });
     },
     resumeChatSession: async (chatKey, sessionId) => {
@@ -446,17 +452,20 @@ export class AgentHost {
     },
     steerTurn: async (chatKey, input) => {
       const chat = this.chats.get(chatKey);
-      if (!chat?.turn) return; // No turn in progress; the caller queues normally.
+      if (!chat?.turn) return false;
       const message = await buildPrompt(
         input.text || ATTACHMENTS_ONLY_PROMPT,
         input.attachments,
         chat.session.sessionManager.getCwd(),
       );
+      // Attachment preparation can outlive the running turn.
+      if (!chat.turn || this.chats.get(chatKey) !== chat) return false;
       // Steering joins the running turn at the next tool boundary.
       await chat.session.prompt(message.text, {
         images: message.images,
         streamingBehavior: "steer",
       });
+      return true;
     },
   };
 
@@ -1382,7 +1391,7 @@ export class AgentHost {
         createTodoTool(),
         ...(scope.askUser ? [createAskTool(scope.askUser)] : []),
         // Like ask_user, only where a person is present: a scheduled run cannot create tasks.
-        ...(scope.askUser ? [createScheduleTool(this.scheduleHost(scope))] : []),
+        ...(scope.askUser ? [createScheduleTool(this.scheduleHost(scope, sessionManager))] : []),
         createSessionsTool({
           list: () => this.sessionRows(sessionManager.getSessionFile()),
           history: (id) => this.sessionHistory(id),
@@ -1390,7 +1399,7 @@ export class AgentHost {
             const file = sessionManager.getSessionFile();
             return file ? sessionRef(file) : null;
           },
-          peers: () => this.peerRows(),
+          peers: () => (scope.visibility === "all" ? this.peerRows() : []),
           visibility: () => scope.visibility,
           locale: () => currentLanguage(),
         }),
@@ -1594,7 +1603,7 @@ export class AgentHost {
           sessionId: file ? sessionRef(file) : null,
           kind: scope.surface.kind,
           surface: scope.surface.label,
-          home: this.homePeer()?.label ?? null,
+          home: scope.visibility === "all" ? (this.homePeer()?.label ?? null) : null,
           sessionsTool: pi.getActiveTools().includes(SESSIONS_TOOL),
         });
         const memory = this.services?.memory;
@@ -2351,17 +2360,16 @@ export class AgentHost {
     this.requireAgent(fields.agentId);
     this.requireWorkspace(fields.workspaceId);
     const now = Date.now();
+    const scheduleChanged = JSON.stringify(previous?.schedule) !== JSON.stringify(fields.schedule);
     // Runs are counted from now when the task is new, switched on, or its schedule changed.
-    const rearm =
-      !previous ||
-      (!previous.enabled && fields.enabled) ||
-      JSON.stringify(previous.schedule) !== JSON.stringify(fields.schedule);
+    const rearm = !previous || (!previous.enabled && fields.enabled) || scheduleChanged;
     const id = previous?.id ?? newTaskId(new Set(existing.map((task) => task.id)));
     const task: ScheduledTask = {
       ...fields,
       id,
       armedAt: rearm ? now : (previous?.armedAt ?? now),
-      lastRun: previous?.lastRun ?? null,
+      lastRun:
+        fields.schedule.kind === "once" && scheduleChanged ? null : (previous?.lastRun ?? null),
     };
     settings.update((draft) => {
       const index = draft.scheduledTasks.findIndex((entry) => entry.id === id);
@@ -2519,24 +2527,15 @@ export class AgentHost {
 
   /**
    * Delivers a scheduled run's result to a chat. `home` goes to the paired Telegram owner; a
-   * peer key like `telegram:123` goes to that chat. Writes the text as a labelled message.
+   * peer key like `telegram:123` goes to that configured chat.
    */
   private async deliverToPeer(peer: string, taskName: string, text: string): Promise<void> {
     const message = `⏰ ${taskName}\n\n${text}`;
     // Record the delivery before sending, so a crash can be recovered.
     const deliveryId = randomUUID();
     this.saveDelivery({ id: deliveryId, peer, message, sent: false });
-    try {
-      if (peer === "home" || peer.startsWith("telegram:")) {
-        await this.requireTelegram().notify(message);
-      } else {
-        throw new Error(`Unknown delivery target: ${peer}`);
-      }
-      this.markDeliverySent(deliveryId);
-    } catch (error) {
-      // Leave as unsent; the next start will retry.
-      throw error;
-    }
+    await this.requireTelegram().deliver(peer, message);
+    this.markDeliverySent(deliveryId);
   }
 
   // Delivery ledger: a JSON file of pending/sent deliveries for crash recovery.
@@ -2589,15 +2588,12 @@ export class AgentHost {
     const pending = deliveries.filter((d) => !d.sent);
     for (const entry of pending) {
       try {
-        if (entry.peer === "home" || entry.peer.startsWith("telegram:")) {
-          await this.requireTelegram().notify(entry.message);
-          entry.sent = true;
-        }
+        await this.requireTelegram().deliver(entry.peer, entry.message);
+        this.markDeliverySent(entry.id);
       } catch {
         // Will retry on next start.
       }
     }
-    this.saveDeliveries(deliveries);
   }
 
   // -------------------------------------------------------------------------------------------
@@ -2624,8 +2620,12 @@ export class AgentHost {
   }
 
   /** The host `schedule_manage` talks to; `scope` decides the agent and workspace of new tasks. */
-  private scheduleHost(scope: SessionScope): ScheduleHost {
+  private scheduleHost(scope: SessionScope, sessionManager: SessionManager): ScheduleHost {
     return {
+      currentSessionId: () => {
+        const file = sessionManager.getSessionFile();
+        return file ? sessionRef(file) : null;
+      },
       create: (input) => {
         const task = this.saveScheduledTask({
           ...input,
@@ -2846,7 +2846,9 @@ export class AgentHost {
       askUser: (call, signal) => this.askQuestionInChat(chat, call, signal),
       systemNote: { section: "channel", text: channelNote(this.channelOf(chatKey).label) },
       surface: { kind: "chat", label: `a ${this.channelOf(chatKey).label} chat (${chatKey})` },
-      visibility: "all",
+      get visibility() {
+        return chatKey === `telegram:${settings.get().channels.telegram.ownerId}` ? "all" : "self";
+      },
     };
   }
 

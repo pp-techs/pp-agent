@@ -237,6 +237,7 @@
         "description": "Times follow this computer's clock.",
         "kind": "Repeat",
         "kinds": {
+          "once": "Once",
           "interval": "At regular intervals",
           "daily": "Every day",
           "weekly": "On chosen days"
@@ -248,6 +249,8 @@
           "hours": "hours"
         },
         "time": "At",
+        "at": "Date and time",
+        "atHelp": "Run once at this local date and time. Existing one-shot tasks keep their exact scheduled instant unless you change it.",
         "days": "On"
       },
       "enabled": {
@@ -261,6 +264,7 @@
         "tooLong": "Use at most {{max}} characters.",
         "interval": "Use {{minMinutes}} to {{maxMinutes}} minutes, or 1 to {{maxHours}} hours.",
         "time": "Enter a time.",
+        "at": "Enter a valid local date and time.",
         "days": "Choose at least one day."
       },
       "create": "Create task",
@@ -372,7 +376,17 @@
       "manage": "Manage",
       "agentFollow": "The workspace's agent",
       "chats": {
-        "empty": "No chats yet. Start a conversation with the bot to see it here.",
+        "empty": "No chats configured. Add a private chat or group using its Telegram chat ID.",
+        "add": "Add chat",
+        "chatId": "Telegram chat ID",
+        "chatIdHelp": "Enter the numeric chat ID, not a username. Group and supergroup IDs are negative (for example, -1001234567890). The bot must be a member of the group to reply.",
+        "label": "Label (optional)",
+        "labelHelp": "A name shown only in these settings. Leave empty to show the chat ID.",
+        "errors": {
+          "chatId": "Enter a non-zero integer Telegram chat ID, including the minus sign for a group.",
+          "duplicate": "This chat is already configured. Edit its existing settings instead.",
+          "allowedUsers": "Enter positive integer Telegram user IDs separated by commas, or leave empty."
+        },
         "access": "Who can talk",
         "accessOwner": "Only the paired owner",
         "accessMembers": "Anyone in the chat",
@@ -381,7 +395,7 @@
         "busySteer": "Steer the running turn",
         "busyInterrupt": "Interrupt and start new",
         "allowedUsers": "Allowed user ids",
-        "allowedUsersHelp": "Comma-separated Telegram user ids. Empty = everyone in the chat."
+        "allowedUsersHelp": "Applies when anyone in the chat can talk: comma-separated Telegram user IDs. Empty allows everyone in the chat; owner-only access still allows only the paired owner."
       }
     }
   }

@@ -6,18 +6,18 @@ Paths are under `packages/agent-core/src/` unless noted. Limits are also listed 
 
 ## What a task is
 
-Settings › Scheduled tasks lists the tasks with an on/off switch, the schedule, the agent and workspace, the next run, the last run (finished or failed, when, and how many actions were skipped) and **Run now**. A task has:
+The **Schedules** navigation item beside Settings opens the management page with an on/off switch, schedule, agent and workspace, next run, last run (finished or failed, when, and how many actions were skipped), and **Run now**. A task has:
 
-| Field     | Rule                                                                                                               |
-| --------- | ------------------------------------------------------------------------------------------------------------------ |
-| Name      | Unique (case-insensitive), at most 60 characters.                                                                  |
-| Prompt    | What the agent should do, at most 20000 characters.                                                                |
-| Agent     | Any agent. A deleted agent falls back to the default agent when the task runs.                                     |
-| Workspace | Any workspace. A deleted workspace falls back to the default workspace.                                            |
-| Schedule  | Every 5–1440 minutes, every 1–168 hours, daily at `HH:MM`, or on chosen weekdays at `HH:MM`. Times are local time. |
-| Enabled   | Off keeps the task but never starts it by itself; **Run now** still works.                                         |
+| Field     | Rule                                                                                                                                    |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Name      | Unique (case-insensitive), at most 60 characters.                                                                                       |
+| Prompt    | What the agent should do, at most 20000 characters.                                                                                     |
+| Agent     | Any agent. A deleted agent falls back to the default agent when the task runs.                                                          |
+| Workspace | Any workspace. A deleted workspace falls back to the default workspace.                                                                 |
+| Schedule  | Once at a date/time, every 5–1440 minutes, every 1–168 hours, daily at `HH:MM`, or on chosen weekdays at `HH:MM`. Times are local time. |
+| Enabled   | Off keeps the task but never starts it by itself; **Run now** still works.                                                              |
 
-At most 50 tasks. The editor opens inside the pane (breadcrumb sub-page) and checks the same limits as the agent (`SCHEDULE_LIMITS` in `packages/shared`).
+At most 50 tasks. The editor opens inside the page and checks the same limits as the agent (`SCHEDULE_LIMITS` in `packages/shared`). Editing a one-shot task preserves its exact instant unless the date/time is changed. Changing a completed one-shot task to a new time re-arms that slot; changing its name or toggling it does not repeat a completed slot. Existing target, delivery, origin, and run controls survive edits.
 
 ## How a run works
 
@@ -48,14 +48,16 @@ Nobody is at the keyboard during a run, so the approval gate cannot ask. For sch
 - Any tool call that would ask for approval is **denied automatically**, never approved. The model receives a plain reason in the tool result and a note in its system prompt saying the run is unattended, so it can explain what it could not do.
 - The run counts denied calls (`lastRun.deniedTools`); Settings shows "N actions skipped".
 - Tools with policy `off` stay unavailable, as always.
-- `ask_user` and `schedule_task` are not offered at all: nobody can answer, and a task cannot create tasks.
-- `telegram_notify` is offered but asks (write tier), so a run can message the person only when its policy is **Allow** in Settings › Tools (see [Background and Telegram](use-case-background-and-telegram.md)).
+- `ask_user` and `schedule_manage` are not offered at all: nobody can answer, and a task cannot create or manage other tasks.
+- The host handles configured result delivery after a successful run. There is no separate `telegram_notify` tool or notification-tool policy.
 
 To let a scheduled task write files or use a business system, set that tool's policy to **Allow** in Settings › Tools (and in the agent's tool list). The editor and the section repeat this rule in an alert.
 
-## Created by the agent (`schedule_task`)
+## Managed by the agent (`schedule_manage`)
 
-In a conversation (the window or Telegram) the agent can create a task when the person asks for something recurring ("every Friday at 16:00, summarize Reports"). `schedule_task` (`schedule-tool.ts`) takes a name, a prompt and a schedule (`interval` with `every` + `unit`, `daily` with `time`, or `weekly` with `days` + `time`), and goes through the same validation and limits as the editor. It is a write-tier tool, so it asks first and shows the schedule and prompt. The task starts **enabled**, with the agent and workspace of that conversation, and appears in Settings › Scheduled tasks. The tool can only create: editing, disabling and deleting stay in Settings. Switch it off in Settings › Tools or in an agent's tool list.
+In a conversation (the window or Telegram), the agent can create a one-shot reminder ("at 21:00 today") or recurring work ("every Friday at 16:00, summarize Reports"). `schedule_manage` (`schedule-tool.ts`, shown as **Scheduled tasks** in Tools) accepts `create`, `list`, `update`, `pause`, `resume`, `run`, and `remove`. Create takes a name, standalone prompt, and `when`: `once` with epoch-millisecond `at`, `interval` with `every` + `unit`, `daily` with `time`, or `weekly` with `days` + `time`. Create and update accept `target`, `deliver`, `deleteAfterRun`, and `silentIfEmpty`. An explicit `current` target resolves to the originating saved session ID; malformed targets are rejected.
+
+The management tool uses the write-tier approval gate. Approval details show the operation, supplied schedule, execution target, delivery destination, and run controls before the prompt. New tasks start enabled with the conversation's agent and workspace and appear on the Schedules page. Switch the tool off in Settings › Tools or an agent's tool list. Telegram destinations must be the paired owner (`home` or its explicit chat key) or an explicitly configured chat; unknown destinations fail rather than delivering to the owner.
 
 ## Data and events
 

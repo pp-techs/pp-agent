@@ -1,4 +1,4 @@
-import { setDefaultAutoSelectFamily } from "node:net";
+import { setDefaultResultOrder } from "node:dns";
 import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { AgentHost } from "@workspace/agent-core";
@@ -8,9 +8,8 @@ import { serviceControlFor } from "./service-control.ts";
 import { resolveShellPath } from "./shell-path.ts";
 import { createVaultBackend } from "./vault/index.ts";
 
-// Node.js fetch (undici) tries IPv6 first when DNS returns both, but many networks have broken
-// IPv6. curl falls back to IPv4; undici does not. Disable autoselection so it uses IPv4.
-setDefaultAutoSelectFamily(false);
+// Prefer IPv4 on networks with broken IPv6 while preserving address-family fallback.
+setDefaultResultOrder("ipv4first");
 
 /** Version the clients compare with their own: set by whoever started the daemon, else package.json. */
 function appVersion(): string {

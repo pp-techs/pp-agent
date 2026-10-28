@@ -48,6 +48,7 @@ function setup() {
   const changed = vi.fn();
   const tokens: string[] = [];
   const service = new TelegramService({
+    dataDir: directory,
     settings,
     credentials: vault,
     gateway,
@@ -216,7 +217,7 @@ describe("pairing", () => {
   });
 });
 
-describe("notify", () => {
+describe("delivery", () => {
   async function paired() {
     const context = setup();
     await context.service.save(input);
@@ -229,17 +230,19 @@ describe("notify", () => {
 
   test("sends to the owner's private chat, split below Telegram's limit", async () => {
     const { service, api } = await paired();
-    await service.notify(`${"a".repeat(3_000)}\n\n${"b".repeat(3_000)}`);
+    await service.deliver("home", `${"a".repeat(3_000)}\n\n${"b".repeat(3_000)}`);
     expect(api.sent.map((message) => message.chatId)).toEqual([42, 42]);
     expect(api.sent.every((message) => message.text.length <= 4096)).toBe(true);
   });
 
   test("is refused before pairing and while the channel is off", async () => {
     const { service } = setup();
-    await expect(service.notify("hi")).rejects.toThrow("channels.telegram.notifyNeedsOwner");
+    await expect(service.deliver("home", "hi")).rejects.toThrow(
+      "channels.telegram.notifyNeedsOwner",
+    );
     const context = await paired();
     await context.service.save({ ...input, enabled: false });
-    await expect(context.service.notify("hi")).rejects.toThrow(
+    await expect(context.service.deliver("home", "hi")).rejects.toThrow(
       "channels.telegram.notifyNeedsOnline",
     );
     expect(context.api.sent).toHaveLength(0);
@@ -248,7 +251,30 @@ describe("notify", () => {
   test("reports a send that Telegram refuses", async () => {
     const { service, api } = await paired();
     api.sendError = () => new TelegramApiError("network", "fetch failed");
-    await expect(service.notify("hi")).rejects.toThrow("channels.telegram.notifyFailed");
+    await expect(service.deliver("home", "hi")).rejects.toThrow("channels.telegram.notifyFailed");
+  });
+
+  test("sends to the selected configured group rather than the owner", async () => {
+    const { service, settings, api } = await paired();
+    settings.update((draft) => {
+      draft.channels.telegram.chats = { "-100456": { label: "Reports", access: "owner" } };
+    });
+    await service.deliver("telegram:-100456", "Morning report");
+    expect(api.sent.map(({ chatId, text }) => ({ chatId, text }))).toEqual([
+      { chatId: -100456, text: "Morning report" },
+    ]);
+  });
+
+  test("rejects unknown or malformed destinations without sending to the owner", async () => {
+    const { service, api } = await paired();
+    for (const peer of ["telegram:99", "telegram:42:other", "telegram:", "slack:42"]) {
+      await expect(service.deliver(peer, "private result")).rejects.toThrow(
+        "Unknown delivery target",
+      );
+    }
+    expect(api.sent).toEqual([]);
+    await service.deliver("telegram:42", "Owner report");
+    expect(api.sent.map(({ chatId }) => chatId)).toEqual([42]);
   });
 });
 

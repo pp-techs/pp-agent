@@ -25,7 +25,7 @@ export interface ChatChoice {
 
 /**
  * Chat → saved session file (`channels.json` next to settings.json), so a restarted daemon
- * continues each conversation. A chat has a file once its session has been saved; `/new` drops it.
+ * continues each conversation. `/new` clears the current file but keeps previous sessions.
  */
 interface ChatEntry {
   current: string;
@@ -55,7 +55,7 @@ export class ChatSessionMap {
             const history = Array.isArray(entry.history)
               ? entry.history.filter((f): f is string => typeof f === "string" && !!f)
               : [];
-            if (current) this.chats[key] = { current, history };
+            if (current || history.length > 0) this.chats[key] = { current, history };
           }
         }
       const choices = raw?.choices;
@@ -75,18 +75,22 @@ export class ChatSessionMap {
   }
 
   get(chatKey: string): string | undefined {
-    return this.chats[chatKey]?.current;
+    return this.chats[chatKey]?.current || undefined;
   }
 
   /** Every chat with a saved conversation, as `[chatKey, file]`. */
   entries(): [string, string][] {
-    return Object.entries(this.chats).map(([key, entry]) => [key, entry.current]);
+    return Object.entries(this.chats)
+      .filter(([, entry]) => !!entry.current)
+      .map(([key, entry]) => [key, entry.current]);
   }
 
   set(chatKey: string, file: string): void {
     const entry = this.chats[chatKey];
     if (entry?.current === file) return;
-    const history = entry ? [entry.current, ...entry.history].slice(0, 20) : [];
+    const history = entry
+      ? [entry.current, ...entry.history].filter((f) => !!f && f !== file).slice(0, 20)
+      : [];
     this.chats = { ...this.chats, [chatKey]: { current: file, history } };
     this.save();
   }
@@ -104,7 +108,7 @@ export class ChatSessionMap {
       ...this.chats,
       [chatKey]: {
         current: file,
-        history: [entry.current, ...entry.history.filter((f) => f !== file)].slice(0, 20),
+        history: [entry.current, ...entry.history].filter((f) => !!f && f !== file).slice(0, 20),
       },
     };
     this.save();
@@ -122,11 +126,14 @@ export class ChatSessionMap {
     this.save();
   }
 
-  /** Forgets the chat's conversation; false when it had none. */
+  /** Clears the current conversation, keeping it resumable; false when there was no current one. */
   drop(chatKey: string): boolean {
-    if (!(chatKey in this.chats)) return false;
-    const { [chatKey]: _dropped, ...rest } = this.chats;
-    this.chats = rest;
+    const entry = this.chats[chatKey];
+    if (!entry?.current) return false;
+    this.chats = {
+      ...this.chats,
+      [chatKey]: { current: "", history: [entry.current, ...entry.history].slice(0, 20) },
+    };
     this.save();
     return true;
   }

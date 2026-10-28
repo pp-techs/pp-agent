@@ -8,11 +8,18 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@workspace/ui/components/field";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -27,6 +34,12 @@ import { toast } from "sonner";
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { SwitchRow } from "@/components/settings/option-group";
 import { useSettingsSubPage } from "@/components/settings/settings-subpage";
+import {
+  telegramAllowedUsers,
+  telegramChatId,
+  telegramChatSettings,
+  type TelegramChatDraft,
+} from "@/components/settings/telegram-chat-fields";
 import { telegramStatusQuery, useBackgroundCommands } from "@/lib/extension-queries";
 import { agentsQuery, workspacesQuery } from "@/lib/queries";
 
@@ -374,54 +387,68 @@ function RepliesStep({ bridge, status }: { bridge: DesktopBridge; status: Telegr
   );
 }
 
-/** Per-chat settings: access level, busy mode, and allowlist for each known chat. */
+/** Explicit chat-id entry also works before the bot has received any messages. */
 function ChatsStep({ bridge, status }: { bridge: DesktopBridge; status: TelegramStatus }) {
   const { t } = useTranslation(["settings", "common"]);
   const { saveTelegram } = useBackgroundCommands(bridge);
   const chats = status.chats ?? {};
   const chatIds = Object.keys(chats);
+  // An empty id means a new chat; null means the editor is closed.
   const [editing, setEditing] = React.useState<string | null>(null);
-  const [draft, setDraft] = React.useState<{
-    access?: "owner" | "members";
-    busyMode?: "queue" | "steer" | "interrupt";
-    allowedUsers?: string;
-    label?: string;
-  }>({});
+  const [draft, setDraft] = React.useState<TelegramChatDraft>({
+    chatId: "",
+    label: "",
+    access: "owner",
+    busyMode: "queue",
+    allowedUsers: "",
+  });
+  const [touched, setTouched] = React.useState(false);
+  const chatId = telegramChatId(draft.chatId);
+  const allowedUsers = telegramAllowedUsers(draft.allowedUsers);
+  const chatIdError = !chatId
+    ? t("channels.telegram.chats.errors.chatId")
+    : editing === "" && Object.hasOwn(chats, chatId)
+      ? t("channels.telegram.chats.errors.duplicate")
+      : null;
+  const allowedUsersError =
+    allowedUsers === null ? t("channels.telegram.chats.errors.allowedUsers") : null;
+  const valid = !chatIdError && !allowedUsersError;
+  const accessItems = [
+    { value: "owner", label: t("channels.telegram.chats.accessOwner") },
+    { value: "members", label: t("channels.telegram.chats.accessMembers") },
+  ];
+  const busyItems = [
+    { value: "queue", label: t("channels.telegram.chats.busyQueue") },
+    { value: "steer", label: t("channels.telegram.chats.busySteer") },
+    { value: "interrupt", label: t("channels.telegram.chats.busyInterrupt") },
+  ];
 
-  function startEdit(chatId: string) {
-    const chat = chats[chatId] ?? {};
-    setEditing(chatId);
+  function startEdit(id: string) {
+    const chat = chats[id];
+    setEditing(id);
+    setTouched(false);
     setDraft({
-      access: chat.access ?? "owner",
-      busyMode: chat.busyMode ?? "queue",
-      allowedUsers: (chat.allowedUsers ?? []).join(", "),
-      label: chat.label ?? "",
+      chatId: id,
+      access: chat?.access ?? "owner",
+      busyMode: chat?.busyMode ?? "queue",
+      allowedUsers: (chat?.allowedUsers ?? []).join(", "),
+      label: chat?.label ?? "",
     });
   }
 
-  function saveChat(chatId: string) {
-    const allowedUsers = draft.allowedUsers
-      ? draft.allowedUsers
-          .split(",")
-          .map((s) => Number(s.trim()))
-          .filter((n) => !Number.isNaN(n))
-      : [];
-    const updated = {
-      ...chats,
-      [chatId]: {
-        ...chats[chatId],
-        ...(draft.label ? { label: draft.label } : {}),
-        access: draft.access ?? "owner",
-        busyMode: draft.busyMode ?? "queue",
-        ...(allowedUsers.length > 0 ? { allowedUsers } : {}),
-      },
-    };
+  function saveChat(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setTouched(true);
+    if (!valid || chatId === null || allowedUsers === null) return;
     saveTelegram.mutate(
       {
         enabled: status.enabled,
         agentId: status.agentId,
         workspaceId: status.workspaceId,
-        chats: updated,
+        chats: {
+          ...chats,
+          [chatId]: telegramChatSettings(chats[chatId], draft, allowedUsers),
+        },
       },
       {
         onSuccess: () => {
@@ -434,117 +461,184 @@ function ChatsStep({ bridge, status }: { bridge: DesktopBridge; status: Telegram
 
   return (
     <Step step="chats">
+      {editing === null ? (
+        <div>
+          <Button variant="outline" size="sm" onClick={() => startEdit("")}>
+            {t("channels.telegram.chats.add")}
+          </Button>
+        </div>
+      ) : (
+        <form onSubmit={saveChat} className="flex flex-col gap-4">
+          <FieldGroup>
+            <Field data-invalid={touched && Boolean(chatIdError)}>
+              <FieldLabel htmlFor="telegram-chat-id">
+                {t("channels.telegram.chats.chatId")}
+              </FieldLabel>
+              <Input
+                id="telegram-chat-id"
+                value={draft.chatId}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, chatId: event.target.value }))
+                }
+                readOnly={editing !== ""}
+                autoComplete="off"
+                aria-invalid={touched && Boolean(chatIdError)}
+              />
+              {touched && chatIdError ? (
+                <FieldError>{chatIdError}</FieldError>
+              ) : (
+                <FieldDescription>{t("channels.telegram.chats.chatIdHelp")}</FieldDescription>
+              )}
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="telegram-chat-label">
+                {t("channels.telegram.chats.label")}
+              </FieldLabel>
+              <Input
+                id="telegram-chat-label"
+                value={draft.label}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, label: event.target.value }))
+                }
+              />
+              <FieldDescription>{t("channels.telegram.chats.labelHelp")}</FieldDescription>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="telegram-chat-access">
+                {t("channels.telegram.chats.access")}
+              </FieldLabel>
+              <Select
+                items={accessItems}
+                value={draft.access}
+                onValueChange={(value) => {
+                  if (value === "owner" || value === "members") {
+                    setDraft((current) => ({ ...current, access: value }));
+                  }
+                }}
+              >
+                <SelectTrigger id="telegram-chat-access" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {accessItems.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="telegram-chat-busy">
+                {t("channels.telegram.chats.busyMode")}
+              </FieldLabel>
+              <Select
+                items={busyItems}
+                value={draft.busyMode}
+                onValueChange={(value) => {
+                  if (value === "queue" || value === "steer" || value === "interrupt") {
+                    setDraft((current) => ({ ...current, busyMode: value }));
+                  }
+                }}
+              >
+                <SelectTrigger id="telegram-chat-busy" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {busyItems.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field data-invalid={touched && Boolean(allowedUsersError)}>
+              <FieldLabel htmlFor="telegram-chat-users">
+                {t("channels.telegram.chats.allowedUsers")}
+              </FieldLabel>
+              <Input
+                id="telegram-chat-users"
+                value={draft.allowedUsers}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, allowedUsers: event.target.value }))
+                }
+                aria-invalid={touched && Boolean(allowedUsersError)}
+                autoComplete="off"
+              />
+              {touched && allowedUsersError ? (
+                <FieldError>{allowedUsersError}</FieldError>
+              ) : (
+                <FieldDescription>{t("channels.telegram.chats.allowedUsersHelp")}</FieldDescription>
+              )}
+            </Field>
+          </FieldGroup>
+          {saveTelegram.isError && <FieldError>{saveTelegram.error.message}</FieldError>}
+          <div className="flex gap-2">
+            <Button
+              type="submit"
+              size="sm"
+              disabled={saveTelegram.isPending || (touched && !valid)}
+            >
+              {saveTelegram.isPending && <Spinner data-icon="inline-start" />}
+              {editing === "" ? t("channels.telegram.chats.add") : t("common:actions.save")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={saveTelegram.isPending}
+              onClick={() => setEditing(null)}
+            >
+              {t("common:actions.cancel")}
+            </Button>
+          </div>
+        </form>
+      )}
       {chatIds.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t("channels.telegram.chats.empty")}</p>
       ) : (
         <div className="flex flex-col gap-3">
-          {chatIds.map((chatId) => {
-            const chat = chats[chatId] ?? {};
-            const isEditing = editing === chatId;
+          {chatIds.map((id) => {
+            const chat = chats[id] ?? {};
             return (
-              <div key={chatId} className="rounded-lg border p-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="font-medium">{chat.label || chatId}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">#{chatId}</span>
+              <div key={id} className="rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="font-medium">{chat.label || id}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">#{id}</span>
                   </div>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => (isEditing ? setEditing(null) : startEdit(chatId))}
+                    disabled={saveTelegram.isPending}
+                    onClick={() => startEdit(id)}
                   >
-                    {isEditing ? t("common:actions.cancel") : t("common:actions.edit")}
+                    {t("common:actions.edit")}
                   </Button>
                 </div>
-                {isEditing ? (
-                  <div className="mt-3 flex flex-col gap-3">
-                    <Field>
-                      <FieldLabel>{t("channels.telegram.chats.access")}</FieldLabel>
-                      <Select
-                        items={[
-                          { value: "owner", label: t("channels.telegram.chats.accessOwner") },
-                          { value: "members", label: t("channels.telegram.chats.accessMembers") },
-                        ]}
-                        value={draft.access ?? "owner"}
-                        onValueChange={(v) =>
-                          v && setDraft((d) => ({ ...d, access: v as "owner" | "members" }))
-                        }
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="owner">
-                            {t("channels.telegram.chats.accessOwner")}
-                          </SelectItem>
-                          <SelectItem value="members">
-                            {t("channels.telegram.chats.accessMembers")}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                    <Field>
-                      <FieldLabel>{t("channels.telegram.chats.busyMode")}</FieldLabel>
-                      <Select
-                        items={[
-                          { value: "queue", label: t("channels.telegram.chats.busyQueue") },
-                          { value: "steer", label: t("channels.telegram.chats.busySteer") },
-                          { value: "interrupt", label: t("channels.telegram.chats.busyInterrupt") },
-                        ]}
-                        value={draft.busyMode ?? "queue"}
-                        onValueChange={(v) =>
-                          v &&
-                          setDraft((d) => ({
-                            ...d,
-                            busyMode: v as "queue" | "steer" | "interrupt",
-                          }))
-                        }
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="queue">
-                            {t("channels.telegram.chats.busyQueue")}
-                          </SelectItem>
-                          <SelectItem value="steer">
-                            {t("channels.telegram.chats.busySteer")}
-                          </SelectItem>
-                          <SelectItem value="interrupt">
-                            {t("channels.telegram.chats.busyInterrupt")}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                    {draft.access === "members" && (
-                      <Field>
-                        <FieldLabel>{t("channels.telegram.chats.allowedUsers")}</FieldLabel>
-                        <Input
-                          value={draft.allowedUsers ?? ""}
-                          onChange={(e) =>
-                            setDraft((d) => ({ ...d, allowedUsers: e.target.value }))
-                          }
-                          placeholder="123, 456"
-                        />
-                        <FieldDescription>
-                          {t("channels.telegram.chats.allowedUsersHelp")}
-                        </FieldDescription>
-                      </Field>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  <Badge variant="outline">
+                    {t(
+                      chat.access === "members"
+                        ? "channels.telegram.chats.accessMembers"
+                        : "channels.telegram.chats.accessOwner",
                     )}
-                    <Button
-                      size="sm"
-                      onClick={() => saveChat(chatId)}
-                      disabled={saveTelegram.isPending}
-                    >
-                      {t("common:actions.save")}
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="mt-1 flex gap-2 text-xs text-muted-foreground">
-                    <Badge variant="outline">{chat.access ?? "owner"}</Badge>
-                    <Badge variant="outline">{chat.busyMode ?? "queue"}</Badge>
-                  </div>
-                )}
+                  </Badge>
+                  <Badge variant="outline">
+                    {t(
+                      chat.busyMode === "steer"
+                        ? "channels.telegram.chats.busySteer"
+                        : chat.busyMode === "interrupt"
+                          ? "channels.telegram.chats.busyInterrupt"
+                          : "channels.telegram.chats.busyQueue",
+                    )}
+                  </Badge>
+                </div>
               </div>
             );
           })}

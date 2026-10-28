@@ -285,10 +285,23 @@ export function describeToolCall(
   if (toolName === SCHEDULE_TOOL) {
     const name = typeof input.name === "string" ? input.name : "";
     const prompt = typeof input.prompt === "string" ? input.prompt : "";
-    const schedule = input.schedule === undefined ? "" : JSON.stringify(input.schedule);
+    const action = typeof input.action === "string" ? input.action : "";
+    const when = input.when === undefined ? "" : JSON.stringify(input.when);
+    const target =
+      typeof input.target === "string" ? input.target : action === "create" ? "new" : "";
+    const deliver =
+      typeof input.deliver === "string" ? input.deliver : action === "create" ? "session" : "";
+    const controls = [
+      action,
+      when,
+      target ? `target: ${target}` : "",
+      deliver ? `deliver: ${deliver}` : "",
+      typeof input.deleteAfterRun === "boolean" ? `deleteAfterRun: ${input.deleteAfterRun}` : "",
+      typeof input.silentIfEmpty === "boolean" ? `silentIfEmpty: ${input.silentIfEmpty}` : "",
+    ];
     return {
       title: t("approvals.scheduleTask", { name }),
-      detail: preview(`${schedule}\n${prompt}`.trim()),
+      detail: preview([...controls, prompt].filter(Boolean).join("\n")),
     };
   }
   if (toolName === ASK_TOOL) return { title: t("approvals.askUser"), detail: "" };

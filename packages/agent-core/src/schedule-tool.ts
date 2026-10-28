@@ -25,6 +25,7 @@ export interface TaskListEntry {
 
 /** Everything the tool needs from the host. */
 export interface ScheduleHost {
+  currentSessionId(): string | null;
   create(input: SaveScheduledTaskInput): CreatedTask;
   list(): TaskListEntry[];
   update(name: string, patch: Partial<SaveScheduledTaskInput>): void;
@@ -145,7 +146,7 @@ export function createScheduleTool(host: ScheduleHost) {
         const patch: Partial<SaveScheduledTaskInput> = {};
         if (params.prompt) patch.prompt = params.prompt;
         if (params.when) patch.schedule = params.when as TaskSchedule;
-        if (params.target !== undefined) patch.target = parseTarget(params.target);
+        if (params.target !== undefined) patch.target = parseTarget(params.target, host);
         if (params.deliver !== undefined) patch.delivery = parseDelivery(params.deliver);
         if (params.deleteAfterRun !== undefined) patch.deleteAfterRun = params.deleteAfterRun;
         if (params.silentIfEmpty !== undefined) patch.silentIfEmpty = params.silentIfEmpty;
@@ -163,7 +164,7 @@ export function createScheduleTool(host: ScheduleHost) {
         enabled: true,
         agentId: "",
         workspaceId: "",
-        ...(params.target ? { target: parseTarget(params.target) } : {}),
+        ...(params.target !== undefined ? { target: parseTarget(params.target, host) } : {}),
         ...(params.deliver ? { delivery: parseDelivery(params.deliver) } : {}),
         ...(params.deleteAfterRun ? { deleteAfterRun: true } : {}),
         ...(params.silentIfEmpty ? { silentIfEmpty: true } : {}),
@@ -176,11 +177,18 @@ export function createScheduleTool(host: ScheduleHost) {
 }
 
 /** `"current"` / `"new"` / `"session:<id>"` → ScheduleTarget. */
-function parseTarget(value: string): SaveScheduledTaskInput["target"] {
-  if (value === "current") return { mode: "current", sessionId: "" };
-  if (value === "new" || value === "") return { mode: "new" };
-  if (value.startsWith("session:")) return { mode: "session", sessionId: value.slice(8) };
-  return { mode: "new" };
+function parseTarget(value: string, host: ScheduleHost): SaveScheduledTaskInput["target"] {
+  if (value === "current") {
+    const sessionId = host.currentSessionId()?.trim();
+    if (!sessionId) throw new Error('`target: "current"` requires a saved conversation.');
+    return { mode: "current", sessionId };
+  }
+  if (value === "new") return { mode: "new" };
+  if (value.startsWith("session:")) {
+    const sessionId = value.slice(8).trim();
+    if (sessionId) return { mode: "session", sessionId };
+  }
+  throw new Error('`target` must be "current", "new", or "session:<id>" with a nonempty ID.');
 }
 
 /** `"session"` / `"home"` / `"peer:<key>"` / `"none"` → ScheduleDelivery. */

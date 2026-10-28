@@ -73,14 +73,14 @@ sequenceDiagram
   D->>H: approved or denied
 ```
 
-### Messages from the agent (`telegram_notify`)
+### Scheduled result delivery
 
-The agent can send a message to the paired owner's private chat with `telegram_notify` (`channels/telegram/tool.ts`), from the window, from a Telegram chat or from a scheduled run, for example "the report is ready". Long text is split like a reply. The tool is write tier: it asks first, and an unattended scheduled run can use it only when its policy is **Allow** in Settings › Tools (and it is ticked in the agent's tool list). It fails with a plain message when no owner is paired or the channel is not online (Settings › Channels › Telegram switched on). The desktop app has no separate "ping" button: messages come from the agent.
+There is no standalone `telegram_notify` tool. The agent uses **Scheduled tasks** (`schedule_manage`) with a one-shot or recurring schedule and `deliver: "home"` for the paired owner's private chat, or `deliver: "peer:telegram:<chat-id>"` for an explicitly configured chat. The host sends the completed result, splitting long text like a reply; a different chat key is never silently redirected to the owner. The channel must be paired and online. Failed delivery stays pending for the next startup, and each confirmed send updates the latest ledger without overwriting concurrent deliveries.
 
 ### Commands and data
 
 - Commands: `get_telegram_status`, `save_telegram { config }`, `start_telegram_pairing`, `forget_telegram` (scope `background`).
-- `settings.json › channels.telegram`: `enabled`, `agentId`, `workspaceId`, `ownerId`, `ownerName`. The token: vault entry `channel:telegram`. Chat → session map: `channels.json`. A chat session unused for 30 minutes is released from memory; its conversation is reopened on the next message.
+- `settings.json › channels.telegram`: `enabled`, `agentId`, `workspaceId`, `ownerId`, `ownerName`, and per-ID `chats` (label, agent/workspace override, access, allowlist, busy mode). Settings › Channels › Telegram lets a person add a private/group ID even before any chat is configured. These controls survive restart; clearing a label or allowlist replaces the old value. The token is vault entry `channel:telegram`. Chat → current/previous session map is `channels.json`; `/new` and workspace changes keep previous sessions available to `/sessions` and `/resume`. Missing historical files are omitted without exposing local paths. A chat session unused for 30 minutes is released from memory and reopened on the next message.
 - Downloads from Telegram are temporary files under the OS temp folder (`pp-agent-telegram/`) and are deleted after the turn.
 
 ## Privacy

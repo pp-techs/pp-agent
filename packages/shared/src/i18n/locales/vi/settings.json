@@ -232,6 +232,7 @@
         "description": "Giờ theo đồng hồ của máy tính này.",
         "kind": "Lặp lại",
         "kinds": {
+          "once": "Một lần",
           "interval": "Cách đều nhau",
           "daily": "Mỗi ngày",
           "weekly": "Vào các ngày chọn"
@@ -243,6 +244,8 @@
           "hours": "giờ"
         },
         "time": "Lúc",
+        "at": "Ngày và giờ",
+        "atHelp": "Chạy một lần vào ngày giờ trên máy tính này. Tác vụ một lần hiện có giữ nguyên thời điểm chính xác nếu bạn không đổi.",
         "days": "Vào"
       },
       "enabled": {
@@ -256,6 +259,7 @@
         "tooLong": "Tối đa {{max}} ký tự.",
         "interval": "Dùng từ {{minMinutes}} đến {{maxMinutes}} phút, hoặc từ 1 đến {{maxHours}} giờ.",
         "time": "Nhập giờ.",
+        "at": "Nhập ngày và giờ hợp lệ trên máy tính này.",
         "days": "Chọn ít nhất một ngày."
       },
       "create": "Tạo tác vụ",
@@ -367,7 +371,17 @@
       "manage": "Quản lý",
       "agentFollow": "Tác nhân của không gian làm việc",
       "chats": {
-        "empty": "Chưa có cuộc trò chuyện nào. Nhắn tin cho bot để thấy ở đây.",
+        "empty": "Chưa có cuộc trò chuyện được cấu hình. Thêm cuộc trò chuyện riêng hoặc nhóm bằng ID Telegram.",
+        "add": "Thêm cuộc trò chuyện",
+        "chatId": "ID cuộc trò chuyện Telegram",
+        "chatIdHelp": "Nhập ID dạng số, không phải tên người dùng. ID nhóm và siêu nhóm là số âm (ví dụ -1001234567890). Bot phải là thành viên của nhóm để trả lời.",
+        "label": "Nhãn (không bắt buộc)",
+        "labelHelp": "Tên chỉ hiển thị trong phần cài đặt này. Để trống để hiển thị ID cuộc trò chuyện.",
+        "errors": {
+          "chatId": "Nhập ID Telegram là số nguyên khác 0, bao gồm dấu trừ nếu là nhóm.",
+          "duplicate": "Cuộc trò chuyện này đã được cấu hình. Hãy sửa cài đặt hiện có.",
+          "allowedUsers": "Nhập ID người dùng Telegram là số nguyên dương, cách nhau bằng dấu phẩy, hoặc để trống."
+        },
         "access": "Ai được nói chuyện",
         "accessOwner": "Chỉ chủ sở hữu đã ghép",
         "accessMembers": "Mọi người trong cuộc trò chuyện",
@@ -376,7 +390,7 @@
         "busySteer": "Chèn vào lượt đang chạy",
         "busyInterrupt": "Ngắt và bắt đầu mới",
         "allowedUsers": "ID người dùng được phép",
-        "allowedUsersHelp": "Các ID Telegram cách nhau bằng dấu phẩy. Trống = mọi người."
+        "allowedUsersHelp": "Áp dụng khi cho phép mọi người trong cuộc trò chuyện: các ID người dùng Telegram cách nhau bằng dấu phẩy. Để trống để cho phép tất cả; chế độ chỉ chủ sở hữu vẫn chỉ cho phép người đã ghép."
       }
     }
   }

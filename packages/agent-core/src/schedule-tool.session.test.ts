@@ -69,12 +69,13 @@ async function setup(tools: ToolDefinition[]) {
 const toolResults = (session: Awaited<ReturnType<typeof setup>>["session"]) =>
   session.messages.filter((message) => message.role === "toolResult");
 
-describe("schedule_task in a Pi session", () => {
+describe("schedule_manage in a Pi session", () => {
   test("the model's schedule reaches the host and the next run comes back", async () => {
     const created: Parameters<ScheduleHost["create"]>[0][] = [];
     const nextRun = new Date(2026, 9, 30, 16, 0).getTime();
     const { session, faux } = await setup([
       createScheduleTool({
+        currentSessionId: () => null,
         create: (input) => {
           created.push(input);
           return { name: input.name, nextRun };
@@ -114,6 +115,7 @@ describe("schedule_task in a Pi session", () => {
   test("a refusal of the host is an error the model can read", async () => {
     const { session, faux } = await setup([
       createScheduleTool({
+        currentSessionId: () => null,
         create: () => {
           throw new Error("A task named Friday summary already exists.");
         },

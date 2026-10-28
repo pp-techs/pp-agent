@@ -95,10 +95,10 @@ export interface ChannelGateway {
   /** Switches the chat to a previous session; rejects when it is not in the history. */
   resumeChatSession(chatKey: string, sessionId: string): Promise<void>;
   /**
-   * Injects a message into the turn in progress (steering). Resolves when the message has been
-   * accepted; the turn continues with the new context. No-op when no turn is running.
+   * Injects a message into the turn in progress (steering). Returns true only when accepted;
+   * false when no turn can accept it, so the caller can queue the input instead.
    */
-  steerTurn(chatKey: string, input: ChannelInput): Promise<void>;
+  steerTurn(chatKey: string, input: ChannelInput): Promise<boolean>;
 }
 
 /** Telegram status and configuration commands as the host exposes them. */

@@ -53,7 +53,7 @@ describe("ChatSessionMap", () => {
     if (process.platform !== "win32") expect(statSync(file).mode & 0o777).toBe(0o600);
   });
 
-  it("drops a chat on /new and keeps the others", () => {
+  it("archives the current chat on /new and keeps the others", () => {
     const file = join(dir, "channels.json");
     const map = new ChatSessionMap(file);
     map.set("telegram:1", "/a");
@@ -63,6 +63,43 @@ describe("ChatSessionMap", () => {
     const again = new ChatSessionMap(file);
     expect(again.get("telegram:1")).toBeUndefined();
     expect(again.get("telegram:2")).toBe("/b");
+    expect(again.history("telegram:1")).toEqual(["/a"]);
+    expect(again.entries()).toEqual([["telegram:2", "/b"]]);
+    expect(again.resume("telegram:1", "/a")).toBe(true);
+    expect(again.get("telegram:1")).toBe("/a");
+    expect(again.history("telegram:1")).toEqual([]);
+    expect(new ChatSessionMap(file).get("telegram:1")).toBe("/a");
+  });
+
+  it("retains reset history after restart and a fresh turn without empty or duplicate files", () => {
+    const file = join(dir, "channels.json");
+    const map = new ChatSessionMap(file);
+    map.set("telegram:1", "/a");
+    map.set("telegram:1", "/b");
+    map.drop("telegram:1");
+    const again = new ChatSessionMap(file);
+    expect(again.get("telegram:1")).toBeUndefined();
+    expect(again.history("telegram:1")).toEqual(["/b", "/a"]);
+    expect(again.entries()).toEqual([]);
+    again.set("telegram:1", "/c");
+    expect(again.history("telegram:1")).toEqual(["/b", "/a"]);
+    expect(again.resume("telegram:1", "/a")).toBe(true);
+    expect(again.history("telegram:1")).toEqual(["/c", "/b"]);
+    again.set("telegram:1", "/b");
+    expect(again.history("telegram:1")).toEqual(["/a", "/c"]);
+    expect(new ChatSessionMap(file).history("telegram:1")).toEqual(["/a", "/c"]);
+  });
+
+  it("caps archived history at twenty sessions through repeated resets", () => {
+    const file = join(dir, "channels.json");
+    const map = new ChatSessionMap(file);
+    for (let i = 0; i < 25; i++) {
+      map.set("telegram:1", `/${i}`);
+      map.drop("telegram:1");
+    }
+    expect(new ChatSessionMap(file).history("telegram:1")).toEqual(
+      Array.from({ length: 20 }, (_, i) => `/${24 - i}`),
+    );
   });
 
   it("leaves no temporary file behind", () => {

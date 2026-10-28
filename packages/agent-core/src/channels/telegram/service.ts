@@ -64,15 +64,24 @@ export class TelegramService implements TelegramControl {
     };
   }
 
-  /** Sends `text` to the paired owner's private chat; throws a message for the person when it cannot. */
-  async notify(text: string): Promise<void> {
-    const { t } = this.deps;
+  /** Sends to the paired owner (`home`) or an explicitly configured Telegram chat. */
+  async deliver(peer: string, text: string): Promise<void> {
+    const { t, settings } = this.deps;
     const owner = this.owner();
     if (!owner) throw new Error(t("channels.telegram.notifyNeedsOwner"));
+    const match = /^telegram:(-?[1-9]\d*)$/.exec(peer);
+    const chatId = peer === "home" ? owner.id : match ? Number(match[1]) : NaN;
+    if (
+      !Number.isSafeInteger(chatId) ||
+      (chatId !== owner.id &&
+        !Object.hasOwn(settings.get().channels.telegram.chats ?? {}, String(chatId)))
+    ) {
+      throw new Error(`Unknown delivery target: ${peer}`);
+    }
     if (!this.channel || this.state !== "online")
       throw new Error(t("channels.telegram.notifyNeedsOnline"));
     try {
-      await this.channel.notify(owner.id, text);
+      await this.channel.notify(chatId, text);
     } catch (error) {
       throw new Error(t("channels.telegram.notifyFailed", { error: (error as Error).message }));
     }

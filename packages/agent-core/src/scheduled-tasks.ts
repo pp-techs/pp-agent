@@ -32,7 +32,7 @@ function text(value: unknown): string {
 function readRun(raw: unknown): TaskRun | null {
   const value = asLoose(raw) as Partial<Record<keyof TaskRun, unknown>> | null;
   if (!value) return null;
-  const { at, durationMs, status, deniedTools, error, sessionPath } = value;
+  const { at, durationMs, status, deniedTools, error, sessionPath, delivery } = value;
   if (typeof at !== "number" || !Number.isFinite(at)) return null;
   if (status !== "completed" && status !== "failed") return null;
   return {
@@ -45,6 +45,9 @@ function readRun(raw: unknown): TaskRun | null {
         : 0,
     ...(typeof error === "string" && error ? { error: error.slice(0, 2_000) } : {}),
     ...(typeof sessionPath === "string" && sessionPath ? { sessionPath } : {}),
+    ...(typeof delivery === "string" && delivery.trim()
+      ? { delivery: delivery.slice(0, 2_000) }
+      : {}),
   };
 }
 
