@@ -149,6 +149,11 @@ export class FakeGateway implements ChannelGateway {
     },
   };
   picked: { chatKey: string; kind: ChatPickKind; id: string }[] = [];
+  sessions: Array<{ id: string; title: string; isCurrent: boolean }> = [];
+  sessionLists: string[] = [];
+  resumed: { chatKey: string; sessionId: string }[] = [];
+  steered: { chatKey: string; input: ChannelInput }[] = [];
+  steerHandler: (input: ChannelInput) => Promise<boolean> = async () => false;
   /** What a turn does; the default answers "ok". */
   handler: (input: ChannelInput, hooks: TurnHooks) => Promise<TurnResult> = async () => ({
     text: "ok",
@@ -186,6 +191,19 @@ export class FakeGateway implements ChannelGateway {
     this.picked.push({ chatKey, kind, id });
   }
 
+  async listChatSessions(chatKey: string): Promise<typeof this.sessions> {
+    this.sessionLists.push(chatKey);
+    return this.sessions;
+  }
+
+  async resumeChatSession(chatKey: string, sessionId: string): Promise<void> {
+    this.resumed.push({ chatKey, sessionId });
+  }
+
+  async steerTurn(chatKey: string, input: ChannelInput): Promise<boolean> {
+    this.steered.push({ chatKey, input });
+    return this.steerHandler(input);
+  }
   async transcribe(data: Uint8Array, mimeType: string): Promise<string> {
     this.transcripts.push({ size: data.byteLength, mimeType });
     if (this.transcript instanceof Error) throw this.transcript;

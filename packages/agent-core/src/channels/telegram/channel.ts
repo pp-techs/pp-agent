@@ -1,9 +1,17 @@
+import { readFileSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import type { Attachment, ChannelState } from "@workspace/shared";
-import type { ChannelGateway, ChannelInput, ChatOption, TurnResult } from "../types.ts";
+import type { Attachment, ChannelState, TelegramChatSettings } from "@workspace/shared";
+import type {
+  ChannelGateway,
+  ChannelInput,
+  ChatOption,
+  TurnResult,
+  ChannelAdapter,
+  PeerKey,
+} from "../types.ts";
 import {
   abortableSleep,
   HttpTelegramApi,
@@ -16,7 +24,7 @@ import {
 } from "./api.ts";
 import { TelegramApprovals } from "./approvals.ts";
 import { TelegramQuestions } from "./questions.ts";
-import { splitText } from "./format.ts";
+import { formatMessage, sendFormatted, splitText } from "./format.ts";
 import { LiveMessage } from "./live-message.ts";
 import type { PairingGuard } from "./pairing.ts";
 import type { TelegramTextName, TelegramTranslate } from "./text.ts";
@@ -34,6 +42,8 @@ const COMMANDS: Record<string, true> = {
   workspace: true,
   model: true,
   thinking: true,
+  sessions: true,
+  resume: true,
   // Another name for /thinking; the menu lists only the first.
   effort: true,
 };
@@ -90,6 +100,13 @@ export interface TelegramChannelDeps {
   onPaired(owner: TelegramOwner): void;
   onState(state: ChannelState, error: string | null): void;
   t: TelegramTranslate;
+
+  /** Where to persist the poll offset. */
+  dataDir?: string;
+  /** App settings for per-chat config. */
+  settings?: {
+    get(): { channels: { telegram: { chats?: Record<string, TelegramChatSettings> } } };
+  };
 }
 
 interface ChatQueue {
@@ -115,18 +132,21 @@ function displayName(user: TelegramUser): string {
   );
 }
 
-function parseCommand(text: string): { name: string; argument: string } | null {
-  const match = /^\/([a-z_]+)(?:@\w+)?(?:\s+([\s\S]*))?$/i.exec(text);
+function parseCommand(text: string): { name: string; target?: string; argument: string } | null {
+  const match = /^\/([a-z_]+)(?:@(\w+))?(?:\s+([\s\S]*))?$/i.exec(text);
   const name = match?.[1]?.toLowerCase();
-  return name && COMMANDS[name] ? { name, argument: (match?.[2] ?? "").trim() } : null;
+  return name && COMMANDS[name]
+    ? { name, target: match?.[2], argument: (match?.[3] ?? "").trim() }
+    : null;
 }
 
 /**
- * The Telegram bot: long polls for updates and turns each private message from the paired person
- * into an agent turn through the gateway. Nobody else gets an answer.
+ * The Telegram bot: long polls for private messages and explicitly configured groups, checks
+ * each sender's access, and runs accepted messages through the gateway.
  */
-export class TelegramChannel {
+export class TelegramChannel implements ChannelAdapter {
   private readonly api: TelegramApi;
+  private readonly botId: string | null;
   private readonly approvals: TelegramApprovals;
   private readonly questions: TelegramQuestions;
   private readonly chats = new Map<number, ChatQueue>();
@@ -139,6 +159,7 @@ export class TelegramChannel {
 
   constructor(private readonly deps: TelegramChannelDeps) {
     this.api = deps.api ?? new HttpTelegramApi(deps.token);
+    this.botId = /^([1-9]\d*):/.exec(deps.token)?.[1] ?? null;
     this.approvals = new TelegramApprovals(this.api, deps.t);
     this.questions = new TelegramQuestions(this.api, deps.t);
   }
@@ -181,6 +202,43 @@ export class TelegramChannel {
     this.deps.onState("off", null);
   }
 
+  /** Sends `text` (Markdown) to a private chat, split to Telegram's length limit. */
+  async notify(chatId: number, text: string): Promise<void> {
+    for (const chunk of formatMessage(text)) await sendFormatted(this.api, chatId, chunk);
+  }
+
+  // ChannelAdapter conformance: the gateway core calls these.
+  readonly channel = "telegram";
+
+  async send(peer: PeerKey, text: string): Promise<string | null> {
+    const id = Number(peer.split(":").pop());
+    if (Number.isNaN(id)) throw new Error(`Invalid peer key: ${peer}`);
+    for (const chunk of formatMessage(text)) await sendFormatted(this.api, id, chunk);
+    return null;
+  }
+
+  async edit(peer: PeerKey, messageId: string, text: string): Promise<void> {
+    const id = Number(peer.split(":").pop());
+    if (Number.isNaN(id)) throw new Error(`Invalid peer key: ${peer}`);
+    await this.api.editMessageText(id, Number(messageId), text);
+  }
+
+  async delete(peer: PeerKey, messageId: string): Promise<void> {
+    const id = Number(peer.split(":").pop());
+    if (Number.isNaN(id)) throw new Error(`Invalid peer key: ${peer}`);
+    await this.api.deleteMessage(id, Number(messageId));
+  }
+
+  async setTyping(peer: PeerKey): Promise<void> {
+    const id = Number(peer.split(":").pop());
+    if (Number.isNaN(id)) return;
+    await this.api.sendChatAction(id, "typing").catch(() => {});
+  }
+
+  isOnline(): boolean {
+    return this.online;
+  }
+
   // -------------------------------------------------------------------------------------------
   // Polling
   // -------------------------------------------------------------------------------------------
@@ -213,6 +271,8 @@ export class TelegramChannel {
           { command: "model", description: t("channels.telegram.commandModel") },
           { command: "thinking", description: t("channels.telegram.commandThinking") },
           { command: "stop", description: t("channels.telegram.commandStop") },
+          { command: "sessions", description: t("channels.telegram.commandSessions") },
+          { command: "resume", description: t("channels.telegram.commandResume") },
           { command: "help", description: t("channels.telegram.commandHelp") },
         ],
         signal,
@@ -243,7 +303,7 @@ export class TelegramChannel {
   private async poll(signal: AbortSignal, initial: "ready" | "retry"): Promise<void> {
     let ready = initial === "ready";
     let failures = ready ? 0 : 1;
-    let offset = 0;
+    let offset = this.loadOffset();
     while (!signal.aborted) {
       try {
         if (failures > 0)
@@ -256,14 +316,47 @@ export class TelegramChannel {
         failures = 0;
         if (!this.online) this.setState("online", null);
         for (const update of updates) {
-          offset = Math.max(offset, update.update_id + 1);
           this.dispatch(update);
+          offset = Math.max(offset, update.update_id + 1);
         }
+        // Persist the offset so a restart does not re-process these updates.
+        this.saveOffset(offset);
       } catch (error) {
         if (signal.aborted) break;
         failures++;
         if (this.failure(error) === "fatal") break;
       }
+    }
+  }
+
+  /** Saves the poll offset so a restart resumes from here. */
+  private saveOffset(offset: number): void {
+    if (!this.deps.dataDir || !this.botId) return;
+    try {
+      const file = join(this.deps.dataDir, "telegram-offset.json");
+      writeFileSync(file, JSON.stringify({ botId: this.botId, offset }), { mode: 0o600 });
+    } catch {
+      // Best effort: a lost offset means re-processing, which is safe (at-least-once).
+    }
+  }
+
+  /** Reads the saved poll offset; 0 when none. */
+  private loadOffset(): number {
+    if (!this.deps.dataDir || !this.botId) return 0;
+    try {
+      const file = join(this.deps.dataDir, "telegram-offset.json");
+      const raw = JSON.parse(readFileSync(file, "utf8")) as {
+        botId?: unknown;
+        offset?: unknown;
+      };
+      return raw.botId === this.botId &&
+        typeof raw.offset === "number" &&
+        Number.isSafeInteger(raw.offset) &&
+        raw.offset >= 0
+        ? raw.offset
+        : 0;
+    } catch {
+      return 0;
     }
   }
 
@@ -275,6 +368,8 @@ export class TelegramChannel {
 
   private async handleUpdate(update: TelegramUpdate): Promise<void> {
     if (update.callback_query) {
+      const chatId = update.callback_query.message?.chat.id;
+      if (chatId !== undefined && chatId < 0 && !this.isConfiguredChat(chatId)) return;
       const ownerId = this.deps.owner()?.id ?? null;
       if (
         !(await this.approvals.handleCallback(update.callback_query, ownerId)) &&
@@ -284,7 +379,14 @@ export class TelegramChannel {
       return;
     }
     const message = update.message;
-    if (!message?.from || message.from.is_bot || message.chat.type !== "private") return;
+    if (!message?.from || message.from.is_bot) return;
+    if (message.chat.type !== "private") {
+      if (
+        (message.chat.type !== "group" && message.chat.type !== "supergroup") ||
+        !this.isConfiguredChat(message.chat.id)
+      )
+        return;
+    }
     await this.handleMessage(message, message.from);
   }
 
@@ -292,12 +394,39 @@ export class TelegramChannel {
   // Messages
   // -------------------------------------------------------------------------------------------
 
+  private isConfiguredChat(chatId: number): boolean {
+    return Object.hasOwn(this.deps.settings?.get().channels.telegram.chats ?? {}, String(chatId));
+  }
+
+  /** Per-chat settings from Settings › Channels; empty when none are configured. */
+  private chatSettings(chatId: number): TelegramChatSettings {
+    const chats = this.deps.settings?.get().channels.telegram.chats;
+    return chats?.[String(chatId)] ?? {};
+  }
+
+  /** True when `from` may talk in this chat (owner, or in the chat's allowlist). */
+  private isAllowed(chatId: number, from: TelegramUser): boolean {
+    const owner = this.deps.owner();
+    if (owner && from.id === owner.id) return true;
+    const settings = this.chatSettings(chatId);
+    if (settings.access !== "members") return false;
+    if (!settings.allowedUsers || settings.allowedUsers.length === 0) return true;
+    return settings.allowedUsers.includes(from.id);
+  }
+
   private async handleMessage(message: TelegramMessage, from: TelegramUser): Promise<void> {
     const chatId = message.chat.id;
     const owner = this.deps.owner();
     const command = parseCommand((message.text ?? "").trim());
+    if (
+      command?.target &&
+      this.username &&
+      command.target.toLowerCase() !== this.username.toLowerCase()
+    )
+      return;
+    if (command?.name === "pair" && message.chat.type !== "private") return;
 
-    if (!owner || from.id !== owner.id) {
+    if (!this.isAllowed(chatId, from)) {
       // Strangers get no answer. A pairing the owner opened is the one exception: its code may
       // come from anyone, and (if the bot already has an owner) it replaces that owner.
       if (command?.name === "pair" && (!owner || this.deps.pairing.isOpen(Date.now())))
@@ -308,7 +437,7 @@ export class TelegramChannel {
 
     switch (command?.name) {
       case "start":
-        await this.reply(chatId, "startPaired", { name: owner.name });
+        await this.reply(chatId, "startPaired", { name: owner?.name ?? "" });
         return;
       case "help":
         await this.reply(chatId, "help");
@@ -324,9 +453,12 @@ export class TelegramChannel {
       case "workspace":
       case "model":
       case "thinking":
+        // Members may converse, but only the owner may inspect or change bindings.
+        if (from.id !== owner?.id) return;
         await this.choose(chatId, command.name, command.argument);
         return;
       case "effort":
+        if (from.id !== owner?.id) return;
         await this.choose(chatId, "thinking", command.argument);
         return;
       case "new":
@@ -338,20 +470,92 @@ export class TelegramChannel {
           await this.reply(chatId, "turnFailed", { error: (error as Error).message });
         }
         return;
+      case "sessions":
+        await this.listSessions(chatId);
+        return;
+      case "resume":
+        await this.resumeSession(chatId, command.argument);
+        return;
     }
 
     // The turn in progress waits for this text (the person tapped "Other"); queued, it would wait
     // behind the very turn that waits for it.
     const plain = !message.photo && !message.document && !message.voice && !message.audio;
-    if (plain && message.text && this.questions.handleText(chatId, message.text)) return;
+    if (
+      from.id === owner?.id &&
+      plain &&
+      message.text &&
+      this.questions.handleText(chatId, message.text)
+    )
+      return;
 
+    // Busy mode: steer joins the running turn, interrupt stops it, queue waits.
+    const busyMode = this.chatSettings(chatId).busyMode ?? "queue";
     const queue = this.queue(chatId);
+    if (queue.running && busyMode === "steer" && plain && message.text?.trim()) {
+      try {
+        const accepted = await this.deps.gateway.steerTurn(`telegram:${chatId}`, {
+          text: message.text.trim(),
+          attachments: [],
+        });
+        if (accepted) return;
+      } catch (error) {
+        console.warn("[telegram] Could not steer the turn; queueing the message:", error);
+      }
+    }
+    if (queue.running && busyMode === "interrupt") {
+      await this.deps.gateway.abort(`telegram:${chatId}`).catch(() => {});
+    }
     if (queue.waiting.length >= MAX_QUEUED_MESSAGES) {
       await this.reply(chatId, "busy");
       return;
     }
     queue.waiting.push(() => this.process(chatId, message));
     void this.drain(queue);
+  }
+
+  /** Replies with the chat's saved sessions, current first. */
+  private async listSessions(chatId: number): Promise<void> {
+    try {
+      const sessions = await this.deps.gateway.listChatSessions(`telegram:${chatId}`);
+      if (sessions.length === 0) {
+        await this.reply(chatId, "noSessions");
+        return;
+      }
+      const lines = sessions.map((s, i) => {
+        const marker = s.isCurrent ? " ←" : "";
+        return `${i + 1}. ${s.title}${marker}`;
+      });
+      await this.api.sendMessage(chatId, lines.join("\n"));
+    } catch (error) {
+      await this.reply(chatId, "turnFailed", { error: (error as Error).message });
+    }
+  }
+
+  /** Switches the chat to a previous session by number (1-based). */
+  private async resumeSession(chatId: number, argument: string): Promise<void> {
+    const index = Number(argument.trim());
+    if (!Number.isInteger(index) || index < 1) {
+      await this.reply(chatId, "resumeUsage");
+      return;
+    }
+    try {
+      const sessions = await this.deps.gateway.listChatSessions(`telegram:${chatId}`);
+      const target = sessions[index - 1];
+      if (!target) {
+        await this.reply(chatId, "sessionNotFound", { number: index });
+        return;
+      }
+      if (target.isCurrent) {
+        await this.reply(chatId, "sessionAlreadyCurrent");
+        return;
+      }
+      await this.interrupt(chatId);
+      await this.deps.gateway.resumeChatSession(`telegram:${chatId}`, target.id);
+      await this.reply(chatId, "sessionResumed", { title: target.title });
+    } catch (error) {
+      await this.reply(chatId, "turnFailed", { error: (error as Error).message });
+    }
   }
 
   /** The list behind a command and what the chat uses now. */

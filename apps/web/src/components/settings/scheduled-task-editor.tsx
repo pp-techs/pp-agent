@@ -20,6 +20,7 @@ import { Input } from "@workspace/ui/components/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -34,11 +35,12 @@ import { toast } from "sonner";
 
 import { OptionGroup, SwitchRow } from "@/components/settings/option-group";
 import { WEEKDAY_ORDER, weekdayName } from "@/components/settings/scheduled-task-format";
+import { localDateTime, onceTimestamp } from "@/components/settings/scheduled-task-fields";
 import { useSettingsSubPage } from "@/components/settings/settings-subpage";
 import { scheduledTasksQuery, useScheduledTaskCommands } from "@/lib/extension-queries";
 import { agentsQuery, workspacesQuery } from "@/lib/queries";
 
-const KINDS = ["interval", "daily", "weekly"] as const;
+const KINDS = ["once", "interval", "daily", "weekly"] as const;
 type Kind = (typeof KINDS)[number];
 const UNITS = ["minutes", "hours"] as const;
 type Unit = (typeof UNITS)[number];
@@ -50,13 +52,18 @@ const DEFAULT_TIME = "09:00";
 
 /** Starting values of the schedule fields for a task being edited (or a new one: every day at 09:00). */
 function scheduleFields(schedule: TaskSchedule | undefined) {
+  const kind: Kind = schedule?.kind ?? "daily";
   return {
-    kind: schedule?.kind ?? "daily",
+    kind,
+    at: schedule?.kind === "once" ? localDateTime(schedule.at) : "",
     every: schedule?.kind === "interval" ? String(schedule.every) : "1",
     unit: schedule?.kind === "interval" ? schedule.unit : "hours",
-    time: schedule && schedule.kind !== "interval" ? schedule.time : DEFAULT_TIME,
+    time:
+      schedule && schedule.kind !== "interval" && schedule.kind !== "once"
+        ? schedule.time
+        : DEFAULT_TIME,
     days: schedule?.kind === "weekly" ? schedule.days : [1, 2, 3, 4, 5],
-  } satisfies { kind: Kind; every: string; unit: Unit; time: string; days: number[] };
+  } satisfies { kind: Kind; at: string; every: string; unit: Unit; time: string; days: number[] };
 }
 
 function TaskForm({
@@ -81,6 +88,7 @@ function TaskForm({
   const [agentId, setAgentId] = React.useState(task?.agentId ?? DEFAULT_AGENT_ID);
   const [workspaceId, setWorkspaceId] = React.useState(task?.workspaceId ?? DEFAULT_WORKSPACE_ID);
   const [kind, setKind] = React.useState<Kind>(initial.kind);
+  const [at, setAt] = React.useState(initial.at);
   const [every, setEvery] = React.useState(initial.every);
   const [unit, setUnit] = React.useState<Unit>(initial.unit);
   const [time, setTime] = React.useState(initial.time);
@@ -91,6 +99,7 @@ function TaskForm({
   const trimmedName = name.trim();
   const trimmedPrompt = prompt.trim();
   const everyNumber = Number(every);
+  const atTimestamp = kind === "once" ? onceTimestamp(at, task?.schedule) : NaN;
   const [minEvery, maxEvery] =
     unit === "minutes"
       ? [SCHEDULE_LIMITS.minMinutes, SCHEDULE_LIMITS.maxMinutes]
@@ -122,10 +131,12 @@ function TaskForm({
             maxHours: SCHEDULE_LIMITS.maxHours,
           })
         : null,
-    time: kind !== "interval" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time),
+    at: kind === "once" && (!Number.isFinite(atTimestamp) || atTimestamp <= 0),
+    time: (kind === "daily" || kind === "weekly") && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time),
     days: kind === "weekly" && days.length === 0,
   };
-  const valid = !errors.name && !errors.prompt && !errors.every && !errors.time && !errors.days;
+  const valid =
+    !errors.name && !errors.prompt && !errors.every && !errors.at && !errors.time && !errors.days;
 
   const agentItems = (agents.data ?? []).map((agent) => ({
     value: agent.id,
@@ -150,6 +161,7 @@ function TaskForm({
   }));
 
   function schedule(): TaskSchedule {
+    if (kind === "once") return { kind, at: atTimestamp };
     if (kind === "interval") return { kind, every: everyNumber, unit };
     if (kind === "daily") return { kind, time };
     return { kind, days, time };
@@ -168,6 +180,12 @@ function TaskForm({
         workspaceId: workspaceValue,
         schedule: schedule(),
         enabled,
+        // These agent-created run and delivery options have no controls in this form.
+        target: task?.target,
+        delivery: task?.delivery,
+        origin: task?.origin,
+        deleteAfterRun: task?.deleteAfterRun,
+        silentIfEmpty: task?.silentIfEmpty,
       },
       {
         onSuccess: (saved) => {
@@ -270,14 +288,34 @@ function TaskForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {kindItems.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
-                ))}
+                <SelectGroup>
+                  {kindItems.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
           </Field>
+          {kind === "once" && (
+            <Field data-invalid={touched && errors.at}>
+              <FieldLabel htmlFor="task-at">{t("scheduledTasks.editor.when.at")}</FieldLabel>
+              <Input
+                id="task-at"
+                type="datetime-local"
+                step="0.001"
+                value={at}
+                onChange={(event) => setAt(event.target.value)}
+                aria-invalid={touched && errors.at}
+              />
+              {touched && errors.at ? (
+                <FieldError>{t("scheduledTasks.editor.errors.at")}</FieldError>
+              ) : (
+                <FieldDescription>{t("scheduledTasks.editor.when.atHelp")}</FieldDescription>
+              )}
+            </Field>
+          )}
           {kind === "interval" && (
             <div className="flex items-start gap-3">
               <Field data-invalid={touched && Boolean(errors.every)} className="w-32 shrink-0">
@@ -344,7 +382,7 @@ function TaskForm({
               )}
             </Field>
           )}
-          {kind !== "interval" && (
+          {(kind === "daily" || kind === "weekly") && (
             <Field data-invalid={touched && errors.time} className="w-40">
               <FieldLabel htmlFor="task-time">{t("scheduledTasks.editor.when.time")}</FieldLabel>
               <Input

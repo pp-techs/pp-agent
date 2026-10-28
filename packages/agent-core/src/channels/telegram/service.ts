@@ -1,3 +1,5 @@
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
 import {
   DEFAULT_WORKSPACE_ID,
   type ChannelState,
@@ -11,9 +13,12 @@ import type { ChannelGateway, TelegramControl } from "../types.ts";
 import { HttpTelegramApi, TelegramApiError, type TelegramApi } from "./api.ts";
 import { TelegramChannel, type TelegramOwner } from "./channel.ts";
 import { PairingGuard } from "./pairing.ts";
+import { readChannelsSettings } from "./settings.ts";
 import type { TelegramTranslate } from "./text.ts";
 
 export interface TelegramServiceDeps {
+  /** Where to persist the poll offset. */
+  dataDir?: string;
   settings: SettingsStore;
   credentials: Pick<VaultCredentialStore, "read" | "modify" | "delete">;
   gateway: ChannelGateway;
@@ -62,6 +67,29 @@ export class TelegramService implements TelegramControl {
     };
   }
 
+  /** Sends to the paired owner (`home`) or an explicitly configured Telegram chat. */
+  async deliver(peer: string, text: string): Promise<void> {
+    const { t, settings } = this.deps;
+    const owner = this.owner();
+    if (!owner) throw new Error(t("channels.telegram.notifyNeedsOwner"));
+    const match = /^telegram:(-?[1-9]\d*)$/.exec(peer);
+    const chatId = peer === "home" ? owner.id : match ? Number(match[1]) : NaN;
+    if (
+      !Number.isSafeInteger(chatId) ||
+      (chatId !== owner.id &&
+        !Object.hasOwn(settings.get().channels.telegram.chats ?? {}, String(chatId)))
+    ) {
+      throw new Error(`Unknown delivery target: ${peer}`);
+    }
+    if (!this.channel || this.state !== "online")
+      throw new Error(t("channels.telegram.notifyNeedsOnline"));
+    try {
+      await this.channel.notify(chatId, text);
+    } catch (error) {
+      throw new Error(t("channels.telegram.notifyFailed", { error: (error as Error).message }));
+    }
+  }
+
   save(input: SaveTelegramInput): Promise<TelegramStatus> {
     return this.serial(async () => {
       const { settings, credentials, t } = this.deps;
@@ -88,6 +116,12 @@ export class TelegramService implements TelegramControl {
           workspaceId: draft.workspaces.some((workspace) => workspace.id === input.workspaceId)
             ? input.workspaceId
             : DEFAULT_WORKSPACE_ID,
+          ...(input.chats !== undefined
+            ? {
+                chats:
+                  readChannelsSettings({ telegram: { chats: input.chats } }).telegram.chats ?? {},
+              }
+            : {}),
         };
       });
       await this.reconcile();
@@ -113,6 +147,8 @@ export class TelegramService implements TelegramControl {
     return this.serial(async () => {
       await this.stopChannel();
       if ((await this.readToken()) !== null) await this.deps.credentials.delete(TELEGRAM_TOKEN_KEY);
+      if (this.deps.dataDir)
+        await rm(join(this.deps.dataDir, "telegram-offset.json"), { force: true });
       this.deps.settings.update((draft) => {
         const telegram = draft.channels.telegram;
         telegram.enabled = false;
@@ -167,6 +203,8 @@ export class TelegramService implements TelegramControl {
     await this.stopChannel();
 
     const channel: TelegramChannel = new TelegramChannel({
+      dataDir: this.deps.dataDir,
+      settings: this.deps.settings,
       token,
       api: this.deps.api?.(token),
       gateway: this.deps.gateway,

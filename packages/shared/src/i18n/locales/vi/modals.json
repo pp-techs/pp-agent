@@ -1,6 +1,7 @@
 {
   "app": {
     "starting": "Đang khởi động Agent…",
+    "backToChat": "Quay lại trò chuyện",
     "unconfigured": {
       "title": "Chọn mô hình để bắt đầu",
       "description": "Kết nối nhà cung cấp AI bằng khóa API của bạn, hoặc thêm Gateway của nhóm bạn, trong Cài đặt › Mô hình.",

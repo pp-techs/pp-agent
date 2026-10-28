@@ -110,6 +110,38 @@ describe("nextRun", () => {
   });
 });
 
+describe("one-shot schedules", () => {
+  const slot = at(2026, 3, 4, 9);
+
+  test("accepts finite one-shot times", () => {
+    expect(parseSchedule({ kind: "once", at: slot })).toEqual({
+      ok: true,
+      schedule: { kind: "once", at: slot },
+    });
+    expect(parseSchedule({ kind: "once", at: Number.NaN }).ok).toBe(false);
+  });
+
+  test("waits for its slot, catches up once, and expires after the catch-up window", () => {
+    const once = task({ kind: "once", at: slot }, slot - HOUR);
+    expect(nextRun(once, slot - MINUTE)).toBe(slot);
+    expect(lastDue(once, slot - MINUTE)).toBeNull();
+    expect(decide(once, slot)).toEqual({ action: "run", dueAt: slot });
+    expect(nextRun(once, slot + MINUTE)).toBe(slot + MINUTE);
+    expect(decide(once, slot + MINUTE)).toEqual({ action: "run", dueAt: slot });
+    expect(nextRun(once, slot + 25 * HOUR)).toBeNull();
+    expect(decide(once, slot + 25 * HOUR)).toEqual({ action: "skip" });
+  });
+
+  test("a completed slot is not repeated just because the task was re-enabled", () => {
+    const completed = task({ kind: "once", at: slot }, slot + 2 * MINUTE, {
+      lastRunEnd: slot + MINUTE,
+    });
+    expect(nextRun(completed, slot + 2 * MINUTE)).toBeNull();
+    expect(lastDue(completed, slot + 2 * MINUTE)).toBeNull();
+    expect(decide(completed, slot + 2 * MINUTE)).toEqual({ action: "wait" });
+  });
+});
+
 describe("lastDue / decide (catch-up)", () => {
   const daily: TaskSchedule = { kind: "daily", time: "09:00" };
 

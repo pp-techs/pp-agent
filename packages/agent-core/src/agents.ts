@@ -301,6 +301,14 @@ const TOOL_TEXT: Record<string, { label: string; description: string }> = {
     label: "Ask you questions",
     description: "Ask you to choose between options when it needs your decision.",
   },
+  sessions: {
+    label: "See other conversations",
+    description: "List and read saved conversations, and see which chats it can deliver to.",
+  },
+  schedule_manage: {
+    label: "Scheduled tasks",
+    description: "Create and manage tasks that run on a schedule; asks first when creating.",
+  },
   office_read: {
     label: "Inspect Word, Excel, PowerPoint files",
     description: "Look at the structure and content of Office files without changing them.",

@@ -50,6 +50,8 @@
       "todo_write": "Lập kế hoạch bằng danh sách",
       "delegate_task": "Giao việc tra cứu",
       "ask_user": "Hỏi bạn khi cần quyết định",
+      "sessions": "Xem các cuộc trò chuyện khác",
+      "schedule_manage": "Tác vụ theo lịch",
       "office_read": "Xem tệp Word, Excel, PowerPoint",
       "office_edit": "Tạo và chỉnh sửa tệp Word, Excel, PowerPoint"
     },

@@ -67,6 +67,7 @@
     "newWorkspace": "New workspace",
     "workspaceName": "Workspace name",
     "workspaces": "Workspaces",
+    "manageWorkspaces": "Manage workspaces",
     "settings": "Settings",
     "loadError": "Couldn't load your chats. Reopen the app to try again.",
     "noChats": "No chats yet",
@@ -103,7 +104,8 @@
       "name": "Chat name",
       "deleteTitle": "Delete this chat?",
       "deleteDescription": "“{{title}}” will be removed from your history. Files it saved stay in your workspace."
-    }
+    },
+    "scheduledTasks": "Schedules"
   },
   "composer": {
     "placeholder": "Ask the agent, or type / for more",
@@ -297,6 +299,16 @@
         "active": "Asking you a question",
         "done": "Asked you a question",
         "notDone": "Ask you a question"
+      },
+      "sessions": {
+        "active": "Looking at conversations",
+        "done": "Looked at conversations",
+        "notDone": "Look at conversations"
+      },
+      "scheduleManage": {
+        "active": "Managing scheduled tasks",
+        "done": "Managed scheduled tasks",
+        "notDone": "Manage scheduled tasks"
       },
       "delegate": {
         "active": "Helper is researching",

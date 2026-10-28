@@ -160,6 +160,20 @@ sequenceDiagram
 
 The result the model reads is text: `User answered: Q3` for one question, otherwise `User answers:` followed by `- <id>: <choices>` lines; a typed answer appears as `Other: <text>`. A skipped question is an error result; the step shows "Skipped" (status `denied`, which a later tool error cannot overwrite). The signal passed to `askUser` settles the call when the run is aborted. If the app closes while a question is open, nothing is stored: the reopened conversation shows the step as interrupted.
 
+## Sessions the agent can see (`sessions`)
+
+Every turn's system prompt has a `## Where you are` section (`sessionContextSection`): today's date and time zone (the date only, so the prompt stays the same all day; `current_datetime` has the time), the id of the running session, what kind of place it is (`SessionScope.surface`: the window, a chat, a scheduled run) and the person's own chat when one is paired.
+
+The `sessions` tool (`sessions-tool.ts`, read tier, off with Settings › Tools or the agent's tool list) has three actions:
+
+| Action    | Result                                                                              |
+| --------- | ----------------------------------------------------------------------------------- |
+| `list`    | Saved sessions, newest first, filtered by `kind`, `peer`, `search`, `limit`.        |
+| `history` | The last messages of one session (user and assistant text only, long messages cut). |
+| `peers`   | The chats a message can be delivered to: `home` is the paired Telegram owner.       |
+
+A session id is its file name without `.jsonl`. Kind is derived, with no extra store: a file in `channels.json` is a `chat` (its chat key is the `peer`), a scheduled run's file (`lastRun.sessionPath`, or a name starting with `⏰`) is a `task`, anything else is a `window` conversation. `SessionScope.visibility` decides what the tool shows: `all` in the window and in chats, `self` in a scheduled run (only its own session can be listed or read). `history` only reads files the session list knows, so an id cannot point outside the session folder.
+
 ## Chat channel turns (Telegram)
 
 A message from the paired person on Telegram becomes a turn without the window. The channel (`packages/agent-core/src/channels/telegram/`) long-polls the Bot API and talks to the agent only through `AgentHost.gateway` (`ChannelGateway`: `runTurn`, `newConversation`, `abort`, `transcribe`). Each chat key (`telegram:<chatId>`) has its own Pi session, separate from the conversation open in the window, built with the agent and workspace chosen in Settings › Channels › Telegram. Either can also be selected in chat with `/agent` and `/workspace`. Turns of one chat run one at a time; up to 5 more messages wait, and the rest get a "busy" reply.

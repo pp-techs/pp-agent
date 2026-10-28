@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
-import type { ChannelState } from "@workspace/shared";
+import type { ChannelState, TelegramChatSettings } from "@workspace/shared";
 import { TelegramApiError, type TelegramMessage, type TelegramUpdate } from "./api.ts";
 import { MAX_QUEUED_MESSAGES, TelegramChannel, type TelegramOwner } from "./channel.ts";
 import { PairingGuard } from "./pairing.ts";
@@ -16,7 +16,10 @@ import {
 const OWNER: TelegramOwner = { id: 7, name: "Ann Lee" };
 const channels: TelegramChannel[] = [];
 
-function setup(initialOwner: TelegramOwner | null = OWNER) {
+function setup(
+  initialOwner: TelegramOwner | null = OWNER,
+  chats?: Record<string, TelegramChatSettings>,
+) {
   const api = new FakeApi();
   const gateway = new FakeGateway();
   const pairing = new PairingGuard();
@@ -35,6 +38,7 @@ function setup(initialOwner: TelegramOwner | null = OWNER) {
     },
     onState: (value, error) => states.push([value, error]),
     t: fakeT,
+    settings: { get: () => ({ channels: { telegram: { chats } } }) },
   });
   channels.push(channel);
   return { api, gateway, pairing, state, paired, states, channel };
@@ -88,6 +92,8 @@ describe("start and stop", () => {
       "model",
       "thinking",
       "stop",
+      "sessions",
+      "resume",
       "help",
     ]);
     expect(first.api.commands.every((entry) => entry.description.length > 0)).toBe(true);
@@ -233,6 +239,73 @@ describe("messages", () => {
     api.push(textUpdate(3, "/help"));
     await vi.waitFor(() => expect(api.sent).toHaveLength(1));
     expect(gateway.turns).toHaveLength(0);
+  });
+
+  test.each(["group", "supergroup"] as const)(
+    "queues allowed members in an explicitly configured %s",
+    async (type) => {
+      const chatId = -100123;
+      const { api, channel, gateway } = setup(OWNER, {
+        [chatId]: { access: "members", allowedUsers: [8] },
+      });
+      const first = Promise.withResolvers<void>();
+      gateway.handler = async (input) => {
+        if (input.text === "first") await first.promise;
+        return { text: "done", status: "done" };
+      };
+      await channel.start();
+      api.push(message({ chat: { id: chatId, type }, text: "first" }, 1, 8));
+      await vi.waitFor(() => expect(gateway.turns).toHaveLength(1));
+      api.push(message({ chat: { id: chatId, type }, text: "second" }, 2, 8));
+      api.push(message({ chat: { id: chatId, type }, text: "not allowed" }, 3, 9));
+      api.push(textUpdate(4, "/help"));
+      await vi.waitFor(() => expect(api.plainTexts).toContain("channels.telegram.help"));
+      expect(gateway.turns).toHaveLength(1);
+      first.resolve();
+      await vi.waitFor(() => expect(gateway.turns).toHaveLength(2));
+      expect(gateway.turns.map(({ chatKey, input }) => ({ chatKey, text: input.text }))).toEqual([
+        { chatKey: `telegram:${chatId}`, text: "first" },
+        { chatKey: `telegram:${chatId}`, text: "second" },
+      ]);
+      expect(api.sent.some((sent) => sent.chatId === chatId)).toBe(true);
+    },
+  );
+
+  test("ignores unconfigured groups even for the owner, configured channel posts and bots", async () => {
+    const { api, channel, gateway } = setup(OWNER, {
+      "-100123": { access: "members" },
+    });
+    await channel.start();
+    api.push(message({ chat: { id: -100456, type: "group" }, text: "owner" }, 1));
+    api.push(message({ chat: { id: -100456, type: "supergroup" }, text: "owner" }, 2));
+    api.push(message({ chat: { id: -100123, type: "channel" }, text: "channel" }, 3));
+    api.push(
+      message(
+        {
+          chat: { id: -100123, type: "group" },
+          from: { id: 8, first_name: "Bot", is_bot: true },
+          text: "bot",
+        },
+        4,
+      ),
+    );
+    api.push(textUpdate(5, "/help"));
+    await vi.waitFor(() => expect(api.offsets.at(-1)).toBe(6));
+    expect(gateway.turns).toEqual([]);
+    expect(api.sent.map(({ chatId }) => chatId)).toEqual([7]);
+  });
+
+  test("a configured members group cannot use or consume a pairing code", async () => {
+    const { api, channel, pairing, paired } = setup(null, {
+      "-100123": { access: "members" },
+    });
+    const { code } = pairing.open(Date.now());
+    await channel.start();
+    api.push(message({ chat: { id: -100123, type: "supergroup" }, text: `/pair ${code}` }, 1, 8));
+    api.push(textUpdate(2, `/pair ${code}`, 8));
+    await vi.waitFor(() => expect(paired).toHaveLength(1));
+    expect(paired[0]?.id).toBe(8);
+    expect(api.sent.map(({ chatId }) => chatId)).toEqual([8]);
   });
 
   test("runs a text turn and shows the final answer", async () => {
@@ -444,6 +517,45 @@ describe("questions of ask_user", () => {
     await vi.waitFor(() => expect(answers).toBeNull());
   });
 
+  test("allowed group members cannot answer the owner's pending question text", async () => {
+    const chatId = -100123;
+    const { api, channel, gateway } = setup(OWNER, {
+      [chatId]: { access: "members", allowedUsers: [8] },
+    });
+    let answers: unknown = "unset";
+    gateway.handler = async (input, hooks) => {
+      if (input.text === "plan it") {
+        answers = await hooks.askQuestion({
+          ...questionRequest("group-question"),
+          questions: [questionRequest().questions[0]!],
+        });
+      }
+      return { text: "done", status: "done" };
+    };
+    await channel.start();
+    api.push(message({ chat: { id: chatId, type: "group" }, text: "plan it" }, 1));
+    await vi.waitFor(() => expect(api.sent.some((sent) => sent.options?.replyMarkup)).toBe(true));
+    api.push({
+      update_id: 2,
+      callback_query: {
+        id: "other",
+        from: { id: 7, first_name: "Owner" },
+        data: "q:group-question:0:o",
+      },
+    });
+    await vi.waitFor(() =>
+      expect(api.plainTexts).toContain("channels.telegram.questionTypeAnswer"),
+    );
+    api.push(message({ chat: { id: chatId, type: "group" }, text: "member text" }, 3, 8));
+    api.push(textUpdate(4, "/help"));
+    await vi.waitFor(() => expect(api.plainTexts).toContain("channels.telegram.help"));
+    expect(answers).toBe("unset");
+    api.push(message({ chat: { id: chatId, type: "group" }, text: "owner answer" }, 5));
+    await vi.waitFor(() => expect(gateway.turns).toHaveLength(2));
+    expect(answers).toEqual([{ id: "scope", selected: [], custom: "owner answer" }]);
+    expect(gateway.turns[1]?.input.text).toBe("member text");
+  });
+
   test("/stop skips the open question", async () => {
     const { api, channel, gateway } = setup();
     let answers: unknown = "unset";
@@ -519,6 +631,197 @@ describe("queue and commands", () => {
     gates[0]?.resolve();
   });
 
+  test("/sessions and /resume use gateway history instead of prompting the agent", async () => {
+    const { api, channel, gateway } = setup();
+    gateway.sessions = [
+      { id: "now", title: "Current chat", isCurrent: true },
+      { id: "before", title: "Previous chat", isCurrent: false },
+    ];
+    await channel.start();
+    api.push(textUpdate(1, "/sessions@pp_bot"));
+    await vi.waitFor(() => expect(api.plainTexts).toContain("1. Current chat ←\n2. Previous chat"));
+    api.push(textUpdate(2, "/resume 2"));
+    await vi.waitFor(() =>
+      expect(api.plainTexts).toContain(
+        'channels.telegram.sessionResumed {"title":"Previous chat"}',
+      ),
+    );
+    expect(gateway.resumed).toEqual([{ chatKey: "telegram:7", sessionId: "before" }]);
+    expect(gateway.sessionLists).toEqual(["telegram:7", "telegram:7"]);
+    expect(gateway.aborted).toEqual(["telegram:7"]);
+    expect(gateway.turns).toEqual([]);
+  });
+
+  test("session commands localize empty history, usage, missing and current replies", async () => {
+    const { api, channel, gateway } = setup();
+    await channel.start();
+    api.push(textUpdate(1, "/sessions"));
+    api.push(textUpdate(2, "/resume"));
+    api.push(textUpdate(3, "/resume 2"));
+    await vi.waitFor(() => expect(api.plainTexts).toHaveLength(3));
+    expect(api.plainTexts).toEqual(
+      expect.arrayContaining([
+        "channels.telegram.resumeUsage",
+        "channels.telegram.noSessions",
+        'channels.telegram.sessionNotFound {"number":2}',
+      ]),
+    );
+    gateway.sessions = [{ id: "now", title: "Current", isCurrent: true }];
+    api.push(textUpdate(4, "/resume 1"));
+    await vi.waitFor(() =>
+      expect(api.plainTexts).toContain("channels.telegram.sessionAlreadyCurrent"),
+    );
+    expect(gateway.resumed).toEqual([]);
+    expect(gateway.turns).toEqual([]);
+  });
+
+  test("allowed group members retain the chat's /new, /resume and /stop controls", async () => {
+    const { api, channel, gateway } = setup(OWNER, {
+      "-100123": { access: "members", allowedUsers: [8] },
+    });
+    gateway.sessions = [
+      { id: "now", title: "Current", isCurrent: true },
+      { id: "before", title: "Previous", isCurrent: false },
+    ];
+    await channel.start();
+    api.push(message({ chat: { id: -100123, type: "group" }, text: "/new" }, 1, 8));
+    await vi.waitFor(() => expect(gateway.fresh).toEqual(["telegram:-100123"]));
+    api.push(message({ chat: { id: -100123, type: "group" }, text: "/resume 2" }, 2, 8));
+    await vi.waitFor(() =>
+      expect(gateway.resumed).toEqual([{ chatKey: "telegram:-100123", sessionId: "before" }]),
+    );
+    api.push(message({ chat: { id: -100123, type: "group" }, text: "/stop" }, 3, 8));
+    await vi.waitFor(() => expect(api.plainTexts).toContain("channels.telegram.stopped"));
+    expect(gateway.aborted).toEqual(["telegram:-100123", "telegram:-100123", "telegram:-100123"]);
+    expect(gateway.turns).toEqual([]);
+  });
+
+  test("steers plain text only after the active turn accepts it", async () => {
+    const { api, channel, gateway } = setup(OWNER, { "7": { busyMode: "steer" } });
+    const gate = Promise.withResolvers<void>();
+    gateway.handler = async () => {
+      await gate.promise;
+      return { text: "done", status: "done" };
+    };
+    gateway.steerHandler = async () => true;
+    await channel.start();
+    api.push(textUpdate(1, "first"));
+    await vi.waitFor(() => expect(gateway.turns).toHaveLength(1));
+    api.push(textUpdate(2, "  correction  "));
+    await vi.waitFor(() => expect(gateway.steered).toHaveLength(1));
+    expect(gateway.steered[0]).toEqual({
+      chatKey: "telegram:7",
+      input: { text: "correction", attachments: [] },
+    });
+    gate.resolve();
+    await vi.waitFor(() => expect(shown(api)).toContain("done"));
+    expect(gateway.turns).toHaveLength(1);
+  });
+
+  test.each(["declined", "error"] as const)(
+    "queues plain text when steering is %s",
+    async (outcome) => {
+      const { api, channel, gateway } = setup(OWNER, { "7": { busyMode: "steer" } });
+      const gate = Promise.withResolvers<void>();
+      gateway.handler = async () => {
+        await gate.promise;
+        return { text: "done", status: "done" };
+      };
+      gateway.steerHandler = async () => {
+        if (outcome === "error") throw new Error("steering failed");
+        return false;
+      };
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+      await channel.start();
+      api.push(textUpdate(1, "first"));
+      await vi.waitFor(() => expect(gateway.turns).toHaveLength(1));
+      api.push(textUpdate(2, "correction"));
+      await vi.waitFor(() => expect(gateway.steered).toHaveLength(1));
+      gate.resolve();
+      await vi.waitFor(() => expect(gateway.turns).toHaveLength(2));
+      expect(gateway.turns[1]?.input).toEqual({ text: "correction", attachments: [] });
+      if (outcome === "error")
+        expect(warning).toHaveBeenCalledWith(
+          "[telegram] Could not steer the turn; queueing the message:",
+          expect.any(Error),
+        );
+      warning.mockRestore();
+    },
+  );
+
+  test("queues captions, photos, documents, voice and audio without attempting to steer", async () => {
+    const { api, channel, gateway } = setup(OWNER, { "7": { busyMode: "steer" } });
+    const gate = Promise.withResolvers<void>();
+    gateway.handler = async () => {
+      await gate.promise;
+      return { text: "done", status: "done" };
+    };
+    gateway.steerHandler = async () => true;
+    api.files.set("photo", new Uint8Array([1, 2]));
+    api.files.set("document", new Uint8Array([3]));
+    api.files.set("voice", new Uint8Array([4]));
+    await channel.start();
+    api.push(textUpdate(1, "first"));
+    await vi.waitFor(() => expect(gateway.turns).toHaveLength(1));
+    api.push(
+      message(
+        {
+          photo: [{ file_id: "photo", width: 10, height: 10 }],
+          caption: "photo caption",
+        },
+        2,
+      ),
+    );
+    api.push(
+      message(
+        {
+          document: { file_id: "document", file_name: "notes.txt" },
+          caption: "document caption",
+        },
+        3,
+      ),
+    );
+    api.push(message({ voice: { file_id: "voice" }, caption: "voice caption" }, 4));
+    api.push(message({ audio: { file_id: "voice" }, caption: "audio caption" }, 5));
+    api.push(message({ caption: "caption only" }, 6));
+    api.push(textUpdate(7, "/help"));
+    await vi.waitFor(() => expect(api.plainTexts).toContain("channels.telegram.help"));
+    expect(gateway.steered).toEqual([]);
+    gate.resolve();
+    await vi.waitFor(() => expect(gateway.turns).toHaveLength(6));
+    expect(gateway.turns.map((turn) => turn.input.text)).toEqual([
+      "first",
+      "photo caption",
+      "document caption",
+      "spoken words\n\nvoice caption",
+      "spoken words\n\naudio caption",
+      "caption only",
+    ]);
+    expect(gateway.turns[1]?.input.attachments).toEqual([
+      { name: "photo.jpg", mimeType: "image/jpeg", data: "AQI=" },
+    ]);
+    expect(gateway.turns[2]?.input.attachments[0]).toMatchObject({ name: "notes.txt" });
+    expect(gateway.transcripts).toEqual([
+      { size: 1, mimeType: "audio/ogg" },
+      { size: 1, mimeType: "audio/mpeg" },
+    ]);
+  });
+
+  test("queues text while the previous message is still downloading before its turn", async () => {
+    const { api, channel, gateway } = setup(OWNER, { "7": { busyMode: "steer" } });
+    const download = Promise.withResolvers<{ data: Uint8Array; path: string }>();
+    const downloadFile = vi.spyOn(api, "downloadFile").mockReturnValue(download.promise);
+    await channel.start();
+    api.push(message({ photo: [{ file_id: "photo", width: 10, height: 10 }] }));
+    await vi.waitFor(() => expect(downloadFile).toHaveBeenCalled());
+    expect(gateway.turns).toHaveLength(0);
+    api.push(textUpdate(2, "after download"));
+    await vi.waitFor(() => expect(gateway.steered).toHaveLength(1));
+    download.resolve({ data: new Uint8Array([1]), path: "photo.jpg" });
+    await vi.waitFor(() => expect(gateway.turns).toHaveLength(2));
+    expect(gateway.turns[1]?.input).toEqual({ text: "after download", attachments: [] });
+  });
+
   test("/start and /help answer the owner", async () => {
     const { api, channel } = setup();
     await channel.start();
@@ -529,6 +832,96 @@ describe("queue and commands", () => {
       'channels.telegram.startPaired {"name":"Ann Lee"}',
       "channels.telegram.help",
     ]);
+  });
+});
+
+describe("binding command authorization", () => {
+  test.each([
+    { name: "agent", argument: "finance" },
+    { name: "workspace", argument: "reports" },
+    { name: "model", argument: "sonnet" },
+    { name: "thinking", argument: "high" },
+    { name: "effort", argument: "high" },
+  ])("only the owner can use /$name, with arguments or callbacks", async ({ name, argument }) => {
+    const chatId = -100123;
+    const { api, channel, gateway } = setup(OWNER, {
+      [chatId]: { access: "members", allowedUsers: [8] },
+    });
+    const inGroup = (id: number, text: string, from: number) =>
+      message({ chat: { id: chatId, type: "supergroup" }, text }, id, from);
+    await channel.start();
+    api.push(inGroup(1, `/${name}`, 8));
+    api.push(inGroup(2, `/${name}@pp_bot ${argument}`, 8));
+    api.push(textUpdate(3, "/help"));
+    await vi.waitFor(() => expect(api.offsets.at(-1)).toBe(4));
+    expect(api.sent.map(({ chatId }) => chatId)).toEqual([7]);
+    expect(gateway.chosen).toEqual([]);
+    expect(gateway.picked).toEqual([]);
+
+    api.push(inGroup(4, `/${name}`, 7));
+    await vi.waitFor(() => expect(api.sent).toHaveLength(2));
+    const offer = api.sent[1]!;
+    const data = offer.options!.replyMarkup!.inline_keyboard[1]![0]!.callback_data;
+    const callback = (id: number, from: number): TelegramUpdate => ({
+      update_id: id,
+      callback_query: {
+        id: `cb${id}`,
+        from: { id: from, first_name: "Member" },
+        data,
+        message: { message_id: offer.id, chat: { id: chatId } },
+      },
+    });
+    api.push(callback(5, 8));
+    await vi.waitFor(() => expect(api.answers).toHaveLength(1));
+    expect(gateway.chosen).toEqual([]);
+    expect(gateway.picked).toEqual([]);
+    api.push(callback(6, 7));
+    await vi.waitFor(() => expect(gateway.chosen.length + gateway.picked.length).toBe(1));
+    api.push(inGroup(7, `/${name} ${argument}`, 7));
+    await vi.waitFor(() => expect(gateway.chosen.length + gateway.picked.length).toBe(2));
+    expect(gateway.turns).toEqual([]);
+  });
+
+  test("removing a configured group disables messages and old binding callbacks", async () => {
+    const chatId = -100123;
+    const chats: Record<string, TelegramChatSettings> = { [chatId]: { access: "members" } };
+    const { api, channel, gateway } = setup(OWNER, chats);
+    await channel.start();
+    api.push(message({ chat: { id: chatId, type: "group" }, text: "/agent" }, 1));
+    await vi.waitFor(() => expect(api.sent).toHaveLength(1));
+    const offer = api.sent[0]!;
+    const data = offer.options!.replyMarkup!.inline_keyboard[1]![0]!.callback_data;
+    delete chats[String(chatId)];
+    api.push({
+      update_id: 2,
+      callback_query: {
+        id: "removed",
+        from: { id: 7, first_name: "Owner" },
+        data,
+        message: { message_id: offer.id, chat: { id: chatId } },
+      },
+    });
+    api.push(message({ chat: { id: chatId, type: "group" }, text: "ignored" }, 3));
+    api.push(textUpdate(4, "/help"));
+    await vi.waitFor(() => expect(api.offsets.at(-1)).toBe(5));
+    expect(gateway.chosen).toEqual([]);
+    expect(gateway.turns).toEqual([]);
+    expect(api.sent.map(({ chatId }) => chatId)).toEqual([chatId, 7]);
+  });
+
+  test("a permitted private-chat member cannot change bindings either", async () => {
+    const { api, channel, gateway } = setup(OWNER, { "8": { access: "members" } });
+    await channel.start();
+    for (const [index, name] of ["agent", "workspace", "model", "thinking", "effort"].entries()) {
+      api.push(textUpdate(index * 2 + 1, `/${name}`, 8));
+      api.push(textUpdate(index * 2 + 2, `/${name} 2`, 8));
+    }
+    api.push(textUpdate(11, "/help"));
+    await vi.waitFor(() => expect(api.offsets.at(-1)).toBe(12));
+    expect(api.sent.map(({ chatId }) => chatId)).toEqual([7]);
+    expect(gateway.chosen).toEqual([]);
+    expect(gateway.picked).toEqual([]);
+    expect(gateway.turns).toEqual([]);
   });
 });
 
@@ -693,5 +1086,21 @@ describe("/model and /thinking", () => {
     expect(api.plainTexts[1]).toBe(
       'channels.telegram.turnFailed {"error":"Wait for the answer to finish."}',
     );
+  });
+  test("ignores commands addressed to a different bot in group and private chats", async () => {
+    const { api, channel, gateway } = setup(OWNER, {
+      "-100456": { access: "members" },
+    });
+    const inGroup = (id: number, text: string, from: number) =>
+      message({ chat: { id: -100456, type: "supergroup" }, text }, id, from);
+    await channel.start();
+    api.push(inGroup(1, "/new@other_bot", 8));
+    api.push(inGroup(2, "/stop@other_bot", 8));
+    api.push(inGroup(3, "/help@other_bot", 8));
+    api.push(textUpdate(4, "/help@other_bot"));
+    api.push(textUpdate(5, "/help@pp_bot"));
+    await vi.waitFor(() => expect(api.offsets.at(-1)).toBe(6));
+    expect(api.sent.map(({ chatId }) => chatId)).toEqual([7]);
+    expect(gateway.turns).toHaveLength(0);
   });
 });

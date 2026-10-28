@@ -149,7 +149,7 @@ function parseLine(line: string): Record<string, unknown> | null {
 }
 
 /** Text of a stored message's content: a string, or the text blocks of a block list. */
-function contentText(content: unknown): string {
+export function contentText(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   const texts: string[] = [];

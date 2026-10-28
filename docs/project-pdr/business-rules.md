@@ -4,11 +4,11 @@ Rules enforced in code. Paths are under `packages/agent-core/src/` unless noted.
 
 ## Approvals and tools (`tools.ts`)
 
-| Tool tier | Tools                                                                                                                                                                                                                   |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| read      | `read`, `ls`, `find`, `grep`, `read_document`, `current_datetime`, `web_search`, `web_fetch`, `memory_list`, `memory_search`, `todo_write`, `delegate_task`, `ask_user`, discovery tools, MCP tools with `readOnlyHint` |
-| write     | `write`, `edit`, `memory_save`, `memory_forget`, MCP tools without `readOnlyHint`                                                                                                                                       |
-| exec      | `bash`, `powershell`, and any tool without a tier                                                                                                                                                                       |
+| Tool tier | Tools                                                                                                                                                                                                                               |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| read      | `read`, `ls`, `find`, `grep`, `read_document`, `current_datetime`, `web_search`, `web_fetch`, `memory_list`, `memory_search`, `todo_write`, `delegate_task`, `ask_user`, `sessions`, discovery tools, MCP tools with `readOnlyHint` |
+| write     | `write`, `edit`, `memory_save`, `memory_forget`, `schedule_task`, `telegram_notify`, MCP tools without `readOnlyHint`                                                                                                               |
+| exec      | `bash`, `powershell`, and any tool without a tier                                                                                                                                                                                   |
 
 | Tool policy    | Effect                                                    |
 | -------------- | --------------------------------------------------------- |

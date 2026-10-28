@@ -23,6 +23,7 @@ import {
   BlocksIcon,
   BotIcon,
   BrainIcon,
+  CalendarClockIcon,
   CircleCheckIcon,
   CircleDashedIcon,
   CircleDotIcon,
@@ -30,6 +31,7 @@ import {
   CodeIcon,
   FileTextIcon,
   FolderOpenIcon,
+  HistoryIcon,
   ListChecksIcon,
   type LucideIcon,
   MessageCircleQuestionIcon,
@@ -63,6 +65,8 @@ const ICONS: Record<string, LucideIcon> = {
   todo_write: ListChecksIcon,
   delegate_task: BotIcon,
   ask_user: MessageCircleQuestionIcon,
+  sessions: HistoryIcon,
+  schedule_manage: CalendarClockIcon,
   office_read: FileTextIcon,
   office_edit: SaveIcon,
 };
@@ -126,6 +130,10 @@ function stepTitle(part: ToolPart, t: TFunction<"chat">) {
       return t(`toolStep.titles.delegate.${state}`);
     case "ask_user":
       return t(`toolStep.titles.ask.${state}`);
+    case "sessions":
+      return t(`toolStep.titles.sessions.${state}`);
+    case "schedule_manage":
+      return t(`toolStep.titles.scheduleManage.${state}`);
   }
   // MCP tools are named mcp__<server>__<tool>.
   const mcp = /^mcp__(.+?)__(.+)$/.exec(part.name);

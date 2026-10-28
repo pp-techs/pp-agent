@@ -14,6 +14,8 @@ import { DELEGATE_TOOL } from "./subagent.ts";
 import { TODO_TOOL } from "./todo.ts";
 import { OFFICE_EDIT_TOOL, OFFICE_READ_TOOL } from "./office/names.ts";
 import { ASK_TOOL } from "./ask.ts";
+import { SCHEDULE_TOOL } from "./schedule-tool.ts";
+import { SESSIONS_TOOL } from "./sessions-tool.ts";
 
 /** Example business tool. Replace or extend with tools that reach your own systems. */
 export const currentDateTimeTool = defineTool({
@@ -62,6 +64,8 @@ const MANAGED_TOOLS = [
   TODO_TOOL,
   DELEGATE_TOOL,
   ASK_TOOL,
+  SESSIONS_TOOL,
+  SCHEDULE_TOOL,
   OFFICE_READ_TOOL,
   OFFICE_EDIT_TOOL,
 ];
@@ -80,6 +84,8 @@ export const AGENT_TOOLS = [
   TODO_TOOL,
   DELEGATE_TOOL,
   ASK_TOOL,
+  SESSIONS_TOOL,
+  SCHEDULE_TOOL,
   OFFICE_READ_TOOL,
   OFFICE_EDIT_TOOL,
   "write",
@@ -116,6 +122,10 @@ const TIERS: Record<string, ToolTier> = {
   [DELEGATE_TOOL]: "read",
   // ask_user only waits for the person's answer; nothing changes.
   [ASK_TOOL]: "read",
+  // sessions only reads what the app saved; it changes nothing.
+  [SESSIONS_TOOL]: "read",
+  // Both change something outside the chat: a task that runs by itself, a message to the phone.
+  [SCHEDULE_TOOL]: "write",
   write: "write",
   edit: "write",
   bash: "exec",
@@ -270,6 +280,35 @@ export function describeToolCall(
     return {
       title: t("approvals.editOffice", { file }),
       detail: preview([command, ...args].join(" ")),
+    };
+  }
+  if (toolName === SCHEDULE_TOOL) {
+    const name = typeof input.name === "string" ? input.name : "";
+    const prompt = typeof input.prompt === "string" ? input.prompt : "";
+    const action = typeof input.action === "string" ? input.action : "";
+    const when = input.when === undefined ? "" : JSON.stringify(input.when);
+    const target =
+      typeof input.target === "string" ? input.target : action === "create" ? "new" : "";
+    const deliver =
+      typeof input.deliver === "string" ? input.deliver : action === "create" ? "session" : "";
+    const controls = [
+      action,
+      when,
+      target ? `target: ${target}` : "",
+      deliver ? `deliver: ${deliver}` : "",
+      typeof input.deleteAfterRun === "boolean" ? `deleteAfterRun: ${input.deleteAfterRun}` : "",
+      typeof input.silentIfEmpty === "boolean" ? `silentIfEmpty: ${input.silentIfEmpty}` : "",
+    ].filter(Boolean);
+    // Reserve room for every control; a long field must never crowd later disclosures out.
+    const controlDetail = controls
+      .map((value) => (value.length > 100 ? `${value.slice(0, 99)}…` : value))
+      .join("\n");
+    const promptBudget = PREVIEW_LIMIT - controlDetail.length - (controlDetail ? 1 : 0);
+    const promptDetail =
+      prompt.length > promptBudget ? `${prompt.slice(0, promptBudget - 1)}…` : prompt;
+    return {
+      title: t("approvals.scheduleTask", { name }),
+      detail: [controlDetail, promptDetail].filter(Boolean).join("\n"),
     };
   }
   if (toolName === ASK_TOOL) return { title: t("approvals.askUser"), detail: "" };

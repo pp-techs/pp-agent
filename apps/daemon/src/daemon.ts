@@ -1,3 +1,4 @@
+import { setDefaultResultOrder } from "node:dns";
 import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { AgentHost } from "@workspace/agent-core";
@@ -6,6 +7,9 @@ import { DaemonServer, ensureToken } from "./server.ts";
 import { serviceControlFor } from "./service-control.ts";
 import { resolveShellPath } from "./shell-path.ts";
 import { createVaultBackend } from "./vault/index.ts";
+
+// Prefer IPv4 on networks with broken IPv6 while preserving address-family fallback.
+setDefaultResultOrder("ipv4first");
 
 /** Version the clients compare with their own: set by whoever started the daemon, else package.json. */
 function appVersion(): string {
