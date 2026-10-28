@@ -1087,4 +1087,20 @@ describe("/model and /thinking", () => {
       'channels.telegram.turnFailed {"error":"Wait for the answer to finish."}',
     );
   });
+  test("ignores commands addressed to a different bot in group and private chats", async () => {
+    const { api, channel, gateway } = setup(OWNER, {
+      "-100456": { access: "members" },
+    });
+    const inGroup = (id: number, text: string, from: number) =>
+      message({ chat: { id: -100456, type: "supergroup" }, text }, id, from);
+    await channel.start();
+    api.push(inGroup(1, "/new@other_bot", 8));
+    api.push(inGroup(2, "/stop@other_bot", 8));
+    api.push(inGroup(3, "/help@other_bot", 8));
+    api.push(textUpdate(4, "/help@other_bot"));
+    api.push(textUpdate(5, "/help@pp_bot"));
+    await vi.waitFor(() => expect(api.offsets.at(-1)).toBe(6));
+    expect(api.sent.map(({ chatId }) => chatId)).toEqual([7]);
+    expect(gateway.turns).toHaveLength(0);
+  });
 });

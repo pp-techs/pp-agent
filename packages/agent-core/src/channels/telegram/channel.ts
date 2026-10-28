@@ -132,10 +132,12 @@ function displayName(user: TelegramUser): string {
   );
 }
 
-function parseCommand(text: string): { name: string; argument: string } | null {
-  const match = /^\/([a-z_]+)(?:@\w+)?(?:\s+([\s\S]*))?$/i.exec(text);
+function parseCommand(text: string): { name: string; target?: string; argument: string } | null {
+  const match = /^\/([a-z_]+)(?:@(\w+))?(?:\s+([\s\S]*))?$/i.exec(text);
   const name = match?.[1]?.toLowerCase();
-  return name && COMMANDS[name] ? { name, argument: (match?.[2] ?? "").trim() } : null;
+  return name && COMMANDS[name]
+    ? { name, target: match?.[2], argument: (match?.[3] ?? "").trim() }
+    : null;
 }
 
 /**
@@ -416,6 +418,12 @@ export class TelegramChannel implements ChannelAdapter {
     const chatId = message.chat.id;
     const owner = this.deps.owner();
     const command = parseCommand((message.text ?? "").trim());
+    if (
+      command?.target &&
+      this.username &&
+      command.target.toLowerCase() !== this.username.toLowerCase()
+    )
+      return;
     if (command?.name === "pair" && message.chat.type !== "private") return;
 
     if (!this.isAllowed(chatId, from)) {
