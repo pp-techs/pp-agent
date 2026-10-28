@@ -104,12 +104,24 @@ if (actual !== sha256) {
   process.exit(1);
 }
 
+/**
+ * Windows: the tar.exe of Windows itself (bsdtar), which reads .zip files. The `tar` that Git's bash
+ * puts first in PATH is GNU tar: it takes `C:` for a remote host and cannot read zip.
+ */
+function extract(file, dir) {
+  if (process.platform === "win32") {
+    const system32 = join(process.env.SystemRoot ?? "C:\\Windows", "System32");
+    execFileSync(join(system32, "tar.exe"), ["-xf", file, "-C", dir], { stdio: "inherit" });
+  } else if (file.endsWith(".zip"))
+    execFileSync("unzip", ["-q", file, "-d", dir], { stdio: "inherit" });
+  else execFileSync("tar", ["-xzf", file, "-C", dir], { stdio: "inherit" });
+}
+
 const work = mkdtempSync(join(tmpdir(), "webclaw-"));
 try {
   const file = join(work, name);
   writeFileSync(file, archive);
-  // bsdtar (macOS, Windows 10+) and GNU tar both read these formats; bsdtar also reads the .zip.
-  execFileSync("tar", ["-xf", file, "-C", work], { stdio: "inherit" });
+  extract(file, work);
   mkdirSync(target, { recursive: true });
   copyFileSync(join(work, name.replace(/\.(tar\.gz|zip)$/, ""), binaryName), binaryPath);
   if (platform !== "win32") chmodSync(binaryPath, 0o755);
