@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SaveScheduledTaskInput, ScheduledTask } from "@workspace/shared";
 import { afterEach, describe, expect, test } from "vite-plus/test";
-import { createScheduleTool, type ScheduleHost } from "./schedule-tool.ts";
+import {
+  createScheduleTool,
+  prepareScheduleArguments,
+  type ScheduleHost,
+} from "./schedule-tool.ts";
 import { nextRun, schedulableOf } from "./scheduler.ts";
 import { readScheduledTasks, validateTaskInput } from "./scheduled-tasks.ts";
 import { SettingsStore } from "./settings-store.ts";
@@ -237,4 +241,70 @@ describe("persisted task run delivery", () => {
       });
     },
   );
+});
+
+describe("prepareScheduleArguments", () => {
+  test("parses JSON stringified when parameter", () => {
+    const input = {
+      action: "create",
+      name: "nhac-quay-com",
+      prompt: "Nhắc cơm",
+      when: '{"kind":"once","at":1793172420000}',
+    };
+    expect(prepareScheduleArguments(input)).toEqual({
+      action: "create",
+      name: "nhac-quay-com",
+      prompt: "Nhắc cơm",
+      when: { kind: "once", at: 1793172420000 },
+    });
+  });
+
+  test("coerces string epoch and ISO string at to number", () => {
+    expect(
+      prepareScheduleArguments({
+        when: { kind: "once", at: "1793172420000" },
+      }),
+    ).toEqual({
+      when: { kind: "once", at: 1793172420000 },
+    });
+
+    const iso = "2026-10-28T12:00:00.000Z";
+    expect(
+      prepareScheduleArguments({
+        when: { kind: "once", at: iso },
+      }),
+    ).toEqual({
+      when: { kind: "once", at: Date.parse(iso) },
+    });
+  });
+
+  test("coerces string interval every and weekly days", () => {
+    expect(
+      prepareScheduleArguments({
+        when: { kind: "interval", every: "15", unit: "minutes" },
+      }),
+    ).toEqual({
+      when: { kind: "interval", every: 15, unit: "minutes" },
+    });
+
+    expect(
+      prepareScheduleArguments({
+        when: { kind: "weekly", days: "[1, 3, 5]", time: "09:00" },
+      }),
+    ).toEqual({
+      when: { kind: "weekly", days: [1, 3, 5], time: "09:00" },
+    });
+  });
+
+  test("coerces string boolean flags", () => {
+    expect(
+      prepareScheduleArguments({
+        deleteAfterRun: "true",
+        silentIfEmpty: "false",
+      }),
+    ).toEqual({
+      deleteAfterRun: true,
+      silentIfEmpty: false,
+    });
+  });
 });

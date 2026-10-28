@@ -35,23 +35,102 @@ export interface ScheduleHost {
   remove(name: string): void;
 }
 
-const SCHEDULE_SCHEMA = Type.Union([
-  Type.Object({
-    kind: Type.Literal("once"),
-    at: Type.Number({ description: "epoch milliseconds" }),
-  }),
-  Type.Object({
-    kind: Type.Literal("interval"),
-    every: Type.Integer({ minimum: 1, maximum: SCHEDULE_LIMITS.maxMinutes }),
-    unit: Type.Union([Type.Literal("minutes"), Type.Literal("hours")]),
-  }),
-  Type.Object({ kind: Type.Literal("daily"), time: Type.String() }),
-  Type.Object({
-    kind: Type.Literal("weekly"),
-    days: Type.Array(Type.Integer({ minimum: 0, maximum: 6 })),
-    time: Type.String(),
-  }),
-]);
+export const SCHEDULE_SCHEMA = Type.Union(
+  [
+    Type.Object({
+      kind: Type.Literal("once"),
+      at: Type.Number({ description: "epoch milliseconds" }),
+    }),
+    Type.Object({
+      kind: Type.Literal("interval"),
+      every: Type.Integer({ minimum: 1, maximum: SCHEDULE_LIMITS.maxMinutes }),
+      unit: Type.Union([Type.Literal("minutes"), Type.Literal("hours")]),
+    }),
+    Type.Object({ kind: Type.Literal("daily"), time: Type.String() }),
+    Type.Object({
+      kind: Type.Literal("weekly"),
+      days: Type.Array(Type.Integer({ minimum: 0, maximum: 6 })),
+      time: Type.String(),
+    }),
+  ],
+  {
+    description:
+      'Schedule object (pass as an object, not a JSON string): { kind: "once", at: epochMs }, ' +
+      '{ kind: "interval", every: N, unit: "minutes"|"hours" }, { kind: "daily", time: "HH:MM" }, ' +
+      'or { kind: "weekly", days: [0-6], time: "HH:MM" }',
+  },
+);
+
+/** Prepares schedule tool arguments from models that stringify nested objects or numbers. */
+export function prepareScheduleArguments(args: unknown): unknown {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return args;
+  const raw = { ...(args as Record<string, unknown>) };
+
+  if (typeof raw.when === "string") {
+    try {
+      let parsed: unknown = JSON.parse(raw.when);
+      if (typeof parsed === "string") {
+        try {
+          parsed = JSON.parse(parsed);
+        } catch {
+          // keep single-parsed
+        }
+      }
+      raw.when = parsed;
+    } catch {
+      // not JSON, keep as is for schema error
+    }
+  }
+
+  if (raw.when && typeof raw.when === "object" && !Array.isArray(raw.when)) {
+    const when = { ...(raw.when as Record<string, unknown>) };
+    if (when.kind === "once") {
+      if (typeof when.at === "string") {
+        const num = Number(when.at);
+        if (Number.isFinite(num)) {
+          when.at = num;
+        } else {
+          const parsedDate = Date.parse(when.at);
+          if (Number.isFinite(parsedDate)) {
+            when.at = parsedDate;
+          }
+        }
+      }
+    } else if (when.kind === "interval") {
+      if (typeof when.every === "string") {
+        const num = Number(when.every);
+        if (Number.isInteger(num)) {
+          when.every = num;
+        }
+      }
+    } else if (when.kind === "weekly") {
+      if (typeof when.days === "string") {
+        try {
+          const parsedDays = JSON.parse(when.days);
+          if (Array.isArray(parsedDays)) {
+            when.days = parsedDays;
+          }
+        } catch {}
+      }
+      if (Array.isArray(when.days)) {
+        when.days = when.days.map((d) => (typeof d === "string" ? Number(d) : d));
+      }
+    }
+    raw.when = when;
+  }
+
+  if (typeof raw.deleteAfterRun === "string") {
+    if (raw.deleteAfterRun === "true") raw.deleteAfterRun = true;
+    else if (raw.deleteAfterRun === "false") raw.deleteAfterRun = false;
+  }
+
+  if (typeof raw.silentIfEmpty === "string") {
+    if (raw.silentIfEmpty === "true") raw.silentIfEmpty = true;
+    else if (raw.silentIfEmpty === "false") raw.silentIfEmpty = false;
+  }
+
+  return raw;
+}
 
 export function createScheduleTool(host: ScheduleHost) {
   return defineTool({
@@ -102,6 +181,7 @@ export function createScheduleTool(host: ScheduleHost) {
       deleteAfterRun: Type.Optional(Type.Boolean()),
       silentIfEmpty: Type.Optional(Type.Boolean()),
     }),
+    prepareArguments: (args) => prepareScheduleArguments(args) as never,
     async execute(_toolCallId, params) {
       const text = (value: string) => ({
         content: [{ type: "text" as const, text: value }],

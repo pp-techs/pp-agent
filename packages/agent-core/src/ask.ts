@@ -188,6 +188,16 @@ export function createAskTool(askUser: AskUser) {
       "Use it only when the choices lead to materially different results and the files, notes and conversation do not settle it.",
     promptSnippet: "Ask the user to choose between options before going on",
     parameters,
+    prepareArguments: (args) => {
+      if (!args || typeof args !== "object" || Array.isArray(args)) return args as never;
+      const raw = { ...(args as Record<string, unknown>) };
+      if (typeof raw.questions === "string") {
+        try {
+          raw.questions = JSON.parse(raw.questions);
+        } catch {}
+      }
+      return raw as never;
+    },
     // One question card at a time.
     executionMode: "sequential",
     async execute(toolCallId, params, signal) {

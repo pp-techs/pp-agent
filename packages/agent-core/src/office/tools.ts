@@ -68,6 +68,17 @@ function createOfficeTool(tool: OfficeTool, options: OfficeToolOptions) {
     // One command at a time: two commands on the same file would race.
     executionMode: "sequential",
     parameters,
+    prepareArguments: (args) => {
+      if (!args || typeof args !== "object" || Array.isArray(args)) return args as never;
+      const raw = { ...(args as Record<string, unknown>) };
+      if (typeof raw.args === "string") {
+        try {
+          const parsed = JSON.parse(raw.args);
+          if (Array.isArray(parsed)) raw.args = parsed;
+        } catch {}
+      }
+      return raw as never;
+    },
     async execute(_toolCallId, params, signal) {
       const call = await validateOfficeCall(
         tool,

@@ -39,6 +39,16 @@ export function createTodoTool() {
         { maxItems: MAX_ITEMS, description: "The whole checklist, in order" },
       ),
     }),
+    prepareArguments: (args) => {
+      if (!args || typeof args !== "object" || Array.isArray(args)) return args as never;
+      const raw = { ...(args as Record<string, unknown>) };
+      if (typeof raw.todos === "string") {
+        try {
+          raw.todos = JSON.parse(raw.todos);
+        } catch {}
+      }
+      return raw as never;
+    },
     async execute(_toolCallId, params) {
       const todos = params.todos.slice(0, MAX_ITEMS);
       const done = todos.filter((todo) => todo.status === "done").length;

@@ -112,6 +112,45 @@ describe("schedule_manage in a Pi session", () => {
     expect(JSON.stringify(result?.content)).toContain("Friday summary");
   });
 
+  test("accepts stringified JSON when parameter from models", async () => {
+    const created: Parameters<ScheduleHost["create"]>[0][] = [];
+    const at = 1793172420000;
+    const { session, faux } = await setup([
+      createScheduleTool({
+        currentSessionId: () => null,
+        create: (input) => {
+          created.push(input);
+          return { name: input.name, nextRun: at };
+        },
+        list: () => [],
+        update: () => {},
+        pause: () => {},
+        resume: () => {},
+        runNow: () => {},
+        remove: () => {},
+      }),
+    ]);
+    const call = {
+      action: "create",
+      name: "nhac-quay-com",
+      prompt: "Nhắc Nhat Bui: tới giờ quay cơm rồi!",
+      when: JSON.stringify({ kind: "once", at }),
+    };
+    faux.setResponses([
+      fauxAssistantMessage(fauxToolCall(SCHEDULE_TOOL, args(call), { id: "call-1" })),
+      fauxAssistantMessage(fauxText("Đã tạo lịch nhắc.")),
+    ]);
+    await session.prompt("nhắc tôi lúc 11h");
+    await session.waitForIdle();
+
+    expect(created).toHaveLength(1);
+    expect(created[0]?.name).toBe("nhac-quay-com");
+    expect(created[0]?.schedule).toEqual({ kind: "once", at });
+    const [result] = toolResults(session);
+    expect(result?.isError).toBe(false);
+    expect(JSON.stringify(result?.content)).toContain("nhac-quay-com");
+  });
+
   test("a refusal of the host is an error the model can read", async () => {
     const { session, faux } = await setup([
       createScheduleTool({
