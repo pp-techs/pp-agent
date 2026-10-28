@@ -24,7 +24,7 @@ extraResources:
   # OfficeCLI (Apache-2.0) for office_read/office_edit: the binary the @officecli/officecli package
   # installed for this platform (checksum-verified at install), its license texts, and the skills
   # written for it. The binary is signed with the app on macOS.
-  - from: ../agent-core/node_modules/@officecli/officecli/vendor
+  - from: ../../packages/agent-core/node_modules/@officecli/officecli/vendor
     to: officecli/${os}-${arch}
   - from: resources/licenses/officecli
     to: licenses/officecli
