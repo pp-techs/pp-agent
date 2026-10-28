@@ -1,5 +1,17 @@
 # @workspace/desktop
 
+## 0.14.0
+
+### Minor Changes
+
+- 4b19c02: Notes the agent remembers are now plain markdown files you can read and edit: `MEMORY.md` for notes that hold everywhere, and `.agents/MEMORY.md` in a workspace's folder for that project's notes. Your saved notes move there the first time the app starts. Deleting a workspace no longer deletes its notes. Searching notes matches whole words instead of any letters inside a word.
+- 4b19c02: A workspace's rules are now the `AGENTS.md` in its folder, like in other coding agents: edit it in Settings › Workspaces or with any editor, and it applies to every chat there. Rules you had typed into a workspace move into that file the first time the app starts. Skills in the folder's `.agents/skills` are always available in its chats, whichever agent you use.
+
+### Patch Changes
+
+- 44ad2cd: Web search works without any setup. When no search service with a key is turned on, or all of them fail, the agent searches with Exa and then DuckDuckGo, which need no key (the words searched for are sent to them). Services you set up are always tried first, and the result says when no key was used.
+- 44ad2cd: Web pages the agent opens now read as the article or documentation itself, without the menus, footers and sign-in banners around it, so more of a long page fits in one read. The app bundles the webclaw tool for this (AGPL-3.0, run as a separate program) and falls back to its own conversion where webclaw is not available.
+
 ## 0.13.0
 
 ### Minor Changes
