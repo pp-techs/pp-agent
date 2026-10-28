@@ -24,4 +24,4 @@ flowchart LR
 
 ## Workspace instructions
 
-An `AGENTS.md` in the conversation's workspace folder is added to the system prompt (`README.md`).
+An `AGENTS.md` in the conversation's workspace folder, and in the folders above it, is added to the system prompt (`README.md`). It is the workspace's rules: edit it in Settings › Workspaces or with any editor. See `business-rules.md`.

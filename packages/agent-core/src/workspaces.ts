@@ -17,7 +17,6 @@ import { t } from "./i18n.ts";
 
 const MAX_NAME_LENGTH = 60;
 const MAX_ICON_LENGTH = 8;
-const MAX_INSTRUCTIONS_LENGTH = 20_000;
 const DEFAULT_ICON = "📁";
 const ID_PREFIX = "ws-";
 
@@ -26,7 +25,6 @@ export const DEFAULT_WORKSPACE: WorkspaceProfile = {
   name: "Personal",
   icon: DEFAULT_ICON,
   dir: null,
-  instructions: "",
   agentId: null,
 };
 
@@ -97,14 +95,10 @@ function editableFields(value: Loose, strict: boolean): EditableFields {
     throw new Error(t("limits.nameTooLong", { max: MAX_NAME_LENGTH }));
   const icon = text(value.icon);
   if (strict && icon.length > MAX_ICON_LENGTH) throw new Error(t("limits.iconNotEmoji"));
-  const instructions = text(value.instructions);
-  if (strict && instructions.length > MAX_INSTRUCTIONS_LENGTH)
-    throw new Error(t("limits.instructionsTooLong", { max: MAX_INSTRUCTIONS_LENGTH }));
   const agentId = text(value.agentId);
   return {
     name: name.slice(0, MAX_NAME_LENGTH),
     icon: icon && icon.length <= MAX_ICON_LENGTH ? icon : DEFAULT_ICON,
-    instructions: instructions.slice(0, MAX_INSTRUCTIONS_LENGTH),
     agentId: agentId || null,
   };
 }
@@ -243,8 +237,25 @@ export async function prepareFolder(
   return path;
 }
 
-/** System prompt section with the workspace's rules; undefined while it has none. */
-export function workspacePromptSection(workspace: WorkspaceProfile): string | undefined {
-  if (!workspace.instructions) return undefined;
-  return `## Workspace: ${workspace.icon} ${workspace.name}\n\n${workspace.instructions}`;
+/** Instructions a workspace in an older settings file kept in the settings instead of AGENTS.md. */
+export interface LegacyInstructions {
+  id: string;
+  /** Absolute folder; null for the built-in workspace (the app's folder). */
+  dir: string | null;
+  instructions: string;
+}
+
+/** The non-empty `instructions` of the raw workspaces, for moving into each folder's AGENTS.md. */
+export function legacyInstructions(raw: unknown): LegacyInstructions[] {
+  const found: LegacyInstructions[] = [];
+  for (const entry of Array.isArray(raw) ? raw : []) {
+    const value = asLoose(entry) as (Loose & { instructions?: unknown }) | null;
+    const id = typeof value?.id === "string" ? value.id : "";
+    const instructions = text(value?.instructions);
+    if (!value || !id || !instructions) continue;
+    if (id === DEFAULT_WORKSPACE_ID) found.push({ id, dir: null, instructions });
+    else if (typeof value.dir === "string" && isAbsolute(value.dir))
+      found.push({ id, dir: resolve(value.dir), instructions });
+  }
+  return found;
 }

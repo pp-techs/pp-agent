@@ -27,13 +27,16 @@ import { toast } from "sonner";
 import { OptionGroup } from "@/components/settings/option-group";
 import { WorkspaceMemoryGroup } from "@/components/settings/memory-section";
 import { useSettingsSubPage } from "@/components/settings/settings-subpage";
-import { useSaveWorkspace } from "@/lib/extension-queries";
+import {
+  useSaveWorkspace,
+  useSaveWorkspaceInstructions,
+  workspaceInstructionsQuery,
+} from "@/lib/extension-queries";
 import { agentsQuery, workspacesQuery } from "@/lib/queries";
 
 const NAME_MAX = 60;
 const ICON_MAX = 8;
 const DEFAULT_ICON = "📁";
-const INSTRUCTIONS_MAX = 20000;
 const ICON_PICKS = ["📁", "💼", "📊", "📝", "🧾", "📈", "🧑‍💼", "🛠️", "📚", "🏠"];
 
 /** Select value for "nothing set here: use the usual default". */
@@ -108,12 +111,20 @@ function WorkspaceForm({
   const [name, setName] = React.useState(workspace?.name ?? "");
   const [icon, setIcon] = React.useState(workspace?.icon ?? DEFAULT_ICON);
   const [dir, setDir] = React.useState(workspace?.dir ?? null);
-  const [instructions, setInstructions] = React.useState(workspace?.instructions ?? "");
+  // Text typed in the editor; null while it is untouched, so the file's own content shows.
+  const [rules, setRules] = React.useState<string | null>(null);
   const [agentId, setAgentId] = React.useState(workspace?.agentId ?? null);
   const [touched, setTouched] = React.useState(false);
-  const { t, i18n } = useTranslation(["agents", "common"]);
+  const { t } = useTranslation(["agents", "common"]);
   const save = useSaveWorkspace(bridge);
+  const saveRules = useSaveWorkspaceInstructions(bridge);
   const agents = useQuery(agentsQuery(bridge));
+  // AGENTS.md can only be read once the workspace (and so its folder) exists.
+  const fileQuery = useQuery({
+    ...workspaceInstructionsQuery(bridge, workspace?.id ?? ""),
+    enabled: workspace !== undefined,
+  });
+  const file = fileQuery.data;
   const isDefault = workspace?.id === DEFAULT_WORKSPACE_ID;
   const fixedFolder = workspace !== undefined;
 
@@ -130,12 +141,8 @@ function WorkspaceForm({
           ? t("workspaceEditor.errors.nameTaken")
           : null,
     dir: !fixedFolder && !dir,
-    instructions:
-      instructions.length > INSTRUCTIONS_MAX
-        ? t("shared.maxChars", { max: INSTRUCTIONS_MAX.toLocaleString(i18n.language) })
-        : null,
   };
-  const valid = !errors.name && !errors.dir && !errors.instructions;
+  const valid = !errors.name && !errors.dir;
 
   const agentItems = [
     { value: INHERIT, label: t("workspaceEditor.defaults.agentInherit") },
@@ -144,26 +151,26 @@ function WorkspaceForm({
       label: `${agent.icon} ${agent.name}`,
     })),
   ];
-  function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setTouched(true);
     if (!valid) return;
-    save.mutate(
-      {
+    try {
+      const saved = await save.mutateAsync({
         id: workspace?.id,
         name: trimmedName,
         icon: icon.trim() || DEFAULT_ICON,
         dir,
-        instructions: instructions.trim(),
         agentId,
-      },
-      {
-        onSuccess: (saved) => {
-          toast.success(t("workspaceEditor.saved", { name: saved.name }));
-          onDone();
-        },
-      },
-    );
+      });
+      // The folder of a new workspace exists only after it is saved, so AGENTS.md follows.
+      if (rules !== null && rules !== (file?.content ?? ""))
+        await saveRules.mutateAsync({ id: saved.id, content: rules });
+      toast.success(t("workspaceEditor.saved", { name: saved.name }));
+      onDone();
+    } catch {
+      // Shown below the form from the failed mutation.
+    }
   }
 
   return (
@@ -222,20 +229,31 @@ function WorkspaceForm({
           invalid={touched && errors.dir}
           onChange={setDir}
         />
-        <Field data-invalid={touched && Boolean(errors.instructions)}>
+        <Field>
           <FieldLabel htmlFor="workspace-instructions">{t("shared.instructions")}</FieldLabel>
           <Textarea
             id="workspace-instructions"
-            value={instructions}
-            onChange={(event) => setInstructions(event.target.value)}
+            value={rules ?? file?.content ?? ""}
+            onChange={(event) => setRules(event.target.value)}
             placeholder={t("workspaceEditor.instructions.placeholder")}
-            aria-invalid={touched && Boolean(errors.instructions)}
-            className="min-h-40 resize-y"
+            disabled={workspace !== undefined && fileQuery.isPending}
+            className="min-h-40 resize-y font-mono text-sm"
           />
-          {touched && errors.instructions ? (
-            <FieldError>{errors.instructions}</FieldError>
-          ) : (
-            <FieldDescription>{t("workspaceEditor.instructions.help")}</FieldDescription>
+          <FieldDescription>{t("workspaceEditor.instructions.help")}</FieldDescription>
+          {file?.overridden && (
+            <FieldDescription className="text-warning">
+              {t("workspaceEditor.instructions.overridden")}
+            </FieldDescription>
+          )}
+          {file && file.inherited.length > 0 && (
+            <FieldDescription>
+              {t("workspaceEditor.instructions.inherited")}
+              <ul className="mt-1 list-disc pl-5 font-mono text-xs break-all">
+                {file.inherited.map((path) => (
+                  <li key={path}>{path}</li>
+                ))}
+              </ul>
+            </FieldDescription>
           )}
         </Field>
         <OptionGroup
@@ -264,6 +282,7 @@ function WorkspaceForm({
         </OptionGroup>
       </FieldGroup>
       {save.isError && <FieldError>{save.error.message}</FieldError>}
+      {saveRules.isError && <FieldError>{saveRules.error.message}</FieldError>}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onDone}>
           {t("common:actions.cancel")}

@@ -16,7 +16,6 @@ import {
   Item,
   ItemActions,
   ItemContent,
-  ItemDescription,
   ItemGroup,
   ItemTitle,
 } from "@workspace/ui/components/item";
@@ -193,9 +192,6 @@ function NoteRow({
           {entry.text}
           {entry.tag && <Badge variant="secondary">{entry.tag}</Badge>}
         </ItemTitle>
-        <ItemDescription className="text-xs">
-          {new Date(entry.updatedAt).toLocaleString()}
-        </ItemDescription>
       </ItemContent>
       <ItemActions>
         {remove.isPending && <Spinner />}

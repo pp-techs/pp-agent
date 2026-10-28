@@ -77,6 +77,7 @@ import {
   type ToolPolicy,
   type ToolSummary,
   type WorkspaceProfile,
+  type WorkspaceInstructions,
 } from "@workspace/shared";
 import {
   AGENT_ENTRY_TYPE,
@@ -101,8 +102,13 @@ import {
   summarizeWorkspace,
   validateWorkspaceInput,
   workspaceForCwd,
-  workspacePromptSection,
+  workspaceFolder,
 } from "./workspaces.ts";
+import {
+  migrateWorkspaceInstructions,
+  readWorkspaceInstructions,
+  saveWorkspaceInstructions,
+} from "./workspace-instructions.ts";
 import {
   CHAT_IDLE_MS,
   channelTitle,
@@ -170,7 +176,9 @@ import {
   MEMORY_FORGET_TOOL,
   MEMORY_TOOLS,
   MemoryStore,
+  memoryPlaces,
   memorySection,
+  migrateMemoryJson,
 } from "./memory.ts";
 import {
   activeToolsFor,
@@ -250,7 +258,7 @@ interface Services {
   skills: SkillLibrary;
   webSearch: WebSearchService;
   mcpConfig: McpConfigFile;
-  /** Long-term notes shared by every conversation (`memory.json` next to settings.json). */
+  /** Long-term notes: a MEMORY.md for every workspace and one per workspace folder. */
   memory: MemoryStore;
   /** Speech to text for the message box. */
   voice: VoiceService;
@@ -537,6 +545,27 @@ export class AgentHost {
       });
       for (const name of builtIn) skills.builtIn.add(name);
       const settings = new SettingsStore(paths.settingsFile);
+      const memory = new MemoryStore(() =>
+        memoryPlaces(paths.agentDir, paths.workspaceDir, settings.get().workspaces),
+      );
+      // Notes that older versions kept in memory.json now live in MEMORY.md files.
+      const movedMemory = migrateMemoryJson(
+        join(dirname(paths.settingsFile), "memory.json"),
+        memory,
+      );
+      if (movedMemory && !movedMemory.enabled)
+        settings.update((draft) => {
+          draft.memoryEnabled = false;
+        });
+      // Rules that older versions kept per workspace in settings.json now live in AGENTS.md.
+      if (settings.legacyInstructions.length > 0) {
+        migrateWorkspaceInstructions(
+          settings.legacyInstructions,
+          paths.workspaceDir,
+          dirname(paths.settingsFile),
+        );
+        settings.update(() => {}); // Saves the file without them.
+      }
       configureLanguage(settings.get().language, systemLocale);
       const runtime = await ModelRuntime.create({
         credentials: this.credentials,
@@ -553,7 +582,7 @@ export class AgentHost {
         webSearch: new WebSearchService(settings, this.credentials),
         mcpConfig,
         voice: new VoiceService(runtime, settings, join(dirname(paths.settingsFile), "models")),
-        memory: new MemoryStore(join(dirname(paths.settingsFile), "memory.json")),
+        memory,
         chatSessions: new ChatSessionMap(join(dirname(paths.settingsFile), "channels.json")),
       };
       this.services = services;
@@ -761,11 +790,15 @@ export class AgentHost {
         return sortWorkspaces(services.settings.get().workspaces);
       case "save_workspace":
         return this.saveWorkspace(command.workspace);
+      case "read_workspace_instructions":
+        return this.readWorkspaceInstructions(command.id);
+      case "save_workspace_instructions":
+        return this.saveWorkspaceInstructions(command.id, command.content);
       case "delete_workspace":
         return this.deleteWorkspace(command.id);
 
       case "get_memory":
-        return services.memory.view();
+        return this.memoryView();
       case "set_memory_enabled":
         return this.setMemoryEnabled(command.enabled);
       case "save_memory_entry":
@@ -1517,9 +1550,10 @@ export class AgentHost {
         return {
           skills: base.skills.filter(
             (skill) =>
-              (skills.owns(skill.baseDir) || isWorkspaceSkill(cwd, skill.baseDir)) &&
               !disabled.includes(skill.name) &&
-              (allowed === null || allowed.includes(skill.name)),
+              // A workspace's own skills are always on; installed ones follow the agent's list.
+              (isWorkspaceSkill(cwd, skill.baseDir) ||
+                (skills.owns(skill.baseDir) && (allowed === null || allowed.includes(skill.name)))),
           ),
           diagnostics: base.diagnostics,
         };
@@ -1543,7 +1577,7 @@ export class AgentHost {
         ...appTools,
         ...createMemoryTools({
           store: memory,
-          isEnabled: () => memory.enabled && scope.agent().memory,
+          isEnabled: () => this.memoryOn(scope.agent()),
           workspaceId: () => scope.workspace().id,
           onChanged: () => emit({ type: "settings_changed", scopes: ["memory"] }),
         }),
@@ -1786,9 +1820,6 @@ export class AgentHost {
         const agentSection = agentPromptSection(scope.agent());
         if (agentSection) sections.agent = agentSection;
         else delete sections.agent;
-        const workspaceSection = workspacePromptSection(scope.workspace());
-        if (workspaceSection) sections.workspace = workspaceSection;
-        else delete sections.workspace;
         if (scope.systemNote) sections[scope.systemNote.section] = scope.systemNote.text;
         const file = sessionManager.getSessionFile();
         sections.where = sessionContextSection({
@@ -2470,6 +2501,25 @@ export class AgentHost {
   // Workspaces
   // -------------------------------------------------------------------------------------------
 
+  /** The AGENTS.md in the workspace's folder, with the other context files loaded next to it. */
+  private readWorkspaceInstructions(id: string): Promise<WorkspaceInstructions> {
+    const { paths } = this.requireServices();
+    return readWorkspaceInstructions(
+      workspaceFolder(this.requireWorkspace(id), paths.workspaceDir),
+      paths.agentDir,
+    );
+  }
+
+  private async saveWorkspaceInstructions(id: string, content: string): Promise<void> {
+    const { paths } = this.requireServices();
+    await saveWorkspaceInstructions(
+      workspaceFolder(this.requireWorkspace(id), paths.workspaceDir),
+      content,
+    );
+    // Pi reads context files when the session loads or reloads.
+    this.changed(["workspaces"], { reload: id === this.workspaceId });
+  }
+
   private async saveWorkspace(input: SaveWorkspaceInput): Promise<WorkspaceProfile> {
     const { paths, settings } = this.requireServices();
     const fields = validateWorkspaceInput(input);
@@ -2506,9 +2556,8 @@ export class AgentHost {
     settings.update((draft) => {
       draft.workspaces = draft.workspaces.filter((entry) => entry.id !== id);
     });
-    // Its notes are forgotten with it; its conversations stay on disk and show up in the
-    // default workspace.
-    this.requireServices().memory.removeWorkspace(id);
+    // Its conversations stay on disk and show up in the default workspace; its notes stay in its
+    // folder's MEMORY.md.
     const open = this.workspaceId === id;
     if (open) this.workspaceId = DEFAULT_WORKSPACE_ID;
     this.changed(["workspaces", "memory"], { workspace: open });
@@ -3413,15 +3462,22 @@ export class AgentHost {
 
   /** Memory is on in Settings › Memory and for the agent. */
   private memoryOn(agent: AgentProfile): boolean {
-    return (this.services?.memory.enabled ?? false) && agent.memory;
+    return (this.services?.settings.get().memoryEnabled ?? false) && agent.memory;
   }
 
   private setMemoryEnabled(enabled: boolean): MemoryView {
-    const { memory } = this.requireServices();
-    memory.setEnabled(enabled);
+    const { settings } = this.requireServices();
+    settings.update((draft) => {
+      draft.memoryEnabled = enabled;
+    });
     // The memory tools join or leave the active set; the notes follow with the next message.
     this.changed(["memory"], { tools: true });
-    return memory.view();
+    return this.memoryView();
+  }
+
+  private memoryView(): MemoryView {
+    const { memory, settings } = this.requireServices();
+    return { enabled: settings.get().memoryEnabled, entries: memory.entries() };
   }
 
   private saveMemoryEntry(

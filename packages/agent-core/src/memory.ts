@@ -1,16 +1,21 @@
 /**
  * Long-term memory: short notes (facts, preferences) that persist across conversations. Each note
- * lives either everywhere (every workspace) or in one workspace only. Stored in
- * `<user-data>/memory.json`, owned by the agent process. The first half of this file is pure logic
- * (limits, de-duplication, search, prompt text); `MemoryStore` adds the file; the tools expose it
- * to the model.
+ * lives either everywhere (`<user-data>/agent/MEMORY.md`) or in one workspace only
+ * (`<workspace folder>/.agents/MEMORY.md`), one note per markdown bullet (`- [tag] text`); the
+ * newest note is the last bullet. The first half of this file is pure logic (limits, parsing,
+ * search, prompt text); `MemoryStore` adds the files; the tools expose it to the model.
+ *
+ * Cost: a file is read again only when its size or modification time changed, so a conversation
+ * turn costs one `stat` per place, and the prompt section is capped (`maxInjectedLength`) however
+ * big a hand-edited file grows.
  */
-import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import { MEMORY_LIMITS, type MemoryEntry, type MemoryView } from "@workspace/shared";
+import { MEMORY_LIMITS, type MemoryEntry, type WorkspaceProfile } from "@workspace/shared";
 import { Type } from "typebox";
+import { workspaceFolder } from "./workspaces.ts";
 
 export const MEMORY_SAVE_TOOL = "memory_save";
 export const MEMORY_LIST_TOOL = "memory_list";
@@ -25,15 +30,11 @@ export const MEMORY_TOOLS = [
 
 const DEFAULT_LIST_LIMIT = 30;
 const MAX_LIST_LIMIT = 100;
+const MEMORY_FILE = "MEMORY.md";
 
 // ---------------------------------------------------------------------------------------------
 // Pure logic
 // ---------------------------------------------------------------------------------------------
-
-export interface MemoryState {
-  enabled: boolean;
-  entries: MemoryEntry[];
-}
 
 export interface NoteInput {
   text: string;
@@ -45,7 +46,7 @@ export interface NoteInput {
 export type NoteProblem = "empty" | "too-long" | "full" | "duplicate" | "missing";
 
 export type NoteResult =
-  | { ok: true; entry: MemoryEntry; entries: MemoryEntry[]; status: "added" | "updated" | "same" }
+  | { ok: true; entry: MemoryEntry; status: "added" | "updated" | "same" }
   | { ok: false; problem: NoteProblem };
 
 /** Text on one line: control characters dropped, whitespace collapsed. */
@@ -72,107 +73,67 @@ export function noteKey(text: string): string {
     .replace(/[.!?;:,\s]+$/u, "");
 }
 
-/** Newest first. */
-export function byRecency(entries: readonly MemoryEntry[]): MemoryEntry[] {
-  return [...entries].sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt);
+/** A note bullet: `- text` or `- [tag] text` (also `*`). Every other line of the file is left alone. */
+const NOTE_LINE = /^[ \t]*[-*][ \t]+(?:\[([^\]]{1,30})\][ \t]+)?(\S.*)$/;
+
+/** A bullet of a MEMORY.md file. */
+export interface ParsedNote {
+  /** Zero-based line of the bullet. */
+  line: number;
+  text: string;
+  tag: string | null;
+  key: string;
 }
 
-/** The notes a conversation in `workspaceId` sees: every workspace's notes plus its own. */
-export function visibleNotes(
-  entries: readonly MemoryEntry[],
-  workspaceId: string | null,
-): MemoryEntry[] {
-  return byRecency(
-    entries.filter((entry) => entry.workspaceId === null || entry.workspaceId === workspaceId),
-  );
+/** The notes of a MEMORY.md, oldest first. A note that repeats an earlier one is ignored. */
+export function parseNotes(content: string): ParsedNote[] {
+  const seen = new Set<string>();
+  const notes: ParsedNote[] = [];
+  content.split(/\r?\n/).forEach((raw, line) => {
+    const match = NOTE_LINE.exec(raw);
+    if (!match) return;
+    const text = cleanText(match[2] ?? "").slice(0, MEMORY_LIMITS.maxEntryLength);
+    const key = noteKey(text);
+    if (!text || seen.has(key)) return;
+    seen.add(key);
+    notes.push({ line, text, tag: cleanTag(match[1]), key });
+  });
+  return notes;
 }
 
-/**
- * Adds a note to its place (`input.workspaceId`) unless that place already holds the same note
- * (then that note is refreshed instead). Places hold `maxEntries` notes each and are kept apart:
- * the same note may live in one place and in another.
- */
-export function addNote(
-  entries: readonly MemoryEntry[],
-  input: NoteInput,
-  now: number,
-  newId: () => string,
-): NoteResult {
-  const text = cleanText(input.text);
-  if (!text) return { ok: false, problem: "empty" };
-  if (text.length > MEMORY_LIMITS.maxEntryLength) return { ok: false, problem: "too-long" };
-  const tag = cleanTag(input.tag);
-  const key = noteKey(text);
-  const scope = input.workspaceId ?? null;
-  const inPlace = entries.filter((entry) => entry.workspaceId === scope);
-  const existing = inPlace.find((entry) => noteKey(entry.text) === key);
-  if (existing) {
-    const entry: MemoryEntry = { ...existing, tag: tag ?? existing.tag, updatedAt: now };
-    return {
-      ok: true,
-      entry,
-      entries: entries.map((item) => (item.id === entry.id ? entry : item)),
-      status: "same",
-    };
-  }
-  if (inPlace.length >= MEMORY_LIMITS.maxEntries) return { ok: false, problem: "full" };
-  const entry: MemoryEntry = {
-    id: newId(),
-    text,
-    tag,
-    workspaceId: scope,
-    createdAt: now,
-    updatedAt: now,
-  };
-  return { ok: true, entry, entries: [...entries, entry], status: "added" };
+export function formatNote(text: string, tag: string | null): string {
+  return tag ? `- [${tag}] ${text}` : `- ${text}`;
 }
 
-/**
- * Replaces the text and tag of note `id`. `input.workspaceId` moves the note to another place
- * (omitted keeps it); the note must stay unique in the place it ends up in.
- */
-export function editNote(
-  entries: readonly MemoryEntry[],
-  id: string,
-  input: NoteInput,
-  now: number,
-): NoteResult {
-  const current = entries.find((entry) => entry.id === id);
-  if (!current) return { ok: false, problem: "missing" };
-  const text = cleanText(input.text);
-  if (!text) return { ok: false, problem: "empty" };
-  if (text.length > MEMORY_LIMITS.maxEntryLength) return { ok: false, problem: "too-long" };
-  const scope = input.workspaceId === undefined ? current.workspaceId : input.workspaceId;
-  const key = noteKey(text);
-  if (
-    entries.some(
-      (entry) => entry.id !== id && entry.workspaceId === scope && noteKey(entry.text) === key,
-    )
-  )
-    return { ok: false, problem: "duplicate" };
-  if (
-    scope !== current.workspaceId &&
-    entries.filter((entry) => entry.workspaceId === scope).length >= MEMORY_LIMITS.maxEntries
-  )
-    return { ok: false, problem: "full" };
-  const entry: MemoryEntry = {
-    ...current,
-    text,
-    tag: cleanTag(input.tag),
-    workspaceId: scope,
-    updatedAt: now,
-  };
-  return {
-    ok: true,
-    entry,
-    entries: entries.map((item) => (item.id === id ? entry : item)),
-    status: "updated",
-  };
+/** `content` with a note added as the newest bullet; an empty file gets a heading first. */
+export function appendNote(content: string, line: string): string {
+  if (!content.trim()) return `# Memory\n\n${line}\n`;
+  const eol = content.includes("\r\n") ? "\r\n" : "\n";
+  return `${content.endsWith("\n") ? content : content + eol}${line}${eol}`;
+}
+
+/** `content` with line `index` replaced; `replacement` null removes it. */
+export function changeLine(content: string, index: number, replacement: string | null): string {
+  const lines = content.split(/\r?\n/);
+  if (replacement === null) lines.splice(index, 1);
+  else lines[index] = replacement;
+  return lines.join(content.includes("\r\n") ? "\r\n" : "\n");
+}
+
+/** Stable across restarts and edits elsewhere in the file; differs per place and per text. */
+function noteId(workspaceId: string | null, key: string): string {
+  return createHash("sha1")
+    .update(`${workspaceId ?? ""}\0${key}`)
+    .digest("hex")
+    .slice(0, 10);
 }
 
 const WORD = /[\p{L}\p{N}]+/gu;
 
-/** Notes that contain the query's words (more matching words first, then newest). */
+/**
+ * Notes (given newest first) that contain the query's words, as whole words or, from three
+ * letters on, as the start of a word. More matching words first, then the given order.
+ */
 export function searchNotes(
   entries: readonly MemoryEntry[],
   query: string,
@@ -182,12 +143,15 @@ export function searchNotes(
   if (wanted.length === 0) return [];
   const scored: { entry: MemoryEntry; score: number }[] = [];
   for (const entry of entries) {
-    const haystack = `${entry.text} ${entry.tag ?? ""}`.normalize("NFC").toLowerCase();
-    const score = wanted.filter((word) => haystack.includes(word)).length;
+    const words =
+      `${entry.text} ${entry.tag ?? ""}`.normalize("NFC").toLowerCase().match(WORD) ?? [];
+    const score = wanted.filter((word) =>
+      words.some((have) => have === word || (word.length >= 3 && have.startsWith(word))),
+    ).length;
     if (score > 0) scored.push({ entry, score });
   }
   return scored
-    .sort((a, b) => b.score - a.score || b.entry.updatedAt - a.entry.updatedAt)
+    .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map((item) => item.entry);
 }
@@ -204,9 +168,10 @@ const MEMORY_RULES = [
 ].join("\n");
 
 /**
- * The `## Memory` section of the system prompt: rules, then the newest notes that fit in
- * `budget` characters. Recency (not the current question) decides, so the section stays the same
- * between turns and the model's prompt cache keeps working; `memory_search` finds the rest.
+ * The `## Memory` section of the system prompt: rules, then the first notes (given newest first)
+ * that fit in `budget` characters, inside a `<memory>` block. Recency (not the current question)
+ * decides, so the section stays the same between turns and the model's prompt cache keeps
+ * working; `memory_search` finds the rest.
  */
 export function memorySection(
   entries: readonly MemoryEntry[],
@@ -214,143 +179,268 @@ export function memorySection(
 ): string {
   const lines: string[] = [];
   let used = 0;
-  const sorted = byRecency(entries);
-  for (const entry of sorted) {
+  for (const entry of entries) {
     const line = noteLine(entry);
     if (used + line.length + 1 > budget) break;
     lines.push(line);
     used += line.length + 1;
   }
-  const hidden = sorted.length - lines.length;
+  const hidden = entries.length - lines.length;
   const body = lines.length === 0 ? "No notes saved yet." : lines.join("\n");
   const more =
     hidden > 0
       ? `\n(${hidden} more saved note${hidden === 1 ? " is" : "s are"} not shown; use memory_search to find them.)`
       : "";
-  return `## Memory\n${MEMORY_RULES}\n\n${body}${more}`;
-}
-
-/** Entries of a memory file read from disk; anything that does not fit is dropped. */
-export function parseMemory(raw: unknown): MemoryState {
-  const state: MemoryState = { enabled: true, entries: [] };
-  if (typeof raw !== "object" || raw === null) return state;
-  const value = raw as { enabled?: unknown; entries?: unknown };
-  if (value.enabled === false) state.enabled = false;
-  if (!Array.isArray(value.entries)) return state;
-  const seenIds = new Set<string>();
-  const perPlace = new Map<string | null, Set<string>>();
-  for (const item of value.entries) {
-    if (typeof item !== "object" || item === null) continue;
-    const entry = item as Partial<Record<keyof MemoryEntry, unknown>>;
-    if (typeof entry.id !== "string" || !entry.id || seenIds.has(entry.id)) continue;
-    if (typeof entry.text !== "string") continue;
-    const workspaceId =
-      typeof entry.workspaceId === "string" && entry.workspaceId ? entry.workspaceId : null;
-    const text = cleanText(entry.text).slice(0, MEMORY_LIMITS.maxEntryLength);
-    const key = noteKey(text);
-    // Notes are kept apart per place: the same note may live in one place and in another.
-    const keys = perPlace.get(workspaceId) ?? new Set<string>();
-    if (!text || keys.has(key) || keys.size >= MEMORY_LIMITS.maxEntries) continue;
-    const createdAt = typeof entry.createdAt === "number" ? entry.createdAt : 0;
-    const updatedAt = typeof entry.updatedAt === "number" ? entry.updatedAt : createdAt;
-    seenIds.add(entry.id);
-    keys.add(key);
-    perPlace.set(workspaceId, keys);
-    state.entries.push({
-      id: entry.id,
-      text,
-      tag: cleanTag(typeof entry.tag === "string" ? entry.tag : null),
-      workspaceId,
-      createdAt,
-      updatedAt,
-    });
-  }
-  return state;
+  return `## Memory\n${MEMORY_RULES}\n\n<memory>\n${body}\n</memory>${more}`;
 }
 
 // ---------------------------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------------------------
 
-/** `<user-data>/memory.json`; the agent process is its only writer. */
+/** One MEMORY.md and whose notes it holds. */
+export interface MemoryPlace {
+  /** Null = the notes of every workspace. */
+  workspaceId: string | null;
+  path: string;
+}
+
+/** The files: the global one in the app's agent folder, one per workspace folder. */
+export function memoryPlaces(
+  agentDir: string,
+  defaultFolder: string,
+  workspaces: readonly WorkspaceProfile[],
+): MemoryPlace[] {
+  return [
+    { workspaceId: null, path: join(agentDir, MEMORY_FILE) },
+    ...workspaces.map((workspace) => ({
+      workspaceId: workspace.id,
+      path: join(workspaceFolder(workspace, defaultFolder), ".agents", MEMORY_FILE),
+    })),
+  ];
+}
+
+interface Snapshot {
+  mtimeMs: number;
+  size: number;
+  content: string;
+  /** Oldest first. */
+  notes: ParsedNote[];
+  entries: MemoryEntry[];
+}
+
+const EMPTY: Snapshot = { mtimeMs: 0, size: 0, content: "", notes: [], entries: [] };
+
+/** The MEMORY.md files; the agent process is their only writer, a person may edit them too. */
 export class MemoryStore {
-  private state: MemoryState;
+  private readonly cache = new Map<string, Snapshot>();
 
-  constructor(private readonly path: string) {
-    let raw: unknown = null;
+  constructor(private readonly places: () => MemoryPlace[]) {}
+
+  /** The file's notes; read from disk only when it changed since the last read. */
+  private read(place: MemoryPlace): Snapshot {
+    let stat;
     try {
-      raw = JSON.parse(readFileSync(path, "utf8"));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT")
-        console.error("memory.json could not be read; starting empty.", error);
+      stat = statSync(place.path);
+    } catch {
+      this.cache.delete(place.path);
+      return EMPTY;
     }
-    this.state = parseMemory(raw);
+    const cached = this.cache.get(place.path);
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) return cached;
+    let content: string;
+    try {
+      content = readFileSync(place.path, "utf8");
+    } catch (error) {
+      console.error(`${place.path} could not be read; its notes are skipped.`, error);
+      return EMPTY;
+    }
+    const notes = parseNotes(content);
+    const snapshot: Snapshot = {
+      mtimeMs: stat.mtimeMs,
+      size: stat.size,
+      content,
+      notes,
+      entries: notes.map((note) => ({
+        id: noteId(place.workspaceId, note.key),
+        text: note.text,
+        tag: note.tag,
+        workspaceId: place.workspaceId,
+      })),
+    };
+    this.cache.set(place.path, snapshot);
+    return snapshot;
   }
 
-  get enabled(): boolean {
-    return this.state.enabled;
+  private placeOf(workspaceId: string | null): MemoryPlace | undefined {
+    return this.places().find((place) => place.workspaceId === workspaceId);
   }
 
-  /** Newest first. */
+  /** Written next to the file and renamed into place, so a crash never leaves half a file. */
+  private write(place: MemoryPlace, content: string): void {
+    mkdirSync(dirname(place.path), { recursive: true });
+    const temp = `${place.path}.tmp`;
+    writeFileSync(temp, content);
+    renameSync(temp, place.path);
+    this.cache.delete(place.path);
+  }
+
+  /** Every place's notes, each place newest first, the global place first. */
   entries(): MemoryEntry[] {
-    return byRecency(this.state.entries);
+    return this.places().flatMap((place) => this.read(place).entries.toReversed());
   }
 
-  /** Newest first: every workspace's notes plus the notes of `workspaceId`. */
+  /** Newest first: the notes of `workspaceId`, then the notes of every workspace. */
   entriesFor(workspaceId: string | null): MemoryEntry[] {
-    return visibleNotes(this.state.entries, workspaceId);
+    const own = workspaceId === null ? undefined : this.placeOf(workspaceId);
+    const global = this.placeOf(null);
+    return [
+      ...(own ? this.read(own).entries.toReversed() : []),
+      ...(global ? this.read(global).entries.toReversed() : []),
+    ];
   }
 
-  /** Forgets the notes of a deleted workspace. */
-  removeWorkspace(workspaceId: string): void {
-    const entries = this.state.entries.filter((entry) => entry.workspaceId !== workspaceId);
-    if (entries.length !== this.state.entries.length) this.write({ ...this.state, entries });
+  find(id: string): MemoryEntry | undefined {
+    return this.locate(id)?.entry;
   }
 
-  view(): MemoryView {
-    return { enabled: this.state.enabled, entries: this.entries() };
-  }
-
-  setEnabled(enabled: boolean): void {
-    this.write({ ...this.state, enabled });
+  private locate(id: string) {
+    for (const place of this.places()) {
+      const snapshot = this.read(place);
+      const index = snapshot.entries.findIndex((entry) => entry.id === id);
+      const entry = snapshot.entries[index];
+      const note = snapshot.notes[index];
+      if (entry && note) return { place, snapshot, entry, note };
+    }
+    return undefined;
   }
 
   add(input: NoteInput): NoteResult {
-    const result = addNote(this.state.entries, input, Date.now(), () => randomUUID().slice(0, 8));
-    if (result.ok) this.write({ ...this.state, entries: result.entries });
-    return result;
+    const text = cleanText(input.text);
+    if (!text) return { ok: false, problem: "empty" };
+    if (text.length > MEMORY_LIMITS.maxEntryLength) return { ok: false, problem: "too-long" };
+    const tag = cleanTag(input.tag);
+    const place = this.placeOf(input.workspaceId ?? null);
+    if (!place) return { ok: false, problem: "missing" };
+    const snapshot = this.read(place);
+    const key = noteKey(text);
+    const index = snapshot.notes.findIndex((note) => note.key === key);
+    const existing = snapshot.notes[index];
+    const entry = snapshot.entries[index];
+    // The same note is not written again (so the prompt stays the same), but a new tag is kept.
+    if (existing && entry) {
+      if (tag && tag !== existing.tag) {
+        this.write(
+          place,
+          changeLine(snapshot.content, existing.line, formatNote(existing.text, tag)),
+        );
+        return { ok: true, entry: { ...entry, tag }, status: "same" };
+      }
+      return { ok: true, entry, status: "same" };
+    }
+    if (snapshot.notes.length >= MEMORY_LIMITS.maxEntries) return { ok: false, problem: "full" };
+    this.write(place, appendNote(snapshot.content, formatNote(text, tag)));
+    return {
+      ok: true,
+      entry: { id: noteId(place.workspaceId, key), text, tag, workspaceId: place.workspaceId },
+      status: "added",
+    };
   }
 
+  /**
+   * Replaces the text and tag of note `id`. `input.workspaceId` moves the note to another place
+   * (omitted keeps it); the note must stay unique in the place it ends up in. An edit keeps the
+   * note where it is in the file; a move makes it the newest note of the other place.
+   */
   edit(id: string, input: NoteInput): NoteResult {
-    const result = editNote(this.state.entries, id, input, Date.now());
-    if (result.ok) this.write({ ...this.state, entries: result.entries });
-    return result;
+    const found = this.locate(id);
+    if (!found) return { ok: false, problem: "missing" };
+    const text = cleanText(input.text);
+    if (!text) return { ok: false, problem: "empty" };
+    if (text.length > MEMORY_LIMITS.maxEntryLength) return { ok: false, problem: "too-long" };
+    const tag = cleanTag(input.tag);
+    const key = noteKey(text);
+    const scope = input.workspaceId === undefined ? found.place.workspaceId : input.workspaceId;
+    const target = this.placeOf(scope);
+    if (!target) return { ok: false, problem: "missing" };
+    const line = formatNote(text, tag);
+    const entry: MemoryEntry = { id: noteId(scope, key), text, tag, workspaceId: scope };
+    if (target.path === found.place.path) {
+      if (found.snapshot.notes.some((note) => note !== found.note && note.key === key))
+        return { ok: false, problem: "duplicate" };
+      this.write(found.place, changeLine(found.snapshot.content, found.note.line, line));
+      return { ok: true, entry, status: "updated" };
+    }
+    const other = this.read(target);
+    if (other.notes.some((note) => note.key === key)) return { ok: false, problem: "duplicate" };
+    if (other.notes.length >= MEMORY_LIMITS.maxEntries) return { ok: false, problem: "full" };
+    // Added before it is removed, so a failure in between duplicates the note instead of losing it.
+    this.write(target, appendNote(other.content, line));
+    this.write(found.place, changeLine(found.snapshot.content, found.note.line, null));
+    return { ok: true, entry, status: "updated" };
   }
 
   /** The removed note, or undefined when there was none with this id. */
   remove(id: string): MemoryEntry | undefined {
-    const entry = this.state.entries.find((item) => item.id === id);
-    if (entry)
-      this.write({ ...this.state, entries: this.state.entries.filter((item) => item.id !== id) });
-    return entry;
+    const found = this.locate(id);
+    if (!found) return undefined;
+    this.write(found.place, changeLine(found.snapshot.content, found.note.line, null));
+    return found.entry;
   }
 
+  /** Removes every note bullet; headings and other text in the files stay. */
   clear(): void {
-    this.write({ ...this.state, entries: [] });
+    for (const place of this.places()) {
+      const snapshot = this.read(place);
+      if (snapshot.notes.length === 0) continue;
+      let content = snapshot.content;
+      for (const note of snapshot.notes.toReversed())
+        content = changeLine(content, note.line, null);
+      this.write(place, content);
+    }
   }
+}
 
-  find(id: string): MemoryEntry | undefined {
-    return this.state.entries.find((entry) => entry.id === id);
+/**
+ * Moves the notes of an older `memory.json` into the MEMORY.md files (oldest first, so the newest
+ * stay last; notes already in a file are not added twice) and deletes it. A note whose workspace is
+ * gone is dropped. Returns whether memory was on, or null when there was nothing to move. When a
+ * file cannot be written the old file stays and the move is tried again at the next start.
+ */
+export function migrateMemoryJson(path: string, store: MemoryStore): { enabled: boolean } | null {
+  let raw: { enabled?: unknown; entries?: unknown };
+  try {
+    raw = JSON.parse(readFileSync(path, "utf8")) as typeof raw;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+      console.error("memory.json could not be read; its notes were not moved.", error);
+    return null;
   }
-
-  /** Written next to the file and renamed into place, so a crash never leaves half a file. */
-  private write(next: MemoryState): void {
-    mkdirSync(dirname(this.path), { recursive: true });
-    const temp = `${this.path}.tmp`;
-    writeFileSync(temp, JSON.stringify(next, null, 2), { mode: 0o600 });
-    renameSync(temp, this.path);
-    this.state = next;
+  type Old = { text?: unknown; tag?: unknown; workspaceId?: unknown; updatedAt?: unknown };
+  const old = (Array.isArray(raw.entries) ? raw.entries : []).filter(
+    (item): item is Old => typeof item === "object" && item !== null,
+  );
+  let failed = false;
+  for (const item of old.toSorted(
+    (a, b) =>
+      (typeof a.updatedAt === "number" ? a.updatedAt : 0) -
+      (typeof b.updatedAt === "number" ? b.updatedAt : 0),
+  )) {
+    if (typeof item.text !== "string") continue;
+    try {
+      store.add({
+        text: item.text,
+        tag: typeof item.tag === "string" ? item.tag : null,
+        workspaceId:
+          typeof item.workspaceId === "string" && item.workspaceId ? item.workspaceId : null,
+      });
+    } catch (error) {
+      console.error("A note of memory.json could not be written to its MEMORY.md.", error);
+      failed = true;
+    }
   }
+  if (!failed) unlinkSync(path);
+  return { enabled: raw.enabled !== false };
 }
 
 // ---------------------------------------------------------------------------------------------

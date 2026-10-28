@@ -446,15 +446,12 @@ export interface MemoryEntry {
   tag: string | null;
   /** Where the note lives: null = every workspace, else only that workspace's conversations. */
   workspaceId: string | null;
-  /** Epoch milliseconds. */
-  createdAt: number;
-  updatedAt: number;
 }
 
 export interface MemoryView {
   /** Global switch: off = no notes in prompts and the memory tools do nothing. */
   enabled: boolean;
-  /** Most recently saved or edited first. */
+  /** Each place's notes, newest first (the order of the lines in its MEMORY.md, last = newest). */
   entries: MemoryEntry[];
 }
 
@@ -484,10 +481,20 @@ export interface WorkspaceSummary {
 export interface WorkspaceProfile extends WorkspaceSummary {
   /** Absolute folder conversations work in. Null only for the built-in workspace: the app's folder. */
   dir: string | null;
-  /** Rules added to the system prompt in every conversation of this workspace. */
-  instructions: string;
   /** Agent for new conversations here; null = the agent picked last. */
   agentId: string | null;
+}
+
+/** The rules file of a workspace: `AGENTS.md` in its folder. */
+export interface WorkspaceInstructions {
+  /** The folder's AGENTS.md (it may not exist yet). */
+  path: string;
+  content: string;
+  exists: boolean;
+  /** AGENTS.override.md sits next to it, and Pi reads that one instead. */
+  overridden: boolean;
+  /** Other context files (parent folders, the app's own) loaded into the conversation as well. */
+  inherited: string[];
 }
 
 /** Omit `id` to create a workspace. */
@@ -534,6 +541,8 @@ export interface SettingsFile extends AppSettings {
   scheduledTasks: ScheduledTask[];
   voice: VoiceSettings;
   channels: ChannelsSettings;
+  /** Global switch of long-term memory (Settings › Memory). */
+  memoryEnabled: boolean;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1051,6 +1060,9 @@ export interface AgentCommandMap {
   /** Default workspace first, then by name. */
   list_workspaces: { params: NoParams; result: WorkspaceProfile[] };
   save_workspace: { params: { workspace: SaveWorkspaceInput }; result: WorkspaceProfile };
+  read_workspace_instructions: { params: { id: string }; result: WorkspaceInstructions };
+  /** Writes the folder's AGENTS.md; the open conversation reloads it when it is in that folder. */
+  save_workspace_instructions: { params: { id: string; content: string }; result: void };
   /** The default workspace cannot be deleted. Its conversations move to the default workspace. */
   delete_workspace: { params: { id: string }; result: void };
 

@@ -15,7 +15,7 @@ import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { emptyWebSearchConfig, readWebSearchConfig } from "./web/config.ts";
 import { readAgents } from "./agents.ts";
-import { readWorkspaces } from "./workspaces.ts";
+import { type LegacyInstructions, legacyInstructions, readWorkspaces } from "./workspaces.ts";
 import { readScheduledTasks } from "./scheduled-tasks.ts";
 import { DEFAULT_VOICE, readVoiceSettings } from "./transcription.ts";
 import { readChannelsSettings } from "./channels/telegram/settings.ts";
@@ -66,6 +66,7 @@ function parse(raw: unknown): SettingsFile {
     scheduledTasks: [],
     voice: { ...DEFAULT_VOICE },
     channels: readChannelsSettings(null),
+    memoryEnabled: true,
   };
   if (typeof raw !== "object" || raw === null) return settings;
   const value = raw as Partial<Record<keyof SettingsFile, unknown>>;
@@ -108,12 +109,15 @@ function parse(raw: unknown): SettingsFile {
   settings.scheduledTasks = readScheduledTasks(value.scheduledTasks);
   settings.voice = readVoiceSettings(value.voice);
   settings.channels = readChannelsSettings(value.channels);
+  settings.memoryEnabled = value.memoryEnabled !== false;
   return settings;
 }
 
 /** App settings (`AgentPaths.settingsFile`), owned by this process. */
 export class SettingsStore {
   private current: SettingsFile;
+  /** Workspace instructions an older file kept here; they move into the folders' AGENTS.md. */
+  readonly legacyInstructions: LegacyInstructions[];
 
   constructor(private readonly path: string) {
     let raw: unknown = null;
@@ -124,6 +128,9 @@ export class SettingsStore {
         console.error("settings.json could not be read; using defaults.", error);
     }
     this.current = parse(raw);
+    this.legacyInstructions = legacyInstructions(
+      (raw as { workspaces?: unknown } | null)?.workspaces,
+    );
   }
 
   get(): SettingsFile {

@@ -1,6 +1,6 @@
 # Use case: skills authoring and usage
 
-A skill is an [Agent Skills](https://agentskills.io) folder with a `SKILL.md`, stored under `<user-data>/agent/skills/<name>/`. Only skills in this folder are loaded (`packages/agent-core/src/skills.ts`).
+A skill is an [Agent Skills](https://agentskills.io) folder with a `SKILL.md`, stored under `<user-data>/agent/skills/<name>/`. Besides these, a workspace's own skills in `<workspace folder>/.agents/skills/` are loaded in its chats (`packages/agent-core/src/skills.ts`); nothing else is.
 
 ## Author (Settings › Skills)
 
@@ -12,4 +12,4 @@ A skill is an [Agent Skills](https://agentskills.io) folder with a `SKILL.md`, s
 
 - Type `/skill:<name> <args>` in the chat, or pick it from the **+** menu or `/` suggestions; the user bubble shows a "Skill: name" chip.
 - The agent also loads skills on its own unless a skill is set to run only when asked.
-- A conversation sees only skills that are enabled and in its agent's skills subset.
+- A conversation sees the skills that are enabled and in its agent's skills subset, plus its workspace's own skills (enabled, whatever the agent's subset).

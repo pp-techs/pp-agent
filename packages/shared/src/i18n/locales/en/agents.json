@@ -244,7 +244,9 @@
     },
     "instructions": {
       "placeholder": "Files here are monthly reports. Name new files YYYY-MM-<topic>.\nAnswer in Vietnamese.",
-      "help": "Rules for every chat in this workspace, whichever agent it uses."
+      "help": "Saved as AGENTS.md in the workspace folder and read in every chat here, whichever agent it uses.",
+      "overridden": "AGENTS.override.md in this folder takes precedence, so changes here have no effect until it is removed.",
+      "inherited": "Also loaded from outside this folder:"
     },
     "defaults": {
       "legend": "Defaults for new chats",

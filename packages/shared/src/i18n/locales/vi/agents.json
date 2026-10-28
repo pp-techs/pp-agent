@@ -244,7 +244,9 @@
     },
     "instructions": {
       "placeholder": "Các tệp ở đây là báo cáo hàng tháng. Đặt tên tệp mới theo dạng YYYY-MM-<chủ đề>.\nTrả lời bằng tiếng Việt.",
-      "help": "Quy tắc áp dụng cho mọi cuộc trò chuyện trong không gian làm việc này, dù dùng Agent nào."
+      "help": "Được lưu thành AGENTS.md trong thư mục của không gian làm việc và áp dụng cho mọi cuộc trò chuyện ở đây, dù dùng Agent nào.",
+      "overridden": "AGENTS.override.md trong thư mục này được ưu tiên, nên thay đổi ở đây không có tác dụng cho đến khi bạn xóa tệp đó.",
+      "inherited": "Cũng được nạp từ bên ngoài thư mục này:"
     },
     "defaults": {
       "legend": "Mặc định cho cuộc trò chuyện mới",

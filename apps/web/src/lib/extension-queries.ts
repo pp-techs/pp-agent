@@ -467,6 +467,22 @@ export function useSaveWorkspace(bridge: DesktopBridge) {
   });
 }
 
+/** The AGENTS.md in a workspace's folder; keyed under the workspaces so saving refetches it. */
+export const workspaceInstructionsQuery = (bridge: DesktopBridge, id: string) =>
+  queryOptions({
+    queryKey: [...queryKeys.workspaces, "instructions", id] as const,
+    queryFn: () => bridge.agent.command({ type: "read_workspace_instructions", id }),
+  });
+
+export function useSaveWorkspaceInstructions(bridge: DesktopBridge) {
+  const invalidate = useInvalidateWorkspaces();
+  return useMutation({
+    mutationFn: (input: { id: string; content: string }) =>
+      bridge.agent.command({ type: "save_workspace_instructions", ...input }),
+    onSuccess: invalidate,
+  });
+}
+
 export function useDeleteWorkspace(bridge: DesktopBridge) {
   const invalidate = useInvalidateWorkspaces();
   return useMutation({
