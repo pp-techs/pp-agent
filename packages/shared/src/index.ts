@@ -126,6 +126,15 @@ export interface AgentSnapshot {
   sessionPath: string | null;
   /** Context window usage of the open conversation; null while it has no model. */
   context: ContextUsage | null;
+  /** Which conversations are answering right now, the open one and those left running. */
+  activity: SessionActivity;
+}
+
+/** Session files of the conversations that are answering, and of those waiting for the person. */
+export interface SessionActivity {
+  running: string[];
+  /** Waiting on an approval or an answer; a subset of `running`. */
+  waiting: string[];
 }
 
 /** Which settings area changed; the renderer refetches the matching query (`[scope]`). */
@@ -158,6 +167,8 @@ export type AgentEvent =
   | { type: "sessions_changed" }
   /** The open conversation's context usage changed (a reply finished, or it was compacted). */
   | { type: "context"; context: ContextUsage | null }
+  /** A conversation started or stopped answering, or began or stopped waiting for the person. */
+  | { type: "activity"; activity: SessionActivity }
   | { type: "settings_changed"; scopes: SettingsScope[] }
   /** A sign-in flow (provider or MCP server) needs input from the person. */
   | { type: "auth_prompt"; prompt: AuthPrompt }
@@ -992,6 +1003,8 @@ export interface AgentCommandMap {
   test_web_search: { params: { provider: SearchProviderId }; result: WebSearchTestResult };
 
   list_skills: { params: NoParams; result: SkillSummary[] };
+  /** Skills in `.agents/skills` of the open conversation's workspace folder; read-only here. */
+  list_workspace_skills: { params: NoParams; result: SkillSummary[] };
   get_skill: { params: { name: string }; result: SkillDetail };
   save_skill: { params: { skill: SaveSkillInput }; result: SkillSummary };
   delete_skill: { params: { name: string }; result: void };

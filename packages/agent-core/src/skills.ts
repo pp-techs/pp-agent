@@ -66,23 +66,52 @@ function serializeSkill(frontmatter: Record<string, unknown>, body: string): str
   return `---\n${stringify(frontmatter).trimEnd()}\n---\n\n${body.trim()}\n`;
 }
 
+/** Whether `path` is inside `root`, with symlinks resolved; pi reports skill folders by real path. */
+function isInside(root: string, path: string): boolean {
+  if (!existsSync(root)) return false;
+  const inside = relative(realpathSync(root), existsSync(path) ? realpathSync(path) : path);
+  return inside !== "" && !inside.startsWith("..") && !isAbsolute(inside);
+}
+
+/** Where pi looks for the skills that belong to a workspace folder. */
+export function workspaceSkillsDir(cwd: string): string {
+  return join(cwd, ".agents", "skills");
+}
+
+/** Whether the skill at `baseDir` is one of the workspace folder's own (`.agents/skills`). */
+export function isWorkspaceSkill(cwd: string, baseDir: string): boolean {
+  return isInside(workspaceSkillsDir(cwd), baseDir);
+}
+
+/** Skills a workspace folder carries in `.agents/skills`; none when the folder has no such skills. */
+export async function listWorkspaceSkills(
+  cwd: string,
+  disabled: readonly string[],
+): Promise<SkillSummary[]> {
+  const skills = await scanSkills(workspaceSkillsDir(cwd));
+  return skills
+    .map(({ path, skill }) => ({
+      name: skill.name,
+      description: skill.description,
+      enabled: !disabled.includes(skill.name),
+      path,
+      modelInvocable: skill.modelInvocable,
+      builtIn: false,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /** Skills in `<agentDir>/skills`, one folder per skill with a SKILL.md. */
 export class SkillLibrary {
-  /** `dir` with symlinks resolved; pi reports skill folders by their real path. */
-  private readonly realDir: string;
-
   /** Names of the unedited skills that ship with the app (see `skills-builtin.ts`). */
   builtIn = new Set<string>();
 
   /** `dir` must exist. */
-  constructor(readonly dir: string) {
-    this.realDir = realpathSync(dir);
-  }
+  constructor(readonly dir: string) {}
 
   /** Whether pi may load the skill at `baseDir`: only skills of this library are used. */
   owns(baseDir: string): boolean {
-    const inside = relative(this.realDir, existsSync(baseDir) ? realpathSync(baseDir) : baseDir);
-    return inside !== "" && !inside.startsWith("..") && !isAbsolute(inside);
+    return isInside(this.dir, baseDir);
   }
 
   async list(disabled: readonly string[]): Promise<SkillSummary[]> {
@@ -181,22 +210,8 @@ export class SkillLibrary {
     };
   }
 
-  private async scan(): Promise<Array<{ path: string; skill: SkillFile }>> {
-    let entries: string[];
-    try {
-      entries = await readdir(this.dir);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-      throw error;
-    }
-    const skills: Array<{ path: string; skill: SkillFile }> = [];
-    for (const entry of entries) {
-      const path = join(this.dir, entry);
-      const file = join(path, SKILL_FILE);
-      if (!existsSync(file)) continue;
-      skills.push({ path, skill: parseSkill(await readFile(file, "utf8"), entry) });
-    }
-    return skills;
+  private scan(): Promise<Array<{ path: string; skill: SkillFile }>> {
+    return scanSkills(this.dir);
   }
 
   private async find(name: string): Promise<{ path: string; skill: SkillFile }> {
@@ -211,6 +226,25 @@ export class SkillLibrary {
       (await this.scan()).some((entry) => entry.skill.name === name);
     if (taken) throw new Error(t("skills.nameTaken", { name }));
   }
+}
+
+/** Folders of `dir` that hold a SKILL.md; none when `dir` does not exist. */
+async function scanSkills(dir: string): Promise<Array<{ path: string; skill: SkillFile }>> {
+  let entries: string[];
+  try {
+    entries = await readdir(dir);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+  const skills: Array<{ path: string; skill: SkillFile }> = [];
+  for (const entry of entries) {
+    const path = join(dir, entry);
+    const file = join(path, SKILL_FILE);
+    if (!existsSync(file)) continue;
+    skills.push({ path, skill: parseSkill(await readFile(file, "utf8"), entry) });
+  }
+  return skills;
 }
 
 interface StagedSkill {

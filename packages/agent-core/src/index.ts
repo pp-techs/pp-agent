@@ -38,6 +38,7 @@ import {
   type QuestionAnswer,
   type QuestionRequest,
   type SaveScheduledTaskInput,
+  type SessionActivity,
   type ScheduledTask,
   type ScheduledTaskView,
   type ServiceStatus,
@@ -161,7 +162,7 @@ import { SettingsStore } from "./settings-store.ts";
 import { newTaskId, runTitle, validateTaskInput } from "./scheduled-tasks.ts";
 import { nextRun, Scheduler, schedulableOf } from "./scheduler.ts";
 import { VoiceService } from "./transcription.ts";
-import { SkillLibrary } from "./skills.ts";
+import { isWorkspaceSkill, listWorkspaceSkills, SkillLibrary } from "./skills.ts";
 import { seedBuiltInSkills } from "./skills-builtin.ts";
 import { createDelegateTool, DELEGATE_TOOL } from "./subagent.ts";
 import {
@@ -251,8 +252,6 @@ interface Services {
   mcpConfig: McpConfigFile;
   /** Long-term notes shared by every conversation (`memory.json` next to settings.json). */
   memory: MemoryStore;
-  /** MCP servers connected for the open conversation's agent. */
-  mcpServers: McpRegistrations;
   /** Speech to text for the message box. */
   voice: VoiceService;
   /** Which saved conversation each chat of a channel continues (`channels.json`). */
@@ -300,6 +299,33 @@ interface ChatRuntime {
   /** The person stopped the turn. */
   stopped: boolean;
 }
+
+/**
+ * What belongs to one conversation of the window. The open one shows in the window; one that was
+ * still answering when the person moved on keeps running in the background until it settles.
+ */
+interface ConversationState {
+  /** Projection of the session's messages for the renderer; only the open one emits. */
+  transcript: Transcript;
+  /** Tool calls waiting for the person's approval. */
+  approvals: Map<string, { request: ApprovalRequest; resolve: (approved: boolean) => void }>;
+  /** Questions of `ask_user` that wait for an answer. */
+  questions: Map<
+    string,
+    { request: QuestionRequest; resolve: (answers: QuestionAnswer[] | null) => void }
+  >;
+  /** MCP servers connected for this conversation's agent. */
+  mcpServers: McpRegistrations;
+  running: boolean;
+  /** Agent and workspace as of when it left the window; the host's own fields are the open one's. */
+  agentId: string;
+  workspaceId: string;
+}
+
+type Conversation = ConversationState & {
+  session: AgentSession;
+  unsubscribe: () => void;
+};
 
 /** A chat's own Pi session, apart from the conversation open in the window. */
 type ChatSession = ChatRuntime & {
@@ -362,27 +388,20 @@ export class AgentHost {
   private readonly prompts = new AuthPrompts();
   private readonly mcp = new McpCommands(this.prompts);
   private gatewayIds = new Set<string>();
-  private session: AgentSession | null = null;
+  /** The conversation shown in the window. */
+  private open: Conversation | null = null;
+  /** Conversations moved out of the window while they answer, by session file. */
+  private readonly background = new Map<string, Conversation>();
+  /** Registrations of no session, for the MCP section before any conversation is open. */
+  private idleMcp: McpRegistrations | null = null;
   /** Agent of the open conversation; resolves to the default agent once deleted. */
   private agentId: string = DEFAULT_AGENT_ID;
   /** Workspace of the open conversation; resolves to the default workspace once deleted. */
   private workspaceId: string = DEFAULT_WORKSPACE_ID;
-  private unsubscribe: (() => void) | null = null;
-  private running = false;
   private status: AgentStatus = "starting";
   private pending: PendingChanges = { ...NO_CHANGES };
   /** Applying changes to the session happens one batch at a time. */
   private applying: Promise<void> = Promise.resolve();
-  private readonly approvals = new Map<
-    string,
-    { request: ApprovalRequest; resolve: (approved: boolean) => void }
-  >();
-  /** Questions of `ask_user` in the open conversation that wait for an answer. */
-  private readonly questions = new Map<
-    string,
-    { request: QuestionRequest; resolve: (answers: QuestionAnswer[] | null) => void }
-  >();
-  private readonly transcript = new Transcript((message) => emit({ type: "message", message }));
   /** Runs scheduled tasks one at a time, each in its own Pi session. */
   private scheduler: Scheduler | null = null;
   /** Session of the scheduled task being run, by task id, so deleting the task can stop it. */
@@ -536,10 +555,6 @@ export class AgentHost {
         voice: new VoiceService(runtime, settings, join(dirname(paths.settingsFile), "models")),
         memory: new MemoryStore(join(dirname(paths.settingsFile), "memory.json")),
         chatSessions: new ChatSessionMap(join(dirname(paths.settingsFile), "channels.json")),
-        mcpServers: new McpRegistrations(mcpConfig, (name) => {
-          const { mcpServers } = this.currentAgent();
-          return mcpServers === null || mcpServers.includes(name);
-        }),
       };
       this.services = services;
       try {
@@ -589,7 +604,9 @@ export class AgentHost {
     }
     await Promise.allSettled([...this.chats.values()].map((chat) => chat.session.abort()));
     for (const chatKey of [...this.chats.keys()]) this.closeChat(chatKey);
-    await this.abort().catch(() => undefined);
+    await Promise.allSettled(this.conversations().map((conversation) => this.stop(conversation)));
+    for (const conversation of this.background.values()) this.release(conversation);
+    this.background.clear();
     this.disposeSession();
   }
 
@@ -673,6 +690,13 @@ export class AgentHost {
 
       case "list_skills":
         return services.skills.list(services.settings.get().disabledSkills);
+      case "list_workspace_skills":
+        return this.session
+          ? listWorkspaceSkills(
+              this.session.sessionManager.getCwd(),
+              services.settings.get().disabledSkills,
+            )
+          : [];
       case "get_skill":
         return services.skills.get(command.name, services.settings.get().disabledSkills);
       case "save_skill":
@@ -688,7 +712,7 @@ export class AgentHost {
         return buildOverview(
           services.mcpConfig,
           await this.mcpStatus(),
-          services.mcpServers,
+          this.mcpServers,
           this.currentAgent().name,
           this.mcpAuth ? "encrypted" : "file",
         );
@@ -803,12 +827,71 @@ export class AgentHost {
   // Conversation
   // -------------------------------------------------------------------------------------------
 
+  /** Session of the open conversation. */
+  private get session(): AgentSession | null {
+    return this.open?.session ?? null;
+  }
+
+  /** Whether the open conversation is answering. */
+  private get running(): boolean {
+    return this.open?.running ?? false;
+  }
+
+  /** MCP servers of the open conversation. */
+  private get mcpServers(): McpRegistrations {
+    if (this.open) return this.open.mcpServers;
+    const { mcpConfig } = this.requireServices();
+    return (this.idleMcp ??= new McpRegistrations(mcpConfig, () => false));
+  }
+
+  /** The open conversation and those still answering in the background. */
+  private conversations(): Conversation[] {
+    return this.open ? [this.open, ...this.background.values()] : [...this.background.values()];
+  }
+
+  private requireOpen(): Conversation {
+    if (!this.open) throw new Error(t("app.starting"));
+    return this.open;
+  }
+
+  /** Agent of a conversation: the open one follows the host, the others keep theirs. */
+  private agentOf(conversation: ConversationState): AgentProfile {
+    const agents = this.services?.settings.get().agents ?? [];
+    return findAgent(agents, conversation === this.open ? this.agentId : conversation.agentId);
+  }
+
+  private workspaceOf(conversation: ConversationState): WorkspaceProfile {
+    const workspaces = this.services?.settings.get().workspaces ?? [];
+    return findWorkspace(
+      workspaces,
+      conversation === this.open ? this.workspaceId : conversation.workspaceId,
+    );
+  }
+
+  /** Which conversations answer now, and which of those wait for the person. */
+  private activity(): SessionActivity {
+    const activity: SessionActivity = { running: [], waiting: [] };
+    for (const conversation of this.conversations()) {
+      const file = conversation.session.sessionFile;
+      if (!file || !conversation.running) continue;
+      activity.running.push(file);
+      if (conversation.approvals.size > 0 || conversation.questions.size > 0)
+        activity.waiting.push(file);
+    }
+    return activity;
+  }
+
+  private emitActivity(): void {
+    emit({ type: "activity", activity: this.activity() });
+  }
+
   private snapshot(): AgentSnapshot {
+    const open = this.open;
     return {
       status: this.status,
-      messages: this.transcript.list(),
-      approvals: [...this.approvals.values()].map((entry) => entry.request),
-      questions: [...this.questions.values()].map((entry) => entry.request),
+      messages: open?.transcript.list() ?? [],
+      approvals: [...(open?.approvals.values() ?? [])].map((entry) => entry.request),
+      questions: [...(open?.questions.values() ?? [])].map((entry) => entry.request),
       model: this.currentModel(),
       agent: this.services ? summarizeAgent(this.currentAgent()) : null,
       thinking: this.thinking(),
@@ -816,8 +899,10 @@ export class AgentHost {
       workspaceDir: this.session?.sessionManager.getCwd() ?? null,
       sessionPath: this.session?.sessionFile ?? null,
       context: this.contextUsage(),
+      activity: this.activity(),
     };
   }
+
   /** Context window usage of the open conversation, null while it has no model. */
   private contextUsage(): ContextUsage | null {
     const usage = this.session?.getContextUsage();
@@ -896,22 +981,68 @@ export class AgentHost {
     emit({ type: "context", context: this.contextUsage() });
   }
 
+  /** Stops the answer of the open conversation. */
   private async abort(): Promise<void> {
-    // Pending approvals and questions block the run; settle them first or abort() would wait forever.
-    this.denyAllApprovals();
-    this.skipAllQuestions();
-    await this.session?.abort();
+    await this.stop(this.open);
   }
 
-  /** Switch to a saved conversation, or to a new one (in `workspaceId`, else the open workspace). */
+  /** Stops a conversation's answer. */
+  private async stop(conversation: Conversation | null): Promise<void> {
+    if (!conversation) return;
+    // Pending approvals and questions block the run; settle them first or abort() would wait forever.
+    this.denyAllApprovals(conversation);
+    this.skipAllQuestions(conversation);
+    await conversation.session.abort();
+  }
+
+  /**
+   * Switch to a saved conversation, or to a new one (in `workspaceId`, else the open workspace).
+   * An answer in progress carries on in the background, and comes back when its conversation is
+   * opened again.
+   */
   private async openSession(path: string | null, workspaceId: string | null = null): Promise<void> {
+    const resumed = path ? this.background.get(path) : undefined;
+    if (resumed && resumed === this.open) return;
+    await this.leaveOpen();
+    if (resumed) {
+      this.background.delete(path ?? "");
+      this.open = resumed;
+      this.agentId = resumed.agentId;
+      this.workspaceId = resumed.workspaceId;
+      this.refreshStatus();
+    } else {
+      await this.startSession(
+        path ? this.savedSessionManager(path) : this.newSessionManager(workspaceId),
+      );
+      this.requireOpen().transcript.load(branchEntries(this.requireSession().sessionManager));
+    }
+    emit({ type: "snapshot", snapshot: this.snapshot() });
+  }
+
+  /** Takes the open conversation out of the window: left to answer in the background, or closed. */
+  private async leaveOpen(): Promise<void> {
+    const conversation = this.open;
+    if (!conversation) return;
+    const file = conversation.session.sessionFile;
+    if (file && (conversation.running || conversation.session.isStreaming)) {
+      conversation.agentId = this.agentId;
+      conversation.workspaceId = this.workspaceId;
+      this.background.set(file, conversation);
+      this.open = null;
+      return;
+    }
     await this.abort();
     this.disposeSession();
-    await this.startSession(
-      path ? this.savedSessionManager(path) : this.newSessionManager(workspaceId),
-    );
-    this.transcript.load(branchEntries(this.requireSession().sessionManager));
-    emit({ type: "snapshot", snapshot: this.snapshot() });
+  }
+
+  /** Closes a background conversation, stopping its answer if it still has one. */
+  private async closeBackground(file: string): Promise<void> {
+    const conversation = this.background.get(file);
+    if (!conversation) return;
+    this.background.delete(file);
+    await this.stop(conversation).catch(() => undefined);
+    this.release(conversation);
+    this.emitActivity();
   }
 
   /**
@@ -972,9 +1103,9 @@ export class AgentHost {
     const pins = new Set(pinnedSessions);
     // Conversations of every workspace and agent.
     const sessions = await SessionManager.listAll(paths.sessionDir);
-    return sessions
+    const saved = new Set(sessions.map((info) => info.path));
+    const rows: SessionSummary[] = sessions
       .filter((info) => info.messageCount > 0)
-      .sort((a, b) => b.modified.getTime() - a.modified.getTime())
       .map((info) => ({
         path: info.path,
         workspaceId: workspaceForCwd(workspaces, info.cwd, paths.workspaceDir).id,
@@ -983,6 +1114,28 @@ export class AgentHost {
         messageCount: info.messageCount,
         pinned: pins.has(pinKey(info.path)),
       }));
+    // A first reply is still on its way: the file is written with it, but the chat is listed now.
+    for (const conversation of this.conversations()) {
+      const { session } = conversation;
+      const file = session.sessionFile;
+      if (!file || saved.has(file) || !conversation.running) continue;
+      const first = session.sessionManager
+        .getBranch()
+        .find((entry) => entry.type === "message" && entry.message.role === "user");
+      rows.push({
+        path: file,
+        workspaceId: conversation === this.open ? this.workspaceId : conversation.workspaceId,
+        title: sessionTitle(
+          session.sessionName,
+          first?.type === "message" ? userContent(first.message).text : "",
+          this.titleFallbacks(),
+        ),
+        modified: Date.now(),
+        messageCount: session.messages.length,
+        pinned: pins.has(pinKey(file)),
+      });
+    }
+    return rows.sort((a, b) => b.modified - a.modified);
   }
 
   /** Translated titles for conversations that have no name and no text of their own. */
@@ -1055,7 +1208,8 @@ export class AgentHost {
   private renameSession(path: string, name: string): void {
     const trimmed = name.trim();
     if (!trimmed) throw new Error(t("conversations.enterName"));
-    if (this.session?.sessionFile === path) this.session.setSessionName(trimmed);
+    const live = this.conversations().find((entry) => entry.session.sessionFile === path);
+    if (live) live.session.setSessionName(trimmed);
     else
       SessionManager.open(path, this.requireServices().paths.sessionDir).appendSessionInfo(trimmed);
     emit({ type: "sessions_changed" });
@@ -1063,6 +1217,7 @@ export class AgentHost {
 
   private async deleteSession(path: string): Promise<void> {
     if (this.session?.sessionFile === path) await this.openSession(null);
+    await this.closeBackground(path);
     await rm(path, { force: true });
     this.setPinned(path, false);
     emit({ type: "sessions_changed" });
@@ -1188,7 +1343,7 @@ export class AgentHost {
     } else {
       await session.navigateTree(entryId);
     }
-    this.transcript.load(branchEntries(manager));
+    this.requireOpen().transcript.load(branchEntries(manager));
     emit({ type: "snapshot", snapshot: this.snapshot() });
     this.startRun(session, message);
   }
@@ -1272,7 +1427,7 @@ export class AgentHost {
    */
   private chooseModel(
     preferred: ModelRef | null,
-    scope: SessionScope = this.liveScope(),
+    scope: SessionScope = this.liveScope(this.requireOpen()),
   ): Model<Api> | undefined {
     const { runtime, settings } = this.requireServices();
     const first = [...runtime.getAvailableSnapshot()].sort((a, b) => {
@@ -1288,14 +1443,17 @@ export class AgentHost {
     );
   }
 
-  /** The open conversation's agent, workspace, MCP servers, and approval gate. */
-  private liveScope(): SessionScope {
+  /** A window conversation's agent, workspace, MCP servers, and approval gate. */
+  private liveScope(conversation: ConversationState): SessionScope {
     return {
-      agent: () => this.currentAgent(),
-      workspace: () => this.currentWorkspace(),
-      mcpServers: this.requireServices().mcpServers,
-      approvalGate: this.approvalGate,
-      askUser: (call, signal) => this.requestQuestion(call, signal),
+      agent: () => this.agentOf(conversation),
+      workspace: () => this.workspaceOf(conversation),
+      mcpServers: conversation.mcpServers,
+      approvalGate: this.gateFor(
+        () => this.agentOf(conversation),
+        (request) => this.requestApproval(conversation, request),
+      ),
+      askUser: (call, signal) => this.requestQuestion(conversation, call, signal),
       surface: { kind: "window", label: "in the desktop window" },
       visibility: "all",
     };
@@ -1334,8 +1492,9 @@ export class AgentHost {
       cwd,
       agentDir: paths.agentDir,
       settingsManager,
-      // Only our own extensions run; skills come from <agentDir>/skills and MCP servers from
-      // <agentDir>/mcp.json (registered by the agent extension), both managed in Settings.
+      // Only our own extensions run; skills come from <agentDir>/skills (managed in Settings) and
+      // the workspace folder's .agents/skills, and MCP servers from <agentDir>/mcp.json
+      // (registered by the agent extension).
       noExtensions: true,
       noPromptTemplates: true,
       noThemes: true,
@@ -1358,7 +1517,7 @@ export class AgentHost {
         return {
           skills: base.skills.filter(
             (skill) =>
-              skills.owns(skill.baseDir) &&
+              (skills.owns(skill.baseDir) || isWorkspaceSkill(cwd, skill.baseDir)) &&
               !disabled.includes(skill.name) &&
               (allowed === null || allowed.includes(skill.name)),
           ),
@@ -1431,61 +1590,93 @@ export class AgentHost {
     sessionManager: SessionManager,
     preferredModel: ModelRef | null = sessionManager.buildSessionContext().model,
   ): Promise<void> {
+    const { mcpConfig } = this.requireServices();
+    const state: ConversationState = {
+      transcript: new Transcript((message) => {
+        if (this.open === conversation) emit({ type: "message", message });
+      }),
+      approvals: new Map(),
+      questions: new Map(),
+      mcpServers: new McpRegistrations(mcpConfig, (name) => {
+        const { mcpServers } = this.agentOf(state);
+        return mcpServers === null || mcpServers.includes(name);
+      }),
+      running: false,
+      agentId: this.agentId,
+      workspaceId: this.workspaceId,
+    };
     const session = await this.buildSession(
       sessionManager,
       preferredModel,
-      this.liveScope(),
+      this.liveScope(state),
       (base) => this.mcp.uiContext(base),
     );
-    this.session = session;
-    this.unsubscribe = session.subscribe((event) => this.onSessionEvent(event));
+    const conversation: Conversation = Object.assign(state, {
+      session,
+      unsubscribe: session.subscribe((event) => this.onSessionEvent(conversation, event)),
+    });
+    this.open = conversation;
     // The new session already reflects every setting.
     this.pending = { ...NO_CHANGES };
     this.refreshStatus();
-    this.watchMcp(session);
+    this.watchMcp(conversation);
   }
 
+  /** Closes the open conversation. */
   private disposeSession(): void {
-    this.unsubscribe?.();
-    this.unsubscribe = null;
-    this.services?.mcpServers.detach();
-    this.session?.dispose();
-    this.session = null;
-    this.running = false;
+    const conversation = this.open;
+    this.open = null;
+    if (conversation) this.release(conversation);
   }
 
-  private onSessionEvent(event: AgentSessionEvent): void {
+  /** Lets go of a conversation's session. */
+  private release(conversation: Conversation): void {
+    conversation.unsubscribe();
+    conversation.mcpServers.detach();
+    conversation.session.dispose();
+  }
+
+  private onSessionEvent(conversation: Conversation, event: AgentSessionEvent): void {
+    const { transcript } = conversation;
+    const inWindow = this.open === conversation;
     switch (event.type) {
       case "compaction_end":
-        if (event.result && !event.aborted) this.transcript.addCompaction();
+        if (event.result && !event.aborted) transcript.addCompaction();
         break;
       case "agent_start":
-        this.running = true;
-        this.refreshStatus();
+        conversation.running = true;
+        if (inWindow) this.refreshStatus();
+        emit({ type: "sessions_changed" });
+        this.emitActivity();
         break;
       case "agent_settled":
-        this.running = false;
-        if (this.session) this.transcript.setEntryIds(chatEntryIds(this.session.sessionManager));
-        this.transcript.flush();
-        this.refreshStatus();
+        conversation.running = false;
+        transcript.setEntryIds(chatEntryIds(conversation.session.sessionManager));
+        transcript.flush();
+        if (inWindow) {
+          this.refreshStatus();
+          void this.applyPending();
+        } else {
+          // Nobody is looking at it: close it now. Opening it later builds a session from
+          // the saved file with the settings of the time.
+          setImmediate(() => this.finishBackground(conversation));
+        }
         emit({ type: "sessions_changed" });
-        void this.applyPending();
+        this.emitActivity();
         break;
       case "message_start":
-        if (event.message.role === "user") this.transcript.addUser(event.message);
-        else if (event.message.role === "assistant") this.transcript.startAssistant();
+        if (event.message.role === "user") transcript.addUser(event.message);
+        else if (event.message.role === "assistant") transcript.startAssistant();
         break;
       case "message_update":
-        if (event.message.role === "assistant")
-          this.transcript.updateAssistant(event.message, false);
+        if (event.message.role === "assistant") transcript.updateAssistant(event.message, false);
         break;
       case "message_end":
-        if (event.message.role === "assistant")
-          this.transcript.updateAssistant(event.message, true);
-        emit({ type: "context", context: this.contextUsage() });
+        if (event.message.role === "assistant") transcript.updateAssistant(event.message, true);
+        if (inWindow) emit({ type: "context", context: this.contextUsage() });
         break;
       case "tool_execution_start":
-        this.transcript.setToolStatus(event.toolCallId, "running");
+        transcript.setToolStatus(event.toolCallId, "running");
         break;
       case "tool_execution_update": {
         // delegate_task reports the helper's steps while it works; the final summary replaces them.
@@ -1497,12 +1688,12 @@ export class AgentHost {
               .map((block) => block.text)
               .join("\n")
           : "";
-        if (text) this.transcript.setToolStatus(event.toolCallId, "running", text);
+        if (text) transcript.setToolStatus(event.toolCallId, "running", text);
         break;
       }
       case "tool_execution_end": {
         const content: unknown = event.result?.content;
-        this.transcript.finishTool(
+        transcript.finishTool(
           event.toolCallId,
           Array.isArray(content) ? content : [],
           event.isError,
@@ -1510,6 +1701,15 @@ export class AgentHost {
         break;
       }
     }
+  }
+
+  /** A background conversation settled, unless it was opened or started anew in between. */
+  private finishBackground(conversation: Conversation): void {
+    const file = conversation.session.sessionFile;
+    if (!file || this.background.get(file) !== conversation || conversation.running) return;
+    this.background.delete(file);
+    this.release(conversation);
+    this.emitActivity();
   }
 
   private refreshStatus(): void {
@@ -1526,12 +1726,6 @@ export class AgentHost {
   // -------------------------------------------------------------------------------------------
   // Approvals
   // -------------------------------------------------------------------------------------------
-
-  /** Gate of the open conversation: asks the person before tools that need approval. */
-  private readonly approvalGate: ExtensionFactory = this.gateFor(
-    () => this.currentAgent(),
-    (request) => this.requestApproval(request),
-  );
 
   /**
    * Extension that applies tool policies for `agent` and settles tools that need approval through
@@ -1620,50 +1814,71 @@ export class AgentHost {
     };
   }
 
-  private requestApproval(request: ApprovalRequest): Promise<boolean> {
-    this.transcript.setToolStatus(request.toolCallId, "awaiting-approval");
-    emit({ type: "approval_requested", request });
+  /** Asks the person before a tool of `conversation` that needs approval; shown when it is open. */
+  private requestApproval(
+    conversation: ConversationState,
+    request: ApprovalRequest,
+  ): Promise<boolean> {
+    conversation.transcript.setToolStatus(request.toolCallId, "awaiting-approval");
     const { promise, resolve } = Promise.withResolvers<boolean>();
-    this.approvals.set(request.requestId, { request, resolve });
+    conversation.approvals.set(request.requestId, { request, resolve });
+    if (conversation === this.open) emit({ type: "approval_requested", request });
+    this.emitActivity();
     return promise;
   }
 
+  /** The conversation that waits on a request; the person answers the ones in the window. */
+  private waitingOn(requestId: string, kind: "approvals" | "questions"): Conversation | undefined {
+    return this.conversations().find((conversation) => conversation[kind].has(requestId));
+  }
+
   private resolveApproval(requestId: string, approved: boolean): void {
-    const entry = this.approvals.get(requestId);
-    if (!entry) return;
-    this.approvals.delete(requestId);
-    this.transcript.setToolStatus(entry.request.toolCallId, approved ? "running" : "denied");
-    emit({ type: "approval_resolved", requestId });
+    const conversation = this.waitingOn(requestId, "approvals");
+    const entry = conversation?.approvals.get(requestId);
+    if (!conversation || !entry) return;
+    conversation.approvals.delete(requestId);
+    conversation.transcript.setToolStatus(
+      entry.request.toolCallId,
+      approved ? "running" : "denied",
+    );
+    if (conversation === this.open) emit({ type: "approval_resolved", requestId });
+    this.emitActivity();
     entry.resolve(approved);
   }
 
-  private denyAllApprovals(): void {
-    for (const requestId of [...this.approvals.keys()]) this.resolveApproval(requestId, false);
+  private denyAllApprovals(conversation: ConversationState | null = this.open): void {
+    for (const requestId of [...(conversation?.approvals.keys() ?? [])])
+      this.resolveApproval(requestId, false);
   }
 
   // -------------------------------------------------------------------------------------------
   // Questions (ask_user)
   // -------------------------------------------------------------------------------------------
 
-  /** Shows the questions in the open conversation; resolves with the answers, or null if skipped. */
+  /**
+   * Puts the questions to the person; shown when `conversation` is open. Resolves with the
+   * answers, or null if skipped.
+   */
   private requestQuestion(
+    conversation: ConversationState,
     call: { toolCallId: string; questions: Question[] },
     signal?: AbortSignal,
   ): Promise<QuestionAnswer[] | null> {
     if (signal?.aborted) return Promise.resolve(null);
     const request: QuestionRequest = { requestId: randomUUID(), ...call };
-    this.transcript.setToolStatus(request.toolCallId, "awaiting-answer");
-    emit({ type: "question_requested", request });
+    conversation.transcript.setToolStatus(request.toolCallId, "awaiting-answer");
     const { promise, resolve } = Promise.withResolvers<QuestionAnswer[] | null>();
     const onAbort = () => this.resolveQuestion(request.requestId, null);
     signal?.addEventListener("abort", onAbort, { once: true });
-    this.questions.set(request.requestId, {
+    conversation.questions.set(request.requestId, {
       request,
       resolve: (answers) => {
         signal?.removeEventListener("abort", onAbort);
         resolve(answers);
       },
     });
+    if (conversation === this.open) emit({ type: "question_requested", request });
+    this.emitActivity();
     return promise;
   }
 
@@ -1672,18 +1887,21 @@ export class AgentHost {
    * the card stays open); `null` skips them.
    */
   private resolveQuestion(requestId: string, answers: QuestionAnswer[] | null): void {
-    const entry = this.questions.get(requestId);
-    if (!entry) return;
+    const conversation = this.waitingOn(requestId, "questions");
+    const entry = conversation?.questions.get(requestId);
+    if (!conversation || !entry) return;
     const checked = answers === null ? null : checkAnswers(entry.request.questions, answers);
-    this.questions.delete(requestId);
+    conversation.questions.delete(requestId);
     // A skipped question is final, as a denied approval: the error the tool ends with must not replace it.
-    this.transcript.setToolStatus(entry.request.toolCallId, checked ? "running" : "denied");
-    emit({ type: "question_resolved", requestId });
+    conversation.transcript.setToolStatus(entry.request.toolCallId, checked ? "running" : "denied");
+    if (conversation === this.open) emit({ type: "question_resolved", requestId });
+    this.emitActivity();
     entry.resolve(checked);
   }
 
-  private skipAllQuestions(): void {
-    for (const requestId of [...this.questions.keys()]) this.resolveQuestion(requestId, null);
+  private skipAllQuestions(conversation: ConversationState | null = this.open): void {
+    for (const requestId of [...(conversation?.questions.keys() ?? [])])
+      this.resolveQuestion(requestId, null);
   }
 
   // -------------------------------------------------------------------------------------------
@@ -1716,10 +1934,10 @@ export class AgentHost {
         } else {
           // A reload loads the extensions again, which registers the MCP servers anew.
           if (changes.reload) await session.reload();
-          else if (changes.mcp) this.requireServices().mcpServers.sync();
+          else if (changes.mcp) this.mcpServers.sync();
           if (this.session !== session) return;
           if (changes.reload || changes.tools) this.applyActiveTools(session);
-          if (changes.reload || changes.mcp) this.watchMcp(session);
+          if (changes.reload || changes.mcp) this.watchMcp(this.requireOpen());
         }
         if (changes.model) await this.ensureModel(current);
         if (changes.agentModel) await this.useAgentModel(current);
@@ -1760,11 +1978,14 @@ export class AgentHost {
     }
     await this.startSession(manager, model);
     const next = this.requireSession();
-    this.transcript.load(branchEntries(next.sessionManager));
+    this.requireOpen().transcript.load(branchEntries(next.sessionManager));
     return next;
   }
 
-  private applyActiveTools(session: AgentSession, scope: SessionScope = this.liveScope()): void {
+  private applyActiveTools(
+    session: AgentSession,
+    scope: SessionScope = this.liveScope(this.requireOpen()),
+  ): void {
     const current = session.getActiveToolNames();
     const agent = scope.agent();
     const allActive = activeToolsFor(current, this.requireServices().settings.get(), agent.tools);
@@ -1824,11 +2045,12 @@ export class AgentHost {
   }
 
   /** Once the MCP servers finish connecting, the renderer refetches their state and tools. */
-  private watchMcp(session: AgentSession): void {
-    if (!this.requireServices().mcpServers.hasServers()) return;
-    this.mcp.status(session).then(
+  private watchMcp(conversation: Conversation): void {
+    if (!conversation.mcpServers.hasServers()) return;
+    this.mcp.status(conversation.session).then(
       () => {
-        if (this.session === session) emit({ type: "settings_changed", scopes: ["mcp", "tools"] });
+        if (this.open === conversation)
+          emit({ type: "settings_changed", scopes: ["mcp", "tools"] });
       },
       () => undefined,
     );
@@ -2623,7 +2845,7 @@ export class AgentHost {
     };
     if (this.session?.sessionFile === file) {
       this.session.sessionManager.appendMessage(assistantMessage);
-      this.transcript.load(branchEntries(this.session.sessionManager));
+      this.requireOpen().transcript.load(branchEntries(this.session.sessionManager));
       emit({ type: "snapshot", snapshot: this.snapshot() });
     } else {
       let activeChat: ChatSession | undefined;
@@ -2934,7 +3156,10 @@ export class AgentHost {
     if (existing) {
       if (existing.agentId === channel.agentId && existing.workspaceId === channel.workspaceId) {
         // Edits to the agent's tools apply from the next turn, as in the window.
-        this.applyActiveTools(existing.session, this.chatScope(existing, chatKey));
+        this.applyActiveTools(
+          existing.session,
+          this.chatScope(existing, chatKey, existing.mcpServers),
+        );
         return existing;
       }
       this.closeChat(chatKey);
@@ -2953,7 +3178,7 @@ export class AgentHost {
       workspaceId: string;
     },
     chatKey: string,
-    mcpServers: McpRegistrations = this.requireServices().mcpServers,
+    mcpServers: McpRegistrations,
   ): SessionScope {
     const { settings } = this.requireServices();
     const agent = () => findAgent(settings.get().agents, chat.agentId);
@@ -3265,7 +3490,7 @@ export class AgentHost {
 
   /** MCP commands reach only the servers the open conversation's agent connects to. */
   private requireUsedServer(name: string): void {
-    if (!this.requireServices().mcpServers.uses(name))
+    if (!this.mcpServers.uses(name))
       throw new Error(
         t("agents.notUsingServer", { agent: this.currentAgent().name, server: name }),
       );

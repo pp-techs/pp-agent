@@ -9,7 +9,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@workspace/ui/components/empty";
-import { MessageScrollerProvider } from "@workspace/ui/components/message-scroller";
 import {
   SidebarInset,
   SidebarProvider,
@@ -148,13 +147,13 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
             </div>
           </>
         ) : (
-          <MessageScrollerProvider autoScroll>
+          <>
             <Header bridge={bridge} />
             <div className="min-h-0 flex-1">
               <ChatBody bridge={bridge} />
             </div>
             <PromptComposer bridge={bridge} disabled={!ready} />
-          </MessageScrollerProvider>
+          </>
         )}
         {page === "chat" && dragDepth > 0 && ready && (
           <div className="pointer-events-none absolute inset-2 z-50 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-primary/40 bg-background/80 text-sm font-medium">

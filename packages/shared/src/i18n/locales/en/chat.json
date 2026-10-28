@@ -99,6 +99,8 @@
       "exportHtml": "Web page (.html)",
       "renameTitle": "Rename chat",
       "name": "Chat name",
+      "answering": "Answering",
+      "waiting": "Waiting for you",
       "deleteTitle": "Delete this chat?",
       "deleteDescription": "“{{title}}” will be removed from your history. Files it saved stay in your workspace."
     },

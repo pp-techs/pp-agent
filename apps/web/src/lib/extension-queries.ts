@@ -181,6 +181,13 @@ export const skillsQuery = (bridge: DesktopBridge) =>
     queryFn: () => bridge.agent.command({ type: "list_skills" }),
   });
 
+/** Skills in the workspace folder's `.agents/skills`; keyed by folder so each workspace has its own. */
+export const workspaceSkillsQuery = (bridge: DesktopBridge, workspaceDir: string | null) =>
+  queryOptions({
+    queryKey: [...queryKeys.skills, "workspace", workspaceDir] as const,
+    queryFn: () => bridge.agent.command({ type: "list_workspace_skills" }),
+  });
+
 export const skillQuery = (bridge: DesktopBridge, name: string) =>
   queryOptions({
     queryKey: queryKeys.skill(name),

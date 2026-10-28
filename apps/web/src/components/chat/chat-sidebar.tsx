@@ -62,6 +62,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { Spinner } from "@workspace/ui/components/spinner";
 import { UpdateNotice } from "@/components/chat/update-notice";
 import { Logo } from "@/components/logo";
 import { ConfirmModal } from "@/components/modals/confirm-modal";
@@ -88,6 +89,8 @@ const SEARCH_DEBOUNCE_MS = 250;
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
+/** How often the ages beside the chats are worked out again. */
+const CLOCK_TICK_MS = 30 * 1000;
 
 /** "now", "5m", "3h", "2d", "4w", then the date: compact enough to sit beside a chat title. */
 function relativeTime(modified: number, now = Date.now()) {
@@ -215,6 +218,12 @@ export function ChatSidebar({
   const sessionPath = useChatStore((state) => state.sessionPath);
   const status = useChatStore((state) => state.status);
   const hasMessages = useChatStore((state) => state.messages.length > 0);
+  const activity = useChatStore((state) => state.activity);
+  const [now, setNow] = React.useState(Date.now);
+  React.useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
+    return () => clearInterval(timer);
+  }, []);
   const currentWorkspaceId = useChatStore((state) => state.workspace?.id);
   const { newChat, openSession, renameSession, deleteSession, pinSession } =
     useAgentCommands(bridge);
@@ -307,7 +316,17 @@ export function ChatSidebar({
           <span className="min-w-0 flex-1 truncate">{session.title}</span>
         </SidebarMenuButton>
         <span className="pointer-events-none absolute inset-y-0 right-1 flex min-w-5 items-center justify-center text-xs text-muted-foreground tabular-nums group-hover/menu-item:invisible group-focus-within/menu-item:invisible">
-          {relativeTime(session.modified)}
+          {activity.waiting.includes(session.path) ? (
+            <span
+              role="status"
+              aria-label={t("sidebar.session.waiting")}
+              className="size-2 rounded-full bg-primary"
+            />
+          ) : activity.running.includes(session.path) ? (
+            <Spinner className="size-3.5" label={t("sidebar.session.answering")} />
+          ) : (
+            relativeTime(session.modified, now)
+          )}
         </span>
         <DropdownMenu>
           <DropdownMenuTrigger

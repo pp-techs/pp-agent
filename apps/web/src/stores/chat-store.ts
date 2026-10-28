@@ -8,6 +8,7 @@ import type {
   ChatMessage,
   QuestionRequest,
   ModelSummary,
+  SessionActivity,
   WorkspaceSummary,
 } from "@workspace/shared";
 import { create } from "zustand";
@@ -21,6 +22,11 @@ interface ChatState {
    */
   pending: ChatMessage | null;
   setPending: (message: ChatMessage | null) => void;
+  /**
+   * For a sent message, the id of the optimistic copy it replaced, by message id. The thread keeps
+   * the row under that key, so the scroller sees one row where the copy was, not a new one.
+   */
+  echoKeys: Record<string, string>;
   /** Pending approvals keyed by request id. */
   approvals: Record<string, ApprovalRequest>;
   /** Pending questions of `ask_user` keyed by request id. */
@@ -38,6 +44,8 @@ interface ChatState {
   sessionPath: string | null;
   /** Context window usage of the open conversation. */
   context: ContextUsage | null;
+  /** Conversations that are answering, including those the person has moved away from. */
+  activity: SessionActivity;
   apply: (event: AgentEvent) => void;
 }
 
@@ -46,6 +54,7 @@ export const useChatStore = create<ChatState>()((set) => ({
   messages: [],
   pending: null,
   setPending: (message) => set({ pending: message }),
+  echoKeys: {},
   approvals: {},
   questions: {},
   model: null,
@@ -55,6 +64,7 @@ export const useChatStore = create<ChatState>()((set) => ({
   workspaceDir: null,
   context: null,
   sessionPath: null,
+  activity: { running: [], waiting: [] },
 
   apply: (event) =>
     set((state): Partial<ChatState> => {
@@ -67,6 +77,7 @@ export const useChatStore = create<ChatState>()((set) => ({
             status: snapshot.status,
             messages: snapshot.messages,
             pending: null,
+            echoKeys: snapshot.sessionPath === state.sessionPath ? state.echoKeys : {},
             approvals: Object.fromEntries(
               snapshot.approvals.map((request) => [request.requestId, request]),
             ),
@@ -80,11 +91,20 @@ export const useChatStore = create<ChatState>()((set) => ({
             workspaceDir: snapshot.workspaceDir,
             sessionPath: snapshot.sessionPath,
             context: snapshot.context,
+            activity: snapshot.activity,
           };
         }
         case "message": {
           // The conversation's copy of the message just sent: drop the optimistic one with it.
-          const echo = event.message.role === "user" ? { pending: null } : {};
+          const echo =
+            event.message.role === "user"
+              ? {
+                  pending: null,
+                  ...(state.pending
+                    ? { echoKeys: { ...state.echoKeys, [event.message.id]: state.pending.id } }
+                    : {}),
+                }
+              : {};
           const index = state.messages.findLastIndex((message) => message.id === event.message.id);
           if (index === -1) return { messages: [...state.messages, event.message], ...echo };
           const messages = state.messages.slice();
@@ -109,6 +129,8 @@ export const useChatStore = create<ChatState>()((set) => ({
         }
         case "context":
           return { context: event.context };
+        case "activity":
+          return { activity: event.activity };
         case "sessions_changed":
         case "settings_changed":
         case "auth_prompt":

@@ -99,6 +99,8 @@
       "exportHtml": "Trang web (.html)",
       "renameTitle": "Đổi tên cuộc trò chuyện",
       "name": "Tên cuộc trò chuyện",
+      "answering": "Đang trả lời",
+      "waiting": "Đang chờ bạn",
       "deleteTitle": "Xóa cuộc trò chuyện này?",
       "deleteDescription": "“{{title}}” sẽ bị xóa khỏi lịch sử của bạn. Các tệp nó đã lưu vẫn nằm trong không gian làm việc của bạn."
     },

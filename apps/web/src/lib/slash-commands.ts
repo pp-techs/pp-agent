@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import { skillsQuery } from "@/lib/extension-queries";
+import { skillsQuery, workspaceSkillsQuery } from "@/lib/extension-queries";
 import { agentsQuery, useAgentCommands } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
 import { useComposerStore } from "@/stores/composer-store";
@@ -21,7 +21,7 @@ export function slashText(item: SlashItem): string {
 
 /**
  * App commands and the skills the open conversation's agent may use (enabled in Settings › Skills
- * and allowed by the agent). Commands run in the app; skills are expanded by the agent when sent.
+ * or found in the workspace's .agents/skills, and allowed by the agent). Commands run in the app; skills are expanded by the agent when sent.
  */
 export function useSlashItems(bridge: DesktopBridge): {
   commands: SlashItem[];
@@ -29,7 +29,9 @@ export function useSlashItems(bridge: DesktopBridge): {
 } {
   const running = useChatStore((state) => state.status === "running");
   const agentId = useChatStore((state) => state.agent?.id ?? DEFAULT_AGENT_ID);
+  const workspaceDir = useChatStore((state) => state.workspaceDir);
   const skills = useQuery(skillsQuery(bridge));
+  const workspaceSkills = useQuery(workspaceSkillsQuery(bridge, workspaceDir));
   const agents = useQuery(agentsQuery(bridge));
   const { newChat, compact } = useAgentCommands(bridge);
   const { t } = useTranslation("chat");
@@ -66,7 +68,12 @@ export function useSlashItems(bridge: DesktopBridge): {
 
   const available = React.useMemo<SlashItem[]>(() => {
     const allowed = agents.data?.find((agent) => agent.id === agentId)?.skills ?? null;
-    return (skills.data ?? [])
+    // The workspace's own skill wins over an installed one of the same name, as in the agent.
+    const own = workspaceSkills.data ?? [];
+    const installed = (skills.data ?? []).filter(
+      (skill) => !own.some((other) => other.name === skill.name),
+    );
+    return [...own, ...installed]
       .filter((skill) => skill.enabled && (allowed === null || allowed.includes(skill.name)))
       .map((skill) => ({
         kind: "skill",
@@ -74,7 +81,7 @@ export function useSlashItems(bridge: DesktopBridge): {
         label: skill.name,
         description: skill.description,
       }));
-  }, [skills.data, agents.data, agentId]);
+  }, [skills.data, workspaceSkills.data, agents.data, agentId]);
 
   return { commands, skills: available };
 }
