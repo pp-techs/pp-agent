@@ -149,7 +149,7 @@ function TaskRow({
           <PencilIcon />
         </Button>
         <Button
-          variant="ghost"
+          variant="destructive"
           size="icon-sm"
           aria-label={t("scheduledTasks.deleteLabel")}
           disabled={busy}

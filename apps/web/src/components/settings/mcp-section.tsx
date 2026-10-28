@@ -214,7 +214,11 @@ function ServerRow({
                   <LogInIcon />
                   {t("mcp.row.signIn")}
                 </DropdownMenuItem>
-                <DropdownMenuItem disabled={busy} onClick={() => void onSignOut()}>
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={busy}
+                  onClick={() => void onSignOut()}
+                >
                   <LogOutIcon />
                   {t("mcp.row.signOut")}
                 </DropdownMenuItem>

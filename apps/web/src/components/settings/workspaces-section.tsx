@@ -74,7 +74,7 @@ function WorkspaceRow({
         </Button>
         {!isDefault && (
           <Button
-            variant="ghost"
+            variant="destructive"
             size="icon-sm"
             aria-label={t("workspacesSection.deleteLabel", { name: workspace.name })}
             disabled={remove.isPending}

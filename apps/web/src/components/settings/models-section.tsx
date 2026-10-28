@@ -162,7 +162,7 @@ function ProviderRow({
               {t("providerRow.changeKey")}
             </Button>
             <Button
-              variant="outline"
+              variant="destructive"
               size="sm"
               disabled={disconnecting}
               onClick={() => void onDisconnect()}
@@ -703,7 +703,7 @@ function GatewayRow({
           {t("common:actions.edit")}
         </Button>
         <Button
-          variant="ghost"
+          variant="destructive"
           size="icon-sm"
           aria-label={t("gatewayRow.delete", { name: gateway.name })}
           disabled={deleting}

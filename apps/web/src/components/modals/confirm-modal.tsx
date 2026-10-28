@@ -35,7 +35,9 @@ function ConfirmDialog({
           <Button variant="outline" onClick={() => onResolve(false)}>
             {t("actions.cancel")}
           </Button>
-          <Button onClick={() => onResolve(true)}>{confirmLabel}</Button>
+          <Button variant="destructive" onClick={() => onResolve(true)}>
+            {confirmLabel}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

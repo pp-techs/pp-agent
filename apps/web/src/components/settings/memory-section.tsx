@@ -208,7 +208,7 @@ function NoteRow({
           <PencilIcon />
         </Button>
         <Button
-          variant="ghost"
+          variant="destructive"
           size="icon-sm"
           aria-label={t("memory.deleteLabel")}
           disabled={remove.isPending}
@@ -266,7 +266,7 @@ export function MemorySection({ bridge }: { bridge: DesktopBridge }) {
     <div className="flex flex-col gap-6">
       <SectionHeading title={t("memory.title")} description={t("memory.description")}>
         {entries.length > 0 && (
-          <Button variant="outline" disabled={clear.isPending} onClick={() => void onClear()}>
+          <Button variant="destructive" disabled={clear.isPending} onClick={() => void onClear()}>
             {clear.isPending ? <Spinner /> : <Trash2Icon data-icon="inline-start" />}
             {t("memory.clearAll")}
           </Button>
