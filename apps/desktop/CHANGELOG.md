@@ -1,5 +1,11 @@
 # @workspace/desktop
 
+## 0.11.1
+
+### Patch Changes
+
+- c09c64b: Updates the bundled OfficeCLI to 1.0.159 (Word, Excel and PowerPoint support).
+
 ## 0.11.0
 
 ### Minor Changes
