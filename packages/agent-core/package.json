@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "catalog:",
+    "@officecli/officecli": "catalog:",
     "@workspace/shared": "workspace:*",
     "fflate": "catalog:",
     "i18next": "catalog:",

@@ -1,10 +1,13 @@
 /**
- * Runs the bundled OfficeCLI binary. It never goes through a shell, starts with a scrubbed
+ * Runs the OfficeCLI binary: the one the app bundles or the one the `@officecli/officecli` package
+ * provides. It never goes through a shell, starts with a scrubbed
  * environment, and is told not to update itself, install anything, or keep a background process
  * (`OFFICECLI_NO_AUTO_RESIDENT`), so there is nothing to clean up when a run ends or is stopped.
  */
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { platformKey, resourcePath, scrubbedEnv } from "../resources.ts";
 
@@ -13,9 +16,33 @@ const TIMEOUT_MS = 120_000;
 /** Bytes kept from the command's output; the rest is dropped and the command stopped. */
 const MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
 
-export function officeCliBinary(): string | null {
+/** What the app uses from the `@officecli/officecli` npm package. */
+interface OfficeCliPackage {
+  /** Where the installer keeps the binary it downloaded (`vendor/` inside the package). */
+  binaryPath(): string;
+  /** Downloads the binary for this platform when it is missing. */
+  ensureBinary(): Promise<string>;
+}
+
+/**
+ * The OfficeCLI binary: the one the desktop build bundles (signed with the app on macOS) first,
+ * then the one the `@officecli/officecli` npm package installs — missing at install time is
+ * downloaded on first use. A path inside an asar archive cannot be executed, so those are refused.
+ */
+export async function officeCliBinary(): Promise<string | null> {
   const name = process.platform === "win32" ? "officecli.exe" : "officecli";
-  return resourcePath("officecli", platformKey(), name);
+  const bundled = resourcePath("officecli", platformKey(), name);
+  if (bundled) return bundled;
+  let pkg: OfficeCliPackage;
+  try {
+    pkg = createRequire(import.meta.url)("@officecli/officecli") as OfficeCliPackage;
+  } catch {
+    return null;
+  }
+  const binary = pkg.binaryPath();
+  if (binary.includes(".asar")) return null;
+  if (existsSync(binary)) return binary;
+  return pkg.ensureBinary().catch(() => null);
 }
 
 export interface OfficeCliOptions {
@@ -60,10 +87,10 @@ export function officeCliEnv(homeDir: string, base: NodeJS.ProcessEnv): NodeJS.P
 }
 
 export async function runOfficeCli(options: OfficeCliOptions): Promise<OfficeCliResult> {
-  const binary = options.binary ?? officeCliBinary();
+  const binary = options.binary ?? (await officeCliBinary());
   if (!binary)
     throw new Error(
-      `OfficeCLI is not included in this build (no binary for ${platformKey()}). Run \`node scripts/fetch-officecli.ts\` when developing.`,
+      `OfficeCLI is not available (no binary for ${platformKey()}). Run \`vp install\` in the project: the @officecli/officecli package provides it.`,
     );
   await mkdir(options.homeDir, { recursive: true });
   const env = officeCliEnv(options.homeDir, options.baseEnv ?? process.env);

@@ -54,9 +54,6 @@ jobs:
       - name: Build
         run: vp run -r build
 
-      - name: Fetch OfficeCLI
-        run: node scripts/fetch-officecli.ts linux-x64
-
       # Linux installers (AppImage + deb): proves the electron-builder config on every change,
       # including target-specific checks an unpacked build skips.
       - name: Package (Linux installers)
@@ -85,9 +82,6 @@ jobs:
 
       - name: Build
         run: vp run -r build
-
-      - name: Fetch OfficeCLI
-        run: node scripts/fetch-officecli.ts win-x64
 
       - name: Package (Windows installer)
         shell: bash

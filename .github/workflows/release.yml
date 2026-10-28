@@ -177,25 +177,22 @@ jobs:
             platform: --mac
             arch: --arm64
             artifact: installers-mac-arm64
-            officecli: mac-arm64
           - name: macOS x64
-            runner: macos-latest
+            # An Intel runner: @officecli/officecli installs the binary of the machine it runs on.
+            runner: macos-15-intel
             platform: --mac
             arch: --x64
             artifact: installers-mac-x64
-            officecli: mac-x64
           - name: Windows x64
             runner: windows-latest
             platform: --win
             arch: --x64
             artifact: installers-win-x64
-            officecli: win-x64
           - name: Linux x64
             runner: ubuntu-latest
             platform: --linux
             arch: --x64
             artifact: installers-linux-x64
-            officecli: linux-x64
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -210,14 +207,6 @@ jobs:
 
       - name: Build renderer and desktop bundles
         run: vp run -r build
-
-      # Pinned version and SHA-256 per asset; the binary is bundled by electron-builder
-      # (extraResources) and signed with the app on macOS.
-      - name: Fetch OfficeCLI
-        shell: bash
-        env:
-          OFFICECLI_PLATFORM: ${{ matrix.officecli }}
-        run: node scripts/fetch-officecli.ts "$OFFICECLI_PLATFORM"
 
       - name: Make installers
         shell: bash

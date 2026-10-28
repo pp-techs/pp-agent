@@ -38,5 +38,5 @@ release
 # Local scratch files (may hold credentials)
 tmp/
 
-# OfficeCLI binaries fetched by scripts/fetch-officecli.ts
+# Leftover OfficeCLI binaries from the old fetch script (the build gets it from @officecli/officecli)
 apps/desktop/resources/officecli/

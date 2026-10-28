@@ -8,6 +8,8 @@ directories:
 files:
   - dist/**
   - package.json
+  # The binary ships once, via extraResources below; inside the asar archive it could not run.
+  - "!**/node_modules/@officecli/officecli/vendor/**"
 extraResources:
   # Built by `vp run @workspace/web#build`; loaded by the main process in packaged builds.
   - from: ../web/dist
@@ -19,10 +21,10 @@ extraResources:
   # Window icon (PNG) for Windows and Linux, read by the main process in packaged builds.
   - from: resources/icons
     to: icons
-  # OfficeCLI (Apache-2.0) for office_read/office_edit: the binary of the platform being packaged,
-  # fetched by scripts/fetch-officecli.ts (pinned and checksummed), its license texts, and the
-  # skills written for it. The binary is signed with the app on macOS.
-  - from: resources/officecli/${os}-${arch}
+  # OfficeCLI (Apache-2.0) for office_read/office_edit: the binary the @officecli/officecli package
+  # installed for this platform (checksum-verified at install), its license texts, and the skills
+  # written for it. The binary is signed with the app on macOS.
+  - from: ../agent-core/node_modules/@officecli/officecli/vendor
     to: officecli/${os}-${arch}
   - from: resources/licenses/officecli
     to: licenses/officecli

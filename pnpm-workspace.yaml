@@ -10,6 +10,7 @@ minimumReleaseAge: 0
 
 allowBuilds:
   "@google/genai": false
+  "@officecli/officecli": true
   electron-winstaller: false
   protobufjs: false
   tesseract.js: false
@@ -23,6 +24,7 @@ catalog:
   "@earendil-works/pi-coding-agent": ^1.4.0
   "@fontsource-variable/geist": ^5.3.0
   "@fontsource-variable/geist-mono": ^5.3.0
+  "@officecli/officecli": ^1.0.159
   "@shadcn/react": ^0.3.1
   "@tailwindcss/vite": ^4.3.3
   "@tanstack/react-query": ^5.104.5

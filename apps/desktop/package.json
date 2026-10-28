@@ -14,9 +14,8 @@
   "scripts": {
     "build": "vp pack",
     "start": "electron .",
-    "fetch:officecli": "node ../../scripts/fetch-officecli.ts",
-    "dist": "node ../../scripts/fetch-officecli.ts && vp pack && electron-builder --config electron-builder.yml --publish never",
-    "dist:dir": "node ../../scripts/fetch-officecli.ts && vp pack && electron-builder --config electron-builder.yml --dir --publish never"
+    "dist": "vp pack && electron-builder --config electron-builder.yml --publish never",
+    "dist:dir": "vp pack && electron-builder --config electron-builder.yml --dir --publish never"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "catalog:",
