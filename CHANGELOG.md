@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.13.0] — 2026-10-28
+
+Buttons that destroy something now look the part: delete, clear, disconnect, sign out and the confirm button of every confirmation dialog use the red destructive style everywhere — notes, scheduled tasks, workspaces, gateways and providers, MCP servers, and the chat sidebar. Non-destructive actions (edit, reconnect, sign in, add) keep their neutral style.
+
+Several chats can answer at the same time. Opening another chat or starting a new one no longer stops the answer in progress: it carries on in the background, shows a spinner (or a dot when it waits for your approval or an answer) in the sidebar, and is there in full when you open it again.
+
+Sending a message in a long chat keeps the view on it instead of jumping back to the top, and opening another chat starts at its end.
+
+A workspace now uses the skills in its folder's `.agents/skills`: the agent can read and follow them in that workspace's chats, and they appear in the `/` menu next to your installed skills.
+
 ## [0.12.0] — 2026-10-28
 
 Settings › Tools groups the tools by what they are for — files and folders, documents, web, memory, shell commands, tasks and conversations — each behind a compact header with its tool count, and one group per MCP server after them. The shell commands switch and the web search services summary sit inside their groups instead of separate blocks at the top, and the warning about commands running without asking is shown once, next to the switch. Click a header to open its tools; searching opens the groups that match.

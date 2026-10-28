@@ -1,5 +1,17 @@
 # @workspace/desktop
 
+## 0.13.0
+
+### Minor Changes
+
+- ba90ff2: A workspace now uses the skills in its folder's `.agents/skills`: the agent can read and follow them in that workspace's chats, and they appear in the `/` menu next to your installed skills.
+
+### Patch Changes
+
+- 0320be1: Buttons that destroy something now look the part: delete, clear, disconnect, sign out and the confirm button of every confirmation dialog use the red destructive style everywhere — notes, scheduled tasks, workspaces, gateways and providers, MCP servers, and the chat sidebar. Non-destructive actions (edit, reconnect, sign in, add) keep their neutral style.
+- ba90ff2: Several chats can answer at the same time. Opening another chat or starting a new one no longer stops the answer in progress: it carries on in the background, shows a spinner (or a dot when it waits for your approval or an answer) in the sidebar, and is there in full when you open it again.
+- ba90ff2: Sending a message in a long chat keeps the view on it instead of jumping back to the top, and opening another chat starts at its end.
+
 ## 0.12.0
 
 ### Minor Changes
