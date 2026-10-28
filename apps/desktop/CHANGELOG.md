@@ -1,5 +1,12 @@
 # @workspace/desktop
 
+## 0.12.0
+
+### Minor Changes
+
+- 9fd284c: Settings › Tools groups the tools by what they are for — files and folders, documents, web, memory, shell commands, tasks and conversations — each behind a compact header with its tool count, and one group per MCP server after them. The shell commands switch and the web search services summary sit inside their groups instead of separate blocks at the top, and the warning about commands running without asking is shown once, next to the switch. Click a header to open its tools; searching opens the groups that match.
+- 9fd284c: The sidebar header now leads with the PP Agent logo and name, with a search button and the sidebar toggle on the right; the New workspace button is gone (workspaces are managed in Settings › Workspaces). Search opens as a command dialog over your chats — type to search, arrow keys and Enter to open a chat — instead of the search box that used to sit in the sidebar. The sidebar minimizes to an icon rail — logo and icons stay, chat lists fold away — where hovering the logo reveals the button that expands it again; the top bar keeps its sidebar toggle for mobile only. Search fields in the pickers no longer touch the entries below them.
+
 ## 0.11.1
 
 ### Patch Changes
