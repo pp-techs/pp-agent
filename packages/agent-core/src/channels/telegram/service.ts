@@ -1,3 +1,5 @@
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
 import {
   DEFAULT_WORKSPACE_ID,
   type ChannelState,
@@ -11,6 +13,7 @@ import type { ChannelGateway, TelegramControl } from "../types.ts";
 import { HttpTelegramApi, TelegramApiError, type TelegramApi } from "./api.ts";
 import { TelegramChannel, type TelegramOwner } from "./channel.ts";
 import { PairingGuard } from "./pairing.ts";
+import { readChannelsSettings } from "./settings.ts";
 import type { TelegramTranslate } from "./text.ts";
 
 export interface TelegramServiceDeps {
@@ -113,7 +116,12 @@ export class TelegramService implements TelegramControl {
           workspaceId: draft.workspaces.some((workspace) => workspace.id === input.workspaceId)
             ? input.workspaceId
             : DEFAULT_WORKSPACE_ID,
-          ...(input.chats !== undefined ? { chats: input.chats } : {}),
+          ...(input.chats !== undefined
+            ? {
+                chats:
+                  readChannelsSettings({ telegram: { chats: input.chats } }).telegram.chats ?? {},
+              }
+            : {}),
         };
       });
       await this.reconcile();
@@ -139,6 +147,8 @@ export class TelegramService implements TelegramControl {
     return this.serial(async () => {
       await this.stopChannel();
       if ((await this.readToken()) !== null) await this.deps.credentials.delete(TELEGRAM_TOKEN_KEY);
+      if (this.deps.dataDir)
+        await rm(join(this.deps.dataDir, "telegram-offset.json"), { force: true });
       this.deps.settings.update((draft) => {
         const telegram = draft.channels.telegram;
         telegram.enabled = false;

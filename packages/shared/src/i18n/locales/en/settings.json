@@ -264,7 +264,7 @@
         "tooLong": "Use at most {{max}} characters.",
         "interval": "Use {{minMinutes}} to {{maxMinutes}} minutes, or 1 to {{maxHours}} hours.",
         "time": "Enter a time.",
-        "at": "Enter a valid local date and time.",
+        "at": "Enter a valid local date and time. Times repeated when the timezone clock moves back are ambiguous; choose a time outside the repeated interval.",
         "days": "Choose at least one day."
       },
       "create": "Create task",

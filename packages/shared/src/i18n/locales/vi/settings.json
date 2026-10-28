@@ -259,7 +259,7 @@
         "tooLong": "Tối đa {{max}} ký tự.",
         "interval": "Dùng từ {{minMinutes}} đến {{maxMinutes}} phút, hoặc từ 1 đến {{maxHours}} giờ.",
         "time": "Nhập giờ.",
-        "at": "Nhập ngày và giờ hợp lệ trên máy tính này.",
+        "at": "Nhập ngày và giờ hợp lệ trên máy tính này. Giờ lặp lại khi đồng hồ múi giờ lùi lại có thể chỉ hai thời điểm khác nhau; hãy chọn giờ ngoài khoảng bị lặp.",
         "days": "Chọn ít nhất một ngày."
       },
       "create": "Tạo tác vụ",

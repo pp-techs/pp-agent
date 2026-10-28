@@ -127,6 +127,60 @@ describe("schedule_manage persisted targets", () => {
   );
 });
 
+describe("schedule_manage persisted delivery", () => {
+  test.each(["", "   ", "peer", "peer:", "peer:   ", "peer:\t\n", "sesssion", "session ", "other"])(
+    "invalid delivery %j fails creation and leaves the entire existing task unchanged on update",
+    async (deliver) => {
+      const { execute, reload } = await setup();
+      await expect(execute({ ...create, deliver })).rejects.toThrow("`deliver`");
+      expect(reload()).toEqual([]);
+      await execute({
+        ...create,
+        target: "session:retained-session",
+        deliver: "peer:telegram:-100456",
+      });
+      const before = reload();
+      await expect(
+        execute({
+          action: "update",
+          name: create.name,
+          prompt: "This must not replace the stored prompt.",
+          target: "new",
+          deliver,
+          deleteAfterRun: true,
+        }),
+      ).rejects.toThrow("`deliver`");
+      expect(reload()).toEqual(before);
+    },
+  );
+
+  test.each([
+    { deliver: undefined, expected: undefined },
+    { deliver: "session", expected: undefined },
+    { deliver: "none", expected: { to: "none" } },
+    { deliver: "home", expected: { to: "peer", peer: "home" } },
+    { deliver: "peer:telegram:-100456", expected: { to: "peer", peer: "telegram:-100456" } },
+  ])(
+    "supported delivery $deliver retains its destination after reload",
+    async ({ deliver, expected }) => {
+      const { execute, reload } = await setup();
+      await execute({
+        ...create,
+        target: "session:retained-session",
+        ...(deliver !== undefined ? { deliver } : {}),
+      });
+      expect(reload()[0]?.delivery).toEqual(expected);
+      expect(reload()[0]?.target).toEqual({ mode: "session", sessionId: "retained-session" });
+      if (deliver !== undefined) {
+        await execute({ action: "update", name: create.name, deliver: "peer:other-destination" });
+        await execute({ action: "update", name: create.name, deliver });
+        expect(reload()[0]?.delivery).toEqual(expected);
+        expect(reload()[0]?.target).toEqual({ mode: "session", sessionId: "retained-session" });
+      }
+    },
+  );
+});
+
 describe("persisted task run delivery", () => {
   test.each(["sent", "session", "none", "failed: Telegram unavailable"])(
     "restores delivery outcome %j alongside the rest of the run",

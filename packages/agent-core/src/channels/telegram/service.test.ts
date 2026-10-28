@@ -1,8 +1,8 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Credential } from "@earendil-works/pi-ai";
-import { DEFAULT_AGENT_ID, DEFAULT_WORKSPACE_ID } from "@workspace/shared";
+import { DEFAULT_AGENT_ID, DEFAULT_WORKSPACE_ID, type SaveTelegramInput } from "@workspace/shared";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vite-plus/test";
 import { SettingsStore } from "../../settings-store.ts";
 import { TELEGRAM_TOKEN_KEY } from "../names.ts";
@@ -158,6 +158,61 @@ describe("save", () => {
     await service.save({ ...input, token: undefined, enabled: true });
     expect(api.webhookDeleted).toBe(webhookCalls + 1);
   });
+
+  test.each(
+    [null, "8", {}, ["8"], [0, -1, 1.5, 9007199254740992]].map((allowedUsers) => ({
+      allowedUsers,
+    })),
+  )(
+    "normalizes a malformed runtime allowlist before the next message: $allowedUsers",
+    async ({ allowedUsers }) => {
+      const { service, settings, api, gateway } = setup();
+      settings.update((draft) => {
+        draft.channels.telegram.ownerId = 7;
+      });
+      await service.save({
+        ...input,
+        chats: { "8": { access: "members", allowedUsers: [8] } },
+      });
+      api.push(textUpdate(1, "initial permitted message", 8));
+      await vi.waitFor(() => expect(gateway.turns).toHaveLength(1));
+      const chats = {
+        "8": { access: "members", allowedUsers },
+        invalid: { access: "members" },
+      } as unknown as SaveTelegramInput["chats"];
+      const saved = await service.save({ ...input, token: undefined, chats });
+      expect(saved.chats).toEqual({
+        "8": { access: "owner", ...(Array.isArray(allowedUsers) ? { allowedUsers: [] } : {}) },
+      });
+      expect(settings.get().channels.telegram.chats).toEqual(saved.chats);
+      api.push(textUpdate(2, "must be ignored", 8));
+      api.push(textUpdate(3, "/help"));
+      await vi.waitFor(() => expect(api.offsets.at(-1)).toBe(4));
+      expect(gateway.turns).toHaveLength(1);
+      expect(api.plainTexts).toContain("channels.telegram.help");
+    },
+  );
+
+  test("normalizes chat IDs and preserves valid restricted runtime members", async () => {
+    const { service, settings, api, gateway } = setup();
+    settings.update((draft) => {
+      draft.channels.telegram.ownerId = 7;
+    });
+    await service.save({
+      ...input,
+      chats: {
+        "8": { access: "members", allowedUsers: [8, "9", -1] },
+        "0": { access: "members" },
+        "9007199254740992": { access: "members" },
+      } as unknown as SaveTelegramInput["chats"],
+    });
+    expect(settings.get().channels.telegram.chats).toEqual({
+      "8": { access: "members", allowedUsers: [8] },
+    });
+    api.push(textUpdate(1, "permitted", 8));
+    await vi.waitFor(() => expect(gateway.turns).toHaveLength(1));
+    expect(gateway.turns[0]?.chatKey).toBe("telegram:8");
+  });
 });
 
 describe("start and stop", () => {
@@ -178,6 +233,44 @@ describe("start and stop", () => {
     await service.stop();
     await service.stop();
     expect((await service.status()).state).toBe("off");
+  });
+});
+
+describe("poll offset identity", () => {
+  test("reuses offsets across restart and token rotation only for the same bot", async () => {
+    const { service, api } = setup();
+    await service.save(input);
+    api.push(textUpdate(41, "/help"));
+    await vi.waitFor(() => expect(api.offsets.at(-1)).toBe(42));
+    const path = join(directory, "telegram-offset.json");
+    expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ botId: "123", offset: 42 });
+    await service.stop();
+    await service.start();
+    expect(api.offsets.at(-1)).toBe(42);
+    const beforeRotation = api.offsets.length;
+    await service.save({ ...input, token: "123:rotated-secret" });
+    expect(api.offsets.length).toBeGreaterThan(beforeRotation);
+    expect(api.offsets.at(-1)).toBe(42);
+    const beforeReplacement = api.offsets.length;
+    await service.save({ ...input, token: "456:different-bot" });
+    expect(api.offsets.length).toBeGreaterThan(beforeReplacement);
+    expect(api.offsets.at(-1)).toBe(0);
+  });
+
+  test.each([
+    { label: "legacy", saved: { offset: 42 } },
+    { label: "different bot", saved: { botId: "456", offset: 42 } },
+    { label: "numeric identity", saved: { botId: 123, offset: 42 } },
+    { label: "negative offset", saved: { botId: "123", offset: -1 } },
+    { label: "fractional offset", saved: { botId: "123", offset: 1.5 } },
+    { label: "unsafe offset", saved: { botId: "123", offset: 9007199254740992 } },
+    { label: "string offset", saved: { botId: "123", offset: "42" } },
+    { label: "null", saved: null },
+  ])("ignores $label saved offsets", async ({ saved }) => {
+    writeFileSync(join(directory, "telegram-offset.json"), JSON.stringify(saved));
+    const { service, api } = setup();
+    await service.save(input);
+    expect(api.offsets).toEqual([0]);
   });
 });
 
@@ -285,6 +378,8 @@ describe("forget", () => {
     const { pairingCode } = await service.startPairing();
     api.push(textUpdate(1, `/pair ${pairingCode}`, 42));
     await vi.waitFor(() => expect(settings.get().channels.telegram.ownerId).toBe(42));
+    const offsetPath = join(directory, "telegram-offset.json");
+    expect(existsSync(offsetPath)).toBe(true);
 
     const status = await service.forget();
     expect(vault.entries.size).toBe(0);
@@ -297,6 +392,7 @@ describe("forget", () => {
       state: "off",
     });
     expect(settings.get().channels.telegram.agentId).toBe(DEFAULT_AGENT_ID);
+    expect(existsSync(offsetPath)).toBe(false);
   });
 
   test("works when nothing was saved", async () => {

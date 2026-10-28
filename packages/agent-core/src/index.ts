@@ -452,14 +452,14 @@ export class AgentHost {
     },
     steerTurn: async (chatKey, input) => {
       const chat = this.chats.get(chatKey);
-      if (!chat?.turn) return false;
+      if (!chat?.turn || !chat.session.isStreaming) return false;
       const message = await buildPrompt(
         input.text || ATTACHMENTS_ONLY_PROMPT,
         input.attachments,
         chat.session.sessionManager.getCwd(),
       );
-      // Attachment preparation can outlive the running turn.
-      if (!chat.turn || this.chats.get(chatKey) !== chat) return false;
+      // Attachment preparation can outlive the running turn or streaming state.
+      if (!chat.turn || this.chats.get(chatKey) !== chat || !chat.session.isStreaming) return false;
       // Steering joins the running turn at the next tool boundary.
       await chat.session.prompt(message.text, {
         images: message.images,
@@ -2418,6 +2418,7 @@ export class AgentHost {
   private async runScheduledTask(task: ScheduledTask): Promise<void> {
     const services = this.requireServices();
     const startedAt = Date.now();
+    const target = task.target ?? { mode: "new" as const };
     let denied = 0;
     let timedOut = false;
     let session: AgentSession | null = null;
@@ -2430,9 +2431,45 @@ export class AgentHost {
       const { settings, paths, mcpConfig } = services;
       const agent = findAgent(settings.get().agents, task.agentId);
       const workspace = findWorkspace(settings.get().workspaces, task.workspaceId);
-      const manager = SessionManager.create(this.workspaceFor(workspace), paths.sessionDir);
-      manager.appendCustomEntry(AGENT_ENTRY_TYPE, { agentId: agent.id });
-      manager.appendSessionInfo(runTitle(task.name, new Date(startedAt), currentLanguage()));
+      const cwd = this.workspaceFor(workspace);
+      let manager: SessionManager;
+      if (target.mode === "session") {
+        const namedFile =
+          this.findSessionPath(target.sessionId) ??
+          (task.lastRun?.sessionPath && existsSync(task.lastRun.sessionPath)
+            ? task.lastRun.sessionPath
+            : null);
+        if (namedFile && existsSync(namedFile)) {
+          manager = SessionManager.open(namedFile, paths.sessionDir, cwd);
+        } else {
+          manager = SessionManager.create(cwd, paths.sessionDir);
+          manager.appendCustomEntry(AGENT_ENTRY_TYPE, { agentId: agent.id });
+          manager.appendSessionInfo(task.name);
+        }
+      } else {
+        manager = SessionManager.create(cwd, paths.sessionDir);
+        manager.appendCustomEntry(AGENT_ENTRY_TYPE, { agentId: agent.id });
+        manager.appendSessionInfo(runTitle(task.name, new Date(startedAt), currentLanguage()));
+      }
+      let originContext = "";
+      if (target.mode === "current") {
+        const originFile =
+          this.findSessionPath(target.sessionId) ??
+          (task.origin ? this.findSessionPath(task.origin) : null);
+        if (originFile && existsSync(originFile)) {
+          const originManager = SessionManager.open(originFile, paths.sessionDir);
+          const branch = originManager.getBranch();
+          const lines = historyLines(
+            branch.flatMap((e) => (e.type === "message" ? [e.message] : [])),
+          );
+          const tail = lines.slice(-10);
+          if (tail.length > 0) {
+            originContext = tail
+              .map((line) => `${line.role === "user" ? "User" : "Assistant"}: ${line.text}`)
+              .join("\n\n");
+          }
+        }
+      }
       mcpServers = new McpRegistrations(
         mcpConfig,
         (name) => agent.mcpServers === null || agent.mcpServers.includes(name),
@@ -2449,7 +2486,12 @@ export class AgentHost {
           },
           SCHEDULED_DENIED_REASON,
         ),
-        systemNote: { section: "scheduled_task", text: scheduledTaskNote(task.name) },
+        systemNote: {
+          section: "scheduled_task",
+          text: originContext
+            ? `${scheduledTaskNote(task.name)}\n\nRecent context from the originating conversation:\n${originContext}`
+            : scheduledTaskNote(task.name),
+        },
         surface: { kind: "task", label: `the scheduled run "${task.name}"` },
         visibility: "self",
       });
@@ -2497,7 +2539,17 @@ export class AgentHost {
           runDelivery = `failed: ${(error as Error).message}`;
         }
       } else if (delivery.to === "session") {
-        runDelivery = "session";
+        if (target.mode === "current") {
+          const committed = await this.commitToOriginSession(
+            target.sessionId,
+            task.origin,
+            task.name,
+            finalText,
+          );
+          runDelivery = committed ? "session" : "failed: origin session not found";
+        } else {
+          runDelivery = "session";
+        }
       } else {
         runDelivery = "none";
       }
@@ -2523,6 +2575,73 @@ export class AgentHost {
     }
     emit({ type: "settings_changed", scopes: ["scheduledTasks"] });
     emit({ type: "sessions_changed" });
+  }
+  private findSessionPath(idOrPath: string): string | null {
+    const { paths } = this.requireServices();
+    if (existsSync(idOrPath)) return idOrPath;
+    const ref = sessionRef(idOrPath);
+    const candidate = join(paths.sessionDir, `${ref}.jsonl`);
+    if (existsSync(candidate)) return candidate;
+    return null;
+  }
+
+  private async commitToOriginSession(
+    sessionId: string,
+    origin: string | undefined,
+    taskName: string,
+    text: string,
+  ): Promise<boolean> {
+    const { paths, chatSessions } = this.requireServices();
+    let file = this.findSessionPath(sessionId) ?? (origin ? this.findSessionPath(origin) : null);
+    if (!file && origin) {
+      for (const [key, current] of chatSessions.entries()) {
+        if (key === origin || current.includes(origin)) {
+          file = current;
+          break;
+        }
+      }
+    }
+    if (!file || !existsSync(file)) return false;
+
+    const messageText = `⏰ ${taskName}\n\n${text}`;
+    const assistantMessage: AssistantMessage = {
+      role: "assistant",
+      content: [{ type: "text", text: messageText }],
+      api: "openai-codex",
+      provider: "scheduled",
+      model: "scheduled-task",
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: "stop",
+      timestamp: Date.now(),
+    };
+    if (this.session?.sessionFile === file) {
+      this.session.sessionManager.appendMessage(assistantMessage);
+      this.transcript.load(branchEntries(this.session.sessionManager));
+      emit({ type: "snapshot", snapshot: this.snapshot() });
+    } else {
+      let activeChat: ChatSession | undefined;
+      for (const chat of this.chats.values()) {
+        if (chat.session.sessionFile === file) {
+          activeChat = chat;
+          break;
+        }
+      }
+      if (activeChat) {
+        activeChat.session.sessionManager.appendMessage(assistantMessage);
+      } else {
+        const manager = SessionManager.open(file, paths.sessionDir);
+        manager.appendMessage(assistantMessage);
+      }
+    }
+    emit({ type: "sessions_changed" });
+    return true;
   }
 
   /**

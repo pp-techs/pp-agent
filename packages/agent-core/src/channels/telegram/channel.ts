@@ -139,11 +139,12 @@ function parseCommand(text: string): { name: string; argument: string } | null {
 }
 
 /**
- * The Telegram bot: long polls for updates and turns each private message from the paired person
- * into an agent turn through the gateway. Nobody else gets an answer.
+ * The Telegram bot: long polls for private messages and explicitly configured groups, checks
+ * each sender's access, and runs accepted messages through the gateway.
  */
 export class TelegramChannel implements ChannelAdapter {
   private readonly api: TelegramApi;
+  private readonly botId: string | null;
   private readonly approvals: TelegramApprovals;
   private readonly questions: TelegramQuestions;
   private readonly chats = new Map<number, ChatQueue>();
@@ -156,6 +157,7 @@ export class TelegramChannel implements ChannelAdapter {
 
   constructor(private readonly deps: TelegramChannelDeps) {
     this.api = deps.api ?? new HttpTelegramApi(deps.token);
+    this.botId = /^([1-9]\d*):/.exec(deps.token)?.[1] ?? null;
     this.approvals = new TelegramApprovals(this.api, deps.t);
     this.questions = new TelegramQuestions(this.api, deps.t);
   }
@@ -327,10 +329,10 @@ export class TelegramChannel implements ChannelAdapter {
 
   /** Saves the poll offset so a restart resumes from here. */
   private saveOffset(offset: number): void {
-    if (!this.deps.dataDir) return;
+    if (!this.deps.dataDir || !this.botId) return;
     try {
       const file = join(this.deps.dataDir, "telegram-offset.json");
-      writeFileSync(file, JSON.stringify({ offset }), { mode: 0o600 });
+      writeFileSync(file, JSON.stringify({ botId: this.botId, offset }), { mode: 0o600 });
     } catch {
       // Best effort: a lost offset means re-processing, which is safe (at-least-once).
     }
@@ -338,11 +340,19 @@ export class TelegramChannel implements ChannelAdapter {
 
   /** Reads the saved poll offset; 0 when none. */
   private loadOffset(): number {
-    if (!this.deps.dataDir) return 0;
+    if (!this.deps.dataDir || !this.botId) return 0;
     try {
       const file = join(this.deps.dataDir, "telegram-offset.json");
-      const raw = JSON.parse(readFileSync(file, "utf8")) as { offset?: unknown };
-      return typeof raw.offset === "number" && raw.offset > 0 ? raw.offset : 0;
+      const raw = JSON.parse(readFileSync(file, "utf8")) as {
+        botId?: unknown;
+        offset?: unknown;
+      };
+      return raw.botId === this.botId &&
+        typeof raw.offset === "number" &&
+        Number.isSafeInteger(raw.offset) &&
+        raw.offset >= 0
+        ? raw.offset
+        : 0;
     } catch {
       return 0;
     }
@@ -356,6 +366,8 @@ export class TelegramChannel implements ChannelAdapter {
 
   private async handleUpdate(update: TelegramUpdate): Promise<void> {
     if (update.callback_query) {
+      const chatId = update.callback_query.message?.chat.id;
+      if (chatId !== undefined && chatId < 0 && !this.isConfiguredChat(chatId)) return;
       const ownerId = this.deps.owner()?.id ?? null;
       if (
         !(await this.approvals.handleCallback(update.callback_query, ownerId)) &&
@@ -365,13 +377,24 @@ export class TelegramChannel implements ChannelAdapter {
       return;
     }
     const message = update.message;
-    if (!message?.from || message.from.is_bot || message.chat.type !== "private") return;
+    if (!message?.from || message.from.is_bot) return;
+    if (message.chat.type !== "private") {
+      if (
+        (message.chat.type !== "group" && message.chat.type !== "supergroup") ||
+        !this.isConfiguredChat(message.chat.id)
+      )
+        return;
+    }
     await this.handleMessage(message, message.from);
   }
 
   // -------------------------------------------------------------------------------------------
   // Messages
   // -------------------------------------------------------------------------------------------
+
+  private isConfiguredChat(chatId: number): boolean {
+    return Object.hasOwn(this.deps.settings?.get().channels.telegram.chats ?? {}, String(chatId));
+  }
 
   /** Per-chat settings from Settings › Channels; empty when none are configured. */
   private chatSettings(chatId: number): TelegramChatSettings {
@@ -393,6 +416,7 @@ export class TelegramChannel implements ChannelAdapter {
     const chatId = message.chat.id;
     const owner = this.deps.owner();
     const command = parseCommand((message.text ?? "").trim());
+    if (command?.name === "pair" && message.chat.type !== "private") return;
 
     if (!this.isAllowed(chatId, from)) {
       // Strangers get no answer. A pairing the owner opened is the one exception: its code may
@@ -421,9 +445,12 @@ export class TelegramChannel implements ChannelAdapter {
       case "workspace":
       case "model":
       case "thinking":
+        // Members may converse, but only the owner may inspect or change bindings.
+        if (from.id !== owner?.id) return;
         await this.choose(chatId, command.name, command.argument);
         return;
       case "effort":
+        if (from.id !== owner?.id) return;
         await this.choose(chatId, "thinking", command.argument);
         return;
       case "new":
@@ -446,7 +473,13 @@ export class TelegramChannel implements ChannelAdapter {
     // The turn in progress waits for this text (the person tapped "Other"); queued, it would wait
     // behind the very turn that waits for it.
     const plain = !message.photo && !message.document && !message.voice && !message.audio;
-    if (plain && message.text && this.questions.handleText(chatId, message.text)) return;
+    if (
+      from.id === owner?.id &&
+      plain &&
+      message.text &&
+      this.questions.handleText(chatId, message.text)
+    )
+      return;
 
     // Busy mode: steer joins the running turn, interrupt stops it, queue waits.
     const busyMode = this.chatSettings(chatId).busyMode ?? "queue";

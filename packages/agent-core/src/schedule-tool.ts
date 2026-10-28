@@ -165,7 +165,7 @@ export function createScheduleTool(host: ScheduleHost) {
         agentId: "",
         workspaceId: "",
         ...(params.target !== undefined ? { target: parseTarget(params.target, host) } : {}),
-        ...(params.deliver ? { delivery: parseDelivery(params.deliver) } : {}),
+        ...(params.deliver !== undefined ? { delivery: parseDelivery(params.deliver) } : {}),
         ...(params.deleteAfterRun ? { deleteAfterRun: true } : {}),
         ...(params.silentIfEmpty ? { silentIfEmpty: true } : {}),
       };
@@ -193,8 +193,12 @@ function parseTarget(value: string, host: ScheduleHost): SaveScheduledTaskInput[
 
 /** `"session"` / `"home"` / `"peer:<key>"` / `"none"` → ScheduleDelivery. */
 function parseDelivery(value: string): SaveScheduledTaskInput["delivery"] {
+  if (value === "session") return { to: "session" };
   if (value === "none") return { to: "none" };
   if (value === "home") return { to: "peer", peer: "home" };
-  if (value.startsWith("peer:")) return { to: "peer", peer: value.slice(5) };
-  return { to: "session" };
+  if (value.startsWith("peer:") && value.slice(5).trim())
+    return { to: "peer", peer: value.slice(5) };
+  throw new Error(
+    '`deliver` must be "session", "none", "home", or "peer:<key>" with a nonempty key.',
+  );
 }

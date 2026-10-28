@@ -298,10 +298,17 @@ export function describeToolCall(
       deliver ? `deliver: ${deliver}` : "",
       typeof input.deleteAfterRun === "boolean" ? `deleteAfterRun: ${input.deleteAfterRun}` : "",
       typeof input.silentIfEmpty === "boolean" ? `silentIfEmpty: ${input.silentIfEmpty}` : "",
-    ];
+    ].filter(Boolean);
+    // Reserve room for every control; a long field must never crowd later disclosures out.
+    const controlDetail = controls
+      .map((value) => (value.length > 100 ? `${value.slice(0, 99)}…` : value))
+      .join("\n");
+    const promptBudget = PREVIEW_LIMIT - controlDetail.length - (controlDetail ? 1 : 0);
+    const promptDetail =
+      prompt.length > promptBudget ? `${prompt.slice(0, promptBudget - 1)}…` : prompt;
     return {
       title: t("approvals.scheduleTask", { name }),
-      detail: preview([...controls, prompt].filter(Boolean).join("\n")),
+      detail: [controlDetail, promptDetail].filter(Boolean).join("\n"),
     };
   }
   if (toolName === ASK_TOOL) return { title: t("approvals.askUser"), detail: "" };

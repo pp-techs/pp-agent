@@ -34,8 +34,11 @@ sequenceDiagram
   A-->>UI: settings_changed(scheduledTasks), sessions_changed
 ```
 
-- The run uses its **own** Pi session (`runScheduledTask`), apart from the conversation the person has open; that one is neither read nor disturbed. Runs go **one at a time**, in the order they became due; a task that is queued or running is never queued again (Run now then fails with a message).
-- The conversation is titled `⏰ <task name> – <date>` and is listed in the sidebar like any other. `lastRun.sessionPath` points to it.
+- **Execution target.**
+  - `new` (default): The run uses its own fresh Pi session (`runScheduledTask`), titled `⏰ <task name> – <date>`, apart from the conversation open in the window; `lastRun.sessionPath` points to it.
+  - `session:<id>`: Consecutive runs execute in the named conversation, building on prior runs and sharing conversation history across runs.
+  - `current`: The run executes in an isolated run session so it cannot race an in-progress user turn, but receives the tail of the originating conversation as context. When `delivery: "session"` is chosen, its completed result is committed back into that originating conversation (or its peer chat fallback) as a labeled message.
+- Runs go **one at a time**, in the order they became due; a task that is queued or running is never queued again (Run now then fails with a message).
 - A run that takes longer than 30 minutes is stopped and recorded as failed. Deleting a task stops its run in progress; the conversation stays.
 - The scheduler (`scheduler.ts`) is pure local-time arithmetic: a day's slot is built from calendar fields, never by adding 24 hours, so daylight-saving changes do not shift "daily at 09:00". One timer points at the earliest next run and wakes at least once a minute, so a computer that slept does not run tasks much too late. It is re-armed after every run and on every settings change.
 - **Catch-up.** Tasks run while the **daemon** runs, not only while the window is open. With **Run in background** on (Settings › Background, see [Background and Telegram](use-case-background-and-telegram.md)) the daemon starts when the person signs in and keeps running with the app closed. Without it, the app starts the daemon and stops it when the app quits, so nothing runs after that; the tray option keeps the app, and so the daemon, running with the window closed (see the shell settings). When the daemon starts, or the computer wakes, a slot missed within the last 24 hours runs **once**; older slots are skipped and counting restarts from now. A task created, switched on, or whose schedule changed is counted from that moment, so it never "catches up" for the time before.

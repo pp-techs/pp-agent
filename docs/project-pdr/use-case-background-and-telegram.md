@@ -1,6 +1,6 @@
 # Use case: background service and Telegram
 
-**Goal.** The agent keeps working when the window is closed, and the person can talk to it from the Telegram app on their phone. Two independent pages: **Settings › Background** (**Run in background**, a login service for the daemon) and **Settings › Channels › Telegram** (a bot that answers one paired person). Nothing is exposed to the network: the daemon is reachable only through its local socket, and the bot reaches Telegram by polling outward.
+**Goal.** The agent keeps working when the window is closed, and the person can talk to it from the Telegram app on their phone. Two independent pages: **Settings › Background** (**Run in background**, a login service for the daemon) and **Settings › Channels › Telegram** (a bot for the paired owner and explicitly allowed chat members). Nothing is exposed to the network: the daemon is reachable only through its local socket, and the bot reaches Telegram by polling outward.
 
 Paths are under `packages/agent-core/src/` (channels in `channels/telegram/`) unless noted; the daemon is `apps/daemon/src/`.
 
@@ -32,23 +32,25 @@ The same daemon can run in a terminal with no Electron at all: `node dist/daemon
 1. In Telegram, create a bot with @BotFather (`/newbot`) and copy its token.
 2. In **Settings › Channels › Telegram**, paste the token, choose the **agent** and **workspace** the bot uses, switch **Answer messages on Telegram** on and **Save**. The daemon asks Telegram who the token belongs to; a refused token is reported and nothing is saved. The token goes to the vault (`channel:telegram`), never to `settings.json`.
 3. Press **Pair** (available once the bot is online). The window shows an 8-character code (alphabet without 0/O/1/I/L) valid for 10 minutes; send `/pair CODE` to the bot in a private chat. The sender becomes the **owner**; their id and name are saved in `settings.json › channels.telegram`.
-4. **Forget Telegram** removes the token and the owner, turns the bot off and stops its polling.
+4. **Forget Telegram** removes the token, owner and saved poll offset, turns the bot off and stops its polling.
 
 The state shown is `Off`, `Connecting…`, `Online` or `Problem` (with the reason: token refused, another process polling the same bot, Telegram unreachable). Unreachable Telegram is retried with back-off up to 30 s; a refused token is not retried until the token is saved again.
 
 ### Who is answered
 
-- Only **private chats** with the paired owner. Everyone else gets no answer; the one exception is `/pair`, which counts only while a pairing window is open and ends with a successful pairing. Pairing again from another account replaces the owner.
+- **Private chats** answer the paired owner by default. A private chat explicitly configured with **members** access also answers its allowed users; an absent or empty allowlist permits any user in that chat, while a nonempty list permits only those user IDs. The owner always retains access.
+- **Groups and supergroups** are answered only when their exact chat ID is configured in Settings › Channels › Telegram, even when the sender is the owner. The same owner/members access and allowlist rules apply. Telegram must deliver the update to the bot; its group privacy mode may limit which messages it receives.
+- Pairing works **only in private chats**. `/pair` can claim an open pairing code, replacing the previous owner; a group message never consumes the code. Before pairing, private `/start` explains how to begin.
 - The code is single-use. Five wrong guesses from anyone lock pairing for 15 minutes; pressing **Pair** in the window opens a new code and lifts the lock.
-- Group chats, channels and other bots are ignored.
+- Unconfigured groups, channel posts and other bots are ignored. Malformed restrictive allowlists normalize to owner-only access before saved settings become active, rather than becoming unrestricted members access.
 
 ### What the bot does
 
 - **Messages.** Text, photos, documents and voice or audio. Photos reach the agent as images; documents (up to 20 MiB) are copied into the workspace's `attachments/` for the turn; voice is transcribed with the voice input provider from Settings and used as the message text. Anything else without text gets a short "not supported" reply.
-- **One conversation per chat**, saved like any other (`💬 Telegram – <date>`) and listed in the window's history. Up to 5 messages queue behind a running turn; more get a "busy" reply.
+- **One conversation per chat**, saved like any other (`💬 Telegram – <date>`) and listed in the window's history. Up to 5 messages queue behind a running turn; more get a "busy" reply. A chat's busy mode can instead steer an active text turn (queueing if steering is not accepted) or interrupt it.
 - **Replies** appear as one message that is edited while the agent writes, with a status line for tool use, and are split when they exceed Telegram's length limit.
-- **Command menu.** When the bot connects it publishes `/new`, `/agent`, `/workspace`, `/model`, `/thinking`, `/stop` and `/help` with Telegram (`setMyCommands`), so they appear when the person types `/`. The descriptions use the app's language at that moment and are refreshed on the next connect (save, restart); a failure is only logged.
-- **Commands.** `/new` starts a fresh conversation, `/stop` stops the running turn and clears the queue, `/help`, `/start`.
+- **Command menu.** When the bot connects it publishes `/new`, `/agent`, `/workspace`, `/model`, `/thinking`, `/stop`, `/sessions`, `/resume` and `/help` with Telegram (`setMyCommands`), so they appear when the person types `/`. The descriptions use the app's language at that moment and are refreshed on the next connect (save, restart); a failure is only logged.
+- **Commands.** Allowed chat participants can use `/new` to start a fresh conversation, `/stop` to stop the running turn and clear the queue, `/sessions` to list the chat's history, `/resume N` to switch to a listed session, `/help` and `/start`. These controls affect the shared chat conversation. Only the paired owner can use `/agent`, `/workspace`, `/model`, `/thinking` or `/effort`, with or without arguments, or tap their binding-choice buttons; member attempts are ignored.
 - **Workspace and agent per chat.** In Settings › Channels › Telegram, step 3 picks the workspace and, optionally, pins an agent; left on **The workspace's agent** it uses the agent set in that workspace, else the built-in agent. In the chat, `/workspace` and `/agent` show buttons (the current one is ticked) or take a name, a number, or a unique part of a name (`/agent finance`). An agent picked in the chat beats the pinned one, which beats the workspace's. A new agent continues the conversation and moves it to the agent's own model, as in the window; a new workspace starts a new conversation, because a conversation belongs to its workspace. The pick is kept across `/new` and restarts; a pick whose agent or workspace was deleted is ignored.
 - **Model and thinking level per conversation.** `/model` lists the models that can run now (buttons, at most 30 shown; type part of a name to find another), `/thinking` (alias `/effort`) lists the levels the conversation's current model offers. Both change only this conversation, not the app's default model or the last-picked level in the window, and are refused while the chat is answering, as the window's pickers are. A new conversation (`/new`) starts again from the agent's model and the default level.
 - **Questions.** When the agent needs a decision it asks with buttons, one question per message: tap an option (several, then **Done**, for multi-choice), **Other** and then type your answer in the next message, or **Skip**. Only the owner's taps and text count; no answer within 10 minutes skips the question, and `/stop` or `/new` skips it too.
@@ -81,6 +83,7 @@ There is no standalone `telegram_notify` tool. The agent uses **Scheduled tasks*
 
 - Commands: `get_telegram_status`, `save_telegram { config }`, `start_telegram_pairing`, `forget_telegram` (scope `background`).
 - `settings.json › channels.telegram`: `enabled`, `agentId`, `workspaceId`, `ownerId`, `ownerName`, and per-ID `chats` (label, agent/workspace override, access, allowlist, busy mode). Settings › Channels › Telegram lets a person add a private/group ID even before any chat is configured. These controls survive restart; clearing a label or allowlist replaces the old value. The token is vault entry `channel:telegram`. Chat → current/previous session map is `channels.json`; `/new` and workspace changes keep previous sessions available to `/sessions` and `/resume`. Missing historical files are omitted without exposing local paths. A chat session unused for 30 minutes is released from memory and reopened on the next message.
+- Poll progress is saved in `telegram-offset.json` with the bot's numeric token-prefix identity, never its token secret. Restarting or rotating the secret for the same bot preserves the offset; a different bot, a legacy offset without an identity, or an invalid offset starts from 0.
 - Downloads from Telegram are temporary files under the OS temp folder (`pp-agent-telegram/`) and are deleted after the turn.
 
 ## Privacy
