@@ -176,7 +176,8 @@
     "remember": "Ghi nhớ một ghi chú",
     "forget": "Quên một ghi chú",
     "editOffice": "Thay đổi {{file}}",
-    "askUser": "Đang hỏi bạn một câu"
+    "askUser": "Đang hỏi bạn một câu",
+    "scheduleTask": "Đặt lịch cho tác vụ “{{name}}”"
   },
   "webSearch": {
     "unknownProvider": "Nhà cung cấp tìm kiếm không xác định.",
@@ -283,6 +284,7 @@
       "pairSuccess": "Đã ghép nối với {{name}}. Bạn có thể trò chuyện với tác nhân ngay bây giờ.",
       "alreadyPaired": "Bot này đã được ghép nối.",
       "newConversation": "Đã bắt đầu cuộc trò chuyện mới.",
+      "noSessions": "Chưa có phiên trò chuyện nào.",
       "busy": "Tôi vẫn đang xử lý các tin nhắn trước. Hãy thử lại sau giây lát.",
       "emptyAnswer": "Tác nhân đã xong nhưng không có câu trả lời.",
       "stopped": "Đã dừng.",
@@ -316,6 +318,9 @@
       "unknownWorkspace": "Không gian làm việc đó không tồn tại.",
       "pairingNeedsToken": "Hãy lưu token bot trước.",
       "pairingNeedsOnline": "Hãy bật kênh Telegram và đợi đến khi kênh trực tuyến.",
+      "notifyNeedsOwner": "Hãy ghép nối Telegram trước: Cài đặt › Kênh chat › Telegram.",
+      "notifyNeedsOnline": "Hãy bật kênh Telegram và đợi đến khi kênh trực tuyến.",
+      "notifyFailed": "Telegram không nhận tin nhắn ({{error}}).",
       "unknownError": "lỗi không rõ",
       "agentPrompt": "Đang trò chuyện với {{name}}. Chọn tác nhân khác:",
       "agentNotFound": "Tôi không tìm thấy tác nhân nào tên “{{query}}”. Hãy chọn một:",
@@ -327,6 +332,8 @@
       "commandAgent": "Chọn tác nhân trả lời",
       "commandWorkspace": "Chọn không gian làm việc",
       "commandStop": "Dừng việc tôi đang làm",
+      "commandSessions": "Xem các cuộc trò chuyện",
+      "commandResume": "Chuyển cuộc trò chuyện",
       "commandHelp": "Hiện trợ giúp",
       "modelPrompt": "Đang dùng {{name}}. Chọn mô hình khác:",
       "modelNotFound": "Tôi không tìm thấy mô hình nào tên “{{query}}”. Hãy chọn một:",

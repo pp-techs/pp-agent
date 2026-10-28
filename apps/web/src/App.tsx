@@ -12,7 +12,7 @@ import {
 import { MessageScrollerProvider } from "@workspace/ui/components/message-scroller";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@workspace/ui/components/sidebar";
 import { Spinner } from "@workspace/ui/components/spinner";
-import { FileUpIcon, PlugIcon } from "lucide-react";
+import { ArrowLeftIcon, FileUpIcon, PlugIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -23,6 +23,7 @@ import { ChatThread } from "@/components/chat/chat-thread";
 import { EmptyChat } from "@/components/chat/empty-chat";
 import { PromptComposer } from "@/components/chat/prompt-composer";
 import { SettingsModal } from "@/components/modals/settings-modal";
+import { ScheduledTasksSection } from "@/components/settings/scheduled-tasks-section";
 import { useAgentConnection } from "@/hooks/use-agent-connection";
 import { bridge } from "@/lib/bridge";
 import { useChatStore } from "@/stores/chat-store";
@@ -87,13 +88,14 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
   React.useEffect(() => connectUpdates(bridge), [bridge]);
   const status = useChatStore((state) => state.status);
   const ready = status === "idle" || status === "running";
+  const [page, setPage] = React.useState<"chat" | "schedules">("chat");
   // Counts nested dragenter/dragleave pairs so the overlay does not flicker over child elements.
   const [dragDepth, setDragDepth] = React.useState(0);
 
   async function onDrop(event: React.DragEvent) {
     event.preventDefault();
     setDragDepth(0);
-    if (!ready) return;
+    if (!ready || page !== "chat") return;
     try {
       useComposerStore
         .getState()
@@ -105,25 +107,44 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
 
   return (
     <SidebarProvider>
-      <ChatSidebar bridge={bridge} />
+      <ChatSidebar bridge={bridge} page={page} onNavigate={setPage} />
       <SidebarInset
         // Inset leaves an 0.5rem gutter around the chat panel on desktop; keep it within the window.
         className="relative h-svh overflow-hidden md:h-[calc(100svh-(--spacing(4)))] md:ring-1 md:ring-foreground/5 dark:md:ring-foreground/10"
         onDragEnter={(event) => {
-          if (event.dataTransfer.types.includes("Files")) setDragDepth((depth) => depth + 1);
+          if (page === "chat" && event.dataTransfer.types.includes("Files")) {
+            setDragDepth((depth) => depth + 1);
+          }
         }}
         onDragLeave={() => setDragDepth((depth) => Math.max(0, depth - 1))}
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => void onDrop(event)}
       >
-        <MessageScrollerProvider autoScroll>
-          <Header bridge={bridge} />
-          <div className="min-h-0 flex-1">
-            <ChatBody bridge={bridge} />
-          </div>
-          <PromptComposer bridge={bridge} disabled={!ready} />
-        </MessageScrollerProvider>
-        {dragDepth > 0 && ready && (
+        {page === "schedules" ? (
+          <>
+            <header className="flex h-12 shrink-0 items-center gap-1 px-3">
+              <SidebarTrigger />
+              <Button variant="ghost" size="sm" onClick={() => setPage("chat")}>
+                <ArrowLeftIcon />
+                {t("app.backToChat")}
+              </Button>
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="mx-auto w-full max-w-5xl p-4 md:p-6">
+                <ScheduledTasksSection bridge={bridge} />
+              </div>
+            </div>
+          </>
+        ) : (
+          <MessageScrollerProvider autoScroll>
+            <Header bridge={bridge} />
+            <div className="min-h-0 flex-1">
+              <ChatBody bridge={bridge} />
+            </div>
+            <PromptComposer bridge={bridge} disabled={!ready} />
+          </MessageScrollerProvider>
+        )}
+        {page === "chat" && dragDepth > 0 && ready && (
           <div className="pointer-events-none absolute inset-2 z-50 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-primary/40 bg-background/80 text-sm font-medium">
             <FileUpIcon className="size-6" />
             {t("app.dropFiles")}

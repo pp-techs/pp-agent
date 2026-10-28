@@ -96,6 +96,8 @@ const BUILT_IN_TOOL_NAMES = [
   "todo_write",
   "delegate_task",
   "ask_user",
+  "sessions",
+  "schedule_manage",
   "office_read",
   "office_edit",
   "codemode",

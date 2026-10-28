@@ -186,6 +186,11 @@ export class FakeGateway implements ChannelGateway {
     this.picked.push({ chatKey, kind, id });
   }
 
+  async listChatSessions(): Promise<Array<{ id: string; title: string; isCurrent: boolean }>> {
+    return [];
+  }
+  async resumeChatSession(): Promise<void> {}
+  async steerTurn(): Promise<void> {}
   async transcribe(data: Uint8Array, mimeType: string): Promise<string> {
     this.transcripts.push({ size: data.byteLength, mimeType });
     if (this.transcript instanceof Error) throw this.transcript;

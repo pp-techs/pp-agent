@@ -50,11 +50,15 @@ const DEFAULT_TIME = "09:00";
 
 /** Starting values of the schedule fields for a task being edited (or a new one: every day at 09:00). */
 function scheduleFields(schedule: TaskSchedule | undefined) {
+  const kind: Kind = schedule && schedule.kind !== "once" ? schedule.kind : "daily";
   return {
-    kind: schedule?.kind ?? "daily",
+    kind,
     every: schedule?.kind === "interval" ? String(schedule.every) : "1",
     unit: schedule?.kind === "interval" ? schedule.unit : "hours",
-    time: schedule && schedule.kind !== "interval" ? schedule.time : DEFAULT_TIME,
+    time:
+      schedule && schedule.kind !== "interval" && schedule.kind !== "once"
+        ? schedule.time
+        : DEFAULT_TIME,
     days: schedule?.kind === "weekly" ? schedule.days : [1, 2, 3, 4, 5],
   } satisfies { kind: Kind; every: string; unit: Unit; time: string; days: number[] };
 }

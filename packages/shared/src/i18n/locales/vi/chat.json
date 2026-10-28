@@ -67,6 +67,7 @@
     "newWorkspace": "Không gian làm việc mới",
     "workspaceName": "Tên không gian làm việc",
     "workspaces": "Không gian làm việc",
+    "manageWorkspaces": "Quản lý không gian làm việc",
     "settings": "Cài đặt",
     "loadError": "Không thể tải các cuộc trò chuyện của bạn. Hãy mở lại ứng dụng để thử lại.",
     "noChats": "Chưa có cuộc trò chuyện nào",
@@ -103,7 +104,8 @@
       "name": "Tên cuộc trò chuyện",
       "deleteTitle": "Xóa cuộc trò chuyện này?",
       "deleteDescription": "“{{title}}” sẽ bị xóa khỏi lịch sử của bạn. Các tệp nó đã lưu vẫn nằm trong không gian làm việc của bạn."
-    }
+    },
+    "scheduledTasks": "Tác vụ theo lịch"
   },
   "composer": {
     "placeholder": "Hỏi Agent, hoặc gõ / để xem thêm",
@@ -297,6 +299,16 @@
         "active": "Đang hỏi bạn một câu",
         "done": "Đã hỏi bạn một câu",
         "notDone": "Hỏi bạn một câu"
+      },
+      "sessions": {
+        "active": "Đang xem các cuộc trò chuyện",
+        "done": "Đã xem các cuộc trò chuyện",
+        "notDone": "Xem các cuộc trò chuyện"
+      },
+      "scheduleManage": {
+        "active": "Đang quản lý tác vụ theo lịch",
+        "done": "Đã quản lý tác vụ theo lịch",
+        "notDone": "Quản lý tác vụ theo lịch"
       },
       "delegate": {
         "active": "Trợ lý phụ đang tra cứu",

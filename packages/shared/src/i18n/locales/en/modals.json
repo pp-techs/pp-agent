@@ -1,6 +1,7 @@
 {
   "app": {
     "starting": "Starting the agent…",
+    "backToChat": "Back to chat",
     "unconfigured": {
       "title": "Choose a model to start",
       "description": "Connect an AI provider with your API key, or add your team's gateway, in Settings › Models.",

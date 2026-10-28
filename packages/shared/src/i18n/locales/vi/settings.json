@@ -357,11 +357,27 @@
         "replies": {
           "title": "3. Chọn cách trả lời",
           "description": "Chọn nơi làm việc và ai trả lời."
+        },
+        "chats": {
+          "title": "Cài đặt theo cuộc trò chuyện",
+          "description": "Cấu hình quyền truy cập, chế độ khi bận và danh sách cho phép cho từng cuộc trò chuyện."
         }
       },
       "setUp": "Thiết lập",
       "manage": "Quản lý",
-      "agentFollow": "Tác nhân của không gian làm việc"
+      "agentFollow": "Tác nhân của không gian làm việc",
+      "chats": {
+        "empty": "Chưa có cuộc trò chuyện nào. Nhắn tin cho bot để thấy ở đây.",
+        "access": "Ai được nói chuyện",
+        "accessOwner": "Chỉ chủ sở hữu đã ghép",
+        "accessMembers": "Mọi người trong cuộc trò chuyện",
+        "busyMode": "Khi agent đang bận",
+        "busyQueue": "Xếp hàng tin nhắn",
+        "busySteer": "Chèn vào lượt đang chạy",
+        "busyInterrupt": "Ngắt và bắt đầu mới",
+        "allowedUsers": "ID người dùng được phép",
+        "allowedUsersHelp": "Các ID Telegram cách nhau bằng dấu phẩy. Trống = mọi người."
+      }
     }
   }
 }

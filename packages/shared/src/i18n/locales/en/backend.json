@@ -176,7 +176,8 @@
     "remember": "Remember a note",
     "forget": "Forget a note",
     "editOffice": "Change {{file}}",
-    "askUser": "Asking you a question"
+    "askUser": "Asking you a question",
+    "scheduleTask": "Schedule the task “{{name}}”"
   },
   "webSearch": {
     "unknownProvider": "Unknown search provider.",
@@ -283,6 +284,7 @@
       "pairSuccess": "Paired with {{name}}. You can chat with the agent now.",
       "alreadyPaired": "This bot is already paired.",
       "newConversation": "Started a new conversation.",
+      "noSessions": "No saved sessions yet.",
       "busy": "I am still working on earlier messages. Try again in a moment.",
       "emptyAnswer": "The agent finished without an answer.",
       "stopped": "Stopped.",
@@ -316,6 +318,9 @@
       "unknownWorkspace": "That workspace does not exist.",
       "pairingNeedsToken": "Save a bot token first.",
       "pairingNeedsOnline": "Turn the Telegram channel on and wait until it is online.",
+      "notifyNeedsOwner": "Pair Telegram first: Settings › Channels › Telegram.",
+      "notifyNeedsOnline": "Turn the Telegram channel on and wait until it is online.",
+      "notifyFailed": "Telegram did not accept the message ({{error}}).",
       "unknownError": "unknown error",
       "agentPrompt": "Talking to {{name}}. Choose another agent:",
       "agentNotFound": "I could not find an agent called “{{query}}”. Choose one:",
@@ -327,6 +332,8 @@
       "commandAgent": "Choose the agent that answers",
       "commandWorkspace": "Choose the workspace it works in",
       "commandStop": "Stop what I am doing",
+      "commandSessions": "List saved conversations",
+      "commandResume": "Switch to a previous conversation",
       "commandHelp": "Show help",
       "modelPrompt": "Using {{name}}. Choose another model:",
       "modelNotFound": "I could not find a model called “{{query}}”. Choose one:",

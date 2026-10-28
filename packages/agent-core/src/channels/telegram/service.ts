@@ -14,6 +14,8 @@ import { PairingGuard } from "./pairing.ts";
 import type { TelegramTranslate } from "./text.ts";
 
 export interface TelegramServiceDeps {
+  /** Where to persist the poll offset. */
+  dataDir?: string;
   settings: SettingsStore;
   credentials: Pick<VaultCredentialStore, "read" | "modify" | "delete">;
   gateway: ChannelGateway;
@@ -62,6 +64,20 @@ export class TelegramService implements TelegramControl {
     };
   }
 
+  /** Sends `text` to the paired owner's private chat; throws a message for the person when it cannot. */
+  async notify(text: string): Promise<void> {
+    const { t } = this.deps;
+    const owner = this.owner();
+    if (!owner) throw new Error(t("channels.telegram.notifyNeedsOwner"));
+    if (!this.channel || this.state !== "online")
+      throw new Error(t("channels.telegram.notifyNeedsOnline"));
+    try {
+      await this.channel.notify(owner.id, text);
+    } catch (error) {
+      throw new Error(t("channels.telegram.notifyFailed", { error: (error as Error).message }));
+    }
+  }
+
   save(input: SaveTelegramInput): Promise<TelegramStatus> {
     return this.serial(async () => {
       const { settings, credentials, t } = this.deps;
@@ -88,6 +104,7 @@ export class TelegramService implements TelegramControl {
           workspaceId: draft.workspaces.some((workspace) => workspace.id === input.workspaceId)
             ? input.workspaceId
             : DEFAULT_WORKSPACE_ID,
+          ...(input.chats !== undefined ? { chats: input.chats } : {}),
         };
       });
       await this.reconcile();
@@ -167,6 +184,8 @@ export class TelegramService implements TelegramControl {
     await this.stopChannel();
 
     const channel: TelegramChannel = new TelegramChannel({
+      dataDir: this.deps.dataDir,
+      settings: this.deps.settings,
       token,
       api: this.deps.api?.(token),
       gateway: this.deps.gateway,

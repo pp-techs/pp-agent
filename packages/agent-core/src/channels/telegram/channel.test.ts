@@ -88,6 +88,8 @@ describe("start and stop", () => {
       "model",
       "thinking",
       "stop",
+      "sessions",
+      "resume",
       "help",
     ]);
     expect(first.api.commands.every((entry) => entry.description.length > 0)).toBe(true);

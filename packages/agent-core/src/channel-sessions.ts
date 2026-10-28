@@ -27,8 +27,13 @@ export interface ChatChoice {
  * Chat → saved session file (`channels.json` next to settings.json), so a restarted daemon
  * continues each conversation. A chat has a file once its session has been saved; `/new` drops it.
  */
+interface ChatEntry {
+  current: string;
+  history: string[];
+}
+
 export class ChatSessionMap {
-  private chats: Record<string, string>;
+  private chats: Record<string, ChatEntry>;
   private choices: Record<string, ChatChoice>;
 
   constructor(private readonly path: string) {
@@ -41,8 +46,18 @@ export class ChatSessionMap {
       } | null;
       const chats = raw?.chats;
       if (typeof chats === "object" && chats !== null && !Array.isArray(chats))
-        for (const [key, file] of Object.entries(chats))
-          if (typeof file === "string" && file) this.chats[key] = file;
+        for (const [key, value] of Object.entries(chats)) {
+          // Old format: string. New format: { current, history[] }.
+          if (typeof value === "string" && value) this.chats[key] = { current: value, history: [] };
+          else if (typeof value === "object" && value !== null) {
+            const entry = value as Record<string, unknown>;
+            const current = typeof entry.current === "string" ? entry.current : "";
+            const history = Array.isArray(entry.history)
+              ? entry.history.filter((f): f is string => typeof f === "string" && !!f)
+              : [];
+            if (current) this.chats[key] = { current, history };
+          }
+        }
       const choices = raw?.choices;
       if (typeof choices === "object" && choices !== null && !Array.isArray(choices))
         for (const [key, value] of Object.entries(choices)) {
@@ -60,13 +75,40 @@ export class ChatSessionMap {
   }
 
   get(chatKey: string): string | undefined {
-    return this.chats[chatKey];
+    return this.chats[chatKey]?.current;
+  }
+
+  /** Every chat with a saved conversation, as `[chatKey, file]`. */
+  entries(): [string, string][] {
+    return Object.entries(this.chats).map(([key, entry]) => [key, entry.current]);
   }
 
   set(chatKey: string, file: string): void {
-    if (this.chats[chatKey] === file) return;
-    this.chats = { ...this.chats, [chatKey]: file };
+    const entry = this.chats[chatKey];
+    if (entry?.current === file) return;
+    const history = entry ? [entry.current, ...entry.history].slice(0, 20) : [];
+    this.chats = { ...this.chats, [chatKey]: { current: file, history } };
     this.save();
+  }
+
+  /** Previous sessions of a chat, newest first (excluding the current one). */
+  history(chatKey: string): string[] {
+    return this.chats[chatKey]?.history ?? [];
+  }
+
+  /** Switches a chat to a previous session; false when it is not in the history. */
+  resume(chatKey: string, file: string): boolean {
+    const entry = this.chats[chatKey];
+    if (!entry || !entry.history.includes(file)) return false;
+    this.chats = {
+      ...this.chats,
+      [chatKey]: {
+        current: file,
+        history: [entry.current, ...entry.history.filter((f) => f !== file)].slice(0, 20),
+      },
+    };
+    this.save();
+    return true;
   }
 
   /** The agent and workspace the person picked in this chat (unset fields follow Settings). */

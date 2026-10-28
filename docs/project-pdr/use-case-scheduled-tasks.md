@@ -48,9 +48,14 @@ Nobody is at the keyboard during a run, so the approval gate cannot ask. For sch
 - Any tool call that would ask for approval is **denied automatically**, never approved. The model receives a plain reason in the tool result and a note in its system prompt saying the run is unattended, so it can explain what it could not do.
 - The run counts denied calls (`lastRun.deniedTools`); Settings shows "N actions skipped".
 - Tools with policy `off` stay unavailable, as always.
-- `ask_user` is not offered at all: nobody can answer, so the model decides by itself.
+- `ask_user` and `schedule_task` are not offered at all: nobody can answer, and a task cannot create tasks.
+- `telegram_notify` is offered but asks (write tier), so a run can message the person only when its policy is **Allow** in Settings › Tools (see [Background and Telegram](use-case-background-and-telegram.md)).
 
 To let a scheduled task write files or use a business system, set that tool's policy to **Allow** in Settings › Tools (and in the agent's tool list). The editor and the section repeat this rule in an alert.
+
+## Created by the agent (`schedule_task`)
+
+In a conversation (the window or Telegram) the agent can create a task when the person asks for something recurring ("every Friday at 16:00, summarize Reports"). `schedule_task` (`schedule-tool.ts`) takes a name, a prompt and a schedule (`interval` with `every` + `unit`, `daily` with `time`, or `weekly` with `days` + `time`), and goes through the same validation and limits as the editor. It is a write-tier tool, so it asks first and shows the schedule and prompt. The task starts **enabled**, with the agent and workspace of that conversation, and appears in Settings › Scheduled tasks. The tool can only create: editing, disabling and deleting stay in Settings. Switch it off in Settings › Tools or in an agent's tool list.
 
 ## Data and events
 

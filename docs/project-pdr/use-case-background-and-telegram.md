@@ -73,6 +73,10 @@ sequenceDiagram
   D->>H: approved or denied
 ```
 
+### Messages from the agent (`telegram_notify`)
+
+The agent can send a message to the paired owner's private chat with `telegram_notify` (`channels/telegram/tool.ts`), from the window, from a Telegram chat or from a scheduled run, for example "the report is ready". Long text is split like a reply. The tool is write tier: it asks first, and an unattended scheduled run can use it only when its policy is **Allow** in Settings › Tools (and it is ticked in the agent's tool list). It fails with a plain message when no owner is paired or the channel is not online (Settings › Channels › Telegram switched on). The desktop app has no separate "ping" button: messages come from the agent.
+
 ### Commands and data
 
 - Commands: `get_telegram_status`, `save_telegram { config }`, `start_telegram_pairing`, `forget_telegram` (scope `background`).

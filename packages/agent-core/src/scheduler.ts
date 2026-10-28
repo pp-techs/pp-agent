@@ -88,6 +88,12 @@ export function parseSchedule(raw: unknown): ParsedSchedule {
         schedule: { kind: "weekly", days: days.sort((a, b) => a - b), time: value.time as string },
       };
     }
+    case "once": {
+      const at = value.at;
+      if (typeof at !== "number" || !Number.isFinite(at) || at <= 0)
+        return { ok: false, problem: "kind" };
+      return { ok: true, schedule: { kind: "once", at } };
+    }
     default:
       return { ok: false, problem: "kind" };
   }
@@ -122,7 +128,7 @@ function since(task: Schedulable): number {
 
 function runsOn(task: Schedulable, day: Date, offset: number): boolean {
   const { schedule } = task;
-  if (schedule.kind === "daily") return true;
+  if (schedule.kind === "once" || schedule.kind === "daily") return true;
   if (schedule.kind === "weekly") {
     const weekday = new Date(day.getFullYear(), day.getMonth(), day.getDate() + offset).getDay();
     return schedule.days.includes(weekday);
@@ -137,6 +143,12 @@ function runsOn(task: Schedulable, day: Date, offset: number): boolean {
 export function nextRun(task: Schedulable, now: number): number | null {
   if (!task.enabled) return null;
   const { schedule } = task;
+  if (schedule.kind === "once") {
+    // Fires at `at` even if that moment is recent and was missed; null once past the window.
+    return task.lastRunEnd !== null || now - schedule.at > CATCH_UP_WINDOW_MS
+      ? null
+      : Math.max(schedule.at, now);
+  }
   if (schedule.kind === "interval") return Math.max(since(task) + intervalMs(schedule), now);
   const day = new Date(now);
   // A week and a day cover every weekday, including today's slot already being past.
@@ -152,6 +164,10 @@ export function nextRun(task: Schedulable, now: number): number | null {
 export function lastDue(task: Schedulable, now: number): number | null {
   if (!task.enabled) return null;
   const { schedule } = task;
+  if (schedule.kind === "once") {
+    if (task.lastRunEnd !== null) return null;
+    return schedule.at <= now ? schedule.at : null;
+  }
   const baseline = since(task);
   if (schedule.kind === "interval") {
     const due = baseline + intervalMs(schedule);

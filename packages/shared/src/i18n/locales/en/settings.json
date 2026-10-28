@@ -362,11 +362,27 @@
         "replies": {
           "title": "3. Choose how it answers",
           "description": "Choose where it works and who answers."
+        },
+        "chats": {
+          "title": "Per-chat settings",
+          "description": "Configure access, busy mode and allowlist for each chat."
         }
       },
       "setUp": "Set up",
       "manage": "Manage",
-      "agentFollow": "The workspace's agent"
+      "agentFollow": "The workspace's agent",
+      "chats": {
+        "empty": "No chats yet. Start a conversation with the bot to see it here.",
+        "access": "Who can talk",
+        "accessOwner": "Only the paired owner",
+        "accessMembers": "Anyone in the chat",
+        "busyMode": "When the agent is busy",
+        "busyQueue": "Queue messages",
+        "busySteer": "Steer the running turn",
+        "busyInterrupt": "Interrupt and start new",
+        "allowedUsers": "Allowed user ids",
+        "allowedUsersHelp": "Comma-separated Telegram user ids. Empty = everyone in the chat."
+      }
     }
   }
 }

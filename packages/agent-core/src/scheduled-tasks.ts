@@ -7,6 +7,8 @@ import {
   DEFAULT_WORKSPACE_ID,
   SCHEDULE_LIMITS,
   type SaveScheduledTaskInput,
+  type ScheduleDelivery,
+  type ScheduleTarget,
   type ScheduledTask,
   type TaskRun,
 } from "@workspace/shared";
@@ -79,10 +81,35 @@ export function readScheduledTasks(raw: unknown): ScheduledTask[] {
       enabled: value.enabled === true,
       armedAt: typeof armedAt === "number" && Number.isFinite(armedAt) ? armedAt : Date.now(),
       lastRun: readRun(value.lastRun),
+      ...readTarget(value.target),
+      ...readDelivery(value.delivery),
+      ...(typeof value.origin === "string" && value.origin ? { origin: value.origin } : {}),
+      ...(value.deleteAfterRun === true ? { deleteAfterRun: true } : {}),
+      ...(value.silentIfEmpty === true ? { silentIfEmpty: true } : {}),
     });
     if (tasks.length >= SCHEDULE_LIMITS.maxTasks) break;
   }
   return tasks;
+}
+
+function readTarget(raw: unknown): { target?: ScheduleTarget } {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {};
+  const v = raw as Record<string, unknown>;
+  if (v.mode === "new") return { target: { mode: "new" } };
+  if (v.mode === "current" && typeof v.sessionId === "string" && v.sessionId)
+    return { target: { mode: "current", sessionId: v.sessionId } };
+  if (v.mode === "session" && typeof v.sessionId === "string" && v.sessionId)
+    return { target: { mode: "session", sessionId: v.sessionId } };
+  return {};
+}
+
+function readDelivery(raw: unknown): { delivery?: ScheduleDelivery } {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {};
+  const v = raw as Record<string, unknown>;
+  if (v.to === "none") return { delivery: { to: "none" } };
+  if (v.to === "peer" && typeof v.peer === "string" && v.peer)
+    return { delivery: { to: "peer", peer: v.peer } };
+  return {};
 }
 
 function scheduleError(problem: ScheduleProblem): string {
@@ -117,6 +144,11 @@ export function validateTaskInput(
     workspaceId: text(input.workspaceId) || DEFAULT_WORKSPACE_ID,
     schedule: schedule.schedule,
     enabled: input.enabled === true,
+    ...(input.target ? { target: input.target } : {}),
+    ...(input.delivery ? { delivery: input.delivery } : {}),
+    ...(input.origin ? { origin: input.origin } : {}),
+    ...(input.deleteAfterRun ? { deleteAfterRun: true } : {}),
+    ...(input.silentIfEmpty ? { silentIfEmpty: true } : {}),
   };
 }
 

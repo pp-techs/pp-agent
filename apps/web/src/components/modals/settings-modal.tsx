@@ -18,7 +18,6 @@ import {
   SidebarProvider,
 } from "@workspace/ui/components/sidebar";
 import {
-  AlarmClockIcon,
   BlocksIcon,
   BookOpenIcon,
   BotIcon,
@@ -41,7 +40,6 @@ import { ChannelsSection } from "@/components/settings/channels-section";
 import { GeneralSection } from "@/components/settings/general-section";
 import { McpSection } from "@/components/settings/mcp-section";
 import { MemorySection } from "@/components/settings/memory-section";
-import { ScheduledTasksSection } from "@/components/settings/scheduled-tasks-section";
 import { ModelsSection } from "@/components/settings/models-section";
 import { SkillsSection } from "@/components/settings/skills-section";
 import { SettingsSubPageProvider } from "@/components/settings/settings-subpage";
@@ -59,7 +57,6 @@ export type SettingsSection =
   | "mcp"
   | "skills"
   | "memory"
-  | "scheduledTasks"
   | "channels"
   | "background";
 
@@ -77,12 +74,14 @@ const SECTIONS: {
   { id: "mcp", icon: BlocksIcon, Component: McpSection },
   { id: "skills", icon: BookOpenIcon, Component: SkillsSection },
   { id: "memory", icon: BrainIcon, Component: MemorySection },
-  { id: "scheduledTasks", icon: AlarmClockIcon, Component: ScheduledTasksSection },
   { id: "channels", icon: MessagesSquareIcon, Component: ChannelsSection },
   { id: "background", icon: MoonStarIcon, Component: BackgroundSection },
 ];
 
-type SettingsModalProps = { bridge: DesktopBridge; section?: SettingsSection };
+type SettingsModalProps = {
+  bridge: DesktopBridge;
+  section?: SettingsSection;
+};
 
 /** The nested sidebar is always expanded; it never toggles or persists state. */
 const keepOpen = () => {};

@@ -54,7 +54,7 @@ function formatCountdown(ms: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-type StepKey = "connect" | "pair" | "replies";
+type StepKey = "connect" | "pair" | "replies" | "chats";
 
 /** One numbered step of the setup, with its own title and explanation. */
 function Step({ step, children }: { step: StepKey; children: React.ReactNode }) {
@@ -374,6 +374,186 @@ function RepliesStep({ bridge, status }: { bridge: DesktopBridge; status: Telegr
   );
 }
 
+/** Per-chat settings: access level, busy mode, and allowlist for each known chat. */
+function ChatsStep({ bridge, status }: { bridge: DesktopBridge; status: TelegramStatus }) {
+  const { t } = useTranslation(["settings", "common"]);
+  const { saveTelegram } = useBackgroundCommands(bridge);
+  const chats = status.chats ?? {};
+  const chatIds = Object.keys(chats);
+  const [editing, setEditing] = React.useState<string | null>(null);
+  const [draft, setDraft] = React.useState<{
+    access?: "owner" | "members";
+    busyMode?: "queue" | "steer" | "interrupt";
+    allowedUsers?: string;
+    label?: string;
+  }>({});
+
+  function startEdit(chatId: string) {
+    const chat = chats[chatId] ?? {};
+    setEditing(chatId);
+    setDraft({
+      access: chat.access ?? "owner",
+      busyMode: chat.busyMode ?? "queue",
+      allowedUsers: (chat.allowedUsers ?? []).join(", "),
+      label: chat.label ?? "",
+    });
+  }
+
+  function saveChat(chatId: string) {
+    const allowedUsers = draft.allowedUsers
+      ? draft.allowedUsers
+          .split(",")
+          .map((s) => Number(s.trim()))
+          .filter((n) => !Number.isNaN(n))
+      : [];
+    const updated = {
+      ...chats,
+      [chatId]: {
+        ...chats[chatId],
+        ...(draft.label ? { label: draft.label } : {}),
+        access: draft.access ?? "owner",
+        busyMode: draft.busyMode ?? "queue",
+        ...(allowedUsers.length > 0 ? { allowedUsers } : {}),
+      },
+    };
+    saveTelegram.mutate(
+      {
+        enabled: status.enabled,
+        agentId: status.agentId,
+        workspaceId: status.workspaceId,
+        chats: updated,
+      },
+      {
+        onSuccess: () => {
+          setEditing(null);
+          toast.success(t("channels.telegram.saved"));
+        },
+      },
+    );
+  }
+
+  return (
+    <Step step="chats">
+      {chatIds.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{t("channels.telegram.chats.empty")}</p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {chatIds.map((chatId) => {
+            const chat = chats[chatId] ?? {};
+            const isEditing = editing === chatId;
+            return (
+              <div key={chatId} className="rounded-lg border p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-medium">{chat.label || chatId}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">#{chatId}</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => (isEditing ? setEditing(null) : startEdit(chatId))}
+                  >
+                    {isEditing ? t("common:actions.cancel") : t("common:actions.edit")}
+                  </Button>
+                </div>
+                {isEditing ? (
+                  <div className="mt-3 flex flex-col gap-3">
+                    <Field>
+                      <FieldLabel>{t("channels.telegram.chats.access")}</FieldLabel>
+                      <Select
+                        items={[
+                          { value: "owner", label: t("channels.telegram.chats.accessOwner") },
+                          { value: "members", label: t("channels.telegram.chats.accessMembers") },
+                        ]}
+                        value={draft.access ?? "owner"}
+                        onValueChange={(v) =>
+                          v && setDraft((d) => ({ ...d, access: v as "owner" | "members" }))
+                        }
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="owner">
+                            {t("channels.telegram.chats.accessOwner")}
+                          </SelectItem>
+                          <SelectItem value="members">
+                            {t("channels.telegram.chats.accessMembers")}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field>
+                      <FieldLabel>{t("channels.telegram.chats.busyMode")}</FieldLabel>
+                      <Select
+                        items={[
+                          { value: "queue", label: t("channels.telegram.chats.busyQueue") },
+                          { value: "steer", label: t("channels.telegram.chats.busySteer") },
+                          { value: "interrupt", label: t("channels.telegram.chats.busyInterrupt") },
+                        ]}
+                        value={draft.busyMode ?? "queue"}
+                        onValueChange={(v) =>
+                          v &&
+                          setDraft((d) => ({
+                            ...d,
+                            busyMode: v as "queue" | "steer" | "interrupt",
+                          }))
+                        }
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="queue">
+                            {t("channels.telegram.chats.busyQueue")}
+                          </SelectItem>
+                          <SelectItem value="steer">
+                            {t("channels.telegram.chats.busySteer")}
+                          </SelectItem>
+                          <SelectItem value="interrupt">
+                            {t("channels.telegram.chats.busyInterrupt")}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    {draft.access === "members" && (
+                      <Field>
+                        <FieldLabel>{t("channels.telegram.chats.allowedUsers")}</FieldLabel>
+                        <Input
+                          value={draft.allowedUsers ?? ""}
+                          onChange={(e) =>
+                            setDraft((d) => ({ ...d, allowedUsers: e.target.value }))
+                          }
+                          placeholder="123, 456"
+                        />
+                        <FieldDescription>
+                          {t("channels.telegram.chats.allowedUsersHelp")}
+                        </FieldDescription>
+                      </Field>
+                    )}
+                    <Button
+                      size="sm"
+                      onClick={() => saveChat(chatId)}
+                      disabled={saveTelegram.isPending}
+                    >
+                      {t("common:actions.save")}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="mt-1 flex gap-2 text-xs text-muted-foreground">
+                    <Badge variant="outline">{chat.access ?? "owner"}</Badge>
+                    <Badge variant="outline">{chat.busyMode ?? "queue"}</Badge>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Step>
+  );
+}
+
 /** Settings › Channels › Telegram: connect the bot, pair the owner, choose who answers. */
 export function TelegramPage({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("settings");
@@ -416,6 +596,7 @@ export function TelegramPage({ bridge }: { bridge: DesktopBridge }) {
           <ConnectStep bridge={bridge} status={status} />
           <PairStep bridge={bridge} status={status} />
           <RepliesStep bridge={bridge} status={status} />
+          <ChatsStep bridge={bridge} status={status} />
           {(status.hasToken || status.ownerId !== null) && (
             <div>
               <Button

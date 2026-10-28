@@ -216,6 +216,42 @@ describe("pairing", () => {
   });
 });
 
+describe("notify", () => {
+  async function paired() {
+    const context = setup();
+    await context.service.save(input);
+    const { pairingCode } = await context.service.startPairing();
+    context.api.push(textUpdate(1, `/pair ${pairingCode}`, 42));
+    await vi.waitFor(() => expect(context.settings.get().channels.telegram.ownerId).toBe(42));
+    context.api.sent.length = 0;
+    return context;
+  }
+
+  test("sends to the owner's private chat, split below Telegram's limit", async () => {
+    const { service, api } = await paired();
+    await service.notify(`${"a".repeat(3_000)}\n\n${"b".repeat(3_000)}`);
+    expect(api.sent.map((message) => message.chatId)).toEqual([42, 42]);
+    expect(api.sent.every((message) => message.text.length <= 4096)).toBe(true);
+  });
+
+  test("is refused before pairing and while the channel is off", async () => {
+    const { service } = setup();
+    await expect(service.notify("hi")).rejects.toThrow("channels.telegram.notifyNeedsOwner");
+    const context = await paired();
+    await context.service.save({ ...input, enabled: false });
+    await expect(context.service.notify("hi")).rejects.toThrow(
+      "channels.telegram.notifyNeedsOnline",
+    );
+    expect(context.api.sent).toHaveLength(0);
+  });
+
+  test("reports a send that Telegram refuses", async () => {
+    const { service, api } = await paired();
+    api.sendError = () => new TelegramApiError("network", "fetch failed");
+    await expect(service.notify("hi")).rejects.toThrow("channels.telegram.notifyFailed");
+  });
+});
+
 describe("forget", () => {
   test("removes the token and owner, disables and stops", async () => {
     const { service, vault, settings, api } = setup();

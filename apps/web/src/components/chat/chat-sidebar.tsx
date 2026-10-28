@@ -22,6 +22,7 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
+  SidebarGroupAction,
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
@@ -31,9 +32,11 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSkeleton,
+  useSidebar,
 } from "@workspace/ui/components/sidebar";
 import { useQuery } from "@tanstack/react-query";
 import {
+  CalendarClockIcon,
   DownloadIcon,
   FolderPlusIcon,
   MoreHorizontalIcon,
@@ -110,7 +113,16 @@ function Highlighted({ text, ranges }: { text: string; ranges: ReadonlyArray<[nu
   return <>{parts}</>;
 }
 
-export function ChatSidebar({ bridge }: { bridge: DesktopBridge }) {
+export function ChatSidebar({
+  bridge,
+  page,
+  onNavigate,
+}: {
+  bridge: DesktopBridge;
+  page: "chat" | "schedules";
+  onNavigate: (page: "chat" | "schedules") => void;
+}) {
+  const { setOpenMobile } = useSidebar();
   const sessions = useQuery(sessionsQuery(bridge));
   const workspaces = useQuery(workspacesQuery(bridge));
   const sessionPath = useChatStore((state) => state.sessionPath);
@@ -131,6 +143,11 @@ export function ChatSidebar({ bridge }: { bridge: DesktopBridge }) {
   const ready = status === "idle" || status === "running";
   const { t } = useTranslation(["chat", "common"]);
   const onError = (error: Error) => toast.error(error.message);
+
+  function navigate(nextPage: "chat" | "schedules") {
+    onNavigate(nextPage);
+    setOpenMobile(false);
+  }
 
   const pinned = React.useMemo(
     () => (sessions.data ?? []).filter((session) => session.pinned),
@@ -179,7 +196,7 @@ export function ChatSidebar({ bridge }: { bridge: DesktopBridge }) {
         instructions: "",
         agentId: null,
       });
-      newChat.mutate(created.id, { onError });
+      newChat.mutate(created.id, { onError, onSuccess: () => navigate("chat") });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     }
@@ -214,6 +231,7 @@ export function ChatSidebar({ bridge }: { bridge: DesktopBridge }) {
   }
 
   function openFound(hit: SessionSearchHit) {
+    navigate("chat");
     if (hit.path !== sessionPath) openSession.mutate(hit.path, { onError });
   }
 
@@ -225,10 +243,11 @@ export function ChatSidebar({ bridge }: { bridge: DesktopBridge }) {
     return (
       <SidebarMenuItem key={session.path}>
         <SidebarMenuButton
-          isActive={session.path === sessionPath}
+          isActive={page === "chat" && session.path === sessionPath}
           disabled={!ready}
           title={session.title}
           onClick={() => {
+            navigate("chat");
             if (session.path !== sessionPath) openSession.mutate(session.path, { onError });
           }}
         >
@@ -290,10 +309,12 @@ export function ChatSidebar({ bridge }: { bridge: DesktopBridge }) {
     const hidden = list.length - visible.length;
     // The open chat is not listed yet (no reply so far): mark its workspace instead.
     const holdsEmptyChat =
+      page === "chat" &&
       workspace.id === currentWorkspaceId &&
       !(sessions.data ?? []).some((session) => session.path === sessionPath);
     // An empty open chat here already is a new chat in this workspace.
-    const canStart = ready && (hasMessages || workspace.id !== currentWorkspaceId);
+    const canStart =
+      ready && (page !== "chat" || hasMessages || workspace.id !== currentWorkspaceId);
     return (
       <React.Fragment key={workspace.id}>
         <SidebarMenu>
@@ -316,7 +337,9 @@ export function ChatSidebar({ bridge }: { bridge: DesktopBridge }) {
               title={t("sidebar.workspace.newChat", { name: workspace.name })}
               aria-label={t("sidebar.workspace.newChat", { name: workspace.name })}
               disabled={!canStart}
-              onClick={() => newChat.mutate(workspace.id, { onError })}
+              onClick={() =>
+                newChat.mutate(workspace.id, { onError, onSuccess: () => navigate("chat") })
+              }
             >
               <SquarePenIcon />
             </SidebarMenuAction>
@@ -406,7 +429,7 @@ export function ChatSidebar({ bridge }: { bridge: DesktopBridge }) {
         {search.data.map((hit) => (
           <SidebarMenuItem key={hit.path}>
             <SidebarMenuButton
-              isActive={hit.path === sessionPath}
+              isActive={page === "chat" && hit.path === sessionPath}
               disabled={!ready}
               className="h-auto flex-col items-start gap-0.5 py-1.5"
               onClick={() => openFound(hit)}
@@ -433,7 +456,7 @@ export function ChatSidebar({ bridge }: { bridge: DesktopBridge }) {
 
   return (
     <Sidebar variant="inset">
-      <SidebarHeader>
+      <SidebarHeader className="shrink-0">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
@@ -470,7 +493,12 @@ export function ChatSidebar({ bridge }: { bridge: DesktopBridge }) {
           )}
         </div>
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent
+        className="overscroll-contain"
+        role="region"
+        aria-label={searching ? t("sidebar.search.results") : t("sidebar.workspaces")}
+        tabIndex={0}
+      >
         {searching ? (
           <SidebarGroup>
             <SidebarGroupLabel>{t("sidebar.search.results")}</SidebarGroupLabel>
@@ -487,7 +515,15 @@ export function ChatSidebar({ bridge }: { bridge: DesktopBridge }) {
               </SidebarGroup>
             )}
             <SidebarGroup>
-              <SidebarGroupLabel>{t("sidebar.workspaces")}</SidebarGroupLabel>
+              <SidebarGroupLabel className="pr-8">{t("sidebar.workspaces")}</SidebarGroupLabel>
+              <SidebarGroupAction
+                className="text-sidebar-foreground/70"
+                aria-label={t("sidebar.manageWorkspaces")}
+                title={t("sidebar.manageWorkspaces")}
+                onClick={() => void SettingsModal.show({ bridge, section: "workspaces" })}
+              >
+                <SettingsIcon aria-hidden />
+              </SidebarGroupAction>
               <SidebarGroupContent className="flex flex-col gap-1">
                 {(sessions.isError && !sessions.data) ||
                 (workspaces.isError && !workspaces.data) ? (
@@ -508,9 +544,19 @@ export function ChatSidebar({ bridge }: { bridge: DesktopBridge }) {
           </>
         )}
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter className="shrink-0">
         <UpdateNotice bridge={bridge} />
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={page === "schedules"}
+              aria-current={page === "schedules" ? "page" : undefined}
+              onClick={() => navigate("schedules")}
+            >
+              <CalendarClockIcon />
+              <span>{t("sidebar.scheduledTasks")}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={() => void SettingsModal.show({ bridge })}>
               <SettingsIcon />

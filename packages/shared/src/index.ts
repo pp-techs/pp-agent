@@ -542,6 +542,22 @@ export interface ServiceStatus {
 }
 
 /** Telegram settings in settings.json. The bot token is in the vault, never here. */
+/** Per-chat settings for a Telegram chat. */
+export interface TelegramChatSettings {
+  /** Human label for the settings UI. */
+  label?: string;
+  /** Agent for this chat; falls back to the channel's agent. */
+  agentId?: string;
+  /** Workspace for this chat; falls back to the channel's workspace. */
+  workspaceId?: string;
+  /** Who can talk to the bot: `owner` (default) or `members` (anyone in the chat). */
+  access?: "owner" | "members";
+  /** User ids allowed when `access` is `members`; empty = everyone in the chat. */
+  allowedUsers?: number[];
+  /** What happens when a message arrives while the agent is busy. */
+  busyMode?: "queue" | "steer" | "interrupt";
+}
+
 export interface TelegramSettings {
   enabled: boolean;
   /** Workspace of new Telegram conversations; the agent is the workspace's own unless pinned here. */
@@ -551,6 +567,8 @@ export interface TelegramSettings {
   /** Telegram user id that paired with the bot; only this person is answered. */
   ownerId: number | null;
   ownerName: string | null;
+  /** Per-chat settings keyed by chat id (as string). */
+  chats?: Record<string, TelegramChatSettings>;
 }
 
 export interface ChannelsSettings {
@@ -577,6 +595,8 @@ export interface SaveTelegramInput {
   /** null = follow the workspace's agent. */
   agentId: string | null;
   workspaceId: string;
+  /** Per-chat settings; omitted keeps the stored ones. */
+  chats?: Record<string, TelegramChatSettings>;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -595,9 +615,26 @@ export const SCHEDULE_LIMITS = {
 
 /** Times are local to the computer. Weekdays are numbered like `Date.getDay()`: 0 = Sunday. */
 export type TaskSchedule =
+  | { kind: "once"; at: number }
   | { kind: "interval"; every: number; unit: "minutes" | "hours" }
   | { kind: "daily"; time: string }
   | { kind: "weekly"; days: number[]; time: string };
+
+/**
+ * Where a scheduled run executes: `current` reads the tail of the session that created it and
+ * commits its result there; `new` opens a fresh conversation every run; `session` reuses one
+ * named session across runs.
+ */
+export type ScheduleTarget =
+  | { mode: "current"; sessionId: string }
+  | { mode: "new" }
+  | { mode: "session"; sessionId: string };
+
+/**
+ * Where a run's result goes: `session` writes it into the run's own session (default), `peer`
+ * writes it into a chat session and pushes it through the channel, `none` keeps it local only.
+ */
+export type ScheduleDelivery = { to: "session" } | { to: "peer"; peer: string } | { to: "none" };
 
 /** How the last run of a task ended. */
 export interface TaskRun {
@@ -611,6 +648,8 @@ export interface TaskRun {
   deniedTools: number;
   /** The saved conversation of the run; absent when it could not start. */
   sessionPath?: string;
+  /** How delivery went: `sent`, `session`, `none`, or `failed` with a reason. */
+  delivery?: "sent" | "session" | "none" | string;
 }
 
 export interface ScheduledTask {
@@ -627,6 +666,16 @@ export interface ScheduledTask {
   /** Runs are counted from here: creation, enabling, or the last schedule change (epoch ms). */
   armedAt: number;
   lastRun: TaskRun | null;
+  /** Where each run executes; default `{ mode: "new" }`. */
+  target?: ScheduleTarget;
+  /** Where the result is delivered; default `{ to: "session" }`. */
+  delivery?: ScheduleDelivery;
+  /** Session id where the task was created (for `target: current`). */
+  origin?: string;
+  /** Remove the task after it fires (for `once`). */
+  deleteAfterRun?: boolean;
+  /** Deliver nothing when the run produces `[SILENT]`. */
+  silentIfEmpty?: boolean;
 }
 
 export type ScheduledTaskState = "idle" | "queued" | "running";

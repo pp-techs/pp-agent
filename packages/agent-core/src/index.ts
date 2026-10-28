@@ -3,7 +3,7 @@
  * the process around it; `HostEnvironment` supplies the event sink, the vault, and service control.
  */
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import type { Api, AssistantMessage, Credential, Model } from "@earendil-works/pi-ai";
@@ -42,6 +42,7 @@ import {
   type ScheduledTaskView,
   type ServiceStatus,
   type TaskRun,
+  type TaskSchedule,
   type VoiceSettings,
   type VoiceView,
   DEFAULT_AGENT_ID,
@@ -186,6 +187,24 @@ import {
   toolTier,
 } from "./tools.ts";
 import { createTodoTool } from "./todo.ts";
+import {
+  createScheduleTool,
+  SCHEDULE_TOOL,
+  type ScheduleHost,
+  type TaskListEntry,
+} from "./schedule-tool.ts";
+import { createSessionsTool, SESSIONS_TOOL, type PeerRow } from "./sessions-tool.ts";
+import {
+  classifySession,
+  historyLines,
+  previewOf,
+  sessionContextSection,
+  sessionRef,
+  type HistoryLine,
+  type SessionKind,
+  type SessionRow,
+  type SessionVisibility,
+} from "./session-index.ts";
 import { ASK_TOOL, askSection, checkAnswers, createAskTool, type AskUser } from "./ask.ts";
 import { Transcript } from "./transcript.ts";
 import { createWebFetchTool, createWebSearchTool } from "./web/tools.ts";
@@ -257,6 +276,10 @@ interface SessionScope {
   askUser?: AskUser;
   /** Extra system prompt section: headless runs tell the model nobody is watching, chats where it replies. */
   systemNote?: { section: string; text: string };
+  /** What kind of session this is and how the model should call it ("a Telegram chat"). */
+  surface: { kind: SessionKind; label: string };
+  /** Which saved sessions the `sessions` tool shows: every one, or only the one running. */
+  visibility: SessionVisibility;
 }
 
 /** What a chat's turn is doing right now; the session events and the approval gate read it. */
@@ -312,6 +335,13 @@ const SCHEDULED_DENIED_REASON =
   "Nobody is available to approve this action because this is a scheduled run, so it was not carried out. Continue without it and mention it in your answer.";
 
 /** System prompt section of a scheduled run: nobody is watching, and what that means. */
+function formatSchedule(schedule: TaskSchedule): string {
+  if (schedule.kind === "once") return `once at ${new Date(schedule.at).toISOString()}`;
+  if (schedule.kind === "interval") return `every ${schedule.every} ${schedule.unit}`;
+  if (schedule.kind === "daily") return `daily at ${schedule.time}`;
+  return `weekly on [${schedule.days.join(",")}] at ${schedule.time}`;
+}
+
 function scheduledTaskNote(name: string): string {
   return [
     `This is the scheduled task "${name}". It runs automatically without anyone watching, so you cannot ask questions or wait for answers.`,
@@ -390,6 +420,44 @@ export class AgentHost {
     // The size limit applies; the length of a Telegram voice note is not known here.
     transcribe: (data, mimeType) =>
       this.requireServices().voice.transcribe(Buffer.from(data).toString("base64"), mimeType, 0),
+    listChatSessions: async (chatKey) => {
+      const { chatSessions, paths } = this.requireServices();
+      const currentFile = chatSessions.get(chatKey);
+      const historyFiles = chatSessions.history(chatKey);
+      const allFiles = currentFile ? [currentFile, ...historyFiles] : historyFiles;
+      const infos = await SessionManager.listAll(paths.sessionDir);
+      return allFiles.map((file) => {
+        const info = infos.find((i) => i.path === file);
+        return {
+          id: sessionRef(file),
+          title: info ? sessionTitle(info.name, info.firstMessage, this.titleFallbacks()) : file,
+          isCurrent: file === currentFile,
+        };
+      });
+    },
+    resumeChatSession: async (chatKey, sessionId) => {
+      const { chatSessions, paths } = this.requireServices();
+      const infos = await SessionManager.listAll(paths.sessionDir);
+      const info = infos.find((i) => sessionRef(i.path) === sessionId);
+      if (!info) throw new Error(`Session ${sessionId} not found.`);
+      if (!chatSessions.resume(chatKey, info.path))
+        throw new Error(`Session ${sessionId} is not in this chat's history.`);
+      this.closeChat(chatKey);
+    },
+    steerTurn: async (chatKey, input) => {
+      const chat = this.chats.get(chatKey);
+      if (!chat?.turn) return; // No turn in progress; the caller queues normally.
+      const message = await buildPrompt(
+        input.text || ATTACHMENTS_ONLY_PROMPT,
+        input.attachments,
+        chat.session.sessionManager.getCwd(),
+      );
+      // Steering joins the running turn at the next tool boundary.
+      await chat.session.prompt(message.text, {
+        images: message.images,
+        streamingBehavior: "steer",
+      });
+    },
   };
 
   /** Registers the daemon with the OS as a login service; the service commands call it. */
@@ -477,6 +545,7 @@ export class AgentHost {
       }
       await this.startSession(this.newSessionManager());
       this.telegram = new TelegramService({
+        dataDir: paths.agentDir,
         settings,
         credentials: this.credentials,
         gateway: this.gateway,
@@ -489,6 +558,7 @@ export class AgentHost {
       if (settings.get().channels.telegram.enabled)
         this.telegram
           .start()
+          .then(() => this.redeliverPending())
           .catch((error: unknown) => emit({ type: "error", message: errorMessage(error) }));
     } catch (error) {
       this.ready.reject(error);
@@ -914,6 +984,65 @@ export class AgentHost {
     };
   }
 
+  /** Every saved session as the agent sees it, newest first; `currentFile` marks the one running. */
+  private async sessionRows(currentFile: string | undefined): Promise<SessionRow[]> {
+    const { paths, settings, chatSessions } = this.requireServices();
+    const { workspaces, scheduledTasks } = settings.get();
+    const chatFiles = new Map(chatSessions.entries().map(([key, file]) => [file, key]));
+    const taskFiles = new Set(
+      scheduledTasks.flatMap((task) =>
+        task.lastRun?.sessionPath ? [task.lastRun.sessionPath] : [],
+      ),
+    );
+    const infos = await SessionManager.listAll(paths.sessionDir);
+    return infos
+      .filter((info) => info.messageCount > 0)
+      .sort((a, b) => b.modified.getTime() - a.modified.getTime())
+      .map((info) => {
+        // A scheduled run's title starts with the clock, so older runs are found too.
+        if (info.name?.startsWith("⏰")) taskFiles.add(info.path);
+        const { kind, peer } = classifySession(info.path, chatFiles, taskFiles);
+        return {
+          id: sessionRef(info.path),
+          title: sessionTitle(info.name, info.firstMessage, this.titleFallbacks()),
+          kind,
+          peer,
+          workspaceId: workspaceForCwd(workspaces, info.cwd, paths.workspaceDir).id,
+          modified: info.modified.getTime(),
+          messageCount: info.messageCount,
+          preview: previewOf(info.firstMessage),
+          isCurrent: info.path === currentFile,
+        };
+      });
+  }
+
+  /** The messages of the saved session with `id`; only files in the session folder are read. */
+  private async sessionHistory(id: string): Promise<HistoryLine[]> {
+    const { paths } = this.requireServices();
+    const info = (await SessionManager.listAll(paths.sessionDir)).find(
+      (candidate) => sessionRef(candidate.path) === id,
+    );
+    if (!info) return [];
+    const manager = SessionManager.open(info.path, paths.sessionDir);
+    return historyLines(
+      manager.getBranch().flatMap((entry) => (entry.type === "message" ? [entry.message] : [])),
+    );
+  }
+
+  /** The person's own chat on a channel, when one is paired and on. */
+  private homePeer(): PeerRow | null {
+    const telegram = this.services?.settings.get().channels.telegram;
+    if (!telegram?.enabled || telegram.ownerId === null) return null;
+    const name = telegram.ownerName ? ` – ${telegram.ownerName}` : "";
+    // A private Telegram chat has the person's user id as its chat id.
+    return { id: "home", label: `Telegram${name}`, key: `telegram:${telegram.ownerId}` };
+  }
+
+  private peerRows(): PeerRow[] {
+    const home = this.homePeer();
+    return home ? [home] : [];
+  }
+
   private renameSession(path: string, name: string): void {
     const trimmed = name.trim();
     if (!trimmed) throw new Error(t("conversations.enterName"));
@@ -1158,6 +1287,8 @@ export class AgentHost {
       mcpServers: this.requireServices().mcpServers,
       approvalGate: this.approvalGate,
       askUser: (call, signal) => this.requestQuestion(call, signal),
+      surface: { kind: "window", label: "in the desktop window" },
+      visibility: "all",
     };
   }
 
@@ -1201,7 +1332,7 @@ export class AgentHost {
       noThemes: true,
       extensionFactories: [
         { name: "approval-gate", factory: scope.approvalGate },
-        { name: "pp-agent", factory: this.agentExtensionFor(scope) },
+        { name: "pp-agent", factory: this.agentExtensionFor(scope, sessionManager) },
         createCodemodeExtension(),
         createToolSearchExtension(),
         // Pi's own mcp.json loading is off: the agent extension registers the agent's servers.
@@ -1250,6 +1381,19 @@ export class AgentHost {
         }),
         createTodoTool(),
         ...(scope.askUser ? [createAskTool(scope.askUser)] : []),
+        // Like ask_user, only where a person is present: a scheduled run cannot create tasks.
+        ...(scope.askUser ? [createScheduleTool(this.scheduleHost(scope))] : []),
+        createSessionsTool({
+          list: () => this.sessionRows(sessionManager.getSessionFile()),
+          history: (id) => this.sessionHistory(id),
+          currentId: () => {
+            const file = sessionManager.getSessionFile();
+            return file ? sessionRef(file) : null;
+          },
+          peers: () => this.peerRows(),
+          visibility: () => scope.visibility,
+          locale: () => currentLanguage(),
+        }),
         createDelegateTool({
           runtime,
           cwd,
@@ -1429,7 +1573,7 @@ export class AgentHost {
    * prompt (read on every prompt, so edits apply from the next message). A scope with a
    * `systemNote` (headless run) adds it as well.
    */
-  private agentExtensionFor(scope: SessionScope): ExtensionFactory {
+  private agentExtensionFor(scope: SessionScope, sessionManager: SessionManager): ExtensionFactory {
     return (pi) => {
       scope.mcpServers.attach(pi);
       // Old tool output is replaced by a note in what the model reads; the chat keeps showing it.
@@ -1443,6 +1587,16 @@ export class AgentHost {
         if (workspaceSection) sections.workspace = workspaceSection;
         else delete sections.workspace;
         if (scope.systemNote) sections[scope.systemNote.section] = scope.systemNote.text;
+        const file = sessionManager.getSessionFile();
+        sections.where = sessionContextSection({
+          now: new Date(),
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          sessionId: file ? sessionRef(file) : null,
+          kind: scope.surface.kind,
+          surface: scope.surface.label,
+          home: this.homePeer()?.label ?? null,
+          sessionsTool: pi.getActiveTools().includes(SESSIONS_TOOL),
+        });
         const memory = this.services?.memory;
         if (memory && this.memoryOn(scope.agent()))
           sections.memory = memorySection(memory.entriesFor(scope.workspace().id));
@@ -1609,8 +1763,11 @@ export class AgentHost {
     const withMemory = this.memoryOn(agent)
       ? allActive
       : allActive.filter((name) => !MEMORY_TOOLS.includes(name));
-    // Where nobody can answer (a scheduled run), ask_user is not registered, so it cannot be active.
-    const next = scope.askUser ? withMemory : withMemory.filter((name) => name !== ASK_TOOL);
+    // Where nobody can answer (a scheduled run), ask_user and schedule_task are not registered, so
+    // they cannot be active.
+    const next = scope.askUser
+      ? withMemory
+      : withMemory.filter((name) => name !== ASK_TOOL && name !== SCHEDULE_TOOL);
     // Only touch the loadout when it changes: replacing it drops MCP tools still connecting.
     const same = next.length === current.length && next.every((name) => current.includes(name));
     if (!same) session.setActiveToolsByName(next);
@@ -2258,6 +2415,8 @@ export class AgentHost {
     let session: AgentSession | null = null;
     let mcpServers: McpRegistrations | null = null;
     let outcome: Pick<TaskRun, "status" | "error"> = { status: "completed" };
+    let runDelivery: string | undefined;
+    let reply: AssistantMessage | undefined;
     let limit: NodeJS.Timeout | undefined;
     try {
       const { settings, paths, mcpConfig } = services;
@@ -2283,6 +2442,8 @@ export class AgentHost {
           SCHEDULED_DENIED_REASON,
         ),
         systemNote: { section: "scheduled_task", text: scheduledTaskNote(task.name) },
+        surface: { kind: "task", label: `the scheduled run "${task.name}"` },
+        visibility: "self",
       });
       if (!session.model) throw new Error(t("models.noneChosen"));
       this.taskSessions.set(task.id, session);
@@ -2294,7 +2455,7 @@ export class AgentHost {
       if (mcpServers.hasServers()) await this.mcp.status(session).catch(() => undefined);
       await session.prompt(task.prompt);
       await session.waitForIdle();
-      const reply = session.messages.findLast(
+      reply = session.messages.findLast(
         (message): message is AssistantMessage => message.role === "assistant",
       );
       if (timedOut) outcome = { status: "failed", error: t("scheduler.errors.timedOut") };
@@ -2312,20 +2473,131 @@ export class AgentHost {
       clearTimeout(limit);
       this.taskSessions.delete(task.id);
     }
+    // Deliver the result according to the task's delivery setting.
+    const finalText =
+      reply?.content?.find(
+        (b): b is { type: "text"; text: string } => (b as { type?: string }).type === "text",
+      )?.text ?? "";
+    const isSilent = task.silentIfEmpty && finalText.trim() === "[SILENT]";
+    if (outcome.status === "completed" && !isSilent) {
+      const delivery = task.delivery ?? { to: "session" as const };
+      if (delivery.to === "peer") {
+        try {
+          await this.deliverToPeer(delivery.peer, task.name, finalText);
+          runDelivery = "sent";
+        } catch (error) {
+          runDelivery = `failed: ${(error as Error).message}`;
+        }
+      } else if (delivery.to === "session") {
+        runDelivery = "session";
+      } else {
+        runDelivery = "none";
+      }
+    }
     const run: TaskRun = {
       at: startedAt,
       durationMs: Date.now() - startedAt,
       ...outcome,
       deniedTools: denied,
       ...(session?.sessionFile ? { sessionPath: session.sessionFile } : {}),
+      ...(runDelivery ? { delivery: runDelivery } : {}),
     };
     mcpServers?.detach();
     session?.dispose();
     this.updateTask(task.id, (draft) => {
       draft.lastRun = run;
     });
+    // A one-shot task that asked to be removed after firing is gone now.
+    if (task.deleteAfterRun) {
+      this.requireServices().settings.update((draft) => {
+        draft.scheduledTasks = draft.scheduledTasks.filter((entry) => entry.id !== task.id);
+      });
+    }
     emit({ type: "settings_changed", scopes: ["scheduledTasks"] });
     emit({ type: "sessions_changed" });
+  }
+
+  /**
+   * Delivers a scheduled run's result to a chat. `home` goes to the paired Telegram owner; a
+   * peer key like `telegram:123` goes to that chat. Writes the text as a labelled message.
+   */
+  private async deliverToPeer(peer: string, taskName: string, text: string): Promise<void> {
+    const message = `⏰ ${taskName}\n\n${text}`;
+    // Record the delivery before sending, so a crash can be recovered.
+    const deliveryId = randomUUID();
+    this.saveDelivery({ id: deliveryId, peer, message, sent: false });
+    try {
+      if (peer === "home" || peer.startsWith("telegram:")) {
+        await this.requireTelegram().notify(message);
+      } else {
+        throw new Error(`Unknown delivery target: ${peer}`);
+      }
+      this.markDeliverySent(deliveryId);
+    } catch (error) {
+      // Leave as unsent; the next start will retry.
+      throw error;
+    }
+  }
+
+  // Delivery ledger: a JSON file of pending/sent deliveries for crash recovery.
+  private deliveryLedgerPath(): string {
+    return join(this.requireServices().paths.agentDir, "deliveries.json");
+  }
+
+  private loadDeliveries(): Array<{ id: string; peer: string; message: string; sent: boolean }> {
+    try {
+      return JSON.parse(readFileSync(this.deliveryLedgerPath(), "utf8")) as Array<{
+        id: string;
+        peer: string;
+        message: string;
+        sent: boolean;
+      }>;
+    } catch {
+      return [];
+    }
+  }
+
+  private saveDeliveries(
+    deliveries: Array<{ id: string; peer: string; message: string; sent: boolean }>,
+  ): void {
+    try {
+      writeFileSync(this.deliveryLedgerPath(), JSON.stringify(deliveries, null, 2), {
+        mode: 0o600,
+      });
+    } catch {
+      // Best effort.
+    }
+  }
+
+  private saveDelivery(entry: { id: string; peer: string; message: string; sent: boolean }): void {
+    const deliveries = this.loadDeliveries();
+    deliveries.push(entry);
+    // Keep only the last 100 entries.
+    this.saveDeliveries(deliveries.slice(-100));
+  }
+
+  private markDeliverySent(id: string): void {
+    const deliveries = this.loadDeliveries();
+    const entry = deliveries.find((d) => d.id === id);
+    if (entry) entry.sent = true;
+    this.saveDeliveries(deliveries);
+  }
+
+  /** Re-sends deliveries that were recorded but never confirmed as sent. */
+  private async redeliverPending(): Promise<void> {
+    const deliveries = this.loadDeliveries();
+    const pending = deliveries.filter((d) => !d.sent);
+    for (const entry of pending) {
+      try {
+        if (entry.peer === "home" || entry.peer.startsWith("telegram:")) {
+          await this.requireTelegram().notify(entry.message);
+          entry.sent = true;
+        }
+      } catch {
+        // Will retry on next start.
+      }
+    }
+    this.saveDeliveries(deliveries);
   }
 
   // -------------------------------------------------------------------------------------------
@@ -2338,6 +2610,52 @@ export class AgentHost {
     const status = await this.service.status();
     emit({ type: "settings_changed", scopes: ["background"] });
     return status;
+  }
+
+  /** Finds a task by name (case-insensitive); throws when none or several match. */
+  private findTaskByName(name: string): ScheduledTask {
+    const lower = name.toLowerCase();
+    const matches = this.requireServices()
+      .settings.get()
+      .scheduledTasks.filter((task) => task.name.toLowerCase() === lower);
+    if (matches.length === 0) throw new Error(t("scheduler.errors.notFound"));
+    if (matches.length > 1) throw new Error(`Several tasks match "${name}"; use the exact name.`);
+    return matches[0];
+  }
+
+  /** The host `schedule_manage` talks to; `scope` decides the agent and workspace of new tasks. */
+  private scheduleHost(scope: SessionScope): ScheduleHost {
+    return {
+      create: (input) => {
+        const task = this.saveScheduledTask({
+          ...input,
+          agentId: scope.agent().id,
+          workspaceId: scope.workspace().id,
+        });
+        return { name: task.name, nextRun: task.nextRun };
+      },
+      list: (): TaskListEntry[] =>
+        this.listScheduledTasks().map((task) => ({
+          name: task.name,
+          schedule: formatSchedule(task.schedule),
+          enabled: task.enabled,
+          nextRun: task.nextRun,
+          lastStatus: task.lastRun?.status,
+        })),
+      update: (name, patch) => {
+        const existing = this.findTaskByName(name);
+        this.saveScheduledTask({
+          ...existing,
+          ...patch,
+          id: existing.id,
+          name: patch.name ?? existing.name,
+        });
+      },
+      pause: (name) => this.setScheduledTaskEnabled(this.findTaskByName(name).id, false),
+      resume: (name) => this.setScheduledTaskEnabled(this.findTaskByName(name).id, true),
+      runNow: (name) => this.runScheduledTaskNow(this.findTaskByName(name).id),
+      remove: (name) => this.deleteScheduledTask(this.findTaskByName(name).id),
+    };
   }
 
   private requireTelegram(): TelegramService {
@@ -2527,6 +2845,8 @@ export class AgentHost {
       approvalGate: this.gateFor(agent, (request) => this.askInChat(chat, request)),
       askUser: (call, signal) => this.askQuestionInChat(chat, call, signal),
       systemNote: { section: "channel", text: channelNote(this.channelOf(chatKey).label) },
+      surface: { kind: "chat", label: `a ${this.channelOf(chatKey).label} chat (${chatKey})` },
+      visibility: "all",
     };
   }
 

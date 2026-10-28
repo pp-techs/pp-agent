@@ -88,6 +88,15 @@
       "label": "Hỏi bạn khi cần quyết định",
       "description": "Hỏi bạn chọn giữa các phương án khi cần bạn quyết định."
     },
+    "sessions": {
+      "label": "Xem các cuộc trò chuyện khác",
+      "description": "Liệt kê và đọc các cuộc trò chuyện đã lưu, và xem có thể gửi tin tới cuộc trò chuyện nào."
+    },
+    "schedule_manage": {
+      "label": "Tác vụ theo lịch",
+      "description": "Tạo và quản lý tác vụ tự chạy theo lịch; hỏi trước khi tạo."
+    },
+
     "office_read": {
       "label": "Xem tệp Word, Excel, PowerPoint",
       "description": "Xem cấu trúc và nội dung tệp Office mà không thay đổi chúng."
