@@ -56,7 +56,6 @@
       "office_edit": "Tạo và chỉnh sửa tệp Word, Excel, PowerPoint"
     },
     "shell": {
-      "legend": "Lệnh shell",
       "description": "Cho phép Agent chạy lệnh trên máy tính của bạn (Terminal trên Mac, PowerShell trên Windows).",
       "enable": {
         "label": "Cho phép lệnh shell",
@@ -77,7 +76,16 @@
       "label": "Tìm công cụ"
     },
     "noMatch": "Không có công cụ nào khớp với “{{query}}”.",
-    "builtIn": "Có sẵn"
+    "groups": {
+      "files": "Tệp và thư mục",
+      "documents": "Tài liệu",
+      "web": "Web",
+      "memory": "Bộ nhớ",
+      "shell": "Lệnh shell",
+      "tasks": "Tác vụ và hội thoại",
+      "other": "Khác"
+    },
+    "groupCount_other": "{{count}} công cụ"
   },
   "webSearch": {
     "title": "Tìm kiếm web",

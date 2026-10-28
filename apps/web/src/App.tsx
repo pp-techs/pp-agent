@@ -10,7 +10,12 @@ import {
   EmptyTitle,
 } from "@workspace/ui/components/empty";
 import { MessageScrollerProvider } from "@workspace/ui/components/message-scroller";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@workspace/ui/components/sidebar";
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+  useSidebar,
+} from "@workspace/ui/components/sidebar";
 import { Spinner } from "@workspace/ui/components/spinner";
 import { ArrowLeftIcon, FileUpIcon, PlugIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -30,12 +35,19 @@ import { useChatStore } from "@/stores/chat-store";
 import { toAttachments, useComposerStore } from "@/stores/composer-store";
 import { connectUpdates } from "@/stores/update-store";
 
+/** The top bar's sidebar toggle: only for mobile, where the sheet closes out of reach of the rail. */
+function HiddenSidebarTrigger() {
+  const { isMobile, openMobile } = useSidebar();
+  if (!isMobile || openMobile) return null;
+  return <SidebarTrigger />;
+}
+
 /** Top bar: the sidebar toggle and the agent on the left; context window and folder on the right. */
 function Header({ bridge }: { bridge: DesktopBridge }) {
   const status = useChatStore((state) => state.status);
   return (
     <header className="flex h-12 shrink-0 items-center gap-1 px-3">
-      <SidebarTrigger />
+      <HiddenSidebarTrigger />
       <AgentPicker bridge={bridge} disabled={status === "starting"} />
       <ChatHeaderActions bridge={bridge} />
     </header>
@@ -123,7 +135,7 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
         {page === "schedules" ? (
           <>
             <header className="flex h-12 shrink-0 items-center gap-1 px-3">
-              <SidebarTrigger />
+              <HiddenSidebarTrigger />
               <Button variant="ghost" size="sm" onClick={() => setPage("chat")}>
                 <ArrowLeftIcon />
                 {t("app.backToChat")}

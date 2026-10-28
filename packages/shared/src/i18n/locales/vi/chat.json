@@ -64,8 +64,7 @@
       "days": "{{value}} ngày",
       "weeks": "{{value}} tuần"
     },
-    "newWorkspace": "Không gian làm việc mới",
-    "workspaceName": "Tên không gian làm việc",
+    "appName": "PP Agent",
     "workspaces": "Không gian làm việc",
     "manageWorkspaces": "Quản lý không gian làm việc",
     "settings": "Cài đặt",
@@ -77,12 +76,10 @@
     "search": {
       "label": "Tìm cuộc trò chuyện",
       "placeholder": "Tìm cuộc trò chuyện…",
-      "clear": "Xóa tìm kiếm",
       "searching": "Đang tìm…",
       "noResults": "Không có cuộc trò chuyện nào khớp với “{{query}}”.",
       "failed": "Tìm kiếm không thành công. Hãy thử lại.",
-      "tooShort": "Nhập ít nhất {{count}} ký tự.",
-      "results": "Kết quả tìm kiếm"
+      "tooShort": "Nhập ít nhất {{count}} ký tự."
     },
     "workspace": {
       "newChat": "Cuộc trò chuyện mới trong {{name}}",

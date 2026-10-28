@@ -64,8 +64,7 @@
       "days": "{{value}}d",
       "weeks": "{{value}}w"
     },
-    "newWorkspace": "New workspace",
-    "workspaceName": "Workspace name",
+    "appName": "PP Agent",
     "workspaces": "Workspaces",
     "manageWorkspaces": "Manage workspaces",
     "settings": "Settings",
@@ -77,12 +76,10 @@
     "search": {
       "label": "Search chats",
       "placeholder": "Search chats…",
-      "clear": "Clear search",
       "searching": "Searching…",
       "noResults": "No chats match “{{query}}”.",
       "failed": "Search failed. Try again.",
-      "tooShort": "Type at least {{count}} characters.",
-      "results": "Search results"
+      "tooShort": "Type at least {{count}} characters."
     },
     "workspace": {
       "newChat": "New chat in {{name}}",

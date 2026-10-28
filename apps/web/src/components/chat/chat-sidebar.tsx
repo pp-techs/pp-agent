@@ -7,6 +7,16 @@ import type {
   WorkspaceProfile,
 } from "@workspace/shared";
 import { DEFAULT_WORKSPACE_ID } from "@workspace/shared";
+import { Button } from "@workspace/ui/components/button";
+import {
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@workspace/ui/components/command";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,20 +36,21 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
-  SidebarInput,
   SidebarMenu,
   SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSkeleton,
+  SidebarTrigger,
   useSidebar,
 } from "@workspace/ui/components/sidebar";
+import { useUiLabels } from "@workspace/ui/components/ui-labels";
 import { useQuery } from "@tanstack/react-query";
 import {
   CalendarClockIcon,
   DownloadIcon,
-  FolderPlusIcon,
   MoreHorizontalIcon,
+  PanelLeftIcon,
   PencilIcon,
   PinIcon,
   PinOffIcon,
@@ -47,18 +58,18 @@ import {
   SettingsIcon,
   SquarePenIcon,
   Trash2Icon,
-  XIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { UpdateNotice } from "@/components/chat/update-notice";
+import { Logo } from "@/components/logo";
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { PromptModal } from "@/components/modals/prompt-modal";
 import { SettingsModal } from "@/components/modals/settings-modal";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useExportSession } from "@/hooks/use-export-session";
-import { useDeleteWorkspace, useSaveWorkspace } from "@/lib/extension-queries";
+import { useDeleteWorkspace } from "@/lib/extension-queries";
 import { i18n } from "@/lib/i18n";
 import {
   MIN_SEARCH_LENGTH,
@@ -71,7 +82,6 @@ import { useChatStore } from "@/stores/chat-store";
 
 /** Chats listed per workspace before "Show more". */
 const VISIBLE_CHATS = 6;
-const NEW_WORKSPACE_ICON = "📁";
 /** Wait for a pause in typing before searching, so one search runs per word, not per key. */
 const SEARCH_DEBOUNCE_MS = 250;
 
@@ -92,9 +102,6 @@ function relativeTime(modified: number, now = Date.now()) {
   return new Date(modified).toLocaleDateString(i18n.language, { month: "short", day: "numeric" });
 }
 
-/** Last segment of a folder path, the suggested name of a new workspace. */
-const folderName = (dir: string) => dir.split(/[\\/]/).filter(Boolean).pop() ?? "";
-
 /** `text` with the [start, end) ranges in bold. */
 function Highlighted({ text, ranges }: { text: string; ranges: ReadonlyArray<[number, number]> }) {
   const parts: React.ReactNode[] = [];
@@ -113,6 +120,85 @@ function Highlighted({ text, ranges }: { text: string; ranges: ReadonlyArray<[nu
   return <>{parts}</>;
 }
 
+/** Chat search as a command dialog (the sidebar's search button opens it); Enter opens a chat. */
+function ChatSearchDialog({
+  bridge,
+  open,
+  onOpenChange,
+  onOpenHit,
+  ready,
+}: {
+  bridge: DesktopBridge;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onOpenHit: (hit: SessionSearchHit) => void;
+  /** False while a reply is running: the hits are listed, but picking one waits. */
+  ready: boolean;
+}) {
+  const { t } = useTranslation("chat");
+  const [query, setQuery] = React.useState("");
+  const searchTerm = useDebouncedValue(query.trim(), SEARCH_DEBOUNCE_MS);
+  const search = useQuery(searchSessionsQuery(bridge, searchTerm));
+  const tooShort = query.trim().length < MIN_SEARCH_LENGTH;
+  // The hits for the previous words stay until the new ones arrive, so the list does not flicker.
+  const stale = !search.data || searchTerm !== query.trim();
+
+  let message = t("sidebar.search.noResults", { query: searchTerm });
+  if (tooShort) message = t("sidebar.search.tooShort", { count: MIN_SEARCH_LENGTH });
+  else if (search.isError) message = t("sidebar.search.failed");
+  else if (stale) message = t("sidebar.search.searching");
+
+  return (
+    <CommandDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) setQuery("");
+        onOpenChange(next);
+      }}
+      title={t("sidebar.search.label")}
+      description={t("sidebar.search.placeholder")}
+    >
+      <Command shouldFilter={false}>
+        <CommandInput
+          value={query}
+          onValueChange={setQuery}
+          placeholder={t("sidebar.search.placeholder")}
+        />
+        <CommandList>
+          <CommandEmpty>{message}</CommandEmpty>
+          {!tooShort && !stale && !search.isError && (
+            <CommandGroup>
+              {(search.data ?? []).map((hit) => (
+                <CommandItem
+                  key={hit.path}
+                  value={hit.path}
+                  disabled={!ready}
+                  onSelect={() => onOpenHit(hit)}
+                  className="h-auto flex-col items-start gap-0.5 py-1.5"
+                >
+                  <span className="flex w-full min-w-0 items-baseline gap-2">
+                    <span className="min-w-0 flex-1 truncate">
+                      <Highlighted text={hit.title} ranges={hit.titleMatches} />
+                    </span>
+                    <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                      {relativeTime(hit.modified)}
+                    </span>
+                  </span>
+                  {hit.snippet && (
+                    <span className="line-clamp-2 w-full text-xs font-normal break-words text-muted-foreground">
+                      <Highlighted text={hit.snippet} ranges={hit.snippetMatches} />
+                    </span>
+                  )}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+        </CommandList>
+      </Command>
+    </CommandDialog>
+  );
+}
+
 export function ChatSidebar({
   bridge,
   page,
@@ -122,7 +208,8 @@ export function ChatSidebar({
   page: "chat" | "schedules";
   onNavigate: (page: "chat" | "schedules") => void;
 }) {
-  const { setOpenMobile } = useSidebar();
+  const { setOpenMobile, toggleSidebar } = useSidebar();
+  const labels = useUiLabels();
   const sessions = useQuery(sessionsQuery(bridge));
   const workspaces = useQuery(workspacesQuery(bridge));
   const sessionPath = useChatStore((state) => state.sessionPath);
@@ -132,14 +219,10 @@ export function ChatSidebar({
   const { newChat, openSession, renameSession, deleteSession, pinSession } =
     useAgentCommands(bridge);
   const exportSession = useExportSession(bridge);
-  const saveWorkspace = useSaveWorkspace(bridge);
   const deleteWorkspace = useDeleteWorkspace(bridge);
   const [collapsed, setCollapsed] = React.useState<ReadonlySet<string>>(new Set());
   const [expanded, setExpanded] = React.useState<ReadonlySet<string>>(new Set());
-  const [query, setQuery] = React.useState("");
-  const searchTerm = useDebouncedValue(query.trim(), SEARCH_DEBOUNCE_MS);
-  const searching = query.trim().length > 0;
-  const search = useQuery(searchSessionsQuery(bridge, searchTerm));
+  const [searchOpen, setSearchOpen] = React.useState(false);
   const ready = status === "idle" || status === "running";
   const { t } = useTranslation(["chat", "common"]);
   const onError = (error: Error) => toast.error(error.message);
@@ -171,36 +254,6 @@ export function ChatSidebar({
     if (!next.delete(id)) next.add(id);
     return next;
   };
-
-  async function createWorkspace() {
-    let dir: string | null;
-    try {
-      dir = await bridge.files.pickFolder();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-      return;
-    }
-    if (!dir) return;
-    const name = await PromptModal.show({
-      title: t("sidebar.newWorkspace"),
-      label: t("sidebar.workspaceName"),
-      initialValue: folderName(dir),
-      confirmLabel: t("common:actions.create"),
-    });
-    if (!name) return;
-    try {
-      const created = await saveWorkspace.mutateAsync({
-        name,
-        icon: NEW_WORKSPACE_ICON,
-        dir,
-        instructions: "",
-        agentId: null,
-      });
-      newChat.mutate(created.id, { onError, onSuccess: () => navigate("chat") });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-    }
-  }
 
   async function removeWorkspace(workspace: WorkspaceProfile) {
     const confirmed = await ConfirmModal.show({
@@ -401,149 +454,96 @@ export function ChatSidebar({
     );
   }
 
-  function renderSearchResults() {
-    if (query.trim().length < MIN_SEARCH_LENGTH) {
-      return (
-        <p className="px-3 py-1.5 text-xs text-muted-foreground">
-          {t("sidebar.search.tooShort", { count: MIN_SEARCH_LENGTH })}
-        </p>
-      );
-    }
-    if (search.isError)
-      return <p className="px-3 py-1.5 text-xs text-destructive">{t("sidebar.search.failed")}</p>;
-    // The list for the previous words stays until the new ones arrive, so it does not flicker.
-    if (!search.data || searchTerm !== query.trim()) {
-      return (
-        <p className="px-3 py-1.5 text-xs text-muted-foreground">{t("sidebar.search.searching")}</p>
-      );
-    }
-    if (search.data.length === 0) {
-      return (
-        <p className="px-3 py-1.5 text-xs text-muted-foreground">
-          {t("sidebar.search.noResults", { query: searchTerm })}
-        </p>
-      );
-    }
-    return (
-      <SidebarMenu>
-        {search.data.map((hit) => (
-          <SidebarMenuItem key={hit.path}>
-            <SidebarMenuButton
-              isActive={page === "chat" && hit.path === sessionPath}
-              disabled={!ready}
-              className="h-auto flex-col items-start gap-0.5 py-1.5"
-              onClick={() => openFound(hit)}
-            >
-              <span className="flex w-full min-w-0 items-baseline gap-2">
-                <span className="min-w-0 flex-1 truncate">
-                  <Highlighted text={hit.title} ranges={hit.titleMatches} />
-                </span>
-                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                  {relativeTime(hit.modified)}
-                </span>
-              </span>
-              {hit.snippet && (
-                <span className="line-clamp-2 w-full text-xs font-normal break-words text-muted-foreground">
-                  <Highlighted text={hit.snippet} ranges={hit.snippetMatches} />
-                </span>
-              )}
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        ))}
-      </SidebarMenu>
-    );
-  }
-
   return (
-    <Sidebar variant="inset">
+    <Sidebar variant="inset" collapsible="icon">
       <SidebarHeader className="shrink-0">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              disabled={saveWorkspace.isPending}
-              onClick={() => void createWorkspace()}
+        <div className="flex items-center gap-2 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-1">
+          {/* The logo's own theme swap (`hidden dark:block`) outbids hide variants on its images. */}
+          <span className="shrink-0 group-data-[collapsible=icon]:hidden">
+            <Logo className="size-6" />
+          </span>
+          {/* Minimized rail: the logo stands in for the toggle button until hovered. */}
+          <button
+            type="button"
+            aria-label={labels.toggleSidebar}
+            title={labels.toggleSidebar}
+            className="group/toggle hidden size-8 shrink-0 items-center justify-center rounded-xl hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:flex"
+            onClick={toggleSidebar}
+          >
+            <span className="group-hover/toggle:hidden">
+              <Logo className="size-6" />
+            </span>
+            <PanelLeftIcon className="hidden size-5 group-hover/toggle:block" />
+          </button>
+          <span className="truncate text-base font-semibold group-data-[collapsible=icon]:hidden">
+            {t("sidebar.appName")}
+          </span>
+          <div className="ml-auto flex items-center gap-1 group-data-[collapsible=icon]:ml-0">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground hover:text-foreground"
+              aria-label={t("sidebar.search.label")}
+              title={t("sidebar.search.label")}
+              onClick={() => setSearchOpen(true)}
             >
-              <FolderPlusIcon />
-              <span>{t("sidebar.newWorkspace")}</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-        <div className="relative">
-          <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <SidebarInput
-            type="search"
-            value={query}
-            placeholder={t("sidebar.search.placeholder")}
-            aria-label={t("sidebar.search.label")}
-            className="pr-8 pl-9 [&::-webkit-search-cancel-button]:hidden"
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") setQuery("");
-            }}
-          />
-          {searching && (
-            <button
-              type="button"
-              aria-label={t("sidebar.search.clear")}
-              className="absolute top-1/2 right-2 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
-              onClick={() => setQuery("")}
-            >
-              <XIcon className="size-3.5" />
-            </button>
-          )}
+              <SearchIcon />
+            </Button>
+            <SidebarTrigger className="text-muted-foreground hover:text-foreground group-data-[collapsible=icon]:hidden" />
+          </div>
         </div>
       </SidebarHeader>
       <SidebarContent
-        className="overscroll-contain"
+        className="overscroll-contain group-data-[collapsible=icon]:hidden"
         role="region"
-        aria-label={searching ? t("sidebar.search.results") : t("sidebar.workspaces")}
+        aria-label={t("sidebar.workspaces")}
         tabIndex={0}
       >
-        {searching ? (
+        {pinned.length > 0 && (
           <SidebarGroup>
-            <SidebarGroupLabel>{t("sidebar.search.results")}</SidebarGroupLabel>
-            <SidebarGroupContent>{renderSearchResults()}</SidebarGroupContent>
+            <SidebarGroupLabel>{t("sidebar.pinned")}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>{pinned.map(renderSession)}</SidebarMenu>
+            </SidebarGroupContent>
           </SidebarGroup>
-        ) : (
-          <>
-            {pinned.length > 0 && (
-              <SidebarGroup>
-                <SidebarGroupLabel>{t("sidebar.pinned")}</SidebarGroupLabel>
-                <SidebarGroupContent>
-                  <SidebarMenu>{pinned.map(renderSession)}</SidebarMenu>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            )}
-            <SidebarGroup>
-              <SidebarGroupLabel className="pr-8">{t("sidebar.workspaces")}</SidebarGroupLabel>
-              <SidebarGroupAction
-                className="text-sidebar-foreground/70"
-                aria-label={t("sidebar.manageWorkspaces")}
-                title={t("sidebar.manageWorkspaces")}
-                onClick={() => void SettingsModal.show({ bridge, section: "workspaces" })}
-              >
-                <SettingsIcon aria-hidden />
-              </SidebarGroupAction>
-              <SidebarGroupContent className="flex flex-col gap-1">
-                {(sessions.isError && !sessions.data) ||
-                (workspaces.isError && !workspaces.data) ? (
-                  <p className="px-3 py-1.5 text-xs text-destructive">{t("sidebar.loadError")}</p>
-                ) : sessions.isPending || workspaces.isPending ? (
-                  <SidebarMenu>
-                    {Array.from({ length: 5 }, (_, index) => (
-                      <SidebarMenuItem key={index}>
-                        <SidebarMenuSkeleton />
-                      </SidebarMenuItem>
-                    ))}
-                  </SidebarMenu>
-                ) : (
-                  (workspaces.data ?? []).map(renderWorkspace)
-                )}
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </>
         )}
+        <SidebarGroup>
+          <SidebarGroupLabel className="pr-8">{t("sidebar.workspaces")}</SidebarGroupLabel>
+          <SidebarGroupAction
+            className="text-sidebar-foreground/70"
+            aria-label={t("sidebar.manageWorkspaces")}
+            title={t("sidebar.manageWorkspaces")}
+            onClick={() => void SettingsModal.show({ bridge, section: "workspaces" })}
+          >
+            <SettingsIcon aria-hidden />
+          </SidebarGroupAction>
+          <SidebarGroupContent className="flex flex-col gap-1">
+            {(sessions.isError && !sessions.data) || (workspaces.isError && !workspaces.data) ? (
+              <p className="px-3 py-1.5 text-xs text-destructive">{t("sidebar.loadError")}</p>
+            ) : sessions.isPending || workspaces.isPending ? (
+              <SidebarMenu>
+                {Array.from({ length: 5 }, (_, index) => (
+                  <SidebarMenuItem key={index}>
+                    <SidebarMenuSkeleton />
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            ) : (
+              (workspaces.data ?? []).map(renderWorkspace)
+            )}
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
+      <ChatSearchDialog
+        bridge={bridge}
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        ready={ready}
+        onOpenHit={(hit) => {
+          openFound(hit);
+          setSearchOpen(false);
+        }}
+      />
       <SidebarFooter className="shrink-0">
         <UpdateNotice bridge={bridge} />
         <SidebarMenu>

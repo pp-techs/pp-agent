@@ -4,6 +4,11 @@ import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/al
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@workspace/ui/components/collapsible";
+import {
   Empty,
   EmptyDescription,
   EmptyHeader,
@@ -29,13 +34,14 @@ import {
 } from "@workspace/ui/components/select";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
+import { cn } from "@workspace/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
 import { Trans, useTranslation } from "react-i18next";
-import { SearchIcon, TriangleAlertIcon, WrenchIcon } from "lucide-react";
+import { ChevronRightIcon, SearchIcon, TriangleAlertIcon, WrenchIcon } from "lucide-react";
 
 import { ConfirmModal } from "@/components/modals/confirm-modal";
-import { OptionGroup, SwitchRow } from "@/components/settings/option-group";
+import { SwitchRow } from "@/components/settings/option-group";
 import { SectionHeading } from "@/components/settings/section-heading";
 import { WebSearchPage } from "@/components/settings/web-search-page";
 import {
@@ -136,22 +142,119 @@ function lockedReason(tool: ToolSummary, t: T) {
   return t("tools.lockedReason.default");
 }
 
-/** Built-in first, then each MCP server alphabetically. */
-function groupBySource(tools: ToolSummary[]) {
-  const groups = new Map<string, ToolSummary[]>();
+/** The kinds of built-in tools the page groups by. */
+type ToolGroupKind = "files" | "documents" | "web" | "memory" | "shell" | "tasks" | "other";
+
+/** What the built-in tools are for; a tool not listed here falls into the "other" group. */
+const BUILT_IN_GROUPS: Record<string, ToolGroupKind> = {
+  read: "files",
+  write: "files",
+  edit: "files",
+  ls: "files",
+  find: "files",
+  grep: "files",
+  read_document: "documents",
+  office_read: "documents",
+  office_edit: "documents",
+  web_search: "web",
+  web_fetch: "web",
+  memory_save: "memory",
+  memory_list: "memory",
+  memory_search: "memory",
+  memory_forget: "memory",
+  bash: "shell",
+  powershell: "shell",
+  todo_write: "tasks",
+  ask_user: "tasks",
+  delegate_task: "tasks",
+  sessions: "tasks",
+  schedule_manage: "tasks",
+};
+
+/** Built-in group kinds in the order the page lists them; MCP servers follow, A–Z. */
+const GROUP_ORDER = ["files", "documents", "web", "memory", "shell", "tasks", "other"];
+
+interface ToolGroupData {
+  /** Stable id for the open/closed state. */
+  id: string;
+  /** Built-in kind (`files`, `memory`, …), or null for an MCP server's tools. */
+  kind: ToolGroupKind | null;
+  /** MCP server name; only read when `kind` is null. */
+  server: string;
+  tools: ToolSummary[];
+}
+
+/** Built-in tools grouped by what they are for; the tools of each MCP server after them. */
+function groupedTools(tools: ToolSummary[]): ToolGroupData[] {
+  const groups = new Map<string, ToolGroupData>();
   for (const tool of tools) {
-    const list = groups.get(tool.source) ?? [];
-    list.push(tool);
-    groups.set(tool.source, list);
+    const kind = tool.source === "built-in" ? (BUILT_IN_GROUPS[tool.name] ?? "other") : null;
+    const id = kind ? `kind:${kind}` : `server:${tool.source}`;
+    const group = groups.get(id) ?? { id, kind, server: tool.source, tools: [] };
+    group.tools.push(tool);
+    groups.set(id, group);
   }
-  return [...groups].sort(([a], [b]) => {
-    if (a === "built-in") return -1;
-    if (b === "built-in") return 1;
-    return a.localeCompare(b);
+  return [...groups.values()].sort((a, b) => {
+    const ra = a.kind ? GROUP_ORDER.indexOf(a.kind) : GROUP_ORDER.length;
+    const rb = b.kind ? GROUP_ORDER.indexOf(b.kind) : GROUP_ORDER.length;
+    return ra - rb || a.server.localeCompare(b.server);
   });
 }
 
-function ShellGroup({ bridge }: { bridge: DesktopBridge }) {
+/**
+ * One kind of tools behind a collapsed header, so a long tool list stays short. Search shows
+ * groups open by default; a click always records the person's own choice.
+ */
+function ToolGroup({
+  bridge,
+  title,
+  tools,
+  intro,
+  open,
+  onOpenChange,
+}: {
+  bridge: DesktopBridge;
+  title: string;
+  tools: ToolSummary[];
+  /** Settings that belong to this kind of tools, shown above its tool rows. */
+  intro?: React.ReactNode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { t } = useTranslation("extensions");
+  return (
+    <Collapsible open={open} onOpenChange={onOpenChange} className="flex flex-col gap-2">
+      <h3 className="text-xs font-medium text-muted-foreground uppercase">
+        <CollapsibleTrigger
+          className={cn(
+            "flex w-full cursor-pointer items-center gap-1.5 rounded-lg text-left outline-none",
+            "hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/30",
+          )}
+        >
+          <ChevronRightIcon
+            aria-hidden
+            className="size-3 shrink-0 transition-transform data-[panel-open]:rotate-90"
+          />
+          <span className="truncate">{title}</span>
+          <span className="shrink-0 font-normal normal-case tabular-nums">
+            {` · ${t("tools.groupCount", { count: tools.length })}`}
+          </span>
+        </CollapsibleTrigger>
+      </h3>
+      <CollapsibleContent className="flex flex-col gap-2.5">
+        {intro}
+        <ItemGroup>
+          {tools.map((tool) => (
+            <ToolRow key={tool.name} bridge={bridge} tool={tool} />
+          ))}
+        </ItemGroup>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+/** The master switch for shell commands, shown above the shell tools in their group. */
+function ShellSettings({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("extensions");
   const settings = useQuery(settingsQuery(bridge));
   const tools = useQuery(toolsQuery(bridge));
@@ -161,7 +264,8 @@ function ShellGroup({ bridge }: { bridge: DesktopBridge }) {
     : (settings.data?.shellEnabled ?? false);
   const warning = tools.data?.find((tool) => SHELL_TOOLS[tool.name] && tool.warning)?.warning;
   return (
-    <OptionGroup legend={t("tools.shell.legend")} description={t("tools.shell.description")}>
+    <div className="flex flex-col gap-2.5">
+      <p className="text-sm text-muted-foreground">{t("tools.shell.description")}</p>
       <SwitchRow
         id="shell-enabled"
         label={t("tools.shell.enable.label")}
@@ -177,7 +281,7 @@ function ShellGroup({ bridge }: { bridge: DesktopBridge }) {
           <AlertDescription>{t(`${WARNING_KEYS[warning]}.message`)}</AlertDescription>
         </Alert>
       )}
-    </OptionGroup>
+    </div>
   );
 }
 
@@ -307,12 +411,6 @@ function ToolRow({ bridge, tool }: { bridge: DesktopBridge; tool: ToolSummary })
         {tool.locked && (
           <ItemDescription className="text-xs">{lockedReason(tool, t)}</ItemDescription>
         )}
-        {tool.warning && (
-          <ItemDescription className="flex items-center gap-1 text-xs text-destructive">
-            <TriangleAlertIcon className="size-3 shrink-0" />
-            {t(`${WARNING_KEYS[tool.warning]}.message`)}
-          </ItemDescription>
-        )}
       </ItemContent>
       <ItemActions>
         <PolicyControl bridge={bridge} tool={tool} />
@@ -338,19 +436,26 @@ export function ToolsSection({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("extensions");
   const tools = useQuery(toolsQuery(bridge));
   const [search, setSearch] = React.useState("");
+  /** Per-group open state; untouched groups stay collapsed, or open while searching. */
+  const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>({});
   const [view, setView] = React.useState<View>({ kind: "list" });
 
   if (view.kind === "webSearch") return <WebSearchPage bridge={bridge} />;
 
   const all = tools.data ?? [];
   const query = search.trim().toLowerCase();
-  const filtered = query
-    ? all.filter((tool) =>
-        [friendlyName(tool, t), tool.name, tool.description, tool.source].some((text) =>
-          text.toLowerCase().includes(query),
-        ),
-      )
-    : all;
+  const groups = groupedTools(all).map((group) => {
+    const title = group.kind ? t(`tools.groups.${group.kind}`) : group.server;
+    const tools = query
+      ? group.tools.filter((tool) =>
+          [friendlyName(tool, t), tool.name, tool.description, title].some((text) =>
+            text.toLowerCase().includes(query),
+          ),
+        )
+      : group.tools;
+    return { ...group, title, tools };
+  });
+  const filtered = groups.filter((group) => group.tools.length > 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -358,12 +463,6 @@ export function ToolsSection({ bridge }: { bridge: DesktopBridge }) {
         title={t("tools.heading.title")}
         description={t("tools.heading.description")}
       />
-
-      <ShellGroup bridge={bridge} />
-
-      <ItemGroup>
-        <WebSearchRow bridge={bridge} onOpen={() => setView({ kind: "webSearch" })} />
-      </ItemGroup>
 
       <p className="text-sm text-muted-foreground">
         <Trans
@@ -410,17 +509,24 @@ export function ToolsSection({ bridge }: { bridge: DesktopBridge }) {
               {t("tools.noMatch", { query: search.trim() })}
             </p>
           ) : (
-            groupBySource(filtered).map(([source, list]) => (
-              <section key={source} className="flex flex-col gap-2">
-                <h3 className="text-xs font-medium text-muted-foreground uppercase">
-                  {source === "built-in" ? t("tools.builtIn") : source}
-                </h3>
-                <ItemGroup>
-                  {list.map((tool) => (
-                    <ToolRow key={tool.name} bridge={bridge} tool={tool} />
-                  ))}
-                </ItemGroup>
-              </section>
+            filtered.map((group) => (
+              <ToolGroup
+                key={group.id}
+                bridge={bridge}
+                title={group.title}
+                tools={group.tools}
+                intro={
+                  group.kind === "shell" ? (
+                    <ShellSettings bridge={bridge} />
+                  ) : group.kind === "web" ? (
+                    <ItemGroup>
+                      <WebSearchRow bridge={bridge} onOpen={() => setView({ kind: "webSearch" })} />
+                    </ItemGroup>
+                  ) : undefined
+                }
+                open={openGroups[group.id] ?? query !== ""}
+                onOpenChange={(next) => setOpenGroups((state) => ({ ...state, [group.id]: next }))}
+              />
             ))
           )}
         </div>
