@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.11.1] — 2026-10-28
+
+Updates the bundled OfficeCLI to 1.0.159 (Word, Excel and PowerPoint support).
+
 ## [0.11.0] — 2026-10-28
 
 The agent now uses "Scheduled tasks" (`schedule_manage`) to create one-shot reminders and recurring jobs, list or update tasks, pause/resume them, run them now, and remove them. It accepts conversation targets and result-delivery destinations, including the paired Telegram owner or an explicitly configured chat. Schedule approvals disclose the action, time, target, delivery, and run controls. Scheduled runs cannot create further tasks; their result delivery is handled by the host, not a separate Telegram notification tool. "See other conversations" lets the agent inspect saved sessions, with member chats restricted to their own conversation.
