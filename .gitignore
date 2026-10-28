@@ -40,3 +40,6 @@ tmp/
 
 # Leftover OfficeCLI binaries from the old fetch script (the build gets it from @officecli/officecli)
 apps/desktop/resources/officecli/
+
+# webclaw binaries downloaded by apps/desktop/scripts/fetch-webclaw.mjs
+apps/desktop/resources/webclaw/

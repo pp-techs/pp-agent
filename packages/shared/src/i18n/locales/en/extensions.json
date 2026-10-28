@@ -90,9 +90,9 @@
   },
   "webSearch": {
     "title": "Web search",
-    "description": "Pick the search services the agent can use. It tries them in order and moves on to the next when one fails. Keys stay encrypted on this computer.",
+    "description": "Pick the search services the agent can use. It tries them in order and moves on to the next when one fails. Keys stay encrypted on this computer. When none of them answers, or none is turned on, the agent uses Exa and DuckDuckGo without a key: your search words are sent to them.",
     "summary": "Tried in order: {{providers}}",
-    "summaryEmpty": "No search service turned on.",
+    "summaryEmpty": "No search service turned on. Exa and DuckDuckGo are used without a key.",
     "manage": "Manage",
     "setUp": "Set up",
     "needsSetup": "Needs setup",
@@ -110,6 +110,7 @@
       "saved": "Key saved. Type to replace it.",
       "required": "API key",
       "optional": "Access token (optional)",
+      "optionalApi": "API key (optional)",
       "remove": "Remove key"
     },
     "test": {

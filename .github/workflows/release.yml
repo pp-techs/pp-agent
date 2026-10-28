@@ -225,6 +225,8 @@ jobs:
           # electron-builder only warns when an extraResources source is missing; fail instead of
           # shipping an app without OfficeCLI.
           test -d ../../packages/agent-core/node_modules/@officecli/officecli/vendor
+          # webclaw is not an npm package: download the binary for this runner (checksum-pinned).
+          node scripts/fetch-webclaw.mjs --require
           args=(--config electron-builder.yml "$PLATFORM" "$ARCH" --publish never)
           if [ "$PLATFORM" = "--mac" ]; then
             if [ -z "$CSC_LINK" ]; then

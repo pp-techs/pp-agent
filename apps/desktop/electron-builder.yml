@@ -30,6 +30,15 @@ extraResources:
     to: licenses/officecli
   - from: resources/skills
     to: skills
+  # webclaw (AGPL-3.0) turns the HTML of a web page into Markdown: the binary scripts/fetch-webclaw.mjs
+  # downloaded for this platform, plus its license and where its source is. Windows on ARM has no
+  # build; the app then converts pages with its own code.
+  - from: resources/webclaw/${os}-${arch}
+    to: webclaw/${os}-${arch}
+    filter:
+      - "!.version"
+  - from: resources/licenses/webclaw
+    to: licenses/webclaw
 asar: true
 # Native addons cannot load from inside the asar archive (the daemon's OS keyring binding).
 asarUnpack:

@@ -155,7 +155,9 @@ function ProviderRow({
                     ? t("webSearch.key.saved")
                     : provider.keyRequired
                       ? t("webSearch.key.required")
-                      : t("webSearch.key.optional")
+                      : provider.id === "searxng"
+                        ? t("webSearch.key.optional")
+                        : t("webSearch.key.optionalApi")
                 }
                 aria-label={t("webSearch.key.label", { provider: provider.label })}
                 onChange={(event) => {

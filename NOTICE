@@ -13,3 +13,9 @@ line tool for Word, Excel, and PowerPoint files, and the skill texts that come w
 (https://OfficeCLI.AI) and is licensed under the Apache License, Version 2.0. Its license, NOTICE,
 and third-party notices are installed with the app in resources/licenses/officecli and are kept
 in apps/desktop/resources/licenses/officecli.
+
+The desktop app also bundles webclaw (https://github.com/0xMassi/webclaw), a command line tool that
+extracts the text of web pages. webclaw is licensed under the GNU Affero General Public License,
+version 3. It runs as a separate program that the app starts for each page; it is not linked into
+the app and is not modified. Its license and the location of its source code are installed with the
+app in resources/licenses/webclaw and are kept in apps/desktop/resources/licenses/webclaw.

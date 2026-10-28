@@ -11,6 +11,7 @@ import type { SettingsStore } from "../settings-store.ts";
 import { isSearchProviderId, normalizeEndpoint } from "./config.ts";
 import { WEB_KEY_PREFIX } from "./names.ts";
 import {
+  KEYLESS_FALLBACK,
   providerDef,
   SEARCH_PROVIDER_DEFS,
   SearchProviderError,
@@ -118,28 +119,37 @@ export class WebSearchService {
     return this.view();
   }
 
-  /** Runs `request` against the enabled providers in order; the first to answer wins. */
+  /**
+   * Runs `request` against the services the person turned on, in order, then against the free
+   * services that need no key (so a saved key always comes first). The first to return results
+   * wins; a service that answers with nothing is passed over, and only when every service does
+   * the empty answer is returned.
+   */
   async search(request: SearchRequest): Promise<SearchOutcome> {
     const { providers } = this.settings.get().webSearch;
+    const order = [...providers, ...KEYLESS_FALLBACK.filter((id) => !providers.includes(id))];
     const failures: string[] = [];
-    for (const id of providers) {
+    let empty: SearchOutcome | undefined;
+    for (const id of order) {
       const def = providerDef(id);
       const setup = await this.setupOf(id);
       if ((def.keyRequired && !setup.key) || (def.endpointRequired && !setup.endpoint)) {
         failures.push(`${def.label}: not fully set up.`);
         continue;
       }
+      // Without a key or a server address of the person's own, say so: the words went to a free service.
+      const label = setup.key || setup.endpoint ? def.label : `${def.label} (no key)`;
       try {
-        return { provider: id, label: def.label, hits: await def.search(request, setup) };
+        const hits = await def.search(request, setup);
+        if (hits.length > 0) return { provider: id, label, hits };
+        empty ??= { provider: id, label, hits };
+        failures.push(`${def.label}: no results.`);
       } catch (error) {
         if (request.signal?.aborted) throw error;
         failures.push(`${def.label}: ${describeFailure(error)}`);
       }
     }
-    if (providers.length === 0)
-      throw new Error(
-        `Web search is not set up. Ask the user to add a search service in ${SETTINGS_HINT}.`,
-      );
+    if (empty) return empty;
     throw new Error(
       `Every search service failed. ${failures.join(" ")} Ask the user to check ${SETTINGS_HINT}.`,
     );

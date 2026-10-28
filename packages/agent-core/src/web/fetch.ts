@@ -4,6 +4,7 @@ import http from "node:http";
 import https from "node:https";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import { OfficeParser } from "officeparser";
+import { extractWithWebclaw } from "./webclaw.ts";
 
 /** Address ranges a web page must never make the app reach: this computer, the local network, cloud metadata. */
 const BLOCKED = new BlockList();
@@ -228,6 +229,28 @@ function decode(body: Buffer, contentType: string): string {
   }
 }
 
+/** webclaw output shorter than this may have cut away the real content of an unusual page. */
+const SHORT_EXTRACTION = 500;
+
+/**
+ * The text of an HTML page as Markdown. webclaw keeps the main content and drops menus and
+ * footers; when it is missing, fails or returns very little, the whole page is converted instead
+ * and the longer of the two wins.
+ */
+export async function htmlToText(
+  html: string,
+  signal?: AbortSignal,
+  binary?: string | null,
+): Promise<string> {
+  const extracted = await extractWithWebclaw(html, { signal, binary });
+  if (extracted !== null && extracted.length >= SHORT_EXTRACTION) return extracted;
+  const ast = await OfficeParser.parseOffice(Buffer.from(html, "utf8"), {
+    fileType: "html" as never,
+  });
+  const whole = (await ast.to("md")).value;
+  return extracted !== null && extracted.length > whole.length ? extracted : whole;
+}
+
 export interface FetchedPage {
   url: string;
   contentType: string;
@@ -256,12 +279,7 @@ export async function fetchPage(input: string, signal?: AbortSignal): Promise<Fe
   const body = decode(response.body, response.contentType);
   const looksHtml =
     type === "text/html" || type === "application/xhtml+xml" || /^\s*<(!doctype|html)/i.test(body);
-  if (looksHtml) {
-    const ast = await OfficeParser.parseOffice(Buffer.from(body, "utf8"), {
-      fileType: "html" as never,
-    });
-    return { ...base, text: (await ast.to("md")).value };
-  }
+  if (looksHtml) return { ...base, text: await htmlToText(body, signal) };
   if (type.startsWith("text/") || type.includes("json") || type.includes("xml") || type === "")
     return { ...base, text: body };
   throw new Error(`Pages of type ${type} cannot be read.`);

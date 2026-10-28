@@ -22,7 +22,7 @@ Coding agents are powerful but built for developers. PP Agent puts the same engi
 ## Features
 
 - **Chat with documents.** Attach or drop files and paste images. The agent reads PDF, Word, Excel, PowerPoint, OpenDocument, RTF, EPUB, HTML, and CSV.
-- **Web search.** The agent can search the web and read pages, PDFs, and Office files from the internet. Pick and order the search services in **Settings › Tools › Web search**: SearXNG (self-hosted), Serper, Tavily, Brave Search, Exa, or webclaw; it falls back to the next one when a service fails. Pages on private networks are never opened.
+- **Web search.** The agent can search the web and read pages, PDFs, and Office files from the internet. Pick and order the search services in **Settings › Tools › Web search**: SearXNG (self-hosted), Serper, Tavily, Brave Search, Exa, webclaw, or DuckDuckGo; it falls back to the next one when a service fails. It also works with no setup at all: without a key it uses Exa and DuckDuckGo, after any service you set up. Pages on private networks are never opened.
 - **Agents.** Profiles with their own rules, icon, tools, MCP servers, skills, model, starter prompts, and workspace folder. Switch mid-conversation; share them as `.json` files.
 - **Any model.** Sign in to Pi's built-in providers (Anthropic, OpenAI, Google, OpenRouter, Mistral, Groq, and more) with an API key, or add your own OpenAI- or Anthropic-compatible gateways. Choose the model and thinking level per conversation.
 - **Business systems through MCP.** Add, edit, and monitor [MCP](https://modelcontextprotocol.io) servers in Settings, including OAuth sign-in. Paste configurations from Claude Desktop or Cursor.

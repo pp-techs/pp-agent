@@ -782,7 +782,15 @@ export interface VoiceView {
 // ---------------------------------------------------------------------------------------------
 
 /** Search services `web_search` can use. */
-export const SEARCH_PROVIDERS = ["searxng", "serper", "tavily", "brave", "exa", "webclaw"] as const;
+export const SEARCH_PROVIDERS = [
+  "searxng",
+  "serper",
+  "tavily",
+  "brave",
+  "exa",
+  "webclaw",
+  "duckduckgo",
+] as const;
 export type SearchProviderId = (typeof SEARCH_PROVIDERS)[number];
 
 /** Stored in settings.json. Keys are not here: they live in the encrypted vault. */

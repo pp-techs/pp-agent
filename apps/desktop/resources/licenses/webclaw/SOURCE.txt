@@ -1,0 +1,11 @@
+PP Agent bundles webclaw (https://github.com/0xMassi/webclaw), a command line tool that extracts
+the text of web pages. webclaw is licensed under the GNU Affero General Public License, version 3
+(the LICENSE file in this folder).
+
+It runs as a separate program: PP Agent starts it for each page and reads its output. It is not
+linked into PP Agent and was not modified.
+
+The source code of the bundled version is at
+https://github.com/0xMassi/webclaw/tree/v0.7.0
+and the binaries are the unmodified release files from
+https://github.com/0xMassi/webclaw/releases/tag/v0.7.0

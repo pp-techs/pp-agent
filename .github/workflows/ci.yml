@@ -62,6 +62,8 @@ jobs:
           # electron-builder only warns when an extraResources source is missing; fail instead of
           # shipping an app without OfficeCLI.
           test -d ../../packages/agent-core/node_modules/@officecli/officecli/vendor
+          # webclaw is not an npm package: download the binary for this runner (checksum-pinned).
+          node scripts/fetch-webclaw.mjs --require
           vp exec electron-builder --config electron-builder.yml --linux --x64 --publish never
           # The release workflow uploads this feed; the installed app finds updates through it.
           test -f release/latest-linux.yml
@@ -95,6 +97,8 @@ jobs:
           # electron-builder only warns when an extraResources source is missing; fail instead of
           # shipping an app without OfficeCLI.
           test -d ../../packages/agent-core/node_modules/@officecli/officecli/vendor
+          # webclaw is not an npm package: download the binary for this runner (checksum-pinned).
+          node scripts/fetch-webclaw.mjs --require
           vp exec electron-builder --config electron-builder.yml --win --x64 --publish never
           # The release workflow uploads this feed; the installed app finds updates through it.
           test -f release/latest.yml

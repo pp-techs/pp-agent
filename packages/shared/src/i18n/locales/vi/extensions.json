@@ -89,9 +89,9 @@
   },
   "webSearch": {
     "title": "Tìm kiếm web",
-    "description": "Chọn các dịch vụ tìm kiếm mà Agent có thể dùng. Agent thử lần lượt theo thứ tự và chuyển sang dịch vụ tiếp theo khi một dịch vụ lỗi. Khóa API được mã hóa và lưu trên máy tính này.",
+    "description": "Chọn các dịch vụ tìm kiếm mà Agent có thể dùng. Agent thử lần lượt theo thứ tự và chuyển sang dịch vụ tiếp theo khi một dịch vụ lỗi. Khóa API được mã hóa và lưu trên máy tính này. Khi không dịch vụ nào trả lời được, hoặc chưa bật dịch vụ nào, Agent dùng Exa và DuckDuckGo không cần khóa: từ khóa tìm kiếm của bạn sẽ được gửi tới các dịch vụ này.",
     "summary": "Thử theo thứ tự: {{providers}}",
-    "summaryEmpty": "Chưa bật dịch vụ tìm kiếm nào.",
+    "summaryEmpty": "Chưa bật dịch vụ tìm kiếm nào. Exa và DuckDuckGo được dùng không cần khóa.",
     "manage": "Quản lý",
     "setUp": "Thiết lập",
     "needsSetup": "Cần thiết lập",
@@ -109,6 +109,7 @@
       "saved": "Đã lưu khóa. Nhập để thay thế.",
       "required": "Khóa API",
       "optional": "Mã truy cập (không bắt buộc)",
+      "optionalApi": "Khóa API (không bắt buộc)",
       "remove": "Xóa khóa"
     },
     "test": {
