@@ -71,6 +71,7 @@
   "gatewayForm": {
     "titleAdd": "Add a gateway",
     "titleEdit": "Edit {{name}}",
+    "description": "An OpenAI- or Anthropic-compatible address your team runs or buys.",
     "saved": "{{name}} saved",
     "noModelsListed": "The gateway didn't list any models. Add them by name.",
     "name": {

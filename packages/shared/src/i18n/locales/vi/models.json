@@ -70,6 +70,7 @@
   "gatewayForm": {
     "titleAdd": "Thêm Gateway",
     "titleEdit": "Sửa {{name}}",
+    "description": "Địa chỉ tương thích OpenAI hoặc Anthropic mà nhóm bạn tự vận hành hoặc mua.",
     "saved": "Đã lưu {{name}}",
     "noModelsListed": "Gateway không liệt kê mô hình nào. Hãy thêm mô hình theo tên.",
     "name": {

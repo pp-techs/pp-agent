@@ -11,6 +11,14 @@ import {
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import { Checkbox } from "@workspace/ui/components/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@workspace/ui/components/empty";
 import {
   Field,
@@ -100,7 +108,7 @@ function ProviderRow({
   onEditGateway: (id: string) => void;
 }) {
   const { t } = useTranslation(["models", "common"]);
-  const { connect, disconnect } = commands;
+  const { connect, disconnect, deleteGateway } = commands;
 
   /** The backend names the credential source in English ("Saved key", "Environment variable"). */
   function authSourceLabel(source: string | undefined) {
@@ -111,6 +119,7 @@ function ProviderRow({
 
   const connecting = connect.isPending && connect.variables === provider.id;
   const disconnecting = disconnect.isPending && disconnect.variables === provider.id;
+  const deleting = deleteGateway.isPending && deleteGateway.variables === provider.id;
 
   function onConnect() {
     connect.mutate(provider.id, {
@@ -134,6 +143,19 @@ function ProviderRow({
     });
   }
 
+  async function onDeleteGateway() {
+    const confirmed = await ConfirmModal.show({
+      title: t("gatewayRow.deleteTitle", { name: provider.name }),
+      description: t("gatewayRow.deleteDescription"),
+      confirmLabel: t("common:actions.delete"),
+    });
+    if (!confirmed) return;
+    deleteGateway.mutate(provider.id, {
+      onSuccess: () => toast.success(t("gatewayRow.deleted", { name: provider.name })),
+      onError: (error) => toast.error(error.message),
+    });
+  }
+
   const details = provider.configured
     ? [authSourceLabel(provider.authSource), t("modelCount", { count: provider.modelCount })]
     : [t("modelCount", { count: provider.modelCount })];
@@ -151,10 +173,21 @@ function ProviderRow({
       </ItemContent>
       <ItemActions>
         {provider.kind === "gateway" ? (
-          <Button variant="outline" size="sm" onClick={() => onEditGateway(provider.id)}>
-            <PencilIcon data-icon="inline-start" />
-            {t("common:actions.edit")}
-          </Button>
+          <>
+            <Button variant="outline" size="sm" onClick={() => onEditGateway(provider.id)}>
+              <PencilIcon data-icon="inline-start" />
+              {t("common:actions.edit")}
+            </Button>
+            <Button
+              variant="destructive"
+              size="icon-sm"
+              aria-label={t("gatewayRow.delete", { name: provider.name })}
+              disabled={deleting}
+              onClick={() => void onDeleteGateway()}
+            >
+              {deleting ? <Spinner /> : <Trash2Icon />}
+            </Button>
+          </>
         ) : provider.configured ? (
           <>
             <Button variant="ghost" size="sm" disabled={connect.isPending} onClick={onConnect}>
@@ -441,6 +474,8 @@ function GatewayForm({
                     name: model.name ?? reported.name,
                     contextWindow: model.contextWindow ?? reported.contextWindow,
                     maxTokens: model.maxTokens ?? reported.maxTokens,
+                    reasoning: model.reasoning ?? reported.reasoning,
+                    images: model.images ?? reported.images,
                   }
                 : model;
             }),
@@ -474,183 +509,194 @@ function GatewayForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-6 rounded-2xl border p-4">
-      <h4 className="font-medium">
-        {gateway ? t("gatewayForm.titleEdit", { name: gateway.name }) : t("gatewayForm.titleAdd")}
-      </h4>
-      <FieldGroup>
-        <Field>
-          <FieldLabel htmlFor="gateway-name">{t("gatewayForm.name.label")}</FieldLabel>
-          <Input
-            id="gateway-name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder={t("gatewayForm.name.placeholder")}
-            autoComplete="off"
-            autoFocus
-          />
-          <FieldDescription>{t("gatewayForm.name.description")}</FieldDescription>
-        </Field>
-        <Field>
-          <FieldLabel>{t("gatewayForm.apiType.label")}</FieldLabel>
-          <Select items={apiItems} value={api} onValueChange={(value) => value && setApi(value)}>
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {apiItems.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <FieldDescription>{t("gatewayForm.apiType.description")}</FieldDescription>
-        </Field>
-        <Field data-invalid={urlInvalid || undefined}>
-          <FieldLabel htmlFor="gateway-url">{t("gatewayForm.url.label")}</FieldLabel>
-          <Input
-            id="gateway-url"
-            value={baseUrl}
-            onChange={(event) => setBaseUrl(event.target.value)}
-            placeholder="https://gateway.example.com/v1"
-            aria-invalid={urlInvalid || undefined}
-            autoComplete="off"
-          />
-          {urlInvalid ? (
-            <FieldError>{t("gatewayForm.url.invalid")}</FieldError>
-          ) : (
-            <FieldDescription>{t("gatewayForm.url.description")}</FieldDescription>
-          )}
-        </Field>
-        <SwitchRow
-          id="gateway-requires-key"
-          label={t("gatewayForm.requiresKey.label")}
-          description={t("gatewayForm.requiresKey.description")}
-          checked={requiresApiKey}
-          onCheckedChange={setRequiresApiKey}
-        />
-        <Field>
-          <FieldLabel htmlFor="gateway-key">
-            {requiresApiKey ? t("gatewayForm.apiKey.label") : t("gatewayForm.apiKey.labelOptional")}
-          </FieldLabel>
-          <Input
-            id="gateway-key"
-            type="password"
-            value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
-            placeholder={
-              gateway?.hasApiKey
-                ? t("gatewayForm.apiKey.placeholderSaved")
-                : t("gatewayForm.apiKey.placeholderNew")
-            }
-            autoComplete="off"
-          />
-          <FieldDescription>
-            {requiresApiKey
-              ? t("gatewayForm.apiKey.description")
-              : t("gatewayForm.apiKey.descriptionOptional")}
-          </FieldDescription>
-        </Field>
-        <OptionGroup
-          legend={t("gatewayForm.models.legend")}
-          description={t("gatewayForm.models.description")}
-          action={
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!isHttpUrl(url) || !hasKey || fetchGatewayModels.isPending}
-              onClick={onFetch}
-            >
-              {fetchGatewayModels.isPending ? (
-                <Spinner data-icon="inline-start" />
-              ) : (
-                <DownloadIcon data-icon="inline-start" />
-              )}
-              {t("gatewayForm.models.load")}
-            </Button>
-          }
-        >
-          {fetchGatewayModels.isError && (
-            <FieldError>
-              {t("gatewayForm.models.loadError", { message: fetchGatewayModels.error.message })}
-            </FieldError>
-          )}
-          {fetched && fetched.length > 0 && (
-            <FetchedModels models={fetched} included={included} onInclude={includeModels} />
-          )}
-          <InputGroup>
-            <InputGroupInput
-              aria-label={t("gatewayForm.models.manualLabel")}
-              value={manualId}
-              onChange={(event) => setManualId(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter") return;
-                event.preventDefault();
-                addModel(manualId);
-                setManualId("");
-              }}
-              placeholder={t("gatewayForm.models.manualPlaceholder")}
+    <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col gap-0">
+      <DialogHeader>
+        <DialogTitle>
+          {gateway ? t("gatewayForm.titleEdit", { name: gateway.name }) : t("gatewayForm.titleAdd")}
+        </DialogTitle>
+        <DialogDescription>{t("gatewayForm.description")}</DialogDescription>
+      </DialogHeader>
+      <div className="min-h-0 flex-1 overflow-y-auto border-y py-4">
+        <FieldGroup className="pr-4">
+          <Field>
+            <FieldLabel htmlFor="gateway-name">{t("gatewayForm.name.label")}</FieldLabel>
+            <Input
+              id="gateway-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder={t("gatewayForm.name.placeholder")}
+              autoComplete="off"
+              autoFocus
+            />
+            <FieldDescription>{t("gatewayForm.name.description")}</FieldDescription>
+          </Field>
+          <Field>
+            <FieldLabel>{t("gatewayForm.apiType.label")}</FieldLabel>
+            <Select items={apiItems} value={api} onValueChange={(value) => value && setApi(value)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {apiItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FieldDescription>{t("gatewayForm.apiType.description")}</FieldDescription>
+          </Field>
+          <Field data-invalid={urlInvalid || undefined}>
+            <FieldLabel htmlFor="gateway-url">{t("gatewayForm.url.label")}</FieldLabel>
+            <Input
+              id="gateway-url"
+              value={baseUrl}
+              onChange={(event) => setBaseUrl(event.target.value)}
+              placeholder="https://gateway.example.com/v1"
+              aria-invalid={urlInvalid || undefined}
               autoComplete="off"
             />
-            <InputGroupAddon align="inline-end">
+            {urlInvalid ? (
+              <FieldError>{t("gatewayForm.url.invalid")}</FieldError>
+            ) : (
+              <FieldDescription>{t("gatewayForm.url.description")}</FieldDescription>
+            )}
+          </Field>
+          <SwitchRow
+            id="gateway-requires-key"
+            label={t("gatewayForm.requiresKey.label")}
+            description={t("gatewayForm.requiresKey.description")}
+            checked={requiresApiKey}
+            onCheckedChange={setRequiresApiKey}
+          />
+          <Field>
+            <FieldLabel htmlFor="gateway-key">
+              {requiresApiKey
+                ? t("gatewayForm.apiKey.label")
+                : t("gatewayForm.apiKey.labelOptional")}
+            </FieldLabel>
+            <Input
+              id="gateway-key"
+              type="password"
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+              placeholder={
+                gateway?.hasApiKey
+                  ? t("gatewayForm.apiKey.placeholderSaved")
+                  : t("gatewayForm.apiKey.placeholderNew")
+              }
+              autoComplete="off"
+            />
+            <FieldDescription>
+              {requiresApiKey
+                ? t("gatewayForm.apiKey.description")
+                : t("gatewayForm.apiKey.descriptionOptional")}
+            </FieldDescription>
+          </Field>
+          <OptionGroup
+            legend={t("gatewayForm.models.legend")}
+            description={t("gatewayForm.models.description")}
+            action={
               <Button
                 type="button"
-                variant="ghost"
-                size="xs"
-                disabled={!manualId.trim()}
-                onClick={() => {
+                variant="outline"
+                size="sm"
+                disabled={!isHttpUrl(url) || !hasKey || fetchGatewayModels.isPending}
+                onClick={onFetch}
+              >
+                {fetchGatewayModels.isPending ? (
+                  <Spinner data-icon="inline-start" />
+                ) : (
+                  <DownloadIcon data-icon="inline-start" />
+                )}
+                {t("gatewayForm.models.load")}
+              </Button>
+            }
+          >
+            {fetchGatewayModels.isError && (
+              <FieldError>
+                {t("gatewayForm.models.loadError", { message: fetchGatewayModels.error.message })}
+              </FieldError>
+            )}
+            {fetched && fetched.length > 0 && (
+              <FetchedModels models={fetched} included={included} onInclude={includeModels} />
+            )}
+            <InputGroup>
+              <InputGroupInput
+                aria-label={t("gatewayForm.models.manualLabel")}
+                value={manualId}
+                onChange={(event) => setManualId(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
                   addModel(manualId);
                   setManualId("");
                 }}
-              >
-                <PlusIcon data-icon="inline-start" />
-                {t("common:actions.add")}
-              </Button>
-            </InputGroupAddon>
-          </InputGroup>
-          {models.length === 0 ? (
-            <FieldDescription className="text-xs">
-              {t("gatewayForm.models.atLeastOne")}
-            </FieldDescription>
-          ) : (
-            <SubOptions>
-              {duplicateNames.size > 0 && (
-                <FieldDescription className="text-xs">
-                  {t("gatewayForm.models.duplicateNames", {
-                    names: [...duplicateNames].map((n) => `“${n}”`).join(", "),
-                  })}
-                </FieldDescription>
-              )}
-              <div className="flex flex-col">
-                {models.map((model) => (
-                  <ModelRow
-                    key={model.id}
-                    model={model}
-                    onChange={(next) =>
-                      setModels((list) => list.map((item) => (item.id === model.id ? next : item)))
-                    }
-                    onRemove={() =>
-                      setModels((list) => list.filter((item) => item.id !== model.id))
-                    }
-                  />
-                ))}
-              </div>
-            </SubOptions>
-          )}
-        </OptionGroup>
-      </FieldGroup>
-      {saveGateway.isError && <FieldError>{saveGateway.error.message}</FieldError>}
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onDone}>
-          {t("common:actions.cancel")}
-        </Button>
-        <Button type="submit" disabled={!canSave || saveGateway.isPending}>
-          {saveGateway.isPending && <Spinner data-icon="inline-start" />}
-          {t("common:actions.save")}
-        </Button>
+                placeholder={t("gatewayForm.models.manualPlaceholder")}
+                autoComplete="off"
+              />
+              <InputGroupAddon align="inline-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  disabled={!manualId.trim()}
+                  onClick={() => {
+                    addModel(manualId);
+                    setManualId("");
+                  }}
+                >
+                  <PlusIcon data-icon="inline-start" />
+                  {t("common:actions.add")}
+                </Button>
+              </InputGroupAddon>
+            </InputGroup>
+            {models.length === 0 ? (
+              <FieldDescription className="text-xs">
+                {t("gatewayForm.models.atLeastOne")}
+              </FieldDescription>
+            ) : (
+              <SubOptions>
+                {duplicateNames.size > 0 && (
+                  <FieldDescription className="text-xs">
+                    {t("gatewayForm.models.duplicateNames", {
+                      names: [...duplicateNames].map((n) => `“${n}”`).join(", "),
+                    })}
+                  </FieldDescription>
+                )}
+                <div className="flex flex-col">
+                  {models.map((model) => (
+                    <ModelRow
+                      key={model.id}
+                      model={model}
+                      onChange={(next) =>
+                        setModels((list) =>
+                          list.map((item) => (item.id === model.id ? next : item)),
+                        )
+                      }
+                      onRemove={() =>
+                        setModels((list) => list.filter((item) => item.id !== model.id))
+                      }
+                    />
+                  ))}
+                </div>
+              </SubOptions>
+            )}
+          </OptionGroup>
+        </FieldGroup>
       </div>
+      <DialogFooter className="pt-4 sm:items-center sm:justify-between">
+        {saveGateway.isError ? <FieldError>{saveGateway.error.message}</FieldError> : <span />}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onDone}>
+            {t("common:actions.cancel")}
+          </Button>
+          <Button type="submit" disabled={!canSave || saveGateway.isPending}>
+            {saveGateway.isPending && <Spinner data-icon="inline-start" />}
+            {t("common:actions.save")}
+          </Button>
+        </div>
+      </DialogFooter>
     </form>
   );
 }
@@ -722,13 +768,11 @@ export function ModelsSection({ bridge }: { bridge: DesktopBridge }) {
   const gateways = useQuery(gatewaysQuery(bridge));
   const commands = useProviderCommands(bridge);
   const [search, setSearch] = React.useState("");
-  /** Gateway id being edited, "new" while adding, null when the form is closed. */
+  /** Gateway id being edited, "new" while adding, null when the dialog is closed. */
   const [editing, setEditing] = React.useState<string | null>(null);
-  const formRef = React.useRef<HTMLDivElement>(null);
 
   function editGateway(id: string) {
     setEditing(id);
-    requestAnimationFrame(() => formRef.current?.scrollIntoView({ behavior: "smooth" }));
   }
 
   if (providers.isPending || gateways.isPending) return <Spinner />;
@@ -744,8 +788,11 @@ export function ModelsSection({ bridge }: { bridge: DesktopBridge }) {
         provider.name.toLowerCase().includes(query) ||
         provider.id.toLowerCase().includes(query)),
   );
-  const gatewayList = gateways.data ?? [];
-  const editedGateway = gatewayList.find((gateway) => gateway.id === editing);
+  // Connected gateways already show their own card above, with the same Edit action.
+  const connectedIds = new Set(connected.map((provider) => provider.id));
+  const allGateways = gateways.data ?? [];
+  const gatewayList = allGateways.filter((gateway) => !connectedIds.has(gateway.id));
+  const editedGateway = allGateways.find((gateway) => gateway.id === editing);
 
   return (
     <div className="flex flex-col gap-6">
@@ -781,32 +828,32 @@ export function ModelsSection({ bridge }: { bridge: DesktopBridge }) {
             {t("section.gateways.add")}
           </Button>
         </GroupHeading>
-        <div ref={formRef}>
-          {editing !== null && (
-            <GatewayForm
-              key={editing}
-              gateway={editedGateway}
-              commands={commands}
-              onDone={() => setEditing(null)}
-            />
-          )}
-        </div>
-        {gatewayList.length === 0 && editing === null ? (
+        {gatewayList.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("section.gateways.hint")}</p>
         ) : (
           <ItemGroup>
-            {gatewayList
-              .filter((gateway) => gateway.id !== editing)
-              .map((gateway) => (
-                <GatewayRow
-                  key={gateway.id}
-                  gateway={gateway}
-                  commands={commands}
-                  onEdit={() => editGateway(gateway.id)}
-                />
-              ))}
+            {gatewayList.map((gateway) => (
+              <GatewayRow
+                key={gateway.id}
+                gateway={gateway}
+                commands={commands}
+                onEdit={() => editGateway(gateway.id)}
+              />
+            ))}
           </ItemGroup>
         )}
+        <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
+          <DialogContent className="flex h-[85vh] flex-col gap-0 overflow-hidden p-6 sm:max-w-2xl">
+            {editing !== null && (
+              <GatewayForm
+                key={editing}
+                gateway={editedGateway}
+                commands={commands}
+                onDone={() => setEditing(null)}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
       </section>
 
       <section className="flex flex-col gap-2">
