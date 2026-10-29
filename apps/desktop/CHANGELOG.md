@@ -1,5 +1,11 @@
 # @workspace/desktop
 
+## 0.15.0
+
+### Minor Changes
+
+- 1028283: Chat with the agent from Zalo. Create a bot with "Zalo Bot Manager", paste its token in **Settings › Channels › Zalo**, and pair your account with a one-time code, as with Telegram. Send text, photos, or voice notes; approvals and questions are answered by replying with a number, since Zalo has no buttons.
+
 ## 0.14.0
 
 ### Minor Changes

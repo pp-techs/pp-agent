@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.15.0] — 2026-10-29
+
+Settings › Models no longer grows the whole panel when editing a gateway. Add/Edit gateway now opens in its own dialog with a fixed header and footer, so only the model list scrolls. Fixed a duplicate card for gateways that are both connected and listed under Custom gateways, and added a delete action for connected gateways.
+
+Chat with the agent from Zalo. Create a bot with "Zalo Bot Manager", paste its token in **Settings › Channels › Zalo**, and pair your account with a one-time code, as with Telegram. Send text, photos, or voice notes; approvals and questions are answered by replying with a number, since Zalo has no buttons.
+
 ## [0.14.0] — 2026-10-28
 
 Web search works without any setup. When no search service with a key is turned on, or all of them fail, the agent searches with Exa and then DuckDuckGo, which need no key (the words searched for are sent to them). Services you set up are always tried first, and the result says when no key was used.
