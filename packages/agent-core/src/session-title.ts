@@ -121,10 +121,10 @@ export async function proposeSessionTitle(
     noThemes: true,
     systemPrompt: TITLE_PROMPT,
   });
-  await resourceLoader.reload();
 
   let session: AgentSession | undefined;
   try {
+    await resourceLoader.reload();
     ({ session } = await createAgentSession({
       cwd: options.cwd,
       agentDir: options.agentDir,

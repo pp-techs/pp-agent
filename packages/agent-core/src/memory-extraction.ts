@@ -157,10 +157,10 @@ export async function extractMemory(
     noThemes: true,
     systemPrompt: EXTRACTION_PROMPT,
   });
-  await resourceLoader.reload();
 
   let session: AgentSession | undefined;
   try {
+    await resourceLoader.reload();
     ({ session } = await createAgentSession({
       cwd: options.cwd,
       agentDir: options.agentDir,

@@ -1783,8 +1783,16 @@ export class AgentHost {
     const titlePass = this.prepareSessionTitle(conversation);
     this.release(conversation);
     this.emitActivity();
-    if (pass) void this.runMemoryExtraction(pass);
-    if (titlePass) void this.runSessionTitle(file, titlePass);
+    // Both are best-effort: `.catch` keeps a failure from becoming an unhandled rejection, which
+    // would otherwise crash the process.
+    if (pass)
+      this.runMemoryExtraction(pass).catch((error: unknown) =>
+        console.error("Background memory extraction failed.", error),
+      );
+    if (titlePass)
+      this.runSessionTitle(file, titlePass).catch((error: unknown) =>
+        console.error("Background auto-titling failed.", error),
+      );
   }
 
   /**
@@ -1807,12 +1815,18 @@ export class AgentHost {
       return null;
     }
     const messages = conversation.session.messages;
-    const since = this.memoryCursor.get(file) ?? 0;
-    this.memoryCursor.set(file, messages.length);
+    const stored = this.memoryCursor.get(file) ?? 0;
+    // Compaction and editing/regenerating an earlier message reassign `session.messages` to a
+    // shorter array; a cursor past the new end would otherwise hide every message as "already
+    // read" instead of starting over.
+    const since = stored > messages.length ? 0 : stored;
     const unread = messages.slice(since);
     if (unread.length === 0) return null;
     const model = this.chooseModel(agent.model);
     if (!model) return null;
+    // Only advance the cursor once a pass will actually run; otherwise a model that is
+    // momentarily unavailable would cause these messages to be skipped on the next settle.
+    this.memoryCursor.set(file, messages.length);
     return {
       messages: unread,
       cwd: conversation.session.sessionManager.getCwd(),
@@ -1880,10 +1894,19 @@ export class AgentHost {
       model: pass.model,
     });
     if (!title) return;
-    // Nothing named it while the call was running (a rename, or the person naming it themselves).
-    const manager = SessionManager.open(file, paths.sessionDir);
-    if (manager.getSessionName()?.trim()) return;
-    manager.appendSessionInfo(title);
+    // The conversation may have been reopened (live again, its own session object) while the
+    // call was running: write through it so its in-memory `sessionName` picks up the title too,
+    // instead of only the file a fresh read of it would see.
+    const live = this.conversations().find((entry) => entry.session.sessionFile === file);
+    if (live) {
+      if (live.session.sessionName?.trim()) return;
+      live.session.setSessionName(title);
+    } else {
+      // Nothing named it while the call was running (a rename, or the person naming it).
+      const manager = SessionManager.open(file, paths.sessionDir);
+      if (manager.getSessionName()?.trim()) return;
+      manager.appendSessionInfo(title);
+    }
     emit({ type: "sessions_changed" });
   }
 
