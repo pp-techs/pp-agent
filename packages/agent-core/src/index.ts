@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, AssistantMessage, Credential, Model } from "@earendil-works/pi-ai";
 import {
   type AgentSession,
@@ -173,6 +174,8 @@ import { VoiceService } from "./transcription.ts";
 import { isWorkspaceSkill, listWorkspaceSkills, SkillLibrary } from "./skills.ts";
 import { seedBuiltInSkills } from "./skills-builtin.ts";
 import { createDelegateTool, DELEGATE_TOOL } from "./subagent.ts";
+import { extractMemory } from "./memory-extraction.ts";
+import { proposeSessionTitle } from "./session-title.ts";
 import {
   createMemoryTools,
   MEMORY_FORGET_TOOL,
@@ -402,6 +405,8 @@ export class AgentHost {
   private open: Conversation | null = null;
   /** Conversations moved out of the window while they answer, by session file. */
   private readonly background = new Map<string, Conversation>();
+  /** How many of a session's messages the memory-extraction pass has already read, by session file. */
+  private readonly memoryCursor = new Map<string, number>();
   /** Registrations of no session, for the MCP section before any conversation is open. */
   private idleMcp: McpRegistrations | null = null;
   /** Agent of the open conversation; resolves to the default agent once deleted. */
@@ -1093,6 +1098,7 @@ export class AgentHost {
     const conversation = this.background.get(file);
     if (!conversation) return;
     this.background.delete(file);
+    this.memoryCursor.delete(file);
     await this.stop(conversation).catch(() => undefined);
     this.release(conversation);
     this.emitActivity();
@@ -1772,8 +1778,113 @@ export class AgentHost {
     const file = conversation.session.sessionFile;
     if (!file || this.background.get(file) !== conversation || conversation.running) return;
     this.background.delete(file);
+    // Read what the memory and title passes need before `release` disposes the session.
+    const pass = this.prepareMemoryExtraction(conversation, file);
+    const titlePass = this.prepareSessionTitle(conversation);
     this.release(conversation);
     this.emitActivity();
+    if (pass) void this.runMemoryExtraction(pass);
+    if (titlePass) void this.runSessionTitle(file, titlePass);
+  }
+
+  /**
+   * What `runMemoryExtraction` needs, gathered while the conversation's session is still alive;
+   * null when there is nothing to do (memory off for its agent, or no new messages since the last
+   * pass).
+   */
+  private prepareMemoryExtraction(
+    conversation: Conversation,
+    file: string,
+  ): {
+    messages: AgentMessage[];
+    cwd: string;
+    model: Model<Api>;
+    workspaceId: string | null;
+  } | null {
+    const agent = this.agentOf(conversation);
+    if (!this.memoryOn(agent)) {
+      this.memoryCursor.delete(file);
+      return null;
+    }
+    const messages = conversation.session.messages;
+    const since = this.memoryCursor.get(file) ?? 0;
+    this.memoryCursor.set(file, messages.length);
+    const unread = messages.slice(since);
+    if (unread.length === 0) return null;
+    const model = this.chooseModel(agent.model);
+    if (!model) return null;
+    return {
+      messages: unread,
+      cwd: conversation.session.sessionManager.getCwd(),
+      model,
+      workspaceId: this.workspaceOf(conversation).id,
+    };
+  }
+
+  /**
+   * Hands the gathered messages to a one-shot background LLM call that proposes lasting notes
+   * (`memory-extraction.ts`) and writes them to the memory store. Best-effort: a failure here
+   * never surfaces to the person.
+   */
+  private async runMemoryExtraction(pass: {
+    messages: AgentMessage[];
+    cwd: string;
+    model: Model<Api>;
+    workspaceId: string | null;
+  }): Promise<void> {
+    const { runtime, memory, paths } = this.requireServices();
+    await extractMemory(pass.messages, {
+      runtime,
+      cwd: pass.cwd,
+      agentDir: paths.agentDir,
+      model: pass.model,
+      store: memory,
+      workspaceId: pass.workspaceId,
+      onSaved: () => emit({ type: "settings_changed", scopes: ["memory"] }),
+    });
+  }
+
+  /**
+   * What `runSessionTitle` needs, gathered while the conversation's session is still alive; null
+   * when the conversation already has a name (typed by the person, or given one at creation) or no
+   * model is available.
+   */
+  private prepareSessionTitle(
+    conversation: Conversation,
+  ): { messages: AgentMessage[]; cwd: string; model: Model<Api> } | null {
+    if (conversation.session.sessionName?.trim()) return null;
+    const model = this.chooseModel(this.agentOf(conversation).model);
+    if (!model) return null;
+    return {
+      messages: conversation.session.messages,
+      cwd: conversation.session.sessionManager.getCwd(),
+      model,
+    };
+  }
+
+  /**
+   * Proposes a title for a conversation that has none yet (`session-title.ts`) and writes it to
+   * the session file directly, since the live session is gone by the time the LLM call returns.
+   * Best-effort: a failure here never surfaces to the person, and the conversation just keeps its
+   * default (first-message) title.
+   */
+  private async runSessionTitle(
+    file: string,
+    pass: { messages: AgentMessage[]; cwd: string; model: Model<Api> },
+  ): Promise<void> {
+    const { runtime, paths } = this.requireServices();
+    const title = await proposeSessionTitle(pass.messages, {
+      runtime,
+      cwd: pass.cwd,
+      agentDir: paths.agentDir,
+      model: pass.model,
+    });
+    if (!title) return;
+    // Nothing named it while the call was running (a rename, or the person naming it themselves).
+    const manager = SessionManager.open(file, paths.sessionDir);
+    if (manager.getSessionName()?.trim()) return;
+    manager.appendSessionInfo(title);
+    emit({ type: "sessions_changed" });
   }
 
   private refreshStatus(): void {
