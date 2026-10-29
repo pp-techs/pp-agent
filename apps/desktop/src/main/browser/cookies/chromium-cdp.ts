@@ -107,9 +107,15 @@ export async function readCookiesThroughBrowser(
       ],
       { stdio: "ignore", windowsHide: true },
     );
-    const [port, path] = (await waitForFile(join(dir, "DevToolsActivePort"), START_TIMEOUT_MS))
-      .trim()
-      .split("\n");
+    // A browser that cannot start (missing, blocked by security software) reports an `error`
+    // event; without a listener that would be an uncaught exception of the main process.
+    const failed = new Promise<never>((_, reject) => child.process?.once("error", reject));
+    failed.catch(() => {});
+    const started = await Promise.race([
+      waitForFile(join(dir, "DevToolsActivePort"), START_TIMEOUT_MS),
+      failed,
+    ]);
+    const [port, path] = started.trim().split("\n");
     const socket = new WebSocket(`ws://127.0.0.1:${port}${path}`);
     await new Promise<void>((resolve, reject) => {
       socket.addEventListener("open", () => resolve(), { once: true });

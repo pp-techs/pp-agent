@@ -18,6 +18,8 @@ interface Terminal {
   seq: number;
   pending: string;
   timer: NodeJS.Timeout | null;
+  /** Closed or disposed: late output and exit of the shell are dropped (the window may be gone). */
+  closed: boolean;
 }
 
 export interface TerminalHostOptions {
@@ -130,13 +132,16 @@ export class TerminalHost {
       seq: 0,
       pending: "",
       timer: null,
+      closed: false,
     };
     this.terminals.set(id, terminal);
     pty.onData((data) => {
+      if (terminal.closed) return;
       terminal.pending += data;
       terminal.timer ??= setTimeout(() => this.flush(terminal), FLUSH_MS);
     });
     pty.onExit(() => {
+      if (terminal.closed) return;
       this.flush(terminal);
       terminal.info.exited = true;
       this.changed();
@@ -186,6 +191,7 @@ export class TerminalHost {
   }
 
   private end(terminal: Terminal): void {
+    terminal.closed = true;
     if (terminal.timer) clearTimeout(terminal.timer);
     terminal.timer = null;
     if (!terminal.info.exited) {

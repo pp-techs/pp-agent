@@ -64,8 +64,11 @@ function isBounds(value: unknown): value is BrowserBounds {
  * argument from the renderer is checked here; folders must be one of the person's workspaces.
  */
 export function createSidePanel(options: SidePanelOptions) {
-  const send = (channel: string, ...args: unknown[]) =>
-    options.window()?.webContents.send(channel, ...args);
+  const send = (channel: string, ...args: unknown[]) => {
+    // While the app quits the window object outlives its contents.
+    const contents = options.window()?.webContents;
+    if (contents && !contents.isDestroyed()) contents.send(channel, ...args);
+  };
 
   const terminals = new TerminalHost({
     onData: (id, data, seq) => send(IPC.terminalData, id, data, seq),
