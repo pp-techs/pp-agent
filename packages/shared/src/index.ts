@@ -281,8 +281,9 @@ export interface GatewayModel {
   id: string;
   /** Display name; defaults to `id`. */
   name?: string;
+  /** Supports extended thinking. Default: the model's value in Pi's catalog, else false. */
   reasoning?: boolean;
-  /** Accepts image input. Default true. */
+  /** Accepts image input. Default: the model's value in Pi's catalog, else true. */
   images?: boolean;
   /** Context window in tokens. Default: the model's value in Pi's catalog, else 128000. */
   contextWindow?: number;
@@ -318,8 +319,11 @@ export interface SaveGatewayInput {
   apiKey?: string;
 }
 
-/** A model a gateway listed, with the name and limits the gateway (or Pi's catalog) reports. */
-export type FetchedGatewayModel = Pick<GatewayModel, "id" | "name" | "contextWindow" | "maxTokens">;
+/** A model a gateway listed, with the name, limits, and capabilities the gateway (or Pi's catalog) reports. */
+export type FetchedGatewayModel = Pick<
+  GatewayModel,
+  "id" | "name" | "contextWindow" | "maxTokens" | "reasoning" | "images"
+>;
 
 export interface FetchGatewayModelsInput {
   api: GatewayApi;

@@ -94,8 +94,9 @@ function gatewayProvider(
         id: model.id,
         name: model.name?.trim() || known?.name || model.id,
         api: gateway.api,
-        reasoning: model.reasoning ?? false,
-        input: model.images === false ? ["text"] : ["text", "image"],
+        reasoning: model.reasoning ?? known?.reasoning ?? false,
+        input:
+          (model.images ?? known?.input.includes("image") ?? true) ? ["text", "image"] : ["text"],
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
         contextWindow: model.contextWindow ?? known?.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
         maxTokens: model.maxTokens ?? known?.maxTokens ?? DEFAULT_MAX_TOKENS,
@@ -205,6 +206,20 @@ export async function fetchGatewayModels(
       tokens(known?.maxTokens);
     if (contextWindow) model.contextWindow = contextWindow;
     if (maxTokens) model.maxTokens = maxTokens;
+    // OpenRouter reports modalities and reasoning support directly; other gateways leave these out
+    // and Pi's catalog is the only source left.
+    const modalities = (entry.architecture as { input_modalities?: unknown } | undefined)
+      ?.input_modalities;
+    const reasoning =
+      (typeof entry.supported_parameters === "object" &&
+        Array.isArray(entry.supported_parameters) &&
+        entry.supported_parameters.includes("reasoning")) ||
+      known?.reasoning;
+    const images = Array.isArray(modalities)
+      ? modalities.includes("image")
+      : known?.input.includes("image");
+    if (reasoning !== undefined) model.reasoning = Boolean(reasoning);
+    if (images !== undefined) model.images = images;
     // Anthropic sends `display_name`, OpenRouter `name`. Gemini's `models/<id>` is an id, not a name.
     const name = [entry.display_name, entry.name]
       .map((value) => (typeof value === "string" ? value.trim() : ""))
