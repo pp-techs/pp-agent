@@ -40,6 +40,7 @@ export const queryKeys = {
   voice: ["voice"] as const,
   serviceStatus: ["service-status"] as const,
   telegramStatus: ["telegram-status"] as const,
+  zaloStatus: ["zalo-status"] as const,
 };
 
 export const settingsQuery = (bridge: DesktopBridge) =>

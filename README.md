@@ -32,11 +32,11 @@ Coding agents are powerful but built for developers. PP Agent puts the same engi
 - **Memory, checklists, helpers.** The agent keeps notes between chats (view and edit them in **Settings › Memory**), tracks multi-step work in a checklist, and hands research to a read-only helper.
 - **Scheduled tasks.** Run a prompt daily, weekly, or at an interval; each run is saved as a chat. Actions that need approval are skipped, since nobody is there to approve them.
 - **Voice input.** Dictate into the message box: a whisper model on your own computer, or a speech-to-text service you choose.
-- **Background and Telegram.** **Settings › Background** keeps the agent running after you close or quit the app (it starts when you sign in), and **Settings › Channels** lets you chat with it from Telegram: pair your account with a one-time code, and approvals are asked in the chat. Scheduled tasks keep running too.
+- **Background and Telegram.** **Settings › Background** keeps the agent running after you close or quit the app (it starts when you sign in), and **Settings › Channels** lets you chat with it from Telegram or Zalo: pair your account with a one-time code, and approvals are asked in the chat. Scheduled tasks keep running too.
 - **Desktop.** Notifications when an answer is ready, an optional tray icon, and a global shortcut.
 - **Languages.** English and Tiếng Việt, chosen in **Settings › General** or following your system language. Errors, approvals, and dialogs are translated too.
 - **Skills.** Import [Agent Skills](https://agentskills.io), write your own in the app, and invoke them with `/skill:<name>`. Slash commands `/new` and `/compact` keep long chats manageable.
-- **Private by design.** API keys (model providers, search services, and the Telegram bot token) are encrypted with a master key kept in your operating system's keychain; conversations and files stay on your computer except what you send to the providers, search services, and MCP servers you configure. Search queries go to the search service you choose.
+- **Private by design.** API keys (model providers, search services, and the Telegram and Zalo bot tokens) are encrypted with a master key kept in your operating system's keychain; conversations and files stay on your computer except what you send to the providers, search services, and MCP servers you configure. Search queries go to the search service you choose.
 
 ## Install
 

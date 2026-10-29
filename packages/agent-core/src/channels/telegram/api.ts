@@ -1,4 +1,5 @@
 /** A minimal Telegram Bot API client: only the calls the Telegram channel needs. */
+import { abortableSleep } from "../shared/sleep.ts";
 
 const API_ORIGIN = "https://api.telegram.org";
 /** Telegram's own limit for files a bot may download. */
@@ -142,25 +143,6 @@ interface ApiResponse {
   description?: string;
   error_code?: number;
   parameters?: { retry_after?: number };
-}
-
-/** Resolves after `ms`; rejects with the signal's reason when it aborts first. */
-export function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
-  const { promise, resolve, reject } = Promise.withResolvers<void>();
-  if (signal?.aborted) {
-    reject(signal.reason);
-    return promise;
-  }
-  const onAbort = () => {
-    clearTimeout(timer);
-    reject(signal?.reason);
-  };
-  const timer = setTimeout(() => {
-    signal?.removeEventListener("abort", onAbort);
-    resolve();
-  }, ms);
-  signal?.addEventListener("abort", onAbort, { once: true });
-  return promise;
 }
 
 export class HttpTelegramApi implements TelegramApi {

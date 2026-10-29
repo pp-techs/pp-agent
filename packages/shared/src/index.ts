@@ -591,8 +591,21 @@ export interface TelegramSettings {
   chats?: Record<string, TelegramChatSettings>;
 }
 
+/** Zalo Bot settings in settings.json. The bot token is in the vault, never here. */
+export interface ZaloSettings {
+  enabled: boolean;
+  /** Workspace of new Zalo conversations; the agent is the workspace's own unless pinned here. */
+  workspaceId: string;
+  /** Agent pinned for Zalo; null = the workspace's agent, else the built-in agent. */
+  agentId: string | null;
+  /** Zalo user id that paired with the bot; only this person is answered. */
+  ownerId: string | null;
+  ownerName: string | null;
+}
+
 export interface ChannelsSettings {
   telegram: TelegramSettings;
+  zalo: ZaloSettings;
 }
 
 export type ChannelState = "off" | "connecting" | "online" | "error";
@@ -617,6 +630,26 @@ export interface SaveTelegramInput {
   workspaceId: string;
   /** Per-chat settings; omitted keeps the stored ones. */
   chats?: Record<string, TelegramChatSettings>;
+}
+
+export interface ZaloStatus extends ZaloSettings {
+  hasToken: boolean;
+  /** The bot's account name; known once Zalo has accepted the token. */
+  botName: string | null;
+  state: ChannelState;
+  error: string | null;
+  /** One-time code to send to the bot as `/pair <code>`, while a pairing is open. */
+  pairingCode: string | null;
+  pairingExpiresAt: number | null;
+}
+
+export interface SaveZaloInput {
+  /** A new bot token; omitted keeps the stored one. */
+  token?: string;
+  enabled: boolean;
+  /** null = follow the workspace's agent. */
+  agentId: string | null;
+  workspaceId: string;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1112,6 +1145,12 @@ export interface AgentCommandMap {
   start_telegram_pairing: { params: NoParams; result: TelegramStatus };
   /** Removes the token and the paired owner and turns the channel off. */
   forget_telegram: { params: NoParams; result: TelegramStatus };
+  get_zalo_status: { params: NoParams; result: ZaloStatus };
+  save_zalo: { params: { config: SaveZaloInput }; result: ZaloStatus };
+  /** Opens a pairing window and returns the status with the one-time code. */
+  start_zalo_pairing: { params: NoParams; result: ZaloStatus };
+  /** Removes the token and the paired owner and turns the channel off. */
+  forget_zalo: { params: NoParams; result: ZaloStatus };
 }
 
 export type AgentCommandType = keyof AgentCommandMap;

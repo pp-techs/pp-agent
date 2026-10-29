@@ -3,3 +3,6 @@ export const CHANNEL_KEY_PREFIX = "channel:";
 
 /** Vault id of the Telegram bot token, stored as `{ type: "api_key", key: <token> }`. */
 export const TELEGRAM_TOKEN_KEY = `${CHANNEL_KEY_PREFIX}telegram`;
+
+/** Vault id of the Zalo bot token, stored as `{ type: "api_key", key: <token> }`. */
+export const ZALO_TOKEN_KEY = `${CHANNEL_KEY_PREFIX}zalo`;

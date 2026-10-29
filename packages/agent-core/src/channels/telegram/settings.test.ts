@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { TelegramChatSettings } from "@workspace/shared";
 import { describe, expect, test } from "vite-plus/test";
 import { SettingsStore } from "../../settings-store.ts";
-import { readChannelsSettings } from "./settings.ts";
+import { readChannelsSettings } from "../settings.ts";
 
 describe("saved Telegram chat settings", () => {
   test("restores labels, bindings, access, allowlists and busy modes through SettingsStore", () => {

@@ -1,5 +1,4 @@
 import {
-  type ChannelsSettings,
   DEFAULT_WORKSPACE_ID,
   type TelegramSettings,
   type TelegramChatSettings,
@@ -38,14 +37,10 @@ function readChatSettings(value: Record<string, unknown>): TelegramChatSettings 
   return chat;
 }
 
-/** Reads `channels` from settings.json field by field, so one bad value keeps the others. */
-export function readChannelsSettings(raw: unknown): ChannelsSettings {
+/** Reads `channels.telegram` from settings.json field by field, so one bad value keeps the others. */
+export function readTelegramSettings(raw: unknown): TelegramSettings {
   const telegram = defaultTelegramSettings();
-  const section = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
-  const value =
-    typeof section.telegram === "object" && section.telegram !== null
-      ? (section.telegram as Record<string, unknown>)
-      : {};
+  const value = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
   telegram.enabled = value.enabled === true;
   if (typeof value.agentId === "string" && value.agentId.trim()) telegram.agentId = value.agentId;
   if (typeof value.workspaceId === "string" && value.workspaceId.trim())
@@ -62,5 +57,5 @@ export function readChannelsSettings(raw: unknown): ChannelsSettings {
       telegram.chats[id] = readChatSettings(chat as Record<string, unknown>);
     }
   }
-  return { telegram };
+  return telegram;
 }

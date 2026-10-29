@@ -7,12 +7,14 @@ import type {
   SaveTelegramInput,
   SaveWebSearchInput,
   SaveWorkspaceInput,
+  SaveZaloInput,
   SearchProviderId,
   TelegramStatus,
   ToolPolicy,
   ToolSummary,
   VoiceModelPreset,
   VoiceSettings,
+  ZaloStatus,
 } from "@workspace/shared";
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -138,6 +140,13 @@ export const telegramStatusQuery = (bridge: DesktopBridge) =>
     queryFn: () => bridge.agent.command({ type: "get_telegram_status" }),
   });
 
+/** Zalo connection, bot, paired person and the open pairing code, if any. */
+export const zaloStatusQuery = (bridge: DesktopBridge) =>
+  queryOptions({
+    queryKey: queryKeys.zaloStatus,
+    queryFn: () => bridge.agent.command({ type: "get_zalo_status" }),
+  });
+
 /** Mutations of Settings › Background; each stores the status it returns. */
 export function useBackgroundCommands(bridge: DesktopBridge) {
   const queryClient = useQueryClient();
@@ -165,7 +174,31 @@ export function useBackgroundCommands(bridge: DesktopBridge) {
     onSuccess: telegramDone,
     onError: showError,
   });
-  return { setInstalled, saveTelegram, startPairing, forgetTelegram };
+  const zaloDone = (status: ZaloStatus) => queryClient.setQueryData(queryKeys.zaloStatus, status);
+  const saveZalo = useMutation({
+    mutationFn: (config: SaveZaloInput) => bridge.agent.command({ type: "save_zalo", config }),
+    onSuccess: zaloDone,
+    onError: showError,
+  });
+  const startZaloPairing = useMutation({
+    mutationFn: () => bridge.agent.command({ type: "start_zalo_pairing" }),
+    onSuccess: zaloDone,
+    onError: showError,
+  });
+  const forgetZalo = useMutation({
+    mutationFn: () => bridge.agent.command({ type: "forget_zalo" }),
+    onSuccess: zaloDone,
+    onError: showError,
+  });
+  return {
+    setInstalled,
+    saveTelegram,
+    startPairing,
+    forgetTelegram,
+    saveZalo,
+    startZaloPairing,
+    forgetZalo,
+  };
 }
 
 /** Tools the agent can use, including those of connected MCP servers. */

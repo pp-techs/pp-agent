@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vite-plus/test";
 import { APPROVAL_TIMEOUT_MS, TelegramApprovals } from "./approvals.ts";
-import { approvalRequest, FakeApi, fakeT } from "./testing.ts";
+import { approvalRequest } from "../shared/testing.ts";
+import { FakeApi, fakeT } from "./testing.ts";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());

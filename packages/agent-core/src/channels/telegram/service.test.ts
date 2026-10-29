@@ -8,7 +8,8 @@ import { SettingsStore } from "../../settings-store.ts";
 import { TELEGRAM_TOKEN_KEY } from "../names.ts";
 import { TelegramApiError } from "./api.ts";
 import { TelegramService } from "./service.ts";
-import { FakeApi, FakeGateway, fakeT, textUpdate } from "./testing.ts";
+import { FakeGateway } from "../shared/testing.ts";
+import { FakeApi, fakeT, textUpdate } from "./testing.ts";
 
 class FakeVault {
   entries = new Map<string, Credential>();

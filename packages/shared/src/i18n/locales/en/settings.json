@@ -303,7 +303,7 @@
     },
     "approval": {
       "title": "Approvals happen in the chat",
-      "description": "While Telegram is on, anything the agent does that needs your approval is asked in the Telegram chat. Tools set to “Always ask” in Settings › Tools can be approved there. Only the paired person can answer or give orders to the bot."
+      "description": "While a channel is on, anything the agent does that needs your approval is asked in that chat (Telegram has buttons; Zalo asks you to reply with a number). Tools set to “Always ask” in Settings › Tools can be approved there. Only the paired person can answer or give orders to the bot."
     },
     "telegram": {
       "title": "Telegram",
@@ -397,6 +397,73 @@
         "allowedUsers": "Allowed user ids",
         "allowedUsersHelp": "Applies when anyone in the chat can talk: comma-separated Telegram user IDs. Empty allows everyone in the chat; owner-only access still allows only the paired owner."
       }
+    },
+    "zalo": {
+      "title": "Zalo",
+      "description": "Chat with the agent from the Zalo app on your phone, even when this window is closed.",
+      "state": {
+        "off": "Off",
+        "connecting": "Connecting…",
+        "online": "Online",
+        "error": "Problem"
+      },
+      "bot": "Bot",
+      "botUnknown": "Not connected yet",
+      "owner": "Paired with",
+      "notPaired": "Not paired",
+      "enabled": {
+        "label": "Answer messages on Zalo",
+        "description": "When off, the bot stays silent. Your settings are kept."
+      },
+      "token": {
+        "label": "Bot token",
+        "placeholder": "Saved. Paste a new token to replace it.",
+        "placeholderEmpty": "Paste the token Zalo sent you",
+        "help": "To get one, open Zalo, find the official account “Zalo Bot Manager”, choose “Create bot”, and enter a name that starts with “Bot”. Zalo then sends you the token in a message: paste it here.",
+        "required": "Paste a bot token to turn Zalo on."
+      },
+      "agent": "Agent",
+      "agentHelp": "Who answers. “The workspace's agent” uses the agent set in the workspace, or the built-in one. /agent in the chat changes it.",
+      "workspace": "Workspace",
+      "workspaceHelp": "Where the agent works. /workspace in the chat changes it and starts a new conversation.",
+      "saved": "Zalo settings saved.",
+      "pairing": {
+        "start": "Pair",
+        "again": "Pair again",
+        "needsSetup": "Save a bot token and turn Zalo on first.",
+        "instruction": "In Zalo, send {{command}} to {{bot}}.",
+        "instructionNoBot": "In Zalo, send {{command}} to your bot.",
+        "copy": "Copy message",
+        "copied": "Copied",
+        "expiresIn": "Expires in {{time}}",
+        "expired": "This code has expired. Pair again to get a new one."
+      },
+      "forget": {
+        "button": "Forget Zalo",
+        "title": "Forget Zalo?",
+        "description": "The saved bot token and the paired person are removed, and the bot stops answering. You can set it up again at any time.",
+        "confirm": "Forget",
+        "done": "Zalo was removed."
+      },
+      "summary": "Bot {{bot}} · Paired with {{owner}}",
+      "summaryEmpty": "Not set up yet",
+      "steps": {
+        "connect": {
+          "title": "1. Connect your bot",
+          "description": "Create a bot with “Zalo Bot Manager” in Zalo, then paste its token here."
+        },
+        "pair": {
+          "title": "2. Pair your account",
+          "description": "Only the person who pairs can talk to the bot. Anyone else is ignored."
+        },
+        "replies": {
+          "title": "3. Choose how it answers",
+          "description": "Choose where it works and who answers."
+        }
+      },
+      "setUp": "Set up",
+      "manage": "Manage",
+      "agentFollow": "The workspace's agent"
     }
   }
 }

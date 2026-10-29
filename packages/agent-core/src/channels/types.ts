@@ -3,8 +3,6 @@ import type {
   Attachment,
   QuestionAnswer,
   QuestionRequest,
-  SaveTelegramInput,
-  TelegramStatus,
 } from "@workspace/shared";
 
 /** One message a person sent through a chat channel. */
@@ -101,109 +99,31 @@ export interface ChannelGateway {
   steerTurn(chatKey: string, input: ChannelInput): Promise<boolean>;
 }
 
-/** Telegram status and configuration commands as the host exposes them. */
-export interface TelegramControl {
-  status(): Promise<TelegramStatus>;
-  save(input: SaveTelegramInput): Promise<TelegramStatus>;
-  /** Opens a pairing window and returns the status with the one-time code. */
-  startPairing(): Promise<TelegramStatus>;
-  /** Removes the token and the paired owner and turns the channel off. */
-  forget(): Promise<TelegramStatus>;
+/** What the host needs to know about a channel's settings, whichever chat app it is. */
+export interface ChannelSummary {
+  enabled: boolean;
+  workspaceId: string;
+  /** Agent pinned for the channel; null = the workspace's own agent. */
+  agentId: string | null;
+  /** Chat key of the paired owner's private chat (`telegram:123`); null when nobody is paired. */
+  ownerKey: string | null;
+  ownerName: string | null;
 }
-
-// -------------------------------------------------------------------------------------------
-// Gateway core: peer keys, adapter interface, command registry
-// -------------------------------------------------------------------------------------------
 
 /**
- * A chat address: `<channel>:<account>:<kind>:<id>[:<thread>]`, for example `telegram:default:dm:123`
- * or `telegram:default:group:-100456`. The legacy `telegram:<id>` form is still accepted and
- * normalized on read.
+ * A chat app the agent can be reached from. The host keeps one per app and finds it by the prefix
+ * of a chat key (`telegram:123` belongs to the service whose `id` is `telegram`). Pairing and
+ * settings are channel-specific and stay on the concrete services.
  */
-export type PeerKey = string;
-
-/** Parse a peer key into its parts; null when it does not fit the pattern. */
-export function parsePeerKey(key: PeerKey): {
-  channel: string;
-  account: string;
-  kind: string;
-  id: string;
-  thread?: string;
-} | null {
-  const parts = key.split(":");
-  if (parts.length < 4) return null;
-  const [channel, account, kind, id, thread] = parts;
-  if (!channel || !account || !kind || !id) return null;
-  return { channel, account, kind, id, ...(thread ? { thread } : {}) };
-}
-
-/** Build a peer key from its parts. */
-export function peerKey(
-  channel: string,
-  account: string,
-  kind: string,
-  id: string,
-  thread?: string,
-): PeerKey {
-  return thread
-    ? `${channel}:${account}:${kind}:${id}:${thread}`
-    : `${channel}:${account}:${kind}:${id}`;
-}
-
-/** What a channel adapter can do. Each platform implements this; the gateway core calls it. */
-export interface ChannelAdapter {
-  /** The channel identifier (`telegram`, `slack`, …). */
-  readonly channel: string;
-  /** Sends a text message to a peer. Returns the platform message id, if any. */
-  send(peer: PeerKey, text: string): Promise<string | null>;
-  /** Sends a message with inline buttons; `callbackPrefix` scopes the callback data. */
-  sendButtons?(
-    peer: PeerKey,
-    text: string,
-    buttons: Array<{ text: string; data: string }>,
-    callbackPrefix: string,
-  ): Promise<string | null>;
-  /** Edits a previously sent message. */
-  edit?(peer: PeerKey, messageId: string, text: string): Promise<void>;
-  /** Deletes a message. */
-  delete?(peer: PeerKey, messageId: string): Promise<void>;
-  /** Shows a typing/activity indicator. */
-  setTyping?(peer: PeerKey): Promise<void>;
-  /** True when the adapter is connected and can send. */
-  isOnline(): boolean;
-}
-
-/** A parsed slash command from a chat message. */
-export interface ParsedCommand {
-  name: string;
-  argument: string;
-}
-
-/** Parses `/command argument` from message text; null when the text is not a command. */
-export function parseCommand(text: string): ParsedCommand | null {
-  const match = /^\/([a-z_]+)\s*(.*)/s.exec(text.trim());
-  return match ? { name: match[1], argument: match[2].trim() } : null;
-}
-
-/** Handlers for slash commands, shared across channels. */
-export type CommandHandler = (argument: string, peer: PeerKey) => Promise<string | null>;
-
-/** Registry of slash commands; each channel delegates to this instead of a switch statement. */
-export class CommandRegistry {
-  private readonly handlers = new Map<string, CommandHandler>();
-
-  register(name: string, handler: CommandHandler): void {
-    this.handlers.set(name, handler);
-  }
-
-  /** Runs the handler for `command`; returns the reply text, or null when the command is unknown. */
-  async dispatch(command: ParsedCommand, peer: PeerKey): Promise<string | null> {
-    const handler = this.handlers.get(command.name);
-    return handler ? handler(command.argument, peer) : null;
-  }
-
-  /** Names of all registered commands, for `/help` and the Telegram command menu. */
-  names(): string[] {
-    return [...this.handlers.keys()];
-  }
+export interface ChannelService {
+  /** Chat keys of this channel start with `<id>:`. */
+  readonly id: string;
+  /** Name shown to the person and the model, such as "Telegram". */
+  readonly label: string;
+  /** Starts the channel when it is enabled and has a token. Safe to call again. */
+  start(): Promise<void>;
+  stop(): Promise<void>;
+  summary(): ChannelSummary;
+  /** Sends text to `home` (the paired owner) or to a chat key of this channel. */
+  deliver(peer: string, text: string): Promise<void>;
 }

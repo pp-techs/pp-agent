@@ -2,7 +2,7 @@
 
 **Goal.** The agent keeps working when the window is closed, and the person can talk to it from the Telegram app on their phone. Two independent pages: **Settings › Background** (**Run in background**, a login service for the daemon) and **Settings › Channels › Telegram** (a bot for the paired owner and explicitly allowed chat members). Nothing is exposed to the network: the daemon is reachable only through its local socket, and the bot reaches Telegram by polling outward.
 
-Paths are under `packages/agent-core/src/` (channels in `channels/telegram/`) unless noted; the daemon is `apps/daemon/src/`.
+Paths are under `packages/agent-core/src/` (channels in `channels/telegram/` and `channels/zalo/`, shared code in `channels/shared/`) unless noted; the daemon is `apps/daemon/src/`.
 
 ## Run in background
 
@@ -83,8 +83,21 @@ There is no standalone `telegram_notify` tool. The agent uses **Scheduled tasks*
 
 - Commands: `get_telegram_status`, `save_telegram { config }`, `start_telegram_pairing`, `forget_telegram` (scope `background`).
 - `settings.json › channels.telegram`: `enabled`, `agentId`, `workspaceId`, `ownerId`, `ownerName`, and per-ID `chats` (label, agent/workspace override, access, allowlist, busy mode). Settings › Channels › Telegram lets a person add a private/group ID even before any chat is configured. These controls survive restart; clearing a label or allowlist replaces the old value. The token is vault entry `channel:telegram`. Chat → current/previous session map is `channels.json`; `/new` and workspace changes keep previous sessions available to `/sessions` and `/resume`. Missing historical files are omitted without exposing local paths. A chat session unused for 30 minutes is released from memory and reopened on the next message.
-- Poll progress is saved in `telegram-offset.json` with the bot's numeric token-prefix identity, never its token secret. Restarting or rotating the secret for the same bot preserves the offset; a different bot, a legacy offset without an identity, or an invalid offset starts from 0.
+- Poll progress is saved in `telegram-offset.json` (in the app's data folder; never committed) with the bot's numeric token-prefix identity, never its token secret. Restarting or rotating the secret for the same bot preserves the offset; a different bot, a legacy offset without an identity, or an invalid offset starts from 0.
 - Downloads from Telegram are temporary files under the OS temp folder (`pp-agent-telegram/`) and are deleted after the turn.
+
+## Zalo
+
+Zalo works as a second chat channel next to Telegram, set up in **Settings › Channels › Zalo** with a bot made by the official account "Zalo Bot Manager" ([Zalo Bot docs](https://docs.zaloplatforms.com/docs/BOT)). It follows the same rules: one paired owner (a one-time `/pair <code>`, ten minutes, five tries), everyone else is ignored, and the same commands (`/new`, `/stop`, `/agent`, `/workspace`, `/model`, `/thinking`, `/sessions`, `/resume`, `/help`).
+
+What differs, because the Zalo Bot API is smaller:
+
+- **Polling.** The daemon long polls `getUpdates` (the bot calls `deleteWebhook` first, since Zalo refuses `getUpdates` while a webhook is set). A webhook would need a public HTTPS address, which a desktop app does not have. Zalo keeps no offset, so nothing is saved between runs, and a message id seen twice is answered once.
+- **Private chats only.** Group chats are beta on Zalo and are ignored.
+- **One message per answer.** Zalo cannot edit a message, so the answer is sent once the agent has finished (split at 2000 characters, as plain text), with the typing indicator on while it works. There is no tool status line.
+- **Replies instead of buttons.** An approval says "Reply 1 to approve or 2 to deny"; a question lists numbered options and takes a number (or several, separated by commas, for multi-select), your own words as the answer, or `0` to skip. `/agent`, `/workspace`, `/model` and `/thinking` list numbered choices and take `/agent 2` or part of a name. While a question is open the owner's next message answers it instead of starting a turn. Unanswered questions are denied or skipped after ten minutes.
+- **Incoming media.** Photos (`photo_url`) go to the agent as images and voice notes (`voice_url`) are transcribed with the voice provider chosen in Settings. Stickers and other types get a "cannot read this" reply. Files are not supported by the Zalo Bot API.
+- **Data.** Commands `get_zalo_status`, `save_zalo { config }`, `start_zalo_pairing`, `forget_zalo` (scope `background`). `settings.json › channels.zalo` holds `enabled`, `agentId`, `workspaceId`, `ownerId` (a string), `ownerName`; the token is vault entry `channel:zalo`; chats are keyed `zalo:<id>` in `channels.json`. Scheduled results can go to `deliver: "home"` (Telegram if paired, else Zalo) or `peer:zalo:<owner id>`.
 
 ## Privacy
 
