@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.16.0] — 2026-10-29
+
+A conversation left in the background now gets two things for free once it settles: a short title generated from how it started (if you have not named it yourself), and, when long-term memory is on, any lasting facts or preferences it mentioned are saved automatically — on top of the agent still being able to save a note itself when asked. Both run as a separate, one-shot background call and never block or show up in the chat; a failure in either is silent and leaves the conversation as it was.
+
 ## [0.15.0] — 2026-10-29
 
 Settings › Models no longer grows the whole panel when editing a gateway. Add/Edit gateway now opens in its own dialog with a fixed header and footer, so only the model list scrolls. Fixed a duplicate card for gateways that are both connected and listed under Custom gateways, and added a delete action for connected gateways.
