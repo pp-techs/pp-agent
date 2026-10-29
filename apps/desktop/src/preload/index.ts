@@ -106,6 +106,7 @@ const bridge: DesktopBridge = {
     go: (id, action) => invoke(IPC.browserGo, id, action),
     setBounds: (bounds) => ipcRenderer.send(IPC.browserSetBounds, bounds),
     onState: (listener) => subscribe<[BrowserState]>(IPC.browserChanged, listener),
+    onReveal: (listener) => subscribe(IPC.browserReveal, listener),
     cookieSources: () => invoke(IPC.browserCookieSources),
     importCookies: (profileId, browser, sourceProfile) =>
       invoke(IPC.browserImportCookies, profileId, browser, sourceProfile),

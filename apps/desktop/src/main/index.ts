@@ -163,6 +163,10 @@ const daemon = new DaemonClient({
       console.error("Could not open link:", error);
     });
   },
+  onBrowserRequest(request) {
+    if (!window) return Promise.reject(new Error("The PP Agent window is closed."));
+    return sidePanel.runBrowserRequest(request);
+  },
   onLost() {
     sendToRenderer({ type: "error", message: translator()("app.stoppedUnexpectedly") });
     sendToRenderer({ type: "status", status: "starting" });
@@ -245,8 +249,10 @@ function createWindow(): void {
   window.on("closed", () => {
     window = null;
     sidePanel.windowClosed();
+    daemon.setBrowserAvailable(false);
   });
   sidePanel.attach(window);
+  daemon.setBrowserAvailable(true);
 
   // Links in agent replies open in the browser; the app window never navigates away.
   window.webContents.setWindowOpenHandler(({ url }) => {

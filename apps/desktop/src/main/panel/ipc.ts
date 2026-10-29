@@ -4,6 +4,8 @@ import {
   type BrowserAction,
   type BrowserBounds,
   type BrowserProfile,
+  type BrowserRequest,
+  type BrowserResult,
   COOKIE_SOURCE_BROWSERS,
   type CookieImportResult,
   IPC,
@@ -11,6 +13,7 @@ import {
 } from "@workspace/shared";
 import { type BrowserWindow, ipcMain } from "electron";
 import { readCookies, listCookieSources } from "../browser/cookies/index.ts";
+import { BrowserAutomation } from "../browser/automation.ts";
 import { BrowserHost } from "../browser/host.ts";
 import { translator } from "../i18n.ts";
 import { readWorkspaceFolders } from "../settings.ts";
@@ -85,6 +88,12 @@ export function createSidePanel(options: SidePanelOptions) {
     onState: (state) => send(IPC.browserChanged, state),
     onTogglePanel: () => send(IPC.shellTogglePanel),
     requireProfile: async (profileId) => void (await requireProfile(profileId)),
+  });
+
+  const automation = new BrowserAutomation({
+    host: browser,
+    profiles,
+    reveal: () => send(IPC.browserReveal),
   });
 
   function requireWorkspace(root: unknown): string {
@@ -204,6 +213,10 @@ export function createSidePanel(options: SidePanelOptions) {
     dispose(): void {
       terminals.dispose();
       watcher.stop();
+    },
+    /** One call of the agent's browser tool, sent by the daemon. */
+    runBrowserRequest(request: BrowserRequest): Promise<BrowserResult> {
+      return automation.run(request);
     },
   };
 }

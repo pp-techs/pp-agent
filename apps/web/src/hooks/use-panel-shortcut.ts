@@ -8,7 +8,8 @@ export const IS_MAC = navigator.userAgent.includes("Mac");
 
 /**
  * Cmd+J / Ctrl+J opens and closes the side panel. A browser page in the panel has the keyboard to
- * itself, so main reports the shortcut pressed there.
+ * itself, so main reports the shortcut pressed there. Main also asks for the browser to show while
+ * the agent uses it.
  */
 export function usePanelShortcut(bridge: DesktopBridge) {
   React.useEffect(() => {
@@ -23,9 +24,14 @@ export function usePanelShortcut(bridge: DesktopBridge) {
     // Capture, so the terminal does not see the key first.
     window.addEventListener("keydown", onKeyDown, true);
     const unsubscribe = bridge.shell.onTogglePanel(toggle);
+    const unsubscribeReveal = bridge.browser.onReveal(() => {
+      const panel = usePanelStore.getState();
+      if (!panel.open || panel.tool !== "browser") panel.show("browser");
+    });
     return () => {
       window.removeEventListener("keydown", onKeyDown, true);
       unsubscribe();
+      unsubscribeReveal();
     };
   }, [bridge]);
 }

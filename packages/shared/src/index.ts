@@ -1309,6 +1309,70 @@ export interface BrowserState {
 
 export type BrowserAction = "back" | "forward" | "reload" | "stop";
 
+// ---------------------------------------------------------------------------------------------
+// Browser use: the agent's `browser` tool, run by the window's side panel browser
+// ---------------------------------------------------------------------------------------------
+
+/** Actions of the agent's `browser` tool. `tab` omitted means the active tab. */
+export const BROWSER_TOOL_ACTIONS = [
+  "tabs",
+  "open",
+  "select",
+  "close",
+  "navigate",
+  "back",
+  "forward",
+  "reload",
+  "snapshot",
+  "text",
+  "screenshot",
+  "click",
+  "type",
+  "press",
+  "select_option",
+  "scroll",
+  "wait",
+  "eval",
+] as const;
+export type BrowserToolAction = (typeof BROWSER_TOOL_ACTIONS)[number];
+
+/** One call of the `browser` tool, as the daemon hands it to the window. */
+export interface BrowserRequest {
+  action: BrowserToolAction;
+  tab?: string;
+  /** `open`, `navigate`: an address, or words to search for. */
+  url?: string;
+  /** `open`: profile name or id; the default profile when omitted. */
+  profile?: string;
+  /** Element reference from the last `snapshot` (`e12`). */
+  ref?: string;
+  /** `type`: the text; `wait`: text to wait for. */
+  text?: string;
+  /** `type`: press Enter afterwards. */
+  submit?: boolean;
+  /** `type`: replace what the field holds (default true). */
+  clear?: boolean;
+  /** `press`: a key such as `Enter`, `Escape`, `ArrowDown`, `Control+A`. */
+  key?: string;
+  /** `select_option`: option values or labels. */
+  values?: string[];
+  /** `scroll`. */
+  direction?: "up" | "down";
+  /** `eval`: JavaScript run in the page. */
+  expression?: string;
+  /** `wait`: milliseconds. */
+  ms?: number;
+  /** `text`: character to continue from. */
+  offset?: number;
+}
+
+/** What the tool returns to the model: page text (untrusted web content) and maybe a PNG. */
+export interface BrowserResult {
+  text: string;
+  /** Base64 PNG for `screenshot`. */
+  image?: string;
+}
+
 /** Rectangle of the page area in the window, in CSS pixels. */
 export interface BrowserBounds {
   x: number;
@@ -1423,6 +1487,8 @@ export interface DesktopBridge {
     /** Where the active page is drawn; null hides it (panel closed, a dialog on top). */
     setBounds(bounds: BrowserBounds | null): void;
     onState(listener: (state: BrowserState) => void): () => void;
+    /** The agent is using the browser: show it in the side panel. */
+    onReveal(listener: () => void): () => void;
     /** Installed browsers and their profiles whose cookies can be imported. */
     cookieSources(): Promise<CookieSource[]>;
     /** Copies every cookie of a source browser profile into a profile. */
@@ -1478,6 +1544,7 @@ export const IPC = {
   browserChanged: "browser:changed",
   browserCookieSources: "browser:cookie-sources",
   browserImportCookies: "browser:import-cookies",
+  browserReveal: "browser:reveal",
 } as const;
 
 // ---------------------------------------------------------------------------------------------
@@ -1485,7 +1552,7 @@ export const IPC = {
 // ---------------------------------------------------------------------------------------------
 
 /** Bump when a frame below changes incompatibly; a client talking to another version shuts the daemon down. */
-export const DAEMON_PROTOCOL = 2;
+export const DAEMON_PROTOCOL = 3;
 
 export interface AgentPaths {
   /** Folder of the built-in workspace; other workspaces use their own folder. */
@@ -1520,7 +1587,12 @@ export type ClientFrame =
   /** One-time import of credentials the old desktop vault held; answered with a `result`. */
   | { kind: "vault_import"; id: number; entries: Record<string, StoredCredential> }
   /** Asks the daemon to exit (an update replaced it, or the desktop app started it and is quitting). */
-  | { kind: "shutdown" };
+  | { kind: "shutdown" }
+  /** Whether this client can run the agent's browser tool now (it has a window). */
+  | { kind: "browser_available"; available: boolean }
+  /** Answers a `browser_request`. */
+  | { kind: "browser_response"; id: number; ok: true; result: BrowserResult }
+  | { kind: "browser_response"; id: number; ok: false; error: string };
 
 export type DaemonFrame =
   | { kind: "challenge"; nonce: string }
@@ -1529,7 +1601,9 @@ export type DaemonFrame =
   | { kind: "event"; event: AgentEvent }
   | { kind: "result"; id: number; ok: true; data: unknown }
   | { kind: "result"; id: number; ok: false; error: string }
-  | { kind: "open_url"; url: string };
+  | { kind: "open_url"; url: string }
+  /** Asks one client that offered its browser to run a `browser` tool call. */
+  | { kind: "browser_request"; id: number; request: BrowserRequest };
 
 /** Workspace folder (relative) that attached files are copied into. */
 export const ATTACHMENTS_DIR = "attachments";

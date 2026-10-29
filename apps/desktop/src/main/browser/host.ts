@@ -21,6 +21,11 @@ import type { BrowserDriver } from "./driver.ts";
 /** Partition folders are `Partitions/pp-browser-<profile id>` inside the app's data folder. */
 const PARTITION_PREFIX = "pp-browser-";
 const MAX_TABS = 20;
+/**
+ * Size of a page that was never shown (the panel closed): pages lay out at their view's size, and
+ * the agent's browser tool must be able to read and click one before the person opens the panel.
+ */
+const UNSHOWN_BOUNDS: BrowserBounds = { x: 0, y: 0, width: 1024, height: 768 };
 const COOKIE_BATCH = 50;
 /** Web permissions a side panel page may use; camera, location, notifications… are refused. */
 const ALLOWED_PERMISSIONS = new Set(["fullscreen", "clipboard-sanitized-write", "pointerLock"]);
@@ -72,6 +77,8 @@ export class BrowserHost implements BrowserDriver {
   private readonly configured = new WeakSet<Session>();
   private activeId: string | null = null;
   private bounds: BrowserBounds | null = null;
+  /** Where pages were last drawn, kept while they are hidden; new tabs start at this size. */
+  private lastBounds: BrowserBounds = UNSHOWN_BOUNDS;
   private window: BrowserWindow | null = null;
   private nextId = 1;
   private emitQueued = false;
@@ -168,7 +175,15 @@ export class BrowserHost implements BrowserDriver {
   /** Where the active page is drawn; null hides every page. */
   setBounds(bounds: BrowserBounds | null): void {
     this.bounds = bounds;
+    if (bounds) this.lastBounds = bounds;
     this.layout();
+  }
+
+  /** The page of a tab, for the agent's browser tool. */
+  contentsOf(tabId: string): WebContents {
+    const contents = this.requireTab(tabId).view.webContents;
+    if (contents.isDestroyed()) throw new Error(translator()("panel.browser.tabNotFound"));
+    return contents;
   }
 
   /**
@@ -215,9 +230,12 @@ export class BrowserHost implements BrowserDriver {
         sandbox: true,
         contextIsolation: true,
         nodeIntegration: false,
+        // The agent's browser tool works on pages the panel is not showing.
+        backgroundThrottling: false,
       },
     });
     this.configureSession(view.webContents.session);
+    view.setBounds(this.pixelBounds(this.lastBounds));
     const tab: Tab = { id: `tab-${this.nextId++}`, profileId, view };
     this.tabs.set(tab.id, tab);
     this.wire(tab);
@@ -317,18 +335,22 @@ export class BrowserHost implements BrowserDriver {
     for (const tab of this.tabs.values()) {
       const visible = tab.id === this.activeId && this.bounds !== null;
       if (visible && this.bounds) {
-        tab.view.setBounds({
-          x: Math.round(this.bounds.x),
-          y: Math.round(this.bounds.y),
-          width: Math.max(0, Math.round(this.bounds.width)),
-          height: Math.max(0, Math.round(this.bounds.height)),
-        });
+        tab.view.setBounds(this.pixelBounds(this.bounds));
       } else if (tab.view.webContents.isFocused()) {
         // The keyboard would stay with a page nobody sees.
         this.window?.webContents.focus();
       }
       tab.view.setVisible(visible);
     }
+  }
+
+  private pixelBounds(bounds: BrowserBounds): Electron.Rectangle {
+    return {
+      x: Math.round(bounds.x),
+      y: Math.round(bounds.y),
+      width: Math.max(0, Math.round(bounds.width)),
+      height: Math.max(0, Math.round(bounds.height)),
+    };
   }
 
   /** Coalesces the bursts of loading events into one state update. */

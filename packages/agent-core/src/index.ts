@@ -138,6 +138,7 @@ import type {
   TurnResult,
 } from "./channels/types.ts";
 import { buildPrompt, splitAttachedFiles, withAttachedFiles } from "./attachments.ts";
+import { createBrowserTool } from "./browser-tool.ts";
 import {
   newProfileId,
   sortBrowserProfiles,
@@ -162,7 +163,7 @@ import {
   userContent,
 } from "./history.ts";
 import { configureLanguage, currentLanguage, t } from "./i18n.ts";
-import type { HostEnvironment, ServiceControl } from "./host-io.ts";
+import type { BrowserBridge, HostEnvironment, ServiceControl } from "./host-io.ts";
 import { configureOutput, emit, errorMessage, openUrl } from "./ipc.ts";
 import { buildOverview, McpCommands, McpConfigFile, McpRegistrations } from "./mcp.ts";
 import { VaultMcpAuthStore } from "./mcp-auth.ts";
@@ -516,11 +517,14 @@ export class AgentHost {
 
   /** Registers the daemon with the OS as a login service; the service commands call it. */
   readonly service: ServiceControl;
+  /** The window's side panel browser, for the agent's browser tool. */
+  private readonly browser: BrowserBridge | undefined;
 
   constructor(environment: HostEnvironment) {
     configureOutput(environment.output);
     this.credentials = new VaultCredentialStore(environment.vault);
     this.service = environment.service;
+    this.browser = environment.browser;
     // Commands wait for `ready`; a failed init must not also surface as an unhandled rejection.
     this.ready.promise.catch(() => undefined);
   }
@@ -1568,6 +1572,7 @@ export class AgentHost {
       createReadDocumentTool(cwd),
       createWebSearchTool(webSearch),
       createWebFetchTool(),
+      createBrowserTool(this.browser),
       ...createOfficeTools({
         workspaceDir: cwd,
         homeDir: join(paths.agentDir, "officecli"),
@@ -3940,5 +3945,11 @@ function cleanGatewayModels(models: readonly GatewayModel[]): GatewayModel[] {
   return clean;
 }
 
-export type { HostEnvironment, HostOutput, ServiceControl, VaultBackend } from "./host-io.ts";
+export type {
+  BrowserBridge,
+  HostEnvironment,
+  HostOutput,
+  ServiceControl,
+  VaultBackend,
+} from "./host-io.ts";
 export type * from "./channels/types.ts";

@@ -65,6 +65,7 @@ const TOOL_OPTION_NAMES = [
   "current_datetime",
   "web_search",
   "web_fetch",
+  "browser",
   "memory_save",
   "memory_list",
   "memory_search",

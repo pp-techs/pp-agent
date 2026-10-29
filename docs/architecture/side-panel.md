@@ -71,6 +71,33 @@ When a profile disappears from the daemon's list (deleted, or found after a reco
 
 Chromium stores `expires_utc` in microseconds since 1601, beyond what a JavaScript number holds exactly (`node:sqlite` refuses it), so the query divides it in SQL. Source profiles are looked up again at import time by id; a path from the renderer is never used. After an import, main records `lastImport` (browser, source profile name, time, count) with `record_browser_import`.
 
-### Towards browser use
+### Browser use (the agent's `browser` tool)
 
-`browser/driver.ts` declares `BrowserDriver` (tabs by stable id, `open`, `navigate`, `go`, `evaluate`, `screenshot`, `setCookies`), which `BrowserHost` implements. A future agent tool runs in the daemon, so it needs a daemon → client request frame that main answers with the driver, and a second driver (a headless Chromium the daemon starts, fed the profile's cookies) for when no window is open.
+```mermaid
+sequenceDiagram
+  participant P as Pi session (daemon)
+  participant T as browser tool (agent-core)
+  participant S as DaemonServer
+  participant M as Main (DaemonClient)
+  participant A as BrowserAutomation
+  participant V as Page (WebContentsView)
+  M->>S: browser_available { available: true } (window created, every reconnection)
+  P->>T: browser { action, tab?, ref?, … }
+  T->>S: BrowserBridge.request
+  S->>M: browser_request { id, request } (newest client that offered its browser)
+  M->>A: run(request)
+  A->>V: isolated-world script / sendInputEvent / insertText
+  A-->>M: { text, image? }
+  M->>S: browser_response { id, ok, result | error }
+  S-->>T: result (90 s timeout; aborts with the tool call)
+  T-->>P: fenced <browser_page> text (+ PNG)
+```
+
+- **One tool, `browser`** (`packages/agent-core/src/browser-tool.ts`), tier `read`, so it runs without asking by default; Settings › Tools can switch it to ask or off, and agents can be limited without it. It is in every session; without a window it answers that PP Agent must be open (a headless browser can later answer `BrowserBridge` instead).
+- **Actions** (`BROWSER_TOOL_ACTIONS` in `packages/shared`): `tabs`, `open` (url, profile by name or id, else the default), `select`, `close`, `navigate`, `back`, `forward`, `reload`, `snapshot`, `text` (with `offset`), `screenshot`, `click`, `type` (`clear`, `submit`), `press`, `select_option`, `scroll`, `wait` (ms or text), `eval`. `tab` omitted means the active tab; the agent may use the person's tabs too.
+- **Snapshots** (`main/browser/page-script.ts`) list headings, images with text, dialogs and interactive elements in document order with refs (`e1`…), values, states and link targets, including same-origin frames and open shadow roots (at most 600 entries, 25k characters). They run in an isolated world (`AGENT_WORLD`), so the page cannot read or forge the refs, which last until the next snapshot. Steps that change the page wait for loading to settle and return a fresh snapshot.
+- **Input is real**: clicks are mouse events at the element's centre (`sendInputEvent`, after scrolling it into view; frame offsets added), typing focuses the field and uses `insertText`, keys go through `parseKey` (`Enter`, `ArrowDown`, `Control+A`…). `select_option` sets the options from script and fires `input`/`change`.
+- **The person sees it**: a tab the agent acts on becomes the active tab, and main sends `browser:reveal` so the panel shows the browser. Pages are created at the last page size (1024×768 before the panel ever showed one) with background throttling off, so they work while hidden. Each call shows in the chat as a plain step ("Opened example.com", "Typed on the page").
+- `DAEMON_PROTOCOL` is 3 for these frames, so an app replaces an older daemon (also in development, where versions match).
+
+`browser/driver.ts` still declares `BrowserDriver`, the tab and cookie surface a second, headless browser needs.

@@ -34,13 +34,16 @@ The side panel adds `terminal:*`, `workspace:*` and `browser:*` channels plus `s
 One JSON value per line (`encodeFrame` / `FrameDecoder` in `apps/daemon/src/framing.ts`; a line longer than 64 MiB or not valid JSON closes the connection). The transport is a Unix socket, or a named pipe on Windows; see [Process model](process-model.md#the-daemon-socket) for the endpoint and token. Abridged from `packages/shared/src/index.ts`:
 
 ```ts
-const DAEMON_PROTOCOL = 2;
+const DAEMON_PROTOCOL = 3;
 
 type ClientFrame =
   | { kind: "hello"; protocol: number; nonce: string; proof: string; appVersion: string }
   | { kind: "command"; id: number; command: AgentCommand }
   | { kind: "vault_import"; id: number; entries: Record<string, StoredCredential> }
-  | { kind: "shutdown" };
+  | { kind: "shutdown" }
+  | { kind: "browser_available"; available: boolean }
+  | { kind: "browser_response"; id: number; ok: true; result: BrowserResult }
+  | { kind: "browser_response"; id: number; ok: false; error: string };
 
 type DaemonFrame =
   | { kind: "challenge"; nonce: string }
@@ -49,21 +52,24 @@ type DaemonFrame =
   | { kind: "event"; event: AgentEvent }
   | { kind: "result"; id: number; ok: true; data: unknown }
   | { kind: "result"; id: number; ok: false; error: string }
-  | { kind: "open_url"; url: string };
+  | { kind: "open_url"; url: string }
+  | { kind: "browser_request"; id: number; request: BrowserRequest };
 ```
 
-| Frame          | Direction       | What happens                                                                                                                                                                        |
-| -------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `challenge`    | daemon → client | Fresh nonce issued for this connection before the client sends its proof.                                                                                                           |
-| `hello`        | client → daemon | Must be the first frame. The daemon checks a challenge-bound HMAC proof, then answers `hello_ok` with its own proof. A wrong proof gets `hello_error` and the connection is closed. |
-| `hello_ok`     | daemon → client | Carries the daemon's protocol, app version and pid. A different protocol or version still gets `hello_ok`, so a newer app can see it and send `shutdown`.                           |
-| `command`      | client → daemon | Carries an agent command with a client-assigned id; answered by a `result` with the same id. Runs `AgentHost.handle`, which waits for `init` to finish except for `get_snapshot`.   |
-| `result`       | daemon → client | Resolves or rejects the pending `invoke` with that id (`error` is the message the renderer shows).                                                                                  |
-| `event`        | daemon → client | Broadcast to every authenticated client; main forwards it unchanged to the renderer on `agent:event`.                                                                               |
-| `open_url`     | daemon → client | Broadcast like events; main opens an http(s) URL in the browser (provider or MCP OAuth sign-in); other schemes are refused.                                                         |
-| `vault_import` | client → daemon | One-time import of the legacy `credentials.json` entries (below); answered by a `result`. Entries the vault already has are not overwritten.                                        |
-| `shutdown`     | client → daemon | Asks the daemon to exit: sent when an update or version change replaced the app, and on quit when this app started the daemon.                                                      |
-| `hello_error`  | daemon → client | Answers a bad proof, a malformed frame or a first frame that is not `hello` (the connection is then closed), and a repeated `hello` (the connection stays open).                    |
+| Frame               | Direction       | What happens                                                                                                                                                                                                                                                                       |
+| ------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `challenge`         | daemon → client | Fresh nonce issued for this connection before the client sends its proof.                                                                                                                                                                                                          |
+| `hello`             | client → daemon | Must be the first frame. The daemon checks a challenge-bound HMAC proof, then answers `hello_ok` with its own proof. A wrong proof gets `hello_error` and the connection is closed.                                                                                                |
+| `hello_ok`          | daemon → client | Carries the daemon's protocol, app version and pid. A different protocol or version still gets `hello_ok`, so a newer app can see it and send `shutdown`.                                                                                                                          |
+| `command`           | client → daemon | Carries an agent command with a client-assigned id; answered by a `result` with the same id. Runs `AgentHost.handle`, which waits for `init` to finish except for `get_snapshot`.                                                                                                  |
+| `result`            | daemon → client | Resolves or rejects the pending `invoke` with that id (`error` is the message the renderer shows).                                                                                                                                                                                 |
+| `event`             | daemon → client | Broadcast to every authenticated client; main forwards it unchanged to the renderer on `agent:event`.                                                                                                                                                                              |
+| `open_url`          | daemon → client | Broadcast like events; main opens an http(s) URL in the browser (provider or MCP OAuth sign-in); other schemes are refused.                                                                                                                                                        |
+| `vault_import`      | client → daemon | One-time import of the legacy `credentials.json` entries (below); answered by a `result`. Entries the vault already has are not overwritten.                                                                                                                                       |
+| `shutdown`          | client → daemon | Asks the daemon to exit: sent when an update or version change replaced the app, and on quit when this app started the daemon.                                                                                                                                                     |
+| `browser_available` | client → daemon | Whether this client has a window whose side panel browser can run the agent's `browser` tool; sent after every connection and when the window opens or closes.                                                                                                                     |
+| `browser_request`   | daemon → client | One `browser` tool call, sent only to the newest client that offered its browser; answered by `browser_response` with the same id (90 s timeout, aborted with the tool call, failed when that client leaves). See [Side panel](side-panel.md#browser-use-the-agents-browser-tool). |
+| `hello_error`       | daemon → client | Answers a bad proof, a malformed frame or a first frame that is not `hello` (the connection is then closed), and a repeated `hello` (the connection stays open).                                                                                                                   |
 
 ### Command correlation
 

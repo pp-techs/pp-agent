@@ -216,7 +216,8 @@
       "file": "một tệp",
       "workspace": "không gian làm việc",
       "pattern": "một mẫu",
-      "text": "văn bản"
+      "text": "văn bản",
+      "page": "một trang"
     },
     "titles": {
       "read": {
@@ -313,6 +314,38 @@
         "active": "Trợ lý phụ đang tra cứu",
         "done": "Trợ lý phụ đã xong",
         "notDone": "Giao việc tra cứu cho trợ lý phụ"
+      },
+      "browser": {
+        "open": {
+          "active": "Đang mở {{target}}",
+          "done": "Đã mở {{target}}",
+          "notDone": "Mở {{target}}"
+        },
+        "click": {
+          "active": "Đang bấm trên trang",
+          "done": "Đã bấm trên trang",
+          "notDone": "Bấm trên trang"
+        },
+        "type": {
+          "active": "Đang nhập trên trang",
+          "done": "Đã nhập trên trang",
+          "notDone": "Nhập trên trang"
+        },
+        "read": {
+          "active": "Đang đọc trang",
+          "done": "Đã đọc trang",
+          "notDone": "Đọc trang"
+        },
+        "tabs": {
+          "active": "Đang sắp xếp tab trình duyệt",
+          "done": "Đã sắp xếp tab trình duyệt",
+          "notDone": "Sắp xếp tab trình duyệt"
+        },
+        "other": {
+          "active": "Đang dùng trình duyệt",
+          "done": "Đã dùng trình duyệt",
+          "notDone": "Dùng trình duyệt"
+        }
       }
     },
     "ask": {

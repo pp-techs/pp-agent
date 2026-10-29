@@ -216,7 +216,8 @@
       "file": "a file",
       "workspace": "the workspace",
       "pattern": "a pattern",
-      "text": "text"
+      "text": "text",
+      "page": "a page"
     },
     "titles": {
       "read": {
@@ -313,6 +314,38 @@
         "active": "Helper is researching",
         "done": "Helper finished",
         "notDone": "Hand research to a helper"
+      },
+      "browser": {
+        "open": {
+          "active": "Opening {{target}}",
+          "done": "Opened {{target}}",
+          "notDone": "Open {{target}}"
+        },
+        "click": {
+          "active": "Clicking on the page",
+          "done": "Clicked on the page",
+          "notDone": "Click on the page"
+        },
+        "type": {
+          "active": "Typing on the page",
+          "done": "Typed on the page",
+          "notDone": "Type on the page"
+        },
+        "read": {
+          "active": "Reading the page",
+          "done": "Read the page",
+          "notDone": "Read the page"
+        },
+        "tabs": {
+          "active": "Arranging browser tabs",
+          "done": "Arranged browser tabs",
+          "notDone": "Arrange browser tabs"
+        },
+        "other": {
+          "active": "Using the browser",
+          "done": "Used the browser",
+          "notDone": "Use the browser"
+        }
       }
     },
     "ask": {

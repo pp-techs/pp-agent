@@ -2,9 +2,11 @@ import { randomBytes } from "node:crypto";
 import { chmod, lstat, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { dirname } from "node:path";
-import type { HostOutput } from "@workspace/agent-core";
+import type { BrowserBridge, HostOutput } from "@workspace/agent-core";
 import {
   type AgentCommand,
+  type BrowserRequest,
+  type BrowserResult,
   type ClientFrame,
   DAEMON_PROTOCOL,
   type DaemonFrame,
@@ -48,7 +50,18 @@ interface Client {
   authenticated: boolean;
   nonce: string;
   helloTimer: NodeJS.Timeout | null;
+  /** The client has a window whose browser can run the agent's browser tool. */
+  browser: boolean;
 }
+
+interface PendingBrowserRequest {
+  client: Client;
+  resolve(result: BrowserResult): void;
+  reject(error: Error): void;
+}
+
+/** A browser step may load a slow page; past this the model hears it timed out. */
+const BROWSER_TIMEOUT_MS = 90_000;
 
 /** Reads the token file, creating it (mode 0600) when missing or malformed. */
 export async function ensureToken(file: string): Promise<string> {
@@ -95,7 +108,18 @@ export class DaemonServer {
     openUrl: (url) => this.broadcast({ kind: "open_url", url }),
   };
 
+  /**
+   * Give this to the host as well: the agent's browser tool runs in the side panel browser of the
+   * client that offered it most recently.
+   */
+  readonly browser: BrowserBridge = {
+    available: () => this.browserClient() !== null,
+    request: (request, signal) => this.requestBrowser(request, signal),
+  };
+
   private server: Server | null = null;
+  private readonly browserRequests = new Map<number, PendingBrowserRequest>();
+  private nextBrowserRequest = 1;
   private releaseLock: (() => Promise<void>) | null = null;
   /** Settles once the host is attached; commands that arrive while the host starts wait for it. */
   private hostReady = Promise.withResolvers<DaemonHost>();
@@ -204,6 +228,7 @@ export class DaemonServer {
       authenticated: false,
       nonce: randomBytes(32).toString("hex"),
       helloTimer: null,
+      browser: false,
     };
     this.clients.add(client);
     this.send(client, { kind: "challenge", nonce: client.nonce });
@@ -216,6 +241,11 @@ export class DaemonServer {
     socket.on("close", () => {
       clearTimeout(client.helloTimer ?? undefined);
       this.clients.delete(client);
+      for (const [id, pending] of this.browserRequests) {
+        if (pending.client !== client) continue;
+        this.browserRequests.delete(id);
+        pending.reject(new Error("The PP Agent window closed before the browser step finished."));
+      }
     });
   }
 
@@ -267,6 +297,25 @@ export class DaemonServer {
         this.options.log?.("A client asked the daemon to shut down.");
         this.options.onShutdown();
         return;
+      case "browser_available": {
+        const { available } = frame as Extract<ClientFrame, { kind: "browser_available" }>;
+        client.browser = available === true;
+        // The newest window is the one the person looks at.
+        if (client.browser) {
+          this.clients.delete(client);
+          this.clients.add(client);
+        }
+        return;
+      }
+      case "browser_response": {
+        const response = frame as Extract<ClientFrame, { kind: "browser_response" }>;
+        const pending = this.browserRequests.get(response.id);
+        if (!pending || pending.client !== client) return;
+        this.browserRequests.delete(response.id);
+        if (response.ok) pending.resolve(response.result);
+        else pending.reject(new Error(String(response.error)));
+        return;
+      }
       default:
         // Includes a repeated hello; a client that does this is confused, not hostile.
         this.send(client, { kind: "hello_error", error: `Unexpected frame: ${frame.kind}.` });
@@ -358,6 +407,43 @@ export class DaemonServer {
       return;
     }
     socket.write(encodeFrame(frame));
+  }
+
+  /** The last client in connection order that offered its browser. */
+  private browserClient(): Client | null {
+    let found: Client | null = null;
+    for (const client of this.clients) {
+      if (client.authenticated && client.browser && !client.socket.destroyed) found = client;
+    }
+    return found;
+  }
+
+  private requestBrowser(request: BrowserRequest, signal?: AbortSignal): Promise<BrowserResult> {
+    const client = this.browserClient();
+    if (!client)
+      return Promise.reject(
+        new Error(
+          "The browser is available only while the PP Agent window is open. Ask the user to open PP Agent and try again.",
+        ),
+      );
+    const id = this.nextBrowserRequest++;
+    const result = Promise.withResolvers<BrowserResult>();
+    const finish = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const timer = setTimeout(() => {
+      this.browserRequests.delete(id);
+      result.reject(new Error("The browser step timed out."));
+    }, BROWSER_TIMEOUT_MS);
+    const onAbort = () => {
+      this.browserRequests.delete(id);
+      result.reject(new Error("The browser step was stopped."));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    this.browserRequests.set(id, { client, resolve: result.resolve, reject: result.reject });
+    this.send(client, { kind: "browser_request", id, request });
+    return result.promise.finally(finish);
   }
 
   private broadcast(frame: DaemonFrame): void {
