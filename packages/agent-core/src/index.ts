@@ -63,6 +63,11 @@ import {
   type ProviderSummary,
   type SaveAgentInput,
   type SaveWorkspaceInput,
+  type BrowserProfile,
+  type BrowserProfileImport,
+  type SaveBrowserProfileInput,
+  BROWSER_PROFILE_LIMITS,
+  DEFAULT_BROWSER_PROFILE_ID,
   type SaveGatewayInput,
   type SaveSkillInput,
   type SkillSummary,
@@ -133,6 +138,12 @@ import type {
   TurnResult,
 } from "./channels/types.ts";
 import { buildPrompt, splitAttachedFiles, withAttachedFiles } from "./attachments.ts";
+import {
+  newProfileId,
+  sortBrowserProfiles,
+  validateImport,
+  validateProfileName,
+} from "./browser-profiles.ts";
 import { AuthPrompts } from "./auth-prompts.ts";
 import { pruneToolOutputs } from "./context.ts";
 import { VaultCredentialStore } from "./credentials.ts";
@@ -873,6 +884,15 @@ export class AgentHost {
         return this.requireChatApps().zalo.startPairing();
       case "forget_zalo":
         return this.requireChatApps().zalo.forget();
+
+      case "list_browser_profiles":
+        return sortBrowserProfiles(services.settings.get().browserProfiles);
+      case "save_browser_profile":
+        return this.saveBrowserProfile(command.profile);
+      case "delete_browser_profile":
+        return this.deleteBrowserProfile(command.id);
+      case "record_browser_import":
+        return this.recordBrowserImport(command.id, command.lastImport);
 
       default: {
         const unknown: never = command;
@@ -2732,6 +2752,57 @@ export class AgentHost {
     if (open) this.workspaceId = DEFAULT_WORKSPACE_ID;
     this.changed(["workspaces", "memory"], { workspace: open });
     emit({ type: "sessions_changed" });
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Browser profiles
+  // -------------------------------------------------------------------------------------------
+
+  private requireBrowserProfile(id: string): BrowserProfile {
+    const profile = this.requireServices()
+      .settings.get()
+      .browserProfiles.find((entry) => entry.id === id);
+    if (!profile) throw new Error(t("browserProfiles.notFound"));
+    return profile;
+  }
+
+  private saveBrowserProfile(input: SaveBrowserProfileInput): BrowserProfile {
+    const { settings } = this.requireServices();
+    const before = input.id === undefined ? undefined : this.requireBrowserProfile(input.id);
+    const { browserProfiles } = settings.get();
+    const name = validateProfileName(browserProfiles, input);
+    if (!before && browserProfiles.length >= BROWSER_PROFILE_LIMITS.maxProfiles)
+      throw new Error(t("browserProfiles.tooMany", { max: BROWSER_PROFILE_LIMITS.maxProfiles }));
+    const saved: BrowserProfile = before
+      ? { ...before, name }
+      : { id: newProfileId(browserProfiles), name, createdAt: Date.now(), lastImport: null };
+    this.putBrowserProfile(saved);
+    return saved;
+  }
+
+  private deleteBrowserProfile(id: string): void {
+    if (id === DEFAULT_BROWSER_PROFILE_ID)
+      throw new Error(t("browserProfiles.builtinCannotDelete"));
+    this.requireBrowserProfile(id);
+    this.requireServices().settings.update((draft) => {
+      draft.browserProfiles = draft.browserProfiles.filter((entry) => entry.id !== id);
+    });
+    emit({ type: "settings_changed", scopes: ["browserProfiles"] });
+  }
+
+  private recordBrowserImport(id: string, lastImport: BrowserProfileImport): BrowserProfile {
+    const saved = { ...this.requireBrowserProfile(id), lastImport: validateImport(lastImport) };
+    this.putBrowserProfile(saved);
+    return saved;
+  }
+
+  private putBrowserProfile(saved: BrowserProfile): void {
+    this.requireServices().settings.update((draft) => {
+      const index = draft.browserProfiles.findIndex((entry) => entry.id === saved.id);
+      if (index === -1) draft.browserProfiles.push(saved);
+      else draft.browserProfiles[index] = saved;
+    });
+    emit({ type: "settings_changed", scopes: ["browserProfiles"] });
   }
 
   // -------------------------------------------------------------------------------------------

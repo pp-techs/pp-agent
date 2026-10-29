@@ -151,7 +151,8 @@ export type SettingsScope =
   | "memory"
   | "scheduledTasks"
   | "voice"
-  | "background";
+  | "background"
+  | "browserProfiles";
 
 export type AgentEvent =
   | { type: "status"; status: AgentStatus }
@@ -547,6 +548,8 @@ export interface SettingsFile extends AppSettings {
   channels: ChannelsSettings;
   /** Global switch of long-term memory (Settings › Memory). */
   memoryEnabled: boolean;
+  /** Always contains the profile with id `DEFAULT_BROWSER_PROFILE_ID`. */
+  browserProfiles: BrowserProfile[];
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1155,6 +1158,18 @@ export interface AgentCommandMap {
   start_zalo_pairing: { params: NoParams; result: ZaloStatus };
   /** Removes the token and the paired owner and turns the channel off. */
   forget_zalo: { params: NoParams; result: ZaloStatus };
+
+  /** Default profile first, then by name. */
+  list_browser_profiles: { params: NoParams; result: BrowserProfile[] };
+  /** Adds a profile (`id` omitted) or renames one. */
+  save_browser_profile: { params: { profile: SaveBrowserProfileInput }; result: BrowserProfile };
+  /** The default profile cannot be deleted. The app clears the deleted profile's sign-ins. */
+  delete_browser_profile: { params: { id: string }; result: void };
+  /** Records a finished cookie import, so the profile shows where its sign-ins came from. */
+  record_browser_import: {
+    params: { id: string; lastImport: BrowserProfileImport };
+    result: BrowserProfile;
+  };
 }
 
 export type AgentCommandType = keyof AgentCommandMap;
@@ -1162,6 +1177,145 @@ export type AgentCommand = {
   [K in AgentCommandType]: { type: K } & AgentCommandMap[K]["params"];
 }[AgentCommandType];
 export type AgentCommandResult<K extends AgentCommandType> = AgentCommandMap[K]["result"];
+
+// ---------------------------------------------------------------------------------------------
+// Side panel: terminal, workspace files, and browser
+// ---------------------------------------------------------------------------------------------
+
+/** A shell the person opened in the side panel. It runs in the main process, never for the agent. */
+export interface TerminalInfo {
+  id: string;
+  /** Workspace folder it started in; the panel shows the terminals of the open conversation's. */
+  cwd: string;
+  title: string;
+  /** The shell ended; the output stays readable until the terminal is closed. */
+  exited: boolean;
+}
+
+export interface TerminalSize {
+  cols: number;
+  rows: number;
+}
+
+/** Output written so far (the most recent part), and the sequence number of its last chunk. */
+export interface TerminalBacklog {
+  output: string;
+  seq: number;
+}
+
+/** One file or folder of a workspace; `path` is relative to the workspace folder, with `/`. */
+export interface WorkspaceEntry {
+  name: string;
+  path: string;
+  kind: "file" | "folder";
+  size: number;
+  /** Last change, epoch milliseconds. */
+  modified: number;
+}
+
+export type FilePreview =
+  | { kind: "text"; text: string; truncated: boolean; size: number }
+  | { kind: "image"; dataUrl: string; size: number }
+  /** Too large or not text: offer to show it in Finder / Explorer instead. */
+  | { kind: "none"; size: number };
+
+/** Id of the profile every browser tab uses unless the person picks another. */
+export const DEFAULT_BROWSER_PROFILE_ID = "default";
+
+export const BROWSER_PROFILE_LIMITS = { maxProfiles: 20, maxNameLength: 40 } as const;
+
+/** Browsers installed on the computer whose cookies can be copied into a profile. */
+export const COOKIE_SOURCE_BROWSERS = [
+  "chrome",
+  "edge",
+  "brave",
+  "arc",
+  "chromium",
+  "firefox",
+] as const;
+export type CookieSourceBrowser = (typeof COOKIE_SOURCE_BROWSERS)[number];
+
+/** Product names, shown as they are in every language. */
+export const COOKIE_SOURCE_NAMES: Record<CookieSourceBrowser, string> = {
+  chrome: "Google Chrome",
+  edge: "Microsoft Edge",
+  brave: "Brave",
+  arc: "Arc",
+  chromium: "Chromium",
+  firefox: "Firefox",
+};
+
+/** Where a profile's cookies were last copied from. */
+export interface BrowserProfileImport {
+  browser: CookieSourceBrowser;
+  /** Name of the source browser's own profile ("Person 1", "default-release"). */
+  sourceProfile: string;
+  /** Epoch milliseconds. */
+  at: number;
+  count: number;
+}
+
+/**
+ * A separate set of sign-ins, cookies and site data for the side panel browser. The daemon keeps
+ * the list (so a future browser tool of the agent can pick a profile); the main process keeps the
+ * data itself, in an Electron partition per profile.
+ */
+export interface BrowserProfile {
+  id: string;
+  name: string;
+  createdAt: number;
+  lastImport: BrowserProfileImport | null;
+}
+
+/** Omit `id` to create a profile. */
+export interface SaveBrowserProfileInput {
+  id?: string;
+  name: string;
+}
+
+/** A profile of an installed browser; `id` is its folder name. */
+export interface CookieSourceProfile {
+  id: string;
+  name: string;
+}
+
+export interface CookieSource {
+  browser: CookieSourceBrowser;
+  profiles: CookieSourceProfile[];
+}
+
+export interface CookieImportResult {
+  imported: number;
+  /** Expired, unreadable, or refused by the browser engine. */
+  skipped: number;
+  profile: BrowserProfile;
+}
+
+/** One tab of the side panel browser. `id` stays the same for the tab's life. */
+export interface BrowserTab {
+  id: string;
+  profileId: string;
+  url: string;
+  title: string;
+  loading: boolean;
+  canGoBack: boolean;
+  canGoForward: boolean;
+}
+
+export interface BrowserState {
+  tabs: BrowserTab[];
+  activeId: string | null;
+}
+
+export type BrowserAction = "back" | "forward" | "reload" | "stop";
+
+/** Rectangle of the page area in the window, in CSS pixels. */
+export interface BrowserBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 /**
  * Where the app stands with updates. `in-app` updates download and install from inside the app
@@ -1230,6 +1384,53 @@ export interface DesktopBridge {
     onFocusComposer(listener: () => void): () => void;
     /** True once when the window was created by the shortcut and missed the event; clears it. */
     takePendingFocus(): Promise<boolean>;
+    /** The side panel shortcut was pressed while a browser page had the keyboard. */
+    onTogglePanel(listener: () => void): () => void;
+  };
+  terminal: {
+    list(): Promise<TerminalInfo[]>;
+    /** Starts the person's shell in a workspace folder. */
+    create(cwd: string, size: TerminalSize): Promise<TerminalInfo>;
+    backlog(id: string): Promise<TerminalBacklog>;
+    write(id: string, data: string): void;
+    resize(id: string, size: TerminalSize): void;
+    close(id: string): Promise<void>;
+    /** Output of every terminal; `seq` increases per terminal, so a backlog can skip repeats. */
+    onData(listener: (id: string, data: string, seq: number) => void): () => void;
+    /** A terminal was added, closed, renamed, or its shell ended. */
+    onChanged(listener: (terminals: TerminalInfo[]) => void): () => void;
+  };
+  workspace: {
+    /** Entries of a folder inside the workspace `root` (`dir` relative, "" for the root). */
+    list(root: string, dir: string): Promise<WorkspaceEntry[]>;
+    preview(root: string, path: string): Promise<FilePreview>;
+    reveal(root: string, path: string): Promise<void>;
+    /** The file as an attachment for the message box. */
+    attachment(root: string, path: string): Promise<Attachment>;
+    /** Watches `root` for changes (replacing the previous watch); null stops watching. */
+    watch(root: string | null): Promise<void>;
+    onChanged(listener: (root: string) => void): () => void;
+  };
+  browser: {
+    state(): Promise<BrowserState>;
+    /** Opens a tab with a profile and makes it the active one. */
+    open(profileId: string, url?: string): Promise<BrowserTab>;
+    close(id: string): Promise<void>;
+    activate(id: string): Promise<void>;
+    /** Goes to an address, or searches the web for anything that is not one. */
+    navigate(id: string, input: string): Promise<void>;
+    go(id: string, action: BrowserAction): Promise<void>;
+    /** Where the active page is drawn; null hides it (panel closed, a dialog on top). */
+    setBounds(bounds: BrowserBounds | null): void;
+    onState(listener: (state: BrowserState) => void): () => void;
+    /** Installed browsers and their profiles whose cookies can be imported. */
+    cookieSources(): Promise<CookieSource[]>;
+    /** Copies every cookie of a source browser profile into a profile. */
+    importCookies(
+      profileId: string,
+      browser: CookieSourceBrowser,
+      sourceProfile: string,
+    ): Promise<CookieImportResult>;
   };
 }
 
@@ -1252,6 +1453,31 @@ export const IPC = {
   updatesEvent: "updates:event",
   shellFocusComposer: "shell:focus-composer",
   shellTakePendingFocus: "shell:take-pending-focus",
+  shellTogglePanel: "shell:toggle-panel",
+  terminalList: "terminal:list",
+  terminalCreate: "terminal:create",
+  terminalBacklog: "terminal:backlog",
+  terminalWrite: "terminal:write",
+  terminalResize: "terminal:resize",
+  terminalClose: "terminal:close",
+  terminalData: "terminal:data",
+  terminalChanged: "terminal:changed",
+  workspaceList: "workspace:list",
+  workspacePreview: "workspace:preview",
+  workspaceReveal: "workspace:reveal",
+  workspaceAttachment: "workspace:attachment",
+  workspaceWatch: "workspace:watch",
+  workspaceChanged: "workspace:changed",
+  browserState: "browser:state",
+  browserOpen: "browser:open",
+  browserClose: "browser:close",
+  browserActivate: "browser:activate",
+  browserNavigate: "browser:navigate",
+  browserGo: "browser:go",
+  browserSetBounds: "browser:set-bounds",
+  browserChanged: "browser:changed",
+  browserCookieSources: "browser:cookie-sources",
+  browserImportCookies: "browser:import-cookies",
 } as const;
 
 // ---------------------------------------------------------------------------------------------

@@ -26,11 +26,14 @@ import { ChatSidebar } from "@/components/chat/chat-sidebar";
 import { ChatThread } from "@/components/chat/chat-thread";
 import { EmptyChat } from "@/components/chat/empty-chat";
 import { PromptComposer } from "@/components/chat/prompt-composer";
+import { SidePanel } from "@/components/panel/side-panel";
 import { SettingsModal } from "@/components/modals/settings-modal";
 import { ScheduledTasksSection } from "@/components/settings/scheduled-tasks-section";
 import { useAgentConnection } from "@/hooks/use-agent-connection";
+import { usePanelShortcut } from "@/hooks/use-panel-shortcut";
 import { bridge } from "@/lib/bridge";
 import { useChatStore } from "@/stores/chat-store";
+import { usePanelStore } from "@/stores/panel-store";
 import { toAttachments, useComposerStore } from "@/stores/composer-store";
 import { connectUpdates } from "@/stores/update-store";
 
@@ -96,10 +99,13 @@ function ChatBody({ bridge }: { bridge: DesktopBridge }) {
 function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("modals");
   useAgentConnection(bridge);
+  usePanelShortcut(bridge);
   React.useEffect(() => connectUpdates(bridge), [bridge]);
   const status = useChatStore((state) => state.status);
   const ready = status === "idle" || status === "running";
   const [page, setPage] = React.useState<"chat" | "schedules">("chat");
+  // An expanded side panel takes the chat's place; the chat stays mounted, only hidden.
+  const panelCovers = usePanelStore((state) => state.open && state.expanded) && page === "chat";
   // Counts nested dragenter/dragleave pairs so the overlay does not flicker over child elements.
   const [dragDepth, setDragDepth] = React.useState(0);
 
@@ -121,7 +127,7 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
       <ChatSidebar bridge={bridge} page={page} onNavigate={setPage} />
       <SidebarInset
         // Inset leaves an 0.5rem gutter around the chat panel on desktop; keep it within the window.
-        className="relative h-svh overflow-hidden md:h-[calc(100svh-(--spacing(4)))] md:ring-1 md:ring-foreground/5 dark:md:ring-foreground/10"
+        className={`relative h-svh overflow-hidden md:h-[calc(100svh-(--spacing(4)))] md:ring-1 md:ring-foreground/5 dark:md:ring-foreground/10 ${panelCovers ? "md:hidden" : ""}`}
         onDragEnter={(event) => {
           if (page === "chat" && event.dataTransfer.types.includes("Files")) {
             setDragDepth((depth) => depth + 1);
@@ -162,6 +168,7 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
           </div>
         )}
       </SidebarInset>
+      {page === "chat" && <SidePanel bridge={bridge} />}
     </SidebarProvider>
   );
 }

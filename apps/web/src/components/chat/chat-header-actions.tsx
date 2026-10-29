@@ -11,13 +11,21 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
-import { DownloadIcon, FileTextIcon, FolderOpenIcon, GlobeIcon } from "lucide-react";
+import {
+  DownloadIcon,
+  FileTextIcon,
+  FolderOpenIcon,
+  GlobeIcon,
+  PanelRightIcon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { useExportSession } from "@/hooks/use-export-session";
 import { useAgentCommands, usageQuery } from "@/lib/queries";
+import { IS_MAC } from "@/hooks/use-panel-shortcut";
 import { useChatStore } from "@/stores/chat-store";
+import { usePanelStore } from "@/stores/panel-store";
 
 const RING_SIZE = 18;
 const RING_STROKE = 2.5;
@@ -265,13 +273,43 @@ function ExportButton({ bridge }: { bridge: DesktopBridge }) {
   );
 }
 
-/** Right end of the chat's top bar: context window, export, and the workspace folder. */
+/** Opens and closes the side panel (terminal, files, browser). */
+function SidePanelButton() {
+  const open = usePanelStore((state) => state.open);
+  const toggle = usePanelStore((state) => state.toggle);
+  const { t } = useTranslation("chat");
+  const label = open ? t("panel.close") : t("panel.open");
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="max-md:hidden"
+            aria-label={label}
+            aria-pressed={open}
+            onClick={toggle}
+          />
+        }
+      >
+        <PanelRightIcon />
+      </TooltipTrigger>
+      <TooltipContent>
+        {t("panel.toggleWithShortcut", { label, shortcut: IS_MAC ? "⌘J" : "Ctrl+J" })}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** Right end of the chat's top bar: context window, export, the workspace folder, the panel. */
 export function ChatHeaderActions({ bridge }: { bridge: DesktopBridge }) {
   return (
     <div className="ml-auto flex items-center gap-0.5">
       <ContextButton bridge={bridge} />
       <ExportButton bridge={bridge} />
       <OpenFolderButton bridge={bridge} />
+      <SidePanelButton />
     </div>
   );
 }

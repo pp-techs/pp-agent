@@ -41,6 +41,14 @@ export const queryKeys = {
   serviceStatus: ["service-status"] as const,
   telegramStatus: ["telegram-status"] as const,
   zaloStatus: ["zalo-status"] as const,
+  browserProfiles: ["browser-profiles"] as const,
+  cookieSources: ["cookie-sources"] as const,
+  /** Prefix of every folder listing of one workspace. */
+  workspaceFiles: (root: string) => ["workspace-files", root] as const,
+  workspaceFolder: (root: string, dir: string) => ["workspace-files", root, dir] as const,
+  /** Prefix of every file preview of one workspace. */
+  filePreviews: (root: string) => ["file-preview", root] as const,
+  filePreview: (root: string, path: string) => ["file-preview", root, path] as const,
 };
 
 export const settingsQuery = (bridge: DesktopBridge) =>

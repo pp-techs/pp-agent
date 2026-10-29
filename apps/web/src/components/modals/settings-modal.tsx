@@ -24,6 +24,7 @@ import {
   ChevronRightIcon,
   BrainIcon,
   FolderKanbanIcon,
+  GlobeIcon,
   MessagesSquareIcon,
   MicIcon,
   MoonStarIcon,
@@ -36,6 +37,7 @@ import { useTranslation } from "react-i18next";
 
 import { AgentsSection } from "@/components/settings/agents-section";
 import { BackgroundSection } from "@/components/settings/background-section";
+import { BrowserSection } from "@/components/settings/browser-section";
 import { ChannelsSection } from "@/components/settings/channels-section";
 import { GeneralSection } from "@/components/settings/general-section";
 import { McpSection } from "@/components/settings/mcp-section";
@@ -58,6 +60,7 @@ export type SettingsSection =
   | "skills"
   | "memory"
   | "channels"
+  | "browser"
   | "background";
 
 const SECTIONS: {
@@ -75,6 +78,7 @@ const SECTIONS: {
   { id: "skills", icon: BookOpenIcon, Component: SkillsSection },
   { id: "memory", icon: BrainIcon, Component: MemorySection },
   { id: "channels", icon: MessagesSquareIcon, Component: ChannelsSection },
+  { id: "browser", icon: GlobeIcon, Component: BrowserSection },
   { id: "background", icon: MoonStarIcon, Component: BackgroundSection },
 ];
 

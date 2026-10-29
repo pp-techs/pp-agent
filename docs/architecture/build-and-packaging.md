@@ -43,7 +43,7 @@ The other runtime `dependencies` of `apps/desktop` (`fflate`, `officeparser`, `t
 - Ships `dist/**` and `package.json` inside an asar archive; production `dependencies` (including the Pi SDK) come along from `node_modules`.
 - `extraResources` copies `../web/dist` to `resources/renderer`. In a packaged app main loads `process.resourcesPath/renderer/index.html`, which is why `dist` builds the web app first.
 - Targets: macOS `dmg` + `zip` (category productivity), Windows `nsis` (assisted installer, install folder selectable), Linux `AppImage` + `deb`. `publish: null`: the release workflow uploads installers itself (see [Release process](../code-standard/release-process.md)).
-- `asarUnpack: node_modules/@napi-rs/**`: a native addon cannot load from inside the asar archive, and the daemon needs the OS keyring binding.
+- `asarUnpack: node_modules/@napi-rs/**` and `node_modules/node-pty/**`: native addons cannot load from inside the asar archive (the daemon's OS keyring binding, the side panel terminal). `afterPack: scripts/after-pack.cjs` restores the execute bit of node-pty's macOS `spawn-helper` before signing. `node-pty` is also in the pack configs' `neverBundle`.
 
 ```mermaid
 flowchart LR

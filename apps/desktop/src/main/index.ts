@@ -20,6 +20,8 @@ import {
 } from "./files.ts";
 import { initI18n, translator } from "./i18n.ts";
 import { createNotifier, type Notifier } from "./notifications.ts";
+import { chromeUserAgent } from "./browser/address.ts";
+import { createSidePanel } from "./panel/ipc.ts";
 import { restrictPermissions } from "./permissions.ts";
 import { readShellSettings } from "./settings.ts";
 import { releaseShortcut, syncShortcut } from "./shortcut.ts";
@@ -153,6 +155,8 @@ const daemon = new DaemonClient({
     notifier.handle(event);
     if (event.type === "settings_changed" && event.scopes.includes("settings"))
       applyShellSettings();
+    if (event.type === "settings_changed" && event.scopes.includes("browserProfiles"))
+      void sidePanel.syncProfiles();
   },
   onOpenUrl(url) {
     openExternal(url).catch((error: unknown) => {
@@ -172,7 +176,10 @@ const daemon = new DaemonClient({
   },
 });
 
-/** After every (re)connection: show the daemon's state, and hand over a leftover old vault. */
+/**
+ * After every (re)connection: show the daemon's state, clear the data of deleted browser profiles,
+ * and hand over a leftover old vault.
+ */
 async function syncWithDaemon(): Promise<void> {
   try {
     const snapshot = (await daemon.command({ type: "get_snapshot" })) as AgentSnapshot;
@@ -180,6 +187,7 @@ async function syncWithDaemon(): Promise<void> {
   } catch (error) {
     console.error("Could not read the agent's state:", error);
   }
+  await sidePanel.syncProfiles();
   try {
     await migrateLegacyVault((entries) => daemon.importCredentials(entries));
   } catch (error) {
@@ -198,6 +206,14 @@ async function startDaemon(): Promise<void> {
 function commandAgent(command: AgentCommand): Promise<unknown> {
   return daemon.command(command);
 }
+
+const sidePanel = createSidePanel({
+  window: () => window,
+  command: commandAgent,
+  settingsFile: SETTINGS_FILE,
+  workspaceDir: WORKSPACE_DIR,
+  userDataDir: USER_DATA_DIR,
+});
 
 function createWindow(): void {
   window = new BrowserWindow({
@@ -228,7 +244,9 @@ function createWindow(): void {
   window.on("restore", refreshTray);
   window.on("closed", () => {
     window = null;
+    sidePanel.windowClosed();
   });
+  sidePanel.attach(window);
 
   // Links in agent replies open in the browser; the app window never navigates away.
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -303,6 +321,7 @@ ipcMain.handle(IPC.updatesInstall, () =>
 app.on("before-quit", () => {
   quitting = true;
   daemon.dispose();
+  sidePanel.dispose();
 });
 
 app.on("will-quit", () => {
@@ -321,6 +340,9 @@ app.on("activate", () => {
 
 // No top-level await: Electron emits `ready` only after the ESM main module finishes evaluating.
 void app.whenReady().then(() => {
+  // Side panel pages present as plain Chrome (sites such as Google sign-in refuse unknown
+  // browsers). Only the fallback reaches `navigator.userAgent`, and only of pages created later.
+  app.userAgentFallback = chromeUserAgent(process.platform, process.versions.chrome);
   restrictPermissions(session.defaultSession, () => window);
   void startDaemon();
   createWindow();

@@ -26,6 +26,7 @@ const SCOPE_KEYS: Record<SettingsScope, QueryKey[]> = {
   scheduledTasks: [queryKeys.scheduledTasks],
   voice: [queryKeys.voice],
   background: [queryKeys.serviceStatus, queryKeys.telegramStatus, queryKeys.zaloStatus],
+  browserProfiles: [queryKeys.browserProfiles],
 };
 
 /** Mirrors the agent process into the chat store: live events first, then a snapshot to catch up. */

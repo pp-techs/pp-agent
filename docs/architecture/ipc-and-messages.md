@@ -27,6 +27,8 @@ Channel names are the `IPC` constant in `packages/shared/src/index.ts`. All are 
 
 `files.pathFor(file)` is answered in the preload itself (`webUtils.getPathForFile`) without IPC.
 
+The side panel adds `terminal:*`, `workspace:*` and `browser:*` channels plus `shell:toggle-panel`; output, file changes and tab state are pushed by main (`terminal:data`, `terminal:changed`, `workspace:changed`, `browser:changed`), and `terminal:write`, `terminal:resize` and `browser:set-bounds` are one-way `send`s. See [Side panel](side-panel.md).
+
 ## Main ↔ daemon frames
 
 One JSON value per line (`encodeFrame` / `FrameDecoder` in `apps/daemon/src/framing.ts`; a line longer than 64 MiB or not valid JSON closes the connection). The transport is a Unix socket, or a named pipe on Windows; see [Process model](process-model.md#the-daemon-socket) for the endpoint and token. Abridged from `packages/shared/src/index.ts`:

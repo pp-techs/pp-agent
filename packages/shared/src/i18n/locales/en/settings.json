@@ -17,7 +17,8 @@
       "memory": "Memory",
       "scheduledTasks": "Scheduled tasks",
       "channels": "Channels",
-      "background": "Background"
+      "background": "Background",
+      "browser": "Browser"
     }
   },
   "general": {
@@ -464,6 +465,43 @@
       "setUp": "Set up",
       "manage": "Manage",
       "agentFollow": "The workspace's agent"
+    }
+  },
+  "browserSection": {
+    "title": "Browser profiles",
+    "description": "The browser in the side panel keeps sign-ins per profile. Import cookies from a browser on this computer to stay signed in to the same sites.",
+    "newProfile": "New profile",
+    "newTitle": "New browser profile",
+    "renameTitle": "Rename browser profile",
+    "nameLabel": "Profile name",
+    "renameLabel": "Rename {{name}}",
+    "deleteLabel": "Delete {{name}}",
+    "defaultBadge": "Built-in",
+    "loadError": "Browser profiles could not be loaded",
+    "noImport": "No cookies imported yet.",
+    "lastImport_one": "{{count}} cookie from {{browser}} ({{profile}}), {{date}}",
+    "lastImport_other": "{{count}} cookies from {{browser}} ({{profile}}), {{date}}",
+    "importButton": "Import cookies",
+    "deleted": "Deleted the profile {{name}} and its sign-ins.",
+    "deleteConfirm": {
+      "title": "Delete this browser profile?",
+      "description": "{{name}} and everything it keeps (sign-ins, cookies, site data) are removed from PP Agent. Your other browsers are not affected."
+    },
+    "privacy": "Cookies are copied once and stay on this computer. Signing out here does not sign you out of the other browser.",
+    "import": {
+      "title": "Import cookies into {{name}}",
+      "description": "Copies every cookie of a browser profile on this computer, so sites you are signed in to there are signed in here too. Cookies already in this profile with the same name are replaced.",
+      "browser": "Browser",
+      "sourceProfile": "Profile in that browser",
+      "hintMac": "macOS will ask to allow access to the browser's saved key. Choose “Allow”.",
+      "hintWindows": "If the import fails, quit that browser completely and try again.",
+      "hintFirefox": "Cookies of container tabs and private windows are not copied.",
+      "none": "No supported browser with saved cookies was found on this computer (Chrome, Edge, Brave, Arc, Chromium or Firefox).",
+      "submit": "Import",
+      "done_one": "Imported {{count}} cookie from {{browser}} into {{profile}}.",
+      "done_other": "Imported {{count}} cookies from {{browser}} into {{profile}}.",
+      "skipped_one": "{{count}} cookie was skipped (expired or unreadable).",
+      "skipped_other": "{{count}} cookies were skipped (expired or unreadable)."
     }
   }
 }

@@ -14,3 +14,9 @@ Rules enforced in `apps/desktop/src/main/index.ts`, the daemon (`apps/daemon`) a
 - **Channels trust one person:** the Telegram bot answers only the paired owner's private chat, ignores everyone else, and accepts a pairing code only while the person has opened a pairing window in Settings (`packages/agent-core/src/channels/telegram/`). New channels must keep an owner check before anything reaches `AgentHost.gateway`, and approvals must be answerable only by that owner.
 - **Approval gate:** tools that write or execute ask before running according to their tool tier and tool policy (`packages/agent-core/src/tools.ts`). New tools must declare a tier; untiered tools ask.
 - **Model-controlled URLs:** `web_fetch` connects only through `guardedLookup` (`packages/agent-core/src/web/fetch.ts`), which refuses private, loopback, link-local and metadata addresses at connect time and on each redirect. Any new tool that fetches a model-supplied URL must reuse it. Search-provider requests use fixed or user-configured URLs and are not model-controlled.
+
+## Side panel
+
+- Terminals and file listings accept only a workspace folder from `settings.json` (or the default one); file paths are resolved with `realpath` and must stay inside it, so a symbolic link cannot lead out.
+- Browser pages are `WebContentsView`s with `sandbox`, `contextIsolation`, no Node and no preload, in their own partition per profile. They navigate only to `http(s):`/`about:blank`, and each partition's permission handlers allow only fullscreen, pointer lock and clipboard writes. See [Side panel](../architecture/side-panel.md).
+- Imported cookies are read from temporary copies of the browser's databases and never logged.

@@ -21,6 +21,11 @@ const MIME_TYPES: Record<string, string> = {
   ".json": "application/json",
 };
 
+/** MIME type of a file the agent may receive, from its extension. */
+export function mimeTypeOf(path: string): string {
+  return MIME_TYPES[extname(path).toLowerCase()] ?? "application/octet-stream";
+}
+
 export async function pickFiles(window: BrowserWindow | null): Promise<Attachment[]> {
   const t = translator();
   const options: Electron.OpenDialogOptions = {
@@ -33,7 +38,7 @@ export async function pickFiles(window: BrowserWindow | null): Promise<Attachmen
   if (result.canceled) return [];
   return result.filePaths.map((path) => ({
     name: basename(path),
-    mimeType: MIME_TYPES[extname(path).toLowerCase()] ?? "application/octet-stream",
+    mimeType: mimeTypeOf(path),
     path,
   }));
 }

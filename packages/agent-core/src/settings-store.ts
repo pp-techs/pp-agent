@@ -19,6 +19,7 @@ import { type LegacyInstructions, legacyInstructions, readWorkspaces } from "./w
 import { readScheduledTasks } from "./scheduled-tasks.ts";
 import { DEFAULT_VOICE, readVoiceSettings } from "./transcription.ts";
 import { readChannelsSettings } from "./channels/settings.ts";
+import { readBrowserProfiles } from "./browser-profiles.ts";
 
 const ModelRefSchema = Type.Object({ provider: Type.String(), modelId: Type.String() });
 const GatewaySchema = Type.Object({
@@ -67,6 +68,7 @@ function parse(raw: unknown): SettingsFile {
     voice: { ...DEFAULT_VOICE },
     channels: readChannelsSettings(null),
     memoryEnabled: true,
+    browserProfiles: readBrowserProfiles(null),
   };
   if (typeof raw !== "object" || raw === null) return settings;
   const value = raw as Partial<Record<keyof SettingsFile, unknown>>;
@@ -110,6 +112,7 @@ function parse(raw: unknown): SettingsFile {
   settings.voice = readVoiceSettings(value.voice);
   settings.channels = readChannelsSettings(value.channels);
   settings.memoryEnabled = value.memoryEnabled !== false;
+  settings.browserProfiles = readBrowserProfiles(value.browserProfiles);
   return settings;
 }
 

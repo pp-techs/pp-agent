@@ -1,4 +1,11 @@
-import { type AgentEvent, type DesktopBridge, IPC, type UpdateState } from "@workspace/shared";
+import {
+  type AgentEvent,
+  type BrowserState,
+  type DesktopBridge,
+  IPC,
+  type TerminalInfo,
+  type UpdateState,
+} from "@workspace/shared";
 import { contextBridge, ipcRenderer, type IpcRendererEvent, webUtils } from "electron";
 
 /**
@@ -12,6 +19,15 @@ async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(message.replace(/^Error invoking remote method '[^']*': (?:\w*Error: )?/, ""));
   }
+}
+
+/** Subscribes to a channel main pushes on; returns the unsubscribe function. */
+function subscribe<A extends unknown[]>(channel: string, listener: (...args: A) => void) {
+  const handler = (_event: IpcRendererEvent, ...args: unknown[]) => listener(...(args as A));
+  ipcRenderer.on(channel, handler);
+  return () => {
+    ipcRenderer.off(channel, handler);
+  };
 }
 
 const bridge: DesktopBridge = {
@@ -61,6 +77,38 @@ const bridge: DesktopBridge = {
       };
     },
     takePendingFocus: () => invoke(IPC.shellTakePendingFocus),
+    onTogglePanel: (listener) => subscribe(IPC.shellTogglePanel, listener),
+  },
+  terminal: {
+    list: () => invoke(IPC.terminalList),
+    create: (cwd, size) => invoke(IPC.terminalCreate, cwd, size),
+    backlog: (id) => invoke(IPC.terminalBacklog, id),
+    write: (id, data) => ipcRenderer.send(IPC.terminalWrite, id, data),
+    resize: (id, size) => ipcRenderer.send(IPC.terminalResize, id, size),
+    close: (id) => invoke(IPC.terminalClose, id),
+    onData: (listener) => subscribe<[string, string, number]>(IPC.terminalData, listener),
+    onChanged: (listener) => subscribe<[TerminalInfo[]]>(IPC.terminalChanged, listener),
+  },
+  workspace: {
+    list: (root, dir) => invoke(IPC.workspaceList, root, dir),
+    preview: (root, path) => invoke(IPC.workspacePreview, root, path),
+    reveal: (root, path) => invoke(IPC.workspaceReveal, root, path),
+    attachment: (root, path) => invoke(IPC.workspaceAttachment, root, path),
+    watch: (root) => invoke(IPC.workspaceWatch, root),
+    onChanged: (listener) => subscribe<[string]>(IPC.workspaceChanged, listener),
+  },
+  browser: {
+    state: () => invoke(IPC.browserState),
+    open: (profileId, url) => invoke(IPC.browserOpen, profileId, url),
+    close: (id) => invoke(IPC.browserClose, id),
+    activate: (id) => invoke(IPC.browserActivate, id),
+    navigate: (id, input) => invoke(IPC.browserNavigate, id, input),
+    go: (id, action) => invoke(IPC.browserGo, id, action),
+    setBounds: (bounds) => ipcRenderer.send(IPC.browserSetBounds, bounds),
+    onState: (listener) => subscribe<[BrowserState]>(IPC.browserChanged, listener),
+    cookieSources: () => invoke(IPC.browserCookieSources),
+    importCookies: (profileId, browser, sourceProfile) =>
+      invoke(IPC.browserImportCookies, profileId, browser, sourceProfile),
   },
 };
 
