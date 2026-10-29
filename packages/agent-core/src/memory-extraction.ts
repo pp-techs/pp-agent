@@ -133,15 +133,18 @@ export interface MemoryExtractionOptions {
 
 /**
  * Runs the extraction call over `messages` and writes whatever it finds to `options.store`.
- * Errors (model unavailable, bad JSON, the call failing) are swallowed: this is a best-effort
- * background pass, never something a failure should surface to the person.
+ * Returns whether the pass completed (including the intentional no-ops of a too-short turn or an
+ * empty reply): false only when the call itself failed, so the caller knows whether it is safe to
+ * treat these messages as read. Errors (model unavailable, bad JSON, the call failing) are
+ * swallowed either way: this is a best-effort background pass, never something a failure should
+ * surface to the person.
  */
 export async function extractMemory(
   messages: readonly AgentMessage[],
   options: MemoryExtractionOptions,
-): Promise<void> {
+): Promise<boolean> {
   const input = transcriptText(messages);
-  if (input.length < MIN_CHARS) return;
+  if (input.length < MIN_CHARS) return true;
 
   const settingsManager = SettingsManager.inMemory({
     compaction: { enabled: false },
@@ -184,7 +187,7 @@ export async function extractMemory(
 
     const last = session.messages.toReversed().find((message) => message.role === "assistant");
     const reply = last ? messageText(last) : "";
-    if (!reply) return;
+    if (!reply) return true;
 
     for (const note of parseExtractedNotes(reply)) {
       const result = options.store.add({
@@ -194,11 +197,13 @@ export async function extractMemory(
       });
       if (result.ok && result.status === "added") options.onSaved(note);
     }
+    return true;
   } catch (error) {
     console.error(
       "Background memory extraction failed; no notes were saved from this pass.",
       error,
     );
+    return false;
   } finally {
     session?.dispose();
   }

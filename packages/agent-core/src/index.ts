@@ -1804,6 +1804,9 @@ export class AgentHost {
     conversation: Conversation,
     file: string,
   ): {
+    file: string;
+    /** `messages.length` as of this prepare; committed to `memoryCursor` only on success. */
+    cursor: number;
     messages: AgentMessage[];
     cwd: string;
     model: Model<Api>;
@@ -1824,10 +1827,9 @@ export class AgentHost {
     if (unread.length === 0) return null;
     const model = this.chooseModel(agent.model);
     if (!model) return null;
-    // Only advance the cursor once a pass will actually run; otherwise a model that is
-    // momentarily unavailable would cause these messages to be skipped on the next settle.
-    this.memoryCursor.set(file, messages.length);
     return {
+      file,
+      cursor: messages.length,
       messages: unread,
       cwd: conversation.session.sessionManager.getCwd(),
       model,
@@ -1837,17 +1839,20 @@ export class AgentHost {
 
   /**
    * Hands the gathered messages to a one-shot background LLM call that proposes lasting notes
-   * (`memory-extraction.ts`) and writes them to the memory store. Best-effort: a failure here
-   * never surfaces to the person.
+   * (`memory-extraction.ts`) and writes them to the memory store. The cursor only advances once
+   * the pass actually succeeds, so a failure (model error, bad reply) leaves these messages
+   * available for the next pass instead of skipping them for good.
    */
   private async runMemoryExtraction(pass: {
+    file: string;
+    cursor: number;
     messages: AgentMessage[];
     cwd: string;
     model: Model<Api>;
     workspaceId: string | null;
   }): Promise<void> {
     const { runtime, memory, paths } = this.requireServices();
-    await extractMemory(pass.messages, {
+    const succeeded = await extractMemory(pass.messages, {
       runtime,
       cwd: pass.cwd,
       agentDir: paths.agentDir,
@@ -1856,6 +1861,7 @@ export class AgentHost {
       workspaceId: pass.workspaceId,
       onSaved: () => emit({ type: "settings_changed", scopes: ["memory"] }),
     });
+    if (succeeded) this.memoryCursor.set(pass.file, pass.cursor);
   }
 
   /**
