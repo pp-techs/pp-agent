@@ -4,16 +4,8 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { Attachment, ChannelState, TelegramChatSettings } from "@workspace/shared";
-import type {
-  ChannelGateway,
-  ChannelInput,
-  ChatOption,
-  TurnResult,
-  ChannelAdapter,
-  PeerKey,
-} from "../types.ts";
+import type { ChannelGateway, ChannelInput, ChatOption, TurnResult } from "../types.ts";
 import {
-  abortableSleep,
   HttpTelegramApi,
   MAX_DOWNLOAD_BYTES,
   TelegramApiError,
@@ -25,8 +17,10 @@ import {
 import { TelegramApprovals } from "./approvals.ts";
 import { TelegramQuestions } from "./questions.ts";
 import { formatMessage, sendFormatted, splitText } from "./format.ts";
+import { findOption } from "../shared/options.ts";
+import type { PairingGuard } from "../shared/pairing.ts";
+import { abortableSleep } from "../shared/sleep.ts";
 import { LiveMessage } from "./live-message.ts";
-import type { PairingGuard } from "./pairing.ts";
 import type { TelegramTextName, TelegramTranslate } from "./text.ts";
 
 /** Messages that may wait behind the turn in progress, per chat. */
@@ -67,23 +61,6 @@ const LETTER_KIND: Record<string, ChoiceKind> = {
   m: "model",
   t: "thinking",
 };
-
-/** The name of an option without its icon, in lower case, for matching what the person typed. */
-function plainName(label: string): string {
-  return label
-    .replace(/^[^\p{L}\p{N}]+/u, "")
-    .trim()
-    .toLowerCase();
-}
-
-/** The option a person meant: its number in the list, its exact name, or a unique partial name. */
-function findOption(options: readonly ChatOption[], query: string): ChatOption | undefined {
-  if (/^\d+$/.test(query)) return options[Number(query) - 1];
-  const exact = options.filter((option) => plainName(option.label) === query);
-  if (exact.length === 1) return exact[0];
-  const partial = options.filter((option) => plainName(option.label).includes(query));
-  return partial.length === 1 ? partial[0] : undefined;
-}
 
 export interface TelegramOwner {
   id: number;
@@ -144,7 +121,7 @@ function parseCommand(text: string): { name: string; target?: string; argument: 
  * The Telegram bot: long polls for private messages and explicitly configured groups, checks
  * each sender's access, and runs accepted messages through the gateway.
  */
-export class TelegramChannel implements ChannelAdapter {
+export class TelegramChannel {
   private readonly api: TelegramApi;
   private readonly botId: string | null;
   private readonly approvals: TelegramApprovals;
@@ -205,38 +182,6 @@ export class TelegramChannel implements ChannelAdapter {
   /** Sends `text` (Markdown) to a private chat, split to Telegram's length limit. */
   async notify(chatId: number, text: string): Promise<void> {
     for (const chunk of formatMessage(text)) await sendFormatted(this.api, chatId, chunk);
-  }
-
-  // ChannelAdapter conformance: the gateway core calls these.
-  readonly channel = "telegram";
-
-  async send(peer: PeerKey, text: string): Promise<string | null> {
-    const id = Number(peer.split(":").pop());
-    if (Number.isNaN(id)) throw new Error(`Invalid peer key: ${peer}`);
-    for (const chunk of formatMessage(text)) await sendFormatted(this.api, id, chunk);
-    return null;
-  }
-
-  async edit(peer: PeerKey, messageId: string, text: string): Promise<void> {
-    const id = Number(peer.split(":").pop());
-    if (Number.isNaN(id)) throw new Error(`Invalid peer key: ${peer}`);
-    await this.api.editMessageText(id, Number(messageId), text);
-  }
-
-  async delete(peer: PeerKey, messageId: string): Promise<void> {
-    const id = Number(peer.split(":").pop());
-    if (Number.isNaN(id)) throw new Error(`Invalid peer key: ${peer}`);
-    await this.api.deleteMessage(id, Number(messageId));
-  }
-
-  async setTyping(peer: PeerKey): Promise<void> {
-    const id = Number(peer.split(":").pop());
-    if (Number.isNaN(id)) return;
-    await this.api.sendChatAction(id, "typing").catch(() => {});
-  }
-
-  isOnline(): boolean {
-    return this.online;
   }
 
   // -------------------------------------------------------------------------------------------

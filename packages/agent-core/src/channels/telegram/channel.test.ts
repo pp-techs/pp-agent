@@ -3,15 +3,9 @@ import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 import type { ChannelState, TelegramChatSettings } from "@workspace/shared";
 import { TelegramApiError, type TelegramMessage, type TelegramUpdate } from "./api.ts";
 import { MAX_QUEUED_MESSAGES, TelegramChannel, type TelegramOwner } from "./channel.ts";
-import { PairingGuard } from "./pairing.ts";
-import {
-  approvalRequest,
-  FakeApi,
-  FakeGateway,
-  fakeT,
-  questionRequest,
-  textUpdate,
-} from "./testing.ts";
+import { PairingGuard } from "../shared/pairing.ts";
+import { approvalRequest, FakeGateway, questionRequest } from "../shared/testing.ts";
+import { FakeApi, fakeT, textUpdate } from "./testing.ts";
 
 const OWNER: TelegramOwner = { id: 7, name: "Ann Lee" };
 const channels: TelegramChannel[] = [];

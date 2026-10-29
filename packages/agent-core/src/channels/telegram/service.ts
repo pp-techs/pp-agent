@@ -9,11 +9,11 @@ import {
 import type { VaultCredentialStore } from "../../credentials.ts";
 import type { SettingsStore } from "../../settings-store.ts";
 import { TELEGRAM_TOKEN_KEY } from "../names.ts";
-import type { ChannelGateway, TelegramControl } from "../types.ts";
+import { BotService } from "../shared/bot-service.ts";
+import type { ChannelGateway, ChannelService, ChannelSummary } from "../types.ts";
 import { HttpTelegramApi, TelegramApiError, type TelegramApi } from "./api.ts";
 import { TelegramChannel, type TelegramOwner } from "./channel.ts";
-import { PairingGuard } from "./pairing.ts";
-import { readChannelsSettings } from "./settings.ts";
+import { readTelegramSettings } from "./settings.ts";
 import type { TelegramTranslate } from "./text.ts";
 
 export interface TelegramServiceDeps {
@@ -33,25 +33,59 @@ export interface TelegramServiceDeps {
  * Owns the Telegram channel: starts it when it is enabled and a token is saved, keeps it in step
  * with the settings, and runs the pairing. Changes are applied one at a time.
  */
-export class TelegramService implements TelegramControl {
-  private channel: TelegramChannel | null = null;
-  private channelToken: string | null = null;
-  private state: ChannelState = "off";
-  private error: string | null = null;
-  private botUsername: string | null = null;
-  private readonly guard = new PairingGuard();
-  private lock: Promise<unknown> = Promise.resolve();
+export class TelegramService extends BotService<TelegramChannel> implements ChannelService {
+  readonly id = "telegram";
+  readonly label = "Telegram";
 
-  constructor(private readonly deps: TelegramServiceDeps) {}
-
-  /** Starts the channel when it is enabled and has a token. Safe to call again. */
-  start(): Promise<void> {
-    return this.serial(() => this.reconcile());
+  constructor(private readonly deps: TelegramServiceDeps) {
+    super({
+      credentials: deps.credentials,
+      tokenKey: TELEGRAM_TOKEN_KEY,
+      changed: () => deps.changed(),
+    });
   }
 
-  /** Stops the channel. Safe to call again. */
-  stop(): Promise<void> {
-    return this.serial(() => this.stopChannel());
+  protected isEnabled(): boolean {
+    return this.deps.settings.get().channels.telegram.enabled;
+  }
+
+  protected pairingNeedsToken(): string {
+    return this.deps.t("channels.telegram.pairingNeedsToken");
+  }
+
+  protected pairingNeedsOnline(): string {
+    return this.deps.t("channels.telegram.pairingNeedsOnline");
+  }
+
+  protected createChannel(
+    token: string,
+    onState: (state: ChannelState, error: string | null) => void,
+  ): TelegramChannel {
+    return new TelegramChannel({
+      dataDir: this.deps.dataDir,
+      settings: this.deps.settings,
+      token,
+      api: this.deps.api?.(token),
+      gateway: this.deps.gateway,
+      pairing: this.guard,
+      owner: () => this.owner(),
+      onPaired: (owner) => this.paired(owner),
+      onState,
+      t: this.deps.t,
+    });
+  }
+
+  summary(): ChannelSummary {
+    const { enabled, workspaceId, agentId, ownerId, ownerName } =
+      this.deps.settings.get().channels.telegram;
+    // A private Telegram chat has the person's user id as its chat id.
+    return {
+      enabled,
+      workspaceId,
+      agentId,
+      ownerKey: ownerId === null ? null : `telegram:${ownerId}`,
+      ownerName,
+    };
   }
 
   async status(): Promise<TelegramStatus> {
@@ -59,7 +93,7 @@ export class TelegramService implements TelegramControl {
     return {
       ...this.deps.settings.get().channels.telegram,
       hasToken: (await this.readToken()) !== null,
-      botUsername: this.botUsername,
+      botUsername: this.botName,
       state: this.state,
       error: this.error,
       pairingCode: pairing?.code ?? null,
@@ -81,10 +115,10 @@ export class TelegramService implements TelegramControl {
     ) {
       throw new Error(`Unknown delivery target: ${peer}`);
     }
-    if (!this.channel || this.state !== "online")
-      throw new Error(t("channels.telegram.notifyNeedsOnline"));
+    const channel = this.onlineChannel;
+    if (!channel) throw new Error(t("channels.telegram.notifyNeedsOnline"));
     try {
-      await this.channel.notify(chatId, text);
+      await channel.notify(chatId, text);
     } catch (error) {
       throw new Error(t("channels.telegram.notifyFailed", { error: (error as Error).message }));
     }
@@ -92,7 +126,7 @@ export class TelegramService implements TelegramControl {
 
   save(input: SaveTelegramInput): Promise<TelegramStatus> {
     return this.serial(async () => {
-      const { settings, credentials, t } = this.deps;
+      const { settings, t } = this.deps;
       let token: string | undefined;
       let username: string | null = null;
       if (input.token !== undefined) {
@@ -104,9 +138,8 @@ export class TelegramService implements TelegramControl {
         throw new Error(t("channels.telegram.tokenRequired"));
 
       if (token !== undefined) {
-        const key = token;
-        await credentials.modify(TELEGRAM_TOKEN_KEY, async () => ({ type: "api_key", key }));
-        this.botUsername = username;
+        await this.writeToken(token);
+        this.botName = username;
       }
       settings.update((draft) => {
         draft.channels.telegram = {
@@ -117,10 +150,7 @@ export class TelegramService implements TelegramControl {
             ? input.workspaceId
             : DEFAULT_WORKSPACE_ID,
           ...(input.chats !== undefined
-            ? {
-                chats:
-                  readChannelsSettings({ telegram: { chats: input.chats } }).telegram.chats ?? {},
-              }
+            ? { chats: readTelegramSettings({ chats: input.chats }).chats ?? {} }
             : {}),
         };
       });
@@ -132,13 +162,7 @@ export class TelegramService implements TelegramControl {
 
   startPairing(): Promise<TelegramStatus> {
     return this.serial(async () => {
-      const { t } = this.deps;
-      if ((await this.readToken()) === null)
-        throw new Error(t("channels.telegram.pairingNeedsToken"));
-      if (!this.channel || this.state !== "online")
-        throw new Error(t("channels.telegram.pairingNeedsOnline"));
-      this.guard.open(Date.now());
-      this.deps.changed();
+      await this.openPairing();
       return this.status();
     });
   }
@@ -146,7 +170,7 @@ export class TelegramService implements TelegramControl {
   forget(): Promise<TelegramStatus> {
     return this.serial(async () => {
       await this.stopChannel();
-      if ((await this.readToken()) !== null) await this.deps.credentials.delete(TELEGRAM_TOKEN_KEY);
+      await this.deleteToken();
       if (this.deps.dataDir)
         await rm(join(this.deps.dataDir, "telegram-offset.json"), { force: true });
       this.deps.settings.update((draft) => {
@@ -155,7 +179,7 @@ export class TelegramService implements TelegramControl {
         telegram.ownerId = null;
         telegram.ownerName = null;
       });
-      this.botUsername = null;
+      this.botName = null;
       this.deps.changed();
       return this.status();
     });
@@ -163,82 +187,17 @@ export class TelegramService implements TelegramControl {
 
   // -------------------------------------------------------------------------------------------
 
-  private serial<T>(work: () => Promise<T>): Promise<T> {
-    const next = this.lock.then(work);
-    this.lock = next.catch(() => {});
-    return next;
-  }
-
-  private async readToken(): Promise<string | null> {
-    const credential = await this.deps.credentials.read(TELEGRAM_TOKEN_KEY);
-    return credential?.type === "api_key" && credential.key ? credential.key : null;
-  }
-
-  private client(token: string): TelegramApi {
-    return this.deps.api?.(token) ?? new HttpTelegramApi(token);
-  }
-
   /** Asks Telegram who the token belongs to; throws a message for the person when it fails. */
   private async verify(token: string): Promise<string | null> {
     const { t } = this.deps;
     try {
-      return (await this.client(token).getMe()).username ?? null;
+      const api = this.deps.api?.(token) ?? new HttpTelegramApi(token);
+      return (await api.getMe()).username ?? null;
     } catch (error) {
       if (error instanceof TelegramApiError && error.kind === "unauthorized")
         throw new Error(t("channels.telegram.tokenInvalid"));
       throw new Error(t("channels.telegram.unreachable", { error: (error as Error).message }));
     }
-  }
-
-  /** Brings the channel in line with the settings and the saved token. */
-  private async reconcile(): Promise<void> {
-    const enabled = this.deps.settings.get().channels.telegram.enabled;
-    const token = await this.readToken();
-    if (!enabled || token === null) {
-      await this.stopChannel();
-      return;
-    }
-    // A channel in error is restarted, so saving again retries a refused token.
-    if (this.channel && this.channelToken === token && this.state !== "error") return;
-    await this.stopChannel();
-
-    const channel: TelegramChannel = new TelegramChannel({
-      dataDir: this.deps.dataDir,
-      settings: this.deps.settings,
-      token,
-      api: this.deps.api?.(token),
-      gateway: this.deps.gateway,
-      pairing: this.guard,
-      owner: () => this.owner(),
-      onPaired: (owner) => this.paired(owner),
-      onState: (state, error) => {
-        if (this.channel === channel) this.setState(state, error);
-      },
-      t: this.deps.t,
-    });
-    this.channel = channel;
-    this.channelToken = token;
-    const username = await channel.start();
-    if (this.channel === channel && username && username !== this.botUsername) {
-      this.botUsername = username;
-      this.deps.changed();
-    }
-  }
-
-  private async stopChannel(): Promise<void> {
-    const channel = this.channel;
-    this.channel = null;
-    this.channelToken = null;
-    this.guard.close();
-    await channel?.stop();
-    if (channel) this.setState("off", null);
-  }
-
-  private setState(state: ChannelState, error: string | null): void {
-    if (this.state === state && this.error === error) return;
-    this.state = state;
-    this.error = error;
-    this.deps.changed();
   }
 
   private owner(): TelegramOwner | null {

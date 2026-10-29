@@ -18,7 +18,7 @@ import { readAgents } from "./agents.ts";
 import { type LegacyInstructions, legacyInstructions, readWorkspaces } from "./workspaces.ts";
 import { readScheduledTasks } from "./scheduled-tasks.ts";
 import { DEFAULT_VOICE, readVoiceSettings } from "./transcription.ts";
-import { readChannelsSettings } from "./channels/telegram/settings.ts";
+import { readChannelsSettings } from "./channels/settings.ts";
 
 const ModelRefSchema = Type.Object({ provider: Type.String(), modelId: Type.String() });
 const GatewaySchema = Type.Object({

@@ -120,9 +120,11 @@ import {
   chatAgentId,
 } from "./channel-sessions.ts";
 import { TelegramService } from "./channels/telegram/index.ts";
+import { ZaloService } from "./channels/zalo/index.ts";
 import type {
   ChannelGateway,
   ChannelInput,
+  ChannelService,
   ChatChoices,
   ChatPick,
   ChatPickKind,
@@ -414,8 +416,8 @@ export class AgentHost {
   private scheduler: Scheduler | null = null;
   /** Session of the scheduled task being run, by task id, so deleting the task can stop it. */
   private readonly taskSessions = new Map<string, AgentSession>();
-  /** Telegram bot; null until the services are ready. */
-  private telegram: TelegramService | null = null;
+  /** The chat apps (Telegram bot, Zalo bot); null until the services are ready. */
+  private chatApps: { telegram: TelegramService; zalo: ZaloService } | null = null;
   /** Open Pi sessions of chats by chat key (`telegram:<id>`); idle ones are released. */
   private readonly chats = new Map<string, ChatSession>();
   /** When each open chat session last finished a turn. */
@@ -597,20 +599,29 @@ export class AgentHost {
         });
       }
       await this.startSession(this.newSessionManager());
-      this.telegram = new TelegramService({
-        dataDir: paths.agentDir,
-        settings,
-        credentials: this.credentials,
-        gateway: this.gateway,
-        changed: () => emit({ type: "settings_changed", scopes: ["background"] }),
-        t: (key, vars) => t(key, vars),
-      });
+      this.chatApps = {
+        telegram: new TelegramService({
+          dataDir: paths.agentDir,
+          settings,
+          credentials: this.credentials,
+          gateway: this.gateway,
+          changed: () => emit({ type: "settings_changed", scopes: ["background"] }),
+          t: (key, vars) => t(key, vars),
+        }),
+        zalo: new ZaloService({
+          settings,
+          credentials: this.credentials,
+          gateway: this.gateway,
+          changed: () => emit({ type: "settings_changed", scopes: ["background"] }),
+          t: (key, vars) => t(key, vars),
+        }),
+      };
       this.ready.resolve(services);
       emit({ type: "snapshot", snapshot: this.snapshot() });
       this.startScheduler();
-      if (settings.get().channels.telegram.enabled)
-        this.telegram
-          .start()
+      const enabled = this.channelServices().filter((channel) => channel.summary().enabled);
+      if (enabled.length > 0)
+        Promise.all(enabled.map((channel) => channel.start()))
           .then(() => this.redeliverPending())
           .catch((error: unknown) => emit({ type: "error", message: errorMessage(error) }));
     } catch (error) {
@@ -624,7 +635,8 @@ export class AgentHost {
    * chat sessions, and the open conversation. The process may exit afterwards.
    */
   async dispose(): Promise<void> {
-    await this.telegram?.stop().catch((error: unknown) => console.error(error));
+    for (const channel of this.channelServices())
+      await channel.stop().catch((error: unknown) => console.error(error));
     this.scheduler?.stop();
     for (const session of this.taskSessions.values()) void session.abort().catch(() => undefined);
     for (const chat of this.chats.values()) {
@@ -841,13 +853,21 @@ export class AgentHost {
         return this.setServiceInstalled(command.installed);
 
       case "get_telegram_status":
-        return this.requireTelegram().status();
+        return this.requireChatApps().telegram.status();
       case "save_telegram":
-        return this.requireTelegram().save(command.config);
+        return this.requireChatApps().telegram.save(command.config);
       case "start_telegram_pairing":
-        return this.requireTelegram().startPairing();
+        return this.requireChatApps().telegram.startPairing();
       case "forget_telegram":
-        return this.requireTelegram().forget();
+        return this.requireChatApps().telegram.forget();
+      case "get_zalo_status":
+        return this.requireChatApps().zalo.status();
+      case "save_zalo":
+        return this.requireChatApps().zalo.save(command.config);
+      case "start_zalo_pairing":
+        return this.requireChatApps().zalo.startPairing();
+      case "forget_zalo":
+        return this.requireChatApps().zalo.forget();
 
       default: {
         const unknown: never = command;
@@ -1226,16 +1246,26 @@ export class AgentHost {
 
   /** The person's own chat on a channel, when one is paired and on. */
   private homePeer(): PeerRow | null {
-    const telegram = this.services?.settings.get().channels.telegram;
-    if (!telegram?.enabled || telegram.ownerId === null) return null;
-    const name = telegram.ownerName ? ` – ${telegram.ownerName}` : "";
-    // A private Telegram chat has the person's user id as its chat id.
-    return { id: "home", label: `Telegram${name}`, key: `telegram:${telegram.ownerId}` };
+    return this.ownerPeers()[0] ?? null;
+  }
+
+  /** The owner's private chat on each channel that is paired and on, Telegram first. */
+  private ownerPeers(): PeerRow[] {
+    const rows: PeerRow[] = [];
+    for (const channel of this.channelServices()) {
+      const { enabled, ownerKey, ownerName } = channel.summary();
+      if (!enabled || ownerKey === null) continue;
+      rows.push({
+        id: rows.length === 0 ? "home" : ownerKey,
+        label: `${channel.label}${ownerName ? ` – ${ownerName}` : ""}`,
+        key: ownerKey,
+      });
+    }
+    return rows;
   }
 
   private peerRows(): PeerRow[] {
-    const home = this.homePeer();
-    return home ? [home] : [];
+    return this.ownerPeers();
   }
 
   private renameSession(path: string, name: string): void {
@@ -2916,15 +2946,16 @@ export class AgentHost {
   }
 
   /**
-   * Delivers a scheduled run's result to a chat. `home` goes to the paired Telegram owner; a
-   * peer key like `telegram:123` goes to that configured chat.
+   * Delivers a scheduled run's result to a chat. `home` goes to the paired owner (Telegram first,
+   * else Zalo); a peer key like `telegram:123` goes to that configured chat, and `zalo:<id>` to
+   * the paired Zalo owner.
    */
   private async deliverToPeer(peer: string, taskName: string, text: string): Promise<void> {
     const message = `⏰ ${taskName}\n\n${text}`;
     // Record the delivery before sending, so a crash can be recovered.
     const deliveryId = randomUUID();
     this.saveDelivery({ id: deliveryId, peer, message, sent: false });
-    await this.requireTelegram().deliver(peer, message);
+    await this.deliverText(peer, message);
     this.markDeliverySent(deliveryId);
   }
 
@@ -2978,7 +3009,7 @@ export class AgentHost {
     const pending = deliveries.filter((d) => !d.sent);
     for (const entry of pending) {
       try {
-        await this.requireTelegram().deliver(entry.peer, entry.message);
+        await this.deliverText(entry.peer, entry.message);
         this.markDeliverySent(entry.id);
       } catch {
         // Will retry on next start.
@@ -3048,39 +3079,62 @@ export class AgentHost {
     };
   }
 
-  private requireTelegram(): TelegramService {
-    if (!this.telegram) throw new Error(t("app.starting"));
-    return this.telegram;
+  private requireChatApps(): NonNullable<typeof this.chatApps> {
+    if (!this.chatApps) throw new Error(t("app.starting"));
+    return this.chatApps;
+  }
+
+  /** Every chat app, Telegram first; empty until the services are ready. */
+  private channelServices(): ChannelService[] {
+    return this.chatApps ? [this.chatApps.telegram, this.chatApps.zalo] : [];
+  }
+
+  /** The chat app a chat key (`telegram:123`) or delivery target (`zalo:abc`) belongs to. */
+  private channelFor(key: string): ChannelService | undefined {
+    return this.channelServices().find((channel) => key.startsWith(`${channel.id}:`));
   }
 
   /**
-   * Label, agent, and workspace of a chat (key `telegram:<id>`). Workspace: what the person picked
-   * in the chat with `/workspace`, else the channel's own choice in Settings. Agent: what they
-   * picked with `/agent`, else the one pinned for the channel, else the workspace's own agent,
-   * else the built-in one. A pick whose agent or workspace was deleted is ignored.
+   * Sends text to a delivery target on the chat app that owns it. `home` is the first paired
+   * owner's chat; with nobody paired it goes to the first app, whose error says what to set up.
+   */
+  private deliverText(peer: string, text: string): Promise<void> {
+    const channel =
+      peer === "home"
+        ? (this.channelFor(this.homePeer()?.key ?? "") ?? this.channelServices()[0])
+        : this.channelFor(peer);
+    if (!channel) return Promise.reject(new Error(`Unknown delivery target: ${peer}`));
+    return channel.deliver(peer, text);
+  }
+
+  /**
+   * Label, agent, and workspace of a chat (key `telegram:<id>` or `zalo:<id>`). Workspace: what the
+   * person picked in the chat with `/workspace`, else the channel's own choice in Settings. Agent:
+   * what they picked with `/agent`, else the one pinned for the channel, else the workspace's own
+   * agent, else the built-in one. A pick whose agent or workspace was deleted is ignored.
    */
   private channelOf(chatKey: string): { label: string; agentId: string; workspaceId: string } {
-    if (chatKey.startsWith("telegram:")) {
-      const { settings, chatSessions } = this.requireServices();
-      const { agents, workspaces, channels } = settings.get();
-      const pick = chatSessions.choice(chatKey);
-      const known = (id: string) => agents.some((agent) => agent.id === id);
-      const workspaceId =
-        pick.workspaceId && workspaces.some((workspace) => workspace.id === pick.workspaceId)
-          ? pick.workspaceId
-          : channels.telegram.workspaceId;
-      const workspace = findWorkspace(workspaces, workspaceId);
-      return {
-        label: "Telegram",
-        agentId: chatAgentId(
-          [pick.agentId, channels.telegram.agentId, workspace.agentId],
-          known,
-          DEFAULT_AGENT_ID,
-        ),
-        workspaceId,
-      };
-    }
-    throw new Error(`Unknown chat channel: ${chatKey}`);
+    const channel = this.channelFor(chatKey);
+    if (!channel) throw new Error(`Unknown chat channel: ${chatKey}`);
+    const { settings, chatSessions } = this.requireServices();
+    const { agents, workspaces } = settings.get();
+    const pick = chatSessions.choice(chatKey);
+    const known = (id: string) => agents.some((agent) => agent.id === id);
+    const summary = channel.summary();
+    const workspaceId =
+      pick.workspaceId && workspaces.some((workspace) => workspace.id === pick.workspaceId)
+        ? pick.workspaceId
+        : summary.workspaceId;
+    const workspace = findWorkspace(workspaces, workspaceId);
+    return {
+      label: channel.label,
+      agentId: chatAgentId(
+        [pick.agentId, summary.agentId, workspace.agentId],
+        known,
+        DEFAULT_AGENT_ID,
+      ),
+      workspaceId,
+    };
   }
 
   private chatOptions(chatKey: string): ChatChoices {
@@ -3231,6 +3285,8 @@ export class AgentHost {
   ): SessionScope {
     const { settings } = this.requireServices();
     const agent = () => findAgent(settings.get().agents, chat.agentId);
+    // The paired owner's own chat sees everything; any other chat sees only itself.
+    const owns = () => this.channelFor(chatKey)?.summary().ownerKey === chatKey;
     return {
       agent,
       workspace: () => findWorkspace(settings.get().workspaces, chat.workspaceId),
@@ -3240,7 +3296,7 @@ export class AgentHost {
       systemNote: { section: "channel", text: channelNote(this.channelOf(chatKey).label) },
       surface: { kind: "chat", label: `a ${this.channelOf(chatKey).label} chat (${chatKey})` },
       get visibility() {
-        return chatKey === `telegram:${settings.get().channels.telegram.ownerId}` ? "all" : "self";
+        return owns() ? "all" : "self";
       },
     };
   }

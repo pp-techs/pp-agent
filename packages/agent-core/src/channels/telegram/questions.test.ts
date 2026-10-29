@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vite-plus/test";
 import { QUESTION_TIMEOUT_MS, TelegramQuestions } from "./questions.ts";
-import { FakeApi, fakeT, questionRequest } from "./testing.ts";
+import { questionRequest } from "../shared/testing.ts";
+import { FakeApi, fakeT } from "./testing.ts";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
