@@ -185,10 +185,14 @@ function ProfileMenu({
           }
         >
           <UserRoundIcon />
-          <span className="truncate">{current?.name}</span>
+          <span className="truncate @max-sm/panel:hidden">{current?.name}</span>
           <ChevronDownIcon />
         </TooltipTrigger>
-        <TooltipContent>{t("panel.browser.profileHint")}</TooltipContent>
+        <TooltipContent>
+          {/* The name is hidden in a narrow panel, so the tooltip names the profile too. */}
+          <p className="font-medium">{t("panel.browser.profile", { name: current?.name ?? "" })}</p>
+          <p>{t("panel.browser.profileHint")}</p>
+        </TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuGroup>
