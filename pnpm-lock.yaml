@@ -303,6 +303,9 @@ catalogs:
 overrides:
   vite@*: npm:@voidzero-dev/vite-plus-core@1.4.0
 
+patchedDependencies:
+  '@shadcn/react@0.3.1': ea3385a651a968a1689bfe562e1d598bad4faf69912f80803e72abe2c4dd94a0
+
 importers:
 
   .:
@@ -535,7 +538,7 @@ importers:
         version: 5.3.0
       '@shadcn/react':
         specifier: 'catalog:'
-        version: 0.3.1(@types/react@19.3.0)(react@19.3.1)
+        version: 0.3.1(patch_hash=ea3385a651a968a1689bfe562e1d598bad4faf69912f80803e72abe2c4dd94a0)(@types/react@19.3.0)(react@19.3.1)
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.7.1
@@ -6847,7 +6850,7 @@ snapshots:
 
   '@sec-ant/readable-stream@0.4.1': {}
 
-  '@shadcn/react@0.3.1(@types/react@19.3.0)(react@19.3.1)':
+  '@shadcn/react@0.3.1(patch_hash=ea3385a651a968a1689bfe562e1d598bad4faf69912f80803e72abe2c4dd94a0)(@types/react@19.3.0)(react@19.3.1)':
     optionalDependencies:
       '@types/react': 19.3.0
       react: 19.3.1

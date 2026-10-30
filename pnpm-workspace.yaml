@@ -80,3 +80,5 @@ minimumReleaseAgeExclude:
   - "@oxfmt/*"
   - vitest
   - "@vitest/*"
+patchedDependencies:
+  "@shadcn/react@0.3.1": patches/@shadcn__react@0.3.1.patch
