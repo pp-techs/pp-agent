@@ -6,13 +6,14 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { goalStatusKey } from "@/lib/goal";
-import { useAgentCommands } from "@/lib/queries";
+import { useAgentCommands, useGoalPending } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
 
 /** The open conversation's goal above the message box, with pause/resume and clear. */
 export function GoalBanner({ bridge }: { bridge: DesktopBridge }) {
   const goal = useChatStore((state) => state.goal);
   const { setGoal } = useAgentCommands(bridge);
+  const pending = useGoalPending();
   const { t } = useTranslation("chat");
   if (!goal) return null;
 
@@ -40,7 +41,7 @@ export function GoalBanner({ bridge }: { bridge: DesktopBridge }) {
                 variant="ghost"
                 size="icon-sm"
                 aria-label={toggle}
-                disabled={setGoal.isPending}
+                disabled={pending}
                 onClick={() => setGoal.mutate({ action: paused ? "resume" : "pause" }, { onError })}
               />
             }
@@ -56,7 +57,7 @@ export function GoalBanner({ bridge }: { bridge: DesktopBridge }) {
                 variant="ghost"
                 size="icon-sm"
                 aria-label={t("goal.clear")}
-                disabled={setGoal.isPending}
+                disabled={pending}
                 onClick={() => setGoal.mutate({ action: "clear" }, { onError })}
               />
             }

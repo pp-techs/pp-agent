@@ -1,12 +1,12 @@
 /**
- * Background memory extraction: after a conversation settles unseen, a separate one-shot LLM call
- * (same pattern as `delegate_task` in subagent.ts) reads the turns the person was not watching and
- * proposes lasting facts or preferences. Notes are written straight to `MemoryStore.add`, the same
- * call `saveMemoryEntry` makes; the model never sees or calls the `memory_save` tool for this.
+ * Background memory extraction: after a conversation settles (watched or not), a separate one-shot
+ * LLM call (same pattern as `delegate_task` in subagent.ts) reads the turns gained since the last
+ * pass and proposes lasting facts or preferences. Notes are written straight to `MemoryStore.add`,
+ * the same call `saveMemoryEntry` makes; the model never sees or calls the `memory_save` tool for
+ * this.
  *
- * This never runs on the person's behalf while they watch: it only looks at a background
- * conversation once it has settled (`agent_settled` with nobody looking), so it never slows down a
- * reply and never doubles as the model's own `memory_save` tool calls.
+ * It runs after the reply is complete, in the background, so it never slows down a reply and never
+ * doubles as the model's own `memory_save` tool calls.
  */
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AgentSession, ModelRuntime } from "@earendil-works/pi-coding-agent";

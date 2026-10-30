@@ -1,5 +1,5 @@
 /**
- * Auto-titling: once a new conversation has settled unseen, a separate one-shot LLM call (same
+ * Auto-titling: once a new conversation has settled (watched or not), a separate one-shot LLM call (same
  * pattern as `delegate_task` in subagent.ts and the memory pass in memory-extraction.ts) reads the
  * turn and proposes a short title, written straight to the session with `setSessionName`. A
  * conversation that already has a name (the person renamed it, or it was given one at creation,

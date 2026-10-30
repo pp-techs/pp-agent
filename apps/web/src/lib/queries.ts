@@ -16,10 +16,19 @@ import type {
 import {
   keepPreviousData,
   queryOptions,
+  useIsMutating,
   useMutation,
   useQueryClient,
   type UseMutationResult,
 } from "@tanstack/react-query";
+
+/** Shared by every `setGoal` observer, so the composer and the banner see one pending state. */
+const SET_GOAL_KEY = ["set-goal"] as const;
+
+/** A goal command is in flight, whichever component sent it. */
+export function useGoalPending(): boolean {
+  return useIsMutating({ mutationKey: SET_GOAL_KEY }) > 0;
+}
 
 /** Keys match `SettingsScope`, so `settings_changed` can invalidate `[scope]` directly. */
 export const queryKeys = {
@@ -249,6 +258,7 @@ export function useAgentCommands(bridge: DesktopBridge) {
       bridge.agent.command({ type: "set_conversation_yolo", active }),
   });
   const setGoal = useMutation({
+    mutationKey: SET_GOAL_KEY,
     mutationFn: (params: AgentCommandMap["set_goal"]["params"]) =>
       bridge.agent.command({ type: "set_goal", ...params }),
   });

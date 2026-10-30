@@ -27,8 +27,11 @@ interface ModelServer {
 /** Answers each request with the next scripted tool call, then with plain text. */
 function modelServer(calls: Record<string, unknown>[]): ModelServer {
   const server: Server = createServer((request, response) => {
-    request.resume();
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
     request.on("end", () => {
+      // The background title and memory passes are not part of the scripted conversation.
+      const background = /short title for it|lasting facts/.test(Buffer.concat(chunks).toString());
       response.writeHead(200, { "content-type": "text/event-stream" });
       const send = (delta: object, finish: string | null = null) =>
         response.write(
@@ -40,7 +43,7 @@ function modelServer(calls: Record<string, unknown>[]): ModelServer {
             choices: [{ index: 0, delta, finish_reason: finish }],
           })}\n\n`,
         );
-      const call = calls.shift();
+      const call = background ? undefined : calls.shift();
       send({ role: "assistant", content: "" });
       if (call) {
         send({

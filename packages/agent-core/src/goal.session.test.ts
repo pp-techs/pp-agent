@@ -34,14 +34,17 @@ function modelServer(script: Step[], requests: Request[]): Server {
       };
       const text = (content: unknown) =>
         typeof content === "string" ? content : JSON.stringify(content);
-      requests.push({
-        tools: (body.tools ?? []).map((tool) => tool.function.name),
-        system: body.messages
-          .filter((m) => m.role === "system")
-          .map((m) => text(m.content))
-          .join("\n"),
-        messages: body.messages.filter((m) => m.role !== "system").map((m) => text(m.content)),
-      });
+      // The background title and memory passes are not part of the conversation being scripted.
+      const background = /short title for it|lasting facts/.test(JSON.stringify(body.messages));
+      if (!background)
+        requests.push({
+          tools: (body.tools ?? []).map((tool) => tool.function.name),
+          system: body.messages
+            .filter((m) => m.role === "system")
+            .map((m) => text(m.content))
+            .join("\n"),
+          messages: body.messages.filter((m) => m.role !== "system").map((m) => text(m.content)),
+        });
       response.writeHead(200, { "content-type": "text/event-stream" });
       const send = (delta: object, finish: string | null = null) =>
         response.write(
@@ -53,7 +56,7 @@ function modelServer(script: Step[], requests: Request[]): Server {
             choices: [{ index: 0, delta, finish_reason: finish }],
           })}\n\n`,
         );
-      const step = script.shift() ?? { text: "ok" };
+      const step = (background ? undefined : script.shift()) ?? { text: background ? "[]" : "ok" };
       send({ role: "assistant", content: "" });
       if ("tool" in step) {
         send({

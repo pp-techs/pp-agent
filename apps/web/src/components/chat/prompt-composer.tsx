@@ -31,7 +31,7 @@ import { useSendMessage } from "@/hooks/use-send-message";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { voiceQuery } from "@/lib/extension-queries";
 import { parseGoalCommand, type GoalParams } from "@/lib/goal";
-import { useAgentCommands } from "@/lib/queries";
+import { useAgentCommands, useGoalPending } from "@/lib/queries";
 import {
   filterSlashItems,
   findTypedCommand,
@@ -58,6 +58,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
   const attachments = useComposerStore((state) => state.attachments);
   const { setDraft, add, remove } = useComposerStore.getState();
   const { abort, respondQuestion, setGoal } = useAgentCommands(bridge);
+  const goalPending = useGoalPending();
   // The agent's question takes the place of the composer until it is answered.
   const question = useChatStore((state) => Object.values(state.questions)[0]);
   const asking = question !== undefined;
@@ -140,7 +141,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
     const goal = attachments.length === 0 ? parseGoalCommand(draft) : null;
     if (command) pickItem(command);
     else if (goal) {
-      if (!disabled && !sending && !setGoal.isPending) runGoal(goal);
+      if (!disabled && !sending && !goalPending) runGoal(goal);
     } else if (canSend && !running && !sending) send(draft);
   }
 

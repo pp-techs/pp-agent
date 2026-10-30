@@ -292,6 +292,31 @@ const NO_CHANGES: PendingChanges = {
   agentModel: false,
 };
 
+/** What `runMemoryExtraction` needs, gathered while the conversation's session is still alive. */
+interface MemoryPass {
+  file: string;
+  /** `messages.length` as of the prepare; committed to `memoryCursor` only on success. */
+  cursor: number;
+  messages: AgentMessage[];
+  cwd: string;
+  model: Model<Api>;
+  workspaceId: string | null;
+}
+
+/** What `runSessionTitle` needs, gathered while the conversation's session is still alive. */
+interface TitlePass {
+  messages: AgentMessage[];
+  cwd: string;
+  model: Model<Api>;
+}
+
+/** Both passes that follow a settled conversation; either is null when it has nothing to do. */
+interface SettledPasses {
+  file: string;
+  memory: MemoryPass | null;
+  title: TitlePass | null;
+}
+
 /** Everything that exists once `init` has finished. */
 interface Services {
   paths: AgentPaths;
@@ -456,6 +481,8 @@ export class AgentHost {
   private readonly background = new Map<string, Conversation>();
   /** How many of a session's messages the memory-extraction pass has already read, by session file. */
   private readonly memoryCursor = new Map<string, number>();
+  /** Memory and title passes still running (`memory:<file>`, `title:<file>`): one at a time each. */
+  private readonly passesInFlight = new Set<string>();
   /** Registrations of no session, for the MCP section before any conversation is open. */
   private idleMcp: McpRegistrations | null = null;
   /** Agent of the open conversation; resolves to the default agent once deleted. */
@@ -2028,8 +2055,11 @@ export class AgentHost {
         transcript.setEntryIds(chatEntryIds(conversation.session.sessionManager));
         transcript.flush();
         if (inWindow) {
+          // Read what the memory and title passes need now: `applyPending` may rebuild the session.
+          const passes = this.preparePasses(conversation);
           this.refreshStatus();
           void this.applyPending();
+          this.launchPasses(passes);
         } else {
           // Nobody is looking at it: close it now. Opening it later builds a session from
           // the saved file with the settings of the time.
@@ -2088,20 +2118,45 @@ export class AgentHost {
     if (!file || this.background.get(file) !== conversation || conversation.running) return;
     this.background.delete(file);
     // Read what the memory and title passes need before `release` disposes the session.
-    const pass = this.prepareMemoryExtraction(conversation, file);
-    const titlePass = this.prepareSessionTitle(conversation);
+    const passes = this.preparePasses(conversation);
     this.release(conversation);
     this.emitActivity();
-    // Both are best-effort: `.catch` keeps a failure from becoming an unhandled rejection, which
-    // would otherwise crash the process.
-    if (pass)
-      this.runMemoryExtraction(pass).catch((error: unknown) =>
-        console.error("Background memory extraction failed.", error),
-      );
-    if (titlePass)
-      this.runSessionTitle(file, titlePass).catch((error: unknown) =>
-        console.error("Background auto-titling failed.", error),
-      );
+    this.launchPasses(passes);
+  }
+
+  /** Gathers the inputs of both passes while the conversation's session is still alive. */
+  private preparePasses(conversation: Conversation): SettledPasses | null {
+    const file = conversation.session.sessionFile;
+    if (!file) return null;
+    return {
+      file,
+      memory: this.prepareMemoryExtraction(conversation, file),
+      title: this.prepareSessionTitle(conversation, file),
+    };
+  }
+
+  /**
+   * Starts the memory and title passes after a conversation settles, watched or not. Both are
+   * best-effort: `.catch` keeps a failure from becoming an unhandled rejection, which would
+   * otherwise crash the process.
+   */
+  private launchPasses(passes: SettledPasses | null): void {
+    if (!passes) return;
+    const { file, memory, title } = passes;
+    if (memory) {
+      const key = `memory:${file}`;
+      this.passesInFlight.add(key);
+      this.runMemoryExtraction(memory)
+        .catch((error: unknown) => console.error("Background memory extraction failed.", error))
+        .finally(() => this.passesInFlight.delete(key));
+    }
+    if (title) {
+      const key = `title:${file}`;
+      this.passesInFlight.add(key);
+      this.runSessionTitle(file, title)
+        .catch((error: unknown) => console.error("Background auto-titling failed.", error))
+        .finally(() => this.passesInFlight.delete(key));
+    }
   }
 
   /**
@@ -2109,23 +2164,13 @@ export class AgentHost {
    * null when there is nothing to do (memory off for its agent, or no new messages since the last
    * pass).
    */
-  private prepareMemoryExtraction(
-    conversation: Conversation,
-    file: string,
-  ): {
-    file: string;
-    /** `messages.length` as of this prepare; committed to `memoryCursor` only on success. */
-    cursor: number;
-    messages: AgentMessage[];
-    cwd: string;
-    model: Model<Api>;
-    workspaceId: string | null;
-  } | null {
+  private prepareMemoryExtraction(conversation: Conversation, file: string): MemoryPass | null {
     const agent = this.agentOf(conversation);
     if (!this.memoryOn(agent)) {
       this.memoryCursor.delete(file);
       return null;
     }
+    if (this.passesInFlight.has(`memory:${file}`)) return null;
     const messages = conversation.session.messages;
     const stored = this.memoryCursor.get(file) ?? 0;
     // Compaction and editing/regenerating an earlier message reassign `session.messages` to a
@@ -2152,14 +2197,7 @@ export class AgentHost {
    * the pass actually succeeds, so a failure (model error, bad reply) leaves these messages
    * available for the next pass instead of skipping them for good.
    */
-  private async runMemoryExtraction(pass: {
-    file: string;
-    cursor: number;
-    messages: AgentMessage[];
-    cwd: string;
-    model: Model<Api>;
-    workspaceId: string | null;
-  }): Promise<void> {
+  private async runMemoryExtraction(pass: MemoryPass): Promise<void> {
     const { runtime, memory, paths } = this.requireServices();
     const succeeded = await extractMemory(pass.messages, {
       runtime,
@@ -2178,14 +2216,13 @@ export class AgentHost {
    * when the conversation already has a name (typed by the person, or given one at creation) or no
    * model is available.
    */
-  private prepareSessionTitle(
-    conversation: Conversation,
-  ): { messages: AgentMessage[]; cwd: string; model: Model<Api> } | null {
+  private prepareSessionTitle(conversation: Conversation, file: string): TitlePass | null {
     if (conversation.session.sessionName?.trim()) return null;
+    if (this.passesInFlight.has(`title:${file}`)) return null;
     const model = this.chooseModel(this.agentOf(conversation).model);
     if (!model) return null;
     return {
-      messages: conversation.session.messages,
+      messages: conversation.session.messages.slice(),
       cwd: conversation.session.sessionManager.getCwd(),
       model,
     };
@@ -2193,14 +2230,11 @@ export class AgentHost {
 
   /**
    * Proposes a title for a conversation that has none yet (`session-title.ts`) and writes it to
-   * the session file directly, since the live session is gone by the time the LLM call returns.
+   * the session file or, when it is open again, through the live session.
    * Best-effort: a failure here never surfaces to the person, and the conversation just keeps its
    * default (first-message) title.
    */
-  private async runSessionTitle(
-    file: string,
-    pass: { messages: AgentMessage[]; cwd: string; model: Model<Api> },
-  ): Promise<void> {
+  private async runSessionTitle(file: string, pass: TitlePass): Promise<void> {
     const { runtime, paths } = this.requireServices();
     const title = await proposeSessionTitle(pass.messages, {
       runtime,
