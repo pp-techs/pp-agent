@@ -1074,7 +1074,11 @@ export class AgentHost {
       : null;
   }
 
-  private async prompt(text: string, attachments: Attachment[]): Promise<void> {
+  private async prompt(
+    text: string,
+    attachments: Attachment[],
+    onRunError?: (error: unknown) => void,
+  ): Promise<void> {
     const session = this.requireSession();
     const trimmed = text.trim();
     if (!trimmed && attachments.length === 0) return;
@@ -1087,17 +1091,22 @@ export class AgentHost {
     );
     // Writing to the agent again picks up a goal that was waiting on the person.
     if (this.open?.goal) this.open.goal.stalled = false;
-    this.startRun(session, message);
+    this.startRun(session, message, onRunError);
   }
 
   /** Sends a message to the model without waiting for the run; progress arrives as events. */
-  private startRun(session: AgentSession, message: PromptMessage): void {
+  private startRun(
+    session: AgentSession,
+    message: PromptMessage,
+    onError: (error: unknown) => void = (error) =>
+      emit({ type: "error", message: errorMessage(error) }),
+  ): void {
     // prompt() resolves when the whole run finishes.
     const run = session.prompt(message.text, {
       images: message.images,
       ...(session.isStreaming ? { streamingBehavior: "followUp" as const } : {}),
     });
-    run.catch((error: unknown) => emit({ type: "error", message: errorMessage(error) }));
+    run.catch(onError);
   }
 
   private async compact(): Promise<void> {
@@ -1168,7 +1177,14 @@ export class AgentHost {
         this.goalChanged(conversation);
         // The objective is the first message; the agent carries on by itself after each turn.
         try {
-          await this.prompt(objective, []);
+          // A run that cannot even start leaves nothing to carry the goal on: pause it.
+          await this.prompt(objective, [], (error) => {
+            if (conversation.goal?.status === "active") {
+              conversation.goal.status = "paused";
+              this.goalChanged(conversation);
+            }
+            emit({ type: "error", message: errorMessage(error) });
+          });
         } catch (error) {
           conversation.goal = null;
           this.goalChanged(conversation);
@@ -1659,7 +1675,17 @@ export class AgentHost {
     } else {
       await session.navigateTree(entryId);
     }
-    this.requireOpen().transcript.load(branchEntries(manager));
+    // The chosen branch decides the goal: one that is not on it ends here, `complete_goal` with it.
+    const conversation = this.requireOpen();
+    const onBranch = readGoal(manager);
+    conversation.goal =
+      onBranch && conversation.goal?.objective === onBranch.objective
+        ? conversation.goal
+        : onBranch;
+    // Unknown what the branch recorded of a goal that stays: save it again with the next turn.
+    conversation.goalSaved = conversation.goal ? "" : JSON.stringify(goalEntry(null));
+    this.applyActiveTools(session, this.liveScope(conversation));
+    conversation.transcript.load(branchEntries(manager));
     emit({ type: "snapshot", snapshot: this.snapshot() });
     this.startRun(session, message);
   }
