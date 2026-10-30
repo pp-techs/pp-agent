@@ -470,7 +470,8 @@
     },
     "cookies": {
       "sourceNotFound": "Không tìm thấy {{browser}} hoặc hồ sơ đã chọn trên máy này.",
-      "closeBrowser": "Hãy thoát hẳn {{browser}} rồi thử lại. Trình duyệt khóa cookie khi đang chạy.",
+      "closeBrowser": "Hãy thoát hẳn {{browser}} rồi thử lại. Trình duyệt khóa cookie khi đang chạy, kể cả chạy nền: thoát từ khay hệ thống hoặc kết thúc các tiến trình của nó trong Task Manager, hoặc tắt “Tiếp tục chạy ứng dụng nền” trong phần cài đặt của trình duyệt.",
+      "copyBlocked": "Không thể sao chép cookie của {{browser}} dù trình duyệt không chạy ({{error}}). Phần mềm bảo mật hoặc quyền truy cập tệp có thể đang chặn.",
       "keyDenied": "macOS không cho phép đọc khóa bảo vệ cookie của {{browser}}. Hãy thử lại và chọn “Cho phép” khi macOS hỏi.",
       "keyUnavailable": "Không thể đọc khóa bảo vệ cookie của {{browser}} ({{error}})."
     }

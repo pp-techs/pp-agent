@@ -13,6 +13,7 @@ import {
   readChromiumCookies,
   readMacPassword,
   readWindowsKey,
+  runningProcessCount,
   userDataDir,
 } from "./chromium.ts";
 import { readCookiesThroughBrowser } from "./chromium-cdp.ts";
@@ -70,10 +71,27 @@ export async function readCookies(
     }
     return await readChromium(browser, sourceProfile);
   } catch (error) {
-    if (error instanceof LockedError)
-      throw new Error(t("panel.cookies.closeBrowser", { browser: name }));
+    if (error instanceof LockedError) throw await lockedMessage(browser, name, error);
     throw error;
   }
+}
+
+/**
+ * Why the cookie database could not be copied. A lock held by background processes of a browser
+ * whose windows are all closed is the usual case on Windows; otherwise report the real error
+ * (security software, permissions) instead of telling the person to quit a browser that is not
+ * running.
+ */
+async function lockedMessage(
+  browser: CookieSourceBrowser,
+  name: string,
+  error: LockedError,
+): Promise<Error> {
+  const t = translator();
+  const definition = CHROMIUM_BROWSERS.find((entry) => entry.browser === browser);
+  if (!definition || process.platform !== "win32" || (await runningProcessCount(definition)) > 0)
+    return new Error(t("panel.cookies.closeBrowser", { browser: name }));
+  return new Error(t("panel.cookies.copyBlocked", { browser: name, error: error.message }));
 }
 
 async function readChromium(

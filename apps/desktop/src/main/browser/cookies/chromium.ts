@@ -2,7 +2,7 @@ import { createDecipheriv, pbkdf2Sync } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { CookieSourceBrowser, CookieSourceProfile } from "@workspace/shared";
 import { readDatabaseCopy, run } from "./database.ts";
 import { fromChromiumSameSite, fromChromiumSeconds, type PortableCookie } from "./portable.ts";
@@ -76,6 +76,22 @@ export function browserExecutable(definition: ChromiumBrowser): string | null {
     if (existsSync(candidate)) return candidate;
   }
   return null;
+}
+
+/**
+ * Processes of the browser still running (Windows). Closing every window does not quit a browser
+ * that keeps running in the background (Chrome's "continue running background apps", Edge's
+ * startup boost), and those processes keep the cookie database locked.
+ */
+export async function runningProcessCount(definition: ChromiumBrowser): Promise<number> {
+  if (process.platform !== "win32" || !definition.exe) return 0;
+  const image = basename(definition.exe);
+  try {
+    const out = await run("tasklist", ["/FI", `IMAGENAME eq ${image}`, "/FO", "CSV", "/NH"]);
+    return out.split(/\r?\n/).filter((line) => line.startsWith('"')).length;
+  } catch {
+    return 0;
+  }
 }
 
 /** The cookie database of a profile: newer versions keep it in `Network/`. */
