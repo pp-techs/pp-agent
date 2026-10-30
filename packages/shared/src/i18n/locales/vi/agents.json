@@ -48,6 +48,10 @@
       "label": "Dùng trình duyệt",
       "description": "Mở trang trong trình duyệt ở bảng bên với thông tin đăng nhập của bạn, bấm và điền biểu mẫu."
     },
+    "computer": {
+      "label": "Dùng ứng dụng trên máy tính",
+      "description": "Đọc cửa sổ ứng dụng, bấm, gõ chữ và dùng menu trong các ứng dụng bạn cho phép."
+    },
     "write": {
       "label": "Tạo và lưu tệp",
       "description": "Lưu tệp mới; sẽ hỏi bạn trước."

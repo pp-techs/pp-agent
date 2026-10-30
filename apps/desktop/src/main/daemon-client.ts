@@ -13,6 +13,8 @@ import {
   type AgentEvent,
   type BrowserRequest,
   type BrowserResult,
+  type ComputerRequest,
+  type ComputerResult,
   type ClientFrame,
   DAEMON_PROTOCOL,
   type DaemonFrame,
@@ -56,6 +58,8 @@ export interface DaemonClientOptions {
   onOpenUrl(url: string): void;
   /** Runs one call of the agent's browser tool in this window's side panel browser. */
   onBrowserRequest(request: BrowserRequest): Promise<BrowserResult>;
+  /** Runs one call of the agent's computer tool through this window's cua-driver. */
+  onComputerRequest(request: ComputerRequest, signal: AbortSignal): Promise<ComputerResult>;
   /** The connection broke after being up. Pending commands were already rejected. */
   onLost(): void;
   /** The daemon could not be started or reached; the client keeps trying. */
@@ -98,6 +102,8 @@ export class DaemonClient {
   private ownsDaemon = false;
   /** Last value given to `setBrowserAvailable`, sent again after every (re)connection. */
   private browserAvailable = false;
+  /** Last value given to `setComputerAvailable`, likewise. */
+  private computerAvailable = false;
 
   constructor(private readonly options: DaemonClientOptions) {
     this.paths = resolveDaemonPaths({ ...process.env, PP_AGENT_HOME: options.home });
@@ -128,6 +134,14 @@ export class DaemonClient {
     this.browserAvailable = available;
     this.conn?.socket.write(
       encodeFrame({ kind: "browser_available", available } satisfies ClientFrame),
+    );
+  }
+
+  /** Tells the daemon whether the agent's computer tool can run here (a window and cua-driver). */
+  setComputerAvailable(available: boolean): void {
+    this.computerAvailable = available;
+    this.conn?.socket.write(
+      encodeFrame({ kind: "computer_available", available } satisfies ClientFrame),
     );
   }
 
@@ -359,6 +373,12 @@ export class DaemonClient {
         available: this.browserAvailable,
       } satisfies ClientFrame),
     );
+    conn.socket.write(
+      encodeFrame({
+        kind: "computer_available",
+        available: this.computerAvailable,
+      } satisfies ClientFrame),
+    );
     for (const frame of conn.early.splice(0)) this.receive(conn, frame);
   }
 
@@ -436,6 +456,30 @@ export class DaemonClient {
               error: error instanceof Error ? error.message : String(error),
             }),
         );
+        return;
+      }
+      case "computer_request": {
+        const { id } = frame;
+        const reply = (response: ClientFrame) => {
+          if (!conn.socket.destroyed) conn.socket.write(encodeFrame(response));
+        };
+        // A step still running when the connection drops has nobody to answer; stop it.
+        const controller = new AbortController();
+        const onClose = () => controller.abort();
+        conn.socket.once("close", onClose);
+        this.options
+          .onComputerRequest(frame.request, controller.signal)
+          .then(
+            (result) => reply({ kind: "computer_response", id, ok: true, result }),
+            (error: unknown) =>
+              reply({
+                kind: "computer_response",
+                id,
+                ok: false,
+                error: error instanceof Error ? error.message : String(error),
+              }),
+          )
+          .finally(() => conn.socket.off("close", onClose));
         return;
       }
       case "result": {

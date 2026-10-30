@@ -39,6 +39,7 @@
       "web_search": "Search the web",
       "web_fetch": "Open web pages",
       "browser": "Use the browser",
+      "computer": "Use apps on this computer",
       "codemode": "Run scripts with connected tools",
       "tool_search": "Look up connected tools",
       "list_mcp_resources": "List server resources",

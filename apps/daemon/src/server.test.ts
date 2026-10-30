@@ -443,6 +443,37 @@ describe("DaemonServer browser bridge", () => {
   });
 });
 
+describe("DaemonServer computer bridge", () => {
+  it("keeps browser and computer offers apart", async () => {
+    const { server } = await startServer();
+    const client = await openClient();
+    await client.hello();
+    client.send({ kind: "computer_available", available: true });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(server.computer.available()).toBe(true);
+    expect(server.browser.available()).toBe(false);
+    await expect(server.browser.request({ action: "tabs" })).rejects.toThrow(/window is open/);
+
+    const answer = server.computer.request({ action: "snapshot", app: "com.apple.Notes" });
+    const frame = await client.next();
+    expect(frame).toMatchObject({
+      kind: "computer_request",
+      request: { action: "snapshot", app: "com.apple.Notes" },
+    });
+    if (frame.kind !== "computer_request") throw new Error("Expected a computer request");
+    // A browser response with the same id does not settle a computer request.
+    client.send({ kind: "browser_response", id: frame.id, ok: true, result: { text: "page" } });
+    client.send({ kind: "computer_response", id: frame.id, ok: true, result: { text: "window" } });
+    await expect(answer).resolves.toEqual({ text: "window" });
+
+    const pending = server.computer.request({ action: "apps" });
+    await client.next();
+    client.close();
+    await expect(pending).rejects.toThrow(/may or may not have happened/);
+    expect(server.computer.available()).toBe(false);
+  });
+});
+
 describe("ensureToken", () => {
   it("creates a 64-character hex token once and reuses it", async () => {
     const file = join(dir, "agentd.token");

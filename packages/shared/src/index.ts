@@ -60,6 +60,11 @@ export interface ApprovalRequest {
   tier: ToolTier;
   title: string;
   detail: string;
+  /**
+   * `computer` only: the app the agent asks to use for the first time in this conversation. The
+   * person may allow it for this call, for the conversation, or always (`respond_approval.remember`).
+   */
+  app?: ComputerApp;
 }
 
 /** One choice of a question the agent asks (`ask_user`). */
@@ -152,7 +157,8 @@ export type SettingsScope =
   | "scheduledTasks"
   | "voice"
   | "background"
-  | "browserProfiles";
+  | "browserProfiles"
+  | "computerApps";
 
 export type AgentEvent =
   | { type: "status"; status: AgentStatus }
@@ -550,6 +556,8 @@ export interface SettingsFile extends AppSettings {
   memoryEnabled: boolean;
   /** Always contains the profile with id `DEFAULT_BROWSER_PROFILE_ID`. */
   browserProfiles: BrowserProfile[];
+  /** Apps the agent's `computer` tool may always use, or never. */
+  computerApps: ComputerAppAccess;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -992,7 +1000,11 @@ export interface AgentCommandMap {
   abort: { params: NoParams; result: void };
   /** Without `workspaceId`: in the workspace of the open conversation. */
   new_chat: { params: { workspaceId?: string }; result: void };
-  respond_approval: { params: { requestId: string; approved: boolean }; result: void };
+  /** `remember` applies to a request with an `app`: keep that app allowed for the conversation or always. */
+  respond_approval: {
+    params: { requestId: string; approved: boolean; remember?: ComputerAppRemember };
+    result: void;
+  };
   /** `answers` null: the person chose not to answer. */
   respond_question: {
     params: { requestId: string; answers: QuestionAnswer[] | null };
@@ -1169,6 +1181,13 @@ export interface AgentCommandMap {
   record_browser_import: {
     params: { id: string; lastImport: BrowserProfileImport };
     result: BrowserProfile;
+  };
+
+  list_computer_apps: { params: NoParams; result: ComputerAppAccess };
+  /** Moves an app to the always-allowed or the blocked list, or (`access` null) off both. */
+  set_computer_app_access: {
+    params: { app: ComputerApp; access: "allowed" | "blocked" | null };
+    result: ComputerAppAccess;
   };
 }
 
@@ -1381,6 +1400,183 @@ export interface BrowserBounds {
   height: number;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Computer use: the agent's `computer` tool, run by the window through cua-driver
+// ---------------------------------------------------------------------------------------------
+
+/** Actions of the agent's `computer` tool. Every action but `apps` names an app. */
+export const COMPUTER_TOOL_ACTIONS = [
+  "apps",
+  "windows",
+  "snapshot",
+  "screenshot",
+  "launch",
+  "click",
+  "double_click",
+  "right_click",
+  "type",
+  "set_value",
+  "press",
+  "hotkey",
+  "scroll",
+  "drag",
+  "menu",
+] as const;
+export type ComputerToolAction = (typeof COMPUTER_TOOL_ACTIONS)[number];
+
+/** Actions that only look; the others change something and are write tier. */
+export const COMPUTER_READ_ACTIONS: readonly ComputerToolAction[] = [
+  "apps",
+  "windows",
+  "snapshot",
+  "screenshot",
+];
+
+/** An app on the computer: `id` is its bundle id (macOS), else what cua-driver names it by. */
+export interface ComputerApp {
+  id: string;
+  name: string;
+}
+
+/** Apps the person allowed for every conversation, and apps the agent may never use. */
+export interface ComputerAppAccess {
+  allowed: ComputerApp[];
+  blocked: ComputerApp[];
+}
+
+export const COMPUTER_APP_LIMITS = { maxApps: 200, maxIdLength: 300, maxNameLength: 120 } as const;
+
+/** How long a first-use approval of an app lasts; omitted means this call only. */
+export type ComputerAppRemember = "conversation" | "always";
+
+/**
+ * Apps the agent may never drive, by bundle id (lower case) or name: PP Agent itself (it would
+ * approve its own requests), terminals and script runners (they would get around the shell
+ * setting), and where macOS and Windows keep passwords and privacy switches.
+ */
+const PROTECTED_COMPUTER_APP_IDS = new Set([
+  "com.pptechs.agent",
+  "com.github.electron",
+  "com.apple.terminal",
+  "com.googlecode.iterm2",
+  "com.mitchellh.ghostty",
+  "dev.warp.warp-stable",
+  "net.kovidgoyal.kitty",
+  "org.alacritty",
+  "io.alacritty",
+  "com.github.wez.wezterm",
+  "co.zeit.hyper",
+  "com.apple.scripteditor2",
+  "com.apple.automator",
+  "com.apple.shortcuts",
+  "com.apple.systempreferences",
+  "com.apple.keychainaccess",
+  "com.apple.passwords",
+  "com.apple.securityagent",
+  "com.1password.1password",
+  "com.agilebits.onepassword7",
+  "com.bitwarden.desktop",
+]);
+const PROTECTED_COMPUTER_APP_NAMES = new Set([
+  "pp agent",
+  "electron",
+  "terminal",
+  "iterm2",
+  "ghostty",
+  "warp",
+  "kitty",
+  "alacritty",
+  "wezterm",
+  "hyper",
+  "script editor",
+  "automator",
+  "shortcuts",
+  "system settings",
+  "system preferences",
+  "keychain access",
+  "passwords",
+  "1password",
+  "bitwarden",
+  "windows terminal",
+  "command prompt",
+  "windows powershell",
+  "powershell",
+  "cmd",
+  "pwsh",
+  "wt",
+  "conhost",
+  "registry editor",
+  "regedit",
+  "windows security",
+  "settings",
+]);
+
+export function isProtectedComputerApp(app: ComputerApp): boolean {
+  const name = app.name
+    .trim()
+    .toLowerCase()
+    .replace(/\.(exe|app)$/, "");
+  return (
+    PROTECTED_COMPUTER_APP_IDS.has(app.id.trim().toLowerCase()) ||
+    PROTECTED_COMPUTER_APP_NAMES.has(name)
+  );
+}
+
+/** One call of the `computer` tool, as the daemon hands it to the window. */
+export interface ComputerRequest {
+  action: ComputerToolAction;
+  /** App id from `apps`; required by every action but `apps`. */
+  app?: string;
+  /** Window id from `windows`; the app's frontmost window when omitted. */
+  window?: number;
+  /** Element token from the latest `snapshot` of that window (`s0000002a:11`). */
+  ref?: string;
+  /** Pixels in the latest screenshot of the window, for elements missing from the snapshot. */
+  x?: number;
+  y?: number;
+  /** `drag`: where to release, in the same pixels. */
+  toX?: number;
+  toY?: number;
+  /** `type`: the text. */
+  text?: string;
+  /** `set_value`: the value for a pop-up, checkbox or slider. */
+  value?: string;
+  /** `press`: one key such as `return`, `escape`, `down`, `tab`. */
+  key?: string;
+  /** `hotkey`: a key combination such as `["cmd", "s"]`. */
+  keys?: string[];
+  /** `menu`: the application menu path, such as `["File", "Export…"]`. */
+  path?: string[];
+  /** `scroll`. */
+  direction?: "up" | "down" | "left" | "right";
+  amount?: number;
+  /** `snapshot`: only rows that contain these words, with their parents. */
+  query?: string;
+  /** `snapshot`: include the screenshot (default false; `screenshot` returns only the image). */
+  image?: boolean;
+  /** Bring the window to the front for this step, then put the person's app back. */
+  foreground?: boolean;
+}
+
+/** What the tool returns to the model: screen text (untrusted) and maybe a PNG. */
+export interface ComputerResult {
+  text: string;
+  /** Base64 PNG or JPEG of the window. */
+  image?: string;
+  imageType?: "image/png" | "image/jpeg";
+  /** Apps this call saw (`apps`, `launch`), so approvals can name them. */
+  apps?: ComputerApp[];
+}
+
+/** Whether the window can drive apps right now, for Settings › Computer use. */
+export interface ComputerStatus {
+  /** False on platforms cua-driver does not run on here, or when the app was built without it. */
+  supported: boolean;
+  /** macOS grants of PP Agent; always true elsewhere. */
+  accessibility: boolean;
+  screenRecording: boolean;
+}
+
 /**
  * Where the app stands with updates. `in-app` updates download and install from inside the app
  * (Windows, Linux AppImage); `download-page` ones open the release page (macOS builds are not
@@ -1498,6 +1694,11 @@ export interface DesktopBridge {
       sourceProfile: string,
     ): Promise<CookieImportResult>;
   };
+  computer: {
+    status(): Promise<ComputerStatus>;
+    /** Asks macOS for the grants PP Agent lacks, or opens their System Settings pane. */
+    requestPermissions(): Promise<ComputerStatus>;
+  };
 }
 
 export const IPC = {
@@ -1545,6 +1746,8 @@ export const IPC = {
   browserCookieSources: "browser:cookie-sources",
   browserImportCookies: "browser:import-cookies",
   browserReveal: "browser:reveal",
+  computerStatus: "computer:status",
+  computerRequestPermissions: "computer:request-permissions",
 } as const;
 
 // ---------------------------------------------------------------------------------------------
@@ -1552,7 +1755,7 @@ export const IPC = {
 // ---------------------------------------------------------------------------------------------
 
 /** Bump when a frame below changes incompatibly; a client talking to another version shuts the daemon down. */
-export const DAEMON_PROTOCOL = 3;
+export const DAEMON_PROTOCOL = 4;
 
 export interface AgentPaths {
   /** Folder of the built-in workspace; other workspaces use their own folder. */
@@ -1592,7 +1795,12 @@ export type ClientFrame =
   | { kind: "browser_available"; available: boolean }
   /** Answers a `browser_request`. */
   | { kind: "browser_response"; id: number; ok: true; result: BrowserResult }
-  | { kind: "browser_response"; id: number; ok: false; error: string };
+  | { kind: "browser_response"; id: number; ok: false; error: string }
+  /** Whether this client can run the agent's computer tool now (it has a window and cua-driver). */
+  | { kind: "computer_available"; available: boolean }
+  /** Answers a `computer_request`. */
+  | { kind: "computer_response"; id: number; ok: true; result: ComputerResult }
+  | { kind: "computer_response"; id: number; ok: false; error: string };
 
 export type DaemonFrame =
   | { kind: "challenge"; nonce: string }
@@ -1603,7 +1811,9 @@ export type DaemonFrame =
   | { kind: "result"; id: number; ok: false; error: string }
   | { kind: "open_url"; url: string }
   /** Asks one client that offered its browser to run a `browser` tool call. */
-  | { kind: "browser_request"; id: number; request: BrowserRequest };
+  | { kind: "browser_request"; id: number; request: BrowserRequest }
+  /** Asks one client that offered computer use to run a `computer` tool call. */
+  | { kind: "computer_request"; id: number; request: ComputerRequest };
 
 /** Workspace folder (relative) that attached files are copied into. */
 export const ATTACHMENTS_DIR = "attachments";

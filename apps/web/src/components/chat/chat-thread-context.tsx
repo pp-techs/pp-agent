@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { ApprovalRequest, DesktopBridge } from "@workspace/shared";
+import type { ApprovalRequest, ComputerAppRemember, DesktopBridge } from "@workspace/shared";
 
 import type { useAgentCommands } from "@/lib/queries";
 
@@ -18,7 +18,8 @@ export interface ChatThreadContextValue {
     responding: boolean;
   };
   actions: {
-    respondApproval: (requestId: string, approved: boolean) => void;
+    /** `remember` keeps an app the agent asked to use allowed for the chat, or always. */
+    respondApproval: (requestId: string, approved: boolean, remember?: ComputerAppRemember) => void;
     regenerate: AgentCommands["regenerate"];
     branchSession: AgentCommands["branchSession"];
     editMessage: AgentCommands["editMessage"];

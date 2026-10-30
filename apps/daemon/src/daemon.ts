@@ -83,6 +83,7 @@ export async function runDaemon(): Promise<number> {
       vault: await createVaultBackend(paths.home),
       service: serviceControlFor(paths),
       browser: server.browser,
+      computer: server.computer,
     });
     server.attach(host);
     // A client that connects while the host is starting waits on it, as the window always did.

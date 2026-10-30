@@ -177,7 +177,21 @@
     "forget": "Forget a note",
     "editOffice": "Change {{file}}",
     "askUser": "Asking you a question",
-    "scheduleTask": "Schedule the task “{{name}}”"
+    "scheduleTask": "Schedule the task “{{name}}”",
+    "computer": {
+      "anApp": "an app",
+      "use": "Use {{app}}",
+      "apps": "See which apps are open",
+      "look": "Look at {{app}}",
+      "launch": "Open {{app}}",
+      "click": "Click in {{app}}",
+      "type": "Type in {{app}}",
+      "setValue": "Change a setting in {{app}}",
+      "press": "Press keys in {{app}}",
+      "scroll": "Scroll in {{app}}",
+      "drag": "Drag in {{app}}",
+      "menu": "Use the menu of {{app}}"
+    }
   },
   "webSearch": {
     "unknownProvider": "Unknown search provider.",
@@ -449,5 +463,10 @@
       "keyDenied": "macOS did not allow reading the key that protects the cookies of {{browser}}. Try again and choose “Allow” when macOS asks.",
       "keyUnavailable": "The key that protects the cookies of {{browser}} could not be read ({{error}})."
     }
+  },
+  "computerApps": {
+    "protected": "{{name}} cannot be used by the agent.",
+    "blocked": "{{name}} is blocked for the agent in Settings › Computer use.",
+    "windowOnly": "Computer use works only in conversations of the PP Agent window."
   }
 }

@@ -2,12 +2,14 @@ import { randomBytes } from "node:crypto";
 import { chmod, lstat, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { dirname } from "node:path";
-import type { BrowserBridge, HostOutput } from "@workspace/agent-core";
+import type { BrowserBridge, ComputerBridge, HostOutput } from "@workspace/agent-core";
 import {
   type AgentCommand,
   type BrowserRequest,
   type BrowserResult,
   type ClientFrame,
+  type ComputerRequest,
+  type ComputerResult,
   DAEMON_PROTOCOL,
   type DaemonFrame,
   type StoredCredential,
@@ -50,18 +52,50 @@ interface Client {
   authenticated: boolean;
   nonce: string;
   helloTimer: NodeJS.Timeout | null;
-  /** The client has a window whose browser can run the agent's browser tool. */
-  browser: boolean;
+  /** Tools whose calls the client's window can run: its side panel browser, its cua-driver. */
+  offers: Set<RelayKind>;
 }
 
-interface PendingBrowserRequest {
+/** Tools the daemon hands to a window: `<kind>_available`, `<kind>_request`, `<kind>_response`. */
+type RelayKind = "browser" | "computer";
+
+interface RelayMap {
+  browser: { request: BrowserRequest; result: BrowserResult };
+  computer: { request: ComputerRequest; result: ComputerResult };
+}
+
+interface PendingRelay {
   client: Client;
-  resolve(result: BrowserResult): void;
+  kind: RelayKind;
+  resolve(result: unknown): void;
   reject(error: Error): void;
 }
 
-/** A browser step may load a slow page; past this the model hears it timed out. */
-const BROWSER_TIMEOUT_MS = 90_000;
+const RELAYS: Record<
+  RelayKind,
+  { timeoutMs: number; unavailable: string; closed: string; timedOut: string; stopped: string }
+> = {
+  // A browser step may load a slow page; past this the model hears it timed out.
+  browser: {
+    timeoutMs: 90_000,
+    unavailable:
+      "The browser is available only while the PP Agent window is open. Ask the user to open PP Agent and try again.",
+    closed: "The PP Agent window closed before the browser step finished.",
+    timedOut: "The browser step timed out.",
+    stopped: "The browser step was stopped.",
+  },
+  // A step waits for the app to settle and returns a fresh snapshot; launching one can take long.
+  computer: {
+    timeoutMs: 60_000,
+    unavailable:
+      "Computer use is available only while the PP Agent window is open. Ask the user to open PP Agent and try again.",
+    closed:
+      "The PP Agent window closed before the computer step finished; it may or may not have happened. Take a snapshot to check.",
+    timedOut:
+      "The computer step timed out; it may or may not have happened. Take a snapshot to check.",
+    stopped: "The computer step was stopped.",
+  },
+};
 
 /** Reads the token file, creating it (mode 0600) when missing or malformed. */
 export async function ensureToken(file: string): Promise<string> {
@@ -113,13 +147,19 @@ export class DaemonServer {
    * client that offered it most recently.
    */
   readonly browser: BrowserBridge = {
-    available: () => this.browserClient() !== null,
-    request: (request, signal) => this.requestBrowser(request, signal),
+    available: () => this.relayClient("browser") !== null,
+    request: (request, signal) => this.relay("browser", request, signal),
+  };
+
+  /** And this: the agent's computer tool runs in the cua-driver of the newest window that has one. */
+  readonly computer: ComputerBridge = {
+    available: () => this.relayClient("computer") !== null,
+    request: (request, signal) => this.relay("computer", request, signal),
   };
 
   private server: Server | null = null;
-  private readonly browserRequests = new Map<number, PendingBrowserRequest>();
-  private nextBrowserRequest = 1;
+  private readonly relays = new Map<number, PendingRelay>();
+  private nextRelay = 1;
   private releaseLock: (() => Promise<void>) | null = null;
   /** Settles once the host is attached; commands that arrive while the host starts wait for it. */
   private hostReady = Promise.withResolvers<DaemonHost>();
@@ -228,7 +268,7 @@ export class DaemonServer {
       authenticated: false,
       nonce: randomBytes(32).toString("hex"),
       helloTimer: null,
-      browser: false,
+      offers: new Set(),
     };
     this.clients.add(client);
     this.send(client, { kind: "challenge", nonce: client.nonce });
@@ -241,10 +281,10 @@ export class DaemonServer {
     socket.on("close", () => {
       clearTimeout(client.helloTimer ?? undefined);
       this.clients.delete(client);
-      for (const [id, pending] of this.browserRequests) {
+      for (const [id, pending] of this.relays) {
         if (pending.client !== client) continue;
-        this.browserRequests.delete(id);
-        pending.reject(new Error("The PP Agent window closed before the browser step finished."));
+        this.relays.delete(id);
+        pending.reject(new Error(RELAYS[pending.kind].closed));
       }
     });
   }
@@ -297,21 +337,33 @@ export class DaemonServer {
         this.options.log?.("A client asked the daemon to shut down.");
         this.options.onShutdown();
         return;
-      case "browser_available": {
-        const { available } = frame as Extract<ClientFrame, { kind: "browser_available" }>;
-        client.browser = available === true;
-        // The newest window is the one the person looks at.
-        if (client.browser) {
-          this.clients.delete(client);
-          this.clients.add(client);
+      case "browser_available":
+      case "computer_available": {
+        const { available } = frame as Extract<
+          ClientFrame,
+          { kind: "browser_available" | "computer_available" }
+        >;
+        const kind = frame.kind === "browser_available" ? "browser" : "computer";
+        if (available !== true) {
+          client.offers.delete(kind);
+          return;
         }
+        client.offers.add(kind);
+        // The newest window is the one the person looks at.
+        this.clients.delete(client);
+        this.clients.add(client);
         return;
       }
-      case "browser_response": {
-        const response = frame as Extract<ClientFrame, { kind: "browser_response" }>;
-        const pending = this.browserRequests.get(response.id);
-        if (!pending || pending.client !== client) return;
-        this.browserRequests.delete(response.id);
+      case "browser_response":
+      case "computer_response": {
+        const response = frame as Extract<
+          ClientFrame,
+          { kind: "browser_response" | "computer_response" }
+        >;
+        const pending = this.relays.get(response.id);
+        const kind = frame.kind === "browser_response" ? "browser" : "computer";
+        if (!pending || pending.client !== client || pending.kind !== kind) return;
+        this.relays.delete(response.id);
         if (response.ok) pending.resolve(response.result);
         else pending.reject(new Error(String(response.error)));
         return;
@@ -409,40 +461,51 @@ export class DaemonServer {
     socket.write(encodeFrame(frame));
   }
 
-  /** The last client in connection order that offered its browser. */
-  private browserClient(): Client | null {
+  /** The last client in connection order that offered `kind`. */
+  private relayClient(kind: RelayKind): Client | null {
     let found: Client | null = null;
     for (const client of this.clients) {
-      if (client.authenticated && client.browser && !client.socket.destroyed) found = client;
+      if (client.authenticated && client.offers.has(kind) && !client.socket.destroyed)
+        found = client;
     }
     return found;
   }
 
-  private requestBrowser(request: BrowserRequest, signal?: AbortSignal): Promise<BrowserResult> {
-    const client = this.browserClient();
-    if (!client)
-      return Promise.reject(
-        new Error(
-          "The browser is available only while the PP Agent window is open. Ask the user to open PP Agent and try again.",
-        ),
-      );
-    const id = this.nextBrowserRequest++;
-    const result = Promise.withResolvers<BrowserResult>();
+  private relay<K extends RelayKind>(
+    kind: K,
+    request: RelayMap[K]["request"],
+    signal?: AbortSignal,
+  ): Promise<RelayMap[K]["result"]> {
+    const texts = RELAYS[kind];
+    const client = this.relayClient(kind);
+    if (!client) return Promise.reject(new Error(texts.unavailable));
+    const id = this.nextRelay++;
+    const result = Promise.withResolvers<RelayMap[K]["result"]>();
     const finish = () => {
       clearTimeout(timer);
       signal?.removeEventListener("abort", onAbort);
     };
     const timer = setTimeout(() => {
-      this.browserRequests.delete(id);
-      result.reject(new Error("The browser step timed out."));
-    }, BROWSER_TIMEOUT_MS);
+      this.relays.delete(id);
+      result.reject(new Error(texts.timedOut));
+    }, texts.timeoutMs);
     const onAbort = () => {
-      this.browserRequests.delete(id);
-      result.reject(new Error("The browser step was stopped."));
+      this.relays.delete(id);
+      result.reject(new Error(texts.stopped));
     };
     signal?.addEventListener("abort", onAbort, { once: true });
-    this.browserRequests.set(id, { client, resolve: result.resolve, reject: result.reject });
-    this.send(client, { kind: "browser_request", id, request });
+    this.relays.set(id, {
+      client,
+      kind,
+      resolve: (value) => result.resolve(value as RelayMap[K]["result"]),
+      reject: result.reject,
+    });
+    this.send(
+      client,
+      kind === "browser"
+        ? { kind: "browser_request", id, request: request as BrowserRequest }
+        : { kind: "computer_request", id, request: request as ComputerRequest },
+    );
     return result.promise.finally(finish);
   }
 

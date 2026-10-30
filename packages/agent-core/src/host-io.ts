@@ -2,6 +2,8 @@ import type {
   AgentEvent,
   BrowserRequest,
   BrowserResult,
+  ComputerRequest,
+  ComputerResult,
   ServiceStatus,
   StoredCredential,
 } from "@workspace/shared";
@@ -44,6 +46,17 @@ export interface BrowserBridge {
   request(request: BrowserRequest, signal?: AbortSignal): Promise<BrowserResult>;
 }
 
+/**
+ * Where the agent's `computer` tool runs: the window, which starts cua-driver itself so macOS
+ * attributes its Accessibility and Screen Recording use to PP Agent.
+ */
+export interface ComputerBridge {
+  /** Whether a window with cua-driver can take requests right now. */
+  available(): boolean;
+  /** Runs one tool call; rejects with a message the model can act on. */
+  request(request: ComputerRequest, signal?: AbortSignal): Promise<ComputerResult>;
+}
+
 /** Everything the host needs from the process that runs it. */
 export interface HostEnvironment {
   output: HostOutput;
@@ -51,4 +64,6 @@ export interface HostEnvironment {
   service: ServiceControl;
   /** Absent where nothing can show a browser (tests, a host without clients). */
   browser?: BrowserBridge;
+  /** Absent where no window can drive apps (tests, a host without clients). */
+  computer?: ComputerBridge;
 }

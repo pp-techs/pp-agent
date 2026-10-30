@@ -111,6 +111,10 @@ const bridge: DesktopBridge = {
     importCookies: (profileId, browser, sourceProfile) =>
       invoke(IPC.browserImportCookies, profileId, browser, sourceProfile),
   },
+  computer: {
+    status: () => invoke(IPC.computerStatus),
+    requestPermissions: () => invoke(IPC.computerRequestPermissions),
+  },
 };
 
 contextBridge.exposeInMainWorld("ppAgent", bridge);

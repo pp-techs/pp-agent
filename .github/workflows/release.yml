@@ -227,6 +227,8 @@ jobs:
           test -d ../../packages/agent-core/node_modules/@officecli/officecli/vendor
           # webclaw is not an npm package: download the binary for this runner (checksum-pinned).
           node scripts/fetch-webclaw.mjs --require
+          # cua-driver (computer use, checksum-pinned) ships on macOS and Windows only.
+          if [ "$PLATFORM" = "--linux" ]; then node scripts/fetch-cua-driver.mjs; else node scripts/fetch-cua-driver.mjs --require; fi
           args=(--config electron-builder.yml "$PLATFORM" "$ARCH" --publish never)
           if [ "$PLATFORM" = "--mac" ]; then
             if [ -z "$CSC_LINK" ]; then

@@ -43,6 +43,8 @@ apps/desktop/resources/officecli/
 
 # webclaw binaries downloaded by apps/desktop/scripts/fetch-webclaw.mjs
 apps/desktop/resources/webclaw/
+# cua-driver binaries downloaded by apps/desktop/scripts/fetch-cua-driver.mjs
+apps/desktop/resources/cua-driver/
 
 # Runtime state of the Telegram poller
 telegram-offset.json

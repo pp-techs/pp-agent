@@ -27,6 +27,7 @@ import {
   GlobeIcon,
   MessagesSquareIcon,
   MicIcon,
+  MonitorIcon,
   MoonStarIcon,
   SlidersHorizontalIcon,
   SparklesIcon,
@@ -39,6 +40,7 @@ import { AgentsSection } from "@/components/settings/agents-section";
 import { BackgroundSection } from "@/components/settings/background-section";
 import { BrowserSection } from "@/components/settings/browser-section";
 import { ChannelsSection } from "@/components/settings/channels-section";
+import { ComputerSection } from "@/components/settings/computer-section";
 import { GeneralSection } from "@/components/settings/general-section";
 import { McpSection } from "@/components/settings/mcp-section";
 import { MemorySection } from "@/components/settings/memory-section";
@@ -61,6 +63,7 @@ export type SettingsSection =
   | "memory"
   | "channels"
   | "browser"
+  | "computer"
   | "background";
 
 const SECTIONS: {
@@ -79,6 +82,7 @@ const SECTIONS: {
   { id: "memory", icon: BrainIcon, Component: MemorySection },
   { id: "channels", icon: MessagesSquareIcon, Component: ChannelsSection },
   { id: "browser", icon: GlobeIcon, Component: BrowserSection },
+  { id: "computer", icon: MonitorIcon, Component: ComputerSection },
   { id: "background", icon: MoonStarIcon, Component: BackgroundSection },
 ];
 

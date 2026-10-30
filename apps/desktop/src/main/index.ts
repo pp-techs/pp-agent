@@ -21,6 +21,7 @@ import {
 import { initI18n, translator } from "./i18n.ts";
 import { createNotifier, type Notifier } from "./notifications.ts";
 import { chromeUserAgent } from "./browser/address.ts";
+import { ComputerHost } from "./computer/host.ts";
 import { createSidePanel } from "./panel/ipc.ts";
 import { restrictPermissions } from "./permissions.ts";
 import { readShellSettings } from "./settings.ts";
@@ -145,6 +146,15 @@ async function openExternal(url: string): Promise<void> {
 /** Folder with OfficeCLI and the built-in skills, for the daemon. */
 const RESOURCES_DIR = app.isPackaged ? process.resourcesPath : join(DIST_DIR, "..", "resources");
 
+/** cua-driver for the agent's computer tool; it runs as a child of this process (see ComputerHost). */
+const computer = new ComputerHost({
+  resourcesDir: RESOURCES_DIR,
+  userDataDir: USER_DATA_DIR,
+  // `appId` in electron-builder.yml.
+  bundleId: "com.pptechs.agent",
+  log: (line) => console.log(line),
+});
+
 const daemon = new DaemonClient({
   home: USER_DATA_DIR,
   daemonScript: join(DIST_DIR, "daemon.mjs"),
@@ -166,6 +176,10 @@ const daemon = new DaemonClient({
   onBrowserRequest(request) {
     if (!window) return Promise.reject(new Error("The PP Agent window is closed."));
     return sidePanel.runBrowserRequest(request);
+  },
+  onComputerRequest(request, signal) {
+    if (!window) return Promise.reject(new Error("The PP Agent window is closed."));
+    return computer.run(request, signal);
   },
   onLost() {
     sendToRenderer({ type: "error", message: translator()("app.stoppedUnexpectedly") });
@@ -250,9 +264,11 @@ function createWindow(): void {
     window = null;
     sidePanel.windowClosed();
     daemon.setBrowserAvailable(false);
+    daemon.setComputerAvailable(false);
   });
   sidePanel.attach(window);
   daemon.setBrowserAvailable(true);
+  daemon.setComputerAvailable(computer.supported);
 
   // Links in agent replies open in the browser; the app window never navigates away.
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -313,6 +329,9 @@ ipcMain.handle(IPC.shellTakePendingFocus, () => {
   return wasPending;
 });
 
+ipcMain.handle(IPC.computerStatus, () => computer.status());
+ipcMain.handle(IPC.computerRequestPermissions, () => computer.requestPermissions());
+
 ipcMain.handle(IPC.updatesState, () => updater.state());
 ipcMain.handle(IPC.updatesCheck, () => updater.check(true));
 ipcMain.handle(IPC.updatesDownload, () => updater.download(openExternal));
@@ -328,6 +347,8 @@ app.on("before-quit", () => {
   quitting = true;
   daemon.dispose();
   sidePanel.dispose();
+  // The driver also exits on its own when this process ends and its stdin closes.
+  void computer.dispose();
 });
 
 app.on("will-quit", () => {

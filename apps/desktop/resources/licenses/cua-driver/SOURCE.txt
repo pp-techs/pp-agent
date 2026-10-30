@@ -1,0 +1,12 @@
+PP Agent bundles cua-driver (https://github.com/trycua/cua), a command line program that reads
+and operates the windows of desktop apps through their accessibility interfaces. cua-driver is
+licensed under the MIT License (the LICENSE file in this folder).
+
+It runs as a separate program: PP Agent starts it when the agent uses the computer tool and talks
+to it over standard input and output (MCP). It is not linked into PP Agent and was not modified.
+
+The source code of the bundled version is at
+https://github.com/trycua/cua/tree/cua-driver-rs-v0.38.0
+and the binaries are the unmodified release files from
+https://github.com/trycua/cua/releases/tag/cua-driver-rs-v0.38.0
+(on macOS, reduced to the computer's architecture with lipo).

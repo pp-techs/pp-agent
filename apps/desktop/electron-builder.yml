@@ -39,6 +39,16 @@ extraResources:
       - "!.version"
   - from: resources/licenses/webclaw
     to: licenses/webclaw
+  # cua-driver (MIT) runs the agent's computer tool on macOS and Windows: the program
+  # scripts/fetch-cua-driver.mjs downloaded for this platform, plus its license and where its source
+  # is. Main starts it as a direct child, so macOS checks PP Agent's own Accessibility and Screen
+  # Recording grants. It is signed with the app on macOS. Linux builds have none.
+  - from: resources/cua-driver/${os}-${arch}
+    to: cua-driver/${os}-${arch}
+    filter:
+      - "!.version"
+  - from: resources/licenses/cua-driver
+    to: licenses/cua-driver
 asar: true
 # Native addons cannot load from inside the asar archive (the daemon's OS keyring binding, and
 # the side panel terminal with its spawn-helper program).
