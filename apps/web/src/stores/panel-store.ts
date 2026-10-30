@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export const PANEL_TOOLS = ["terminal", "files", "browser"] as const;
+export const PANEL_TOOLS = ["files", "browser", "terminal"] as const;
 export type PanelTool = (typeof PANEL_TOOLS)[number];
 
 export const PANEL_WIDTH = { min: 320, default: 440, max: 1200 } as const;
