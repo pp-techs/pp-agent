@@ -186,6 +186,17 @@ test("Settings forcing yolo on everywhere locks the conversation's own switch", 
   expect((await snapshot()).approvals).toHaveLength(0);
 });
 
+test("Settings forcing yolo on everywhere also skips a new app's first-use card", async () => {
+  const FINDER = { id: "com.apple.finder", name: "Finder" };
+  await host.handle({ type: "update_settings", patch: { yoloMode: true } });
+
+  calls.push({ action: "click", app: FINDER.id, x: 1, y: 2 });
+  await host.handle({ type: "prompt", text: "click in finder", attachments: [] });
+  await until(() => request.mock.calls.length === 1);
+  await until(async () => (await snapshot()).status === "idle");
+  expect((await snapshot()).approvals).toHaveLength(0);
+});
+
 test("yolo also skips an app's first-use card, and remembers it allowed for the chat", async () => {
   const FINDER = { id: "com.apple.finder", name: "Finder" };
   await host.handle({ type: "set_conversation_yolo", active: true });

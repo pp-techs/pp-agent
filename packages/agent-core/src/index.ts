@@ -2047,7 +2047,7 @@ export class AgentHost {
           : toolTier(event.toolName, info?.annotations);
         const saved = this.services?.settings.get();
         if (!saved) return { block: true, reason: "The app is still starting." };
-        const active = yolo?.() === true;
+        const active = saved.yoloMode || yolo?.() === true;
         const settings = active ? { ...saved, yoloMode: true } : saved;
         // Tools that are off stay registered (codemode can reach any registered tool), so the gate
         // blocks them too.
