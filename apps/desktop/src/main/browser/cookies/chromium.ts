@@ -78,27 +78,41 @@ export function browserExecutable(definition: ChromiumBrowser): string | null {
   return null;
 }
 
+/** Install folder of a browser's program, as it appears in a lower-case Windows process path. */
+function installFolder(definition: ChromiumBrowser): string {
+  return `\\${dirname(definition.exe ?? "").replaceAll("/", "\\")}\\`.toLowerCase();
+}
+
 /**
  * Processes of the browser still running (Windows); null when that cannot be told. Closing every
  * window does not quit a browser that keeps running in the background (Chrome's "continue running
  * background apps", Edge's startup boost), and those processes keep the cookie database locked.
- * Chrome and Chromium share `chrome.exe`, so processes are matched by their install folder; a
- * process whose path cannot be read counts as running.
+ * Chrome and Chromium share `chrome.exe`: a process counts for this browser unless it runs from
+ * the install folder of another browser with the same program name. A process whose path cannot
+ * be read, or that runs from elsewhere (a Chromium build), counts as running.
  */
 export async function runningProcessCount(definition: ChromiumBrowser): Promise<number | null> {
   if (process.platform !== "win32" || !definition.exe) return 0;
-  const name = basename(definition.exe, ".exe");
-  const folder = `\\${dirname(definition.exe).replaceAll("/", "\\")}\\`.toLowerCase();
+  const name = basename(definition.exe, ".exe").toLowerCase();
+  const others = CHROMIUM_BROWSERS.filter(
+    (other) =>
+      other !== definition && other.exe && basename(other.exe, ".exe").toLowerCase() === name,
+  ).map(installFolder);
   try {
+    // Filtering instead of `Get-Process -Name`, which fails when nothing matches.
     const out = await run("powershell", [
       "-NoProfile",
       "-NonInteractive",
       "-Command",
-      `Get-Process -Name ${name} -ErrorAction SilentlyContinue | ForEach-Object { $_.Id.ToString() + '|' + $_.Path }`,
+      `Get-Process | Where-Object { $_.ProcessName -eq '${name}' } | ForEach-Object { $_.Id.ToString() + '|' + $_.Path }`,
     ]);
     return out.split(/\r?\n/).filter((line) => {
-      const path = line.slice(line.indexOf("|") + 1).trim();
-      return line.includes("|") && (!path || path.toLowerCase().includes(folder));
+      if (!line.includes("|")) return false;
+      const path = line
+        .slice(line.indexOf("|") + 1)
+        .trim()
+        .toLowerCase();
+      return !others.some((folder) => path.includes(folder));
     }).length;
   } catch {
     return null;

@@ -31,6 +31,8 @@ let helperRequests: ChatRequest[];
 let parentSaw: PromiseWithResolvers<string>;
 /** Held until all three sub agents of the first test have asked, so they must run together. */
 let helperRelease: PromiseWithResolvers<void>;
+/** How many sub agents had asked when the first one was answered; 3 only if they ran together. */
+let waitingHelpers: number | undefined;
 /** Arguments of the `delegate_task` call the parent makes. */
 let delegateArgs: Record<string, unknown>;
 
@@ -63,9 +65,10 @@ function modelServer(): ModelServer {
       const toolMessage = body.messages.find((m) => m.role === "tool");
       if (isHelper) {
         helperRequests.push(body);
-        // Answer only once all three have asked: a sequential run would wait here for ever.
+        // Answer once all three have asked, or after a short wait (a sequential run never gets there).
         if (helperRequests.length === 3) helperRelease.resolve();
-        await helperRelease.promise;
+        await Promise.race([helperRelease.promise, new Promise((r) => setTimeout(r, 3000))]);
+        waitingHelpers ??= helperRequests.length;
         const task = text(body.messages.findLast((m) => m.role === "user"));
         send({ content: `Found: ${task}` });
         send({}, "stop");
@@ -109,6 +112,7 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "pp-agent-subagent-"));
   helperRequests = [];
   helperRelease = Promise.withResolvers<void>();
+  waitingHelpers = undefined;
   parentSaw = Promise.withResolvers<string>();
   model = modelServer();
   const store = new Map<string, StoredCredential>();
@@ -185,6 +189,7 @@ test("one call runs several sub agents; a named Agent's rules and the shared con
   // Wait for the tool result the parent receives, not a guessed delay.
   await parentSaw.promise;
 
+  expect(waitingHelpers).toBe(3);
   expect(helperRequests).toHaveLength(3);
   const prompts = helperRequests.map((request) =>
     text(request.messages.find((m) => m.role === "system")),
