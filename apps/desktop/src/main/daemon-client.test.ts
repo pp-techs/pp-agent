@@ -71,6 +71,7 @@ async function setup(authenticated: boolean) {
     appVersion: "1.0.0",
     onOpenUrl,
     onBrowserRequest: vi.fn(),
+    onComputerRequest: vi.fn(),
     onEvent: vi.fn(),
     onLost: vi.fn(),
     onConnected: vi.fn(),

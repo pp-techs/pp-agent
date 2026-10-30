@@ -15,8 +15,9 @@
     "build": "vp pack",
     "start": "electron .",
     "fetch:webclaw": "node scripts/fetch-webclaw.mjs",
-    "dist": "node scripts/fetch-webclaw.mjs && vp pack && electron-builder --config electron-builder.yml --publish never",
-    "dist:dir": "node scripts/fetch-webclaw.mjs && vp pack && electron-builder --config electron-builder.yml --dir --publish never"
+    "fetch:cua-driver": "node scripts/fetch-cua-driver.mjs",
+    "dist": "node scripts/fetch-webclaw.mjs && node scripts/fetch-cua-driver.mjs && vp pack && electron-builder --config electron-builder.yml --publish never",
+    "dist:dir": "node scripts/fetch-webclaw.mjs && node scripts/fetch-cua-driver.mjs && vp pack && electron-builder --config electron-builder.yml --dir --publish never"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "catalog:",

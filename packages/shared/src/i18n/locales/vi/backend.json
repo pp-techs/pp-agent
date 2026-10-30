@@ -177,7 +177,21 @@
     "forget": "Quên một ghi chú",
     "editOffice": "Thay đổi {{file}}",
     "askUser": "Đang hỏi bạn một câu",
-    "scheduleTask": "Đặt lịch cho tác vụ “{{name}}”"
+    "scheduleTask": "Đặt lịch cho tác vụ “{{name}}”",
+    "computer": {
+      "anApp": "một ứng dụng",
+      "use": "Dùng {{app}}",
+      "apps": "Xem các ứng dụng đang mở",
+      "look": "Xem {{app}}",
+      "launch": "Mở {{app}}",
+      "click": "Bấm trong {{app}}",
+      "type": "Gõ chữ trong {{app}}",
+      "setValue": "Đổi một thiết lập trong {{app}}",
+      "press": "Nhấn phím trong {{app}}",
+      "scroll": "Cuộn trong {{app}}",
+      "drag": "Kéo thả trong {{app}}",
+      "menu": "Dùng menu của {{app}}"
+    }
   },
   "webSearch": {
     "unknownProvider": "Nhà cung cấp tìm kiếm không xác định.",
@@ -449,5 +463,11 @@
       "keyDenied": "macOS không cho phép đọc khóa bảo vệ cookie của {{browser}}. Hãy thử lại và chọn “Cho phép” khi macOS hỏi.",
       "keyUnavailable": "Không thể đọc khóa bảo vệ cookie của {{browser}} ({{error}})."
     }
+  },
+  "computerApps": {
+    "protected": "Agent không được dùng {{name}}.",
+    "blocked": "{{name}} đã bị chặn với agent trong Cài đặt › Điều khiển máy tính.",
+    "windowOnly": "Điều khiển máy tính chỉ hoạt động trong các cuộc trò chuyện của cửa sổ PP Agent.",
+    "saveFailed": "{{name}} chỉ được cho phép trong cuộc trò chuyện này: không lưu được thành luôn cho phép ({{error}})."
   }
 }

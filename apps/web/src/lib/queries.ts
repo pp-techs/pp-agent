@@ -1,5 +1,6 @@
 import type {
   Attachment,
+  ComputerAppRemember,
   DesktopBridge,
   FetchGatewayModelsInput,
   FetchedGatewayModel,
@@ -42,6 +43,8 @@ export const queryKeys = {
   telegramStatus: ["telegram-status"] as const,
   zaloStatus: ["zalo-status"] as const,
   browserProfiles: ["browser-profiles"] as const,
+  computerApps: ["computer-apps"] as const,
+  computerStatus: ["computer-status"] as const,
   cookieSources: ["cookie-sources"] as const,
   /** Prefix of every folder listing of one workspace. */
   workspaceFiles: (root: string) => ["workspace-files", root] as const,
@@ -191,7 +194,7 @@ export function useAgentCommands(bridge: DesktopBridge) {
     mutationFn: (workspaceId?: string) => bridge.agent.command({ type: "new_chat", workspaceId }),
   });
   const respondApproval = useMutation({
-    mutationFn: (input: { requestId: string; approved: boolean }) =>
+    mutationFn: (input: { requestId: string; approved: boolean; remember?: ComputerAppRemember }) =>
       bridge.agent.command({ type: "respond_approval", ...input }),
   });
   const respondQuestion = useMutation({

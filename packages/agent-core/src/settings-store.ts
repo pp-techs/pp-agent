@@ -20,6 +20,7 @@ import { readScheduledTasks } from "./scheduled-tasks.ts";
 import { DEFAULT_VOICE, readVoiceSettings } from "./transcription.ts";
 import { readChannelsSettings } from "./channels/settings.ts";
 import { readBrowserProfiles } from "./browser-profiles.ts";
+import { readComputerApps } from "./computer-apps.ts";
 
 const ModelRefSchema = Type.Object({ provider: Type.String(), modelId: Type.String() });
 const GatewaySchema = Type.Object({
@@ -69,6 +70,7 @@ function parse(raw: unknown): SettingsFile {
     channels: readChannelsSettings(null),
     memoryEnabled: true,
     browserProfiles: readBrowserProfiles(null),
+    computerApps: readComputerApps(null),
   };
   if (typeof raw !== "object" || raw === null) return settings;
   const value = raw as Partial<Record<keyof SettingsFile, unknown>>;
@@ -113,6 +115,7 @@ function parse(raw: unknown): SettingsFile {
   settings.channels = readChannelsSettings(value.channels);
   settings.memoryEnabled = value.memoryEnabled !== false;
   settings.browserProfiles = readBrowserProfiles(value.browserProfiles);
+  settings.computerApps = readComputerApps(value.computerApps);
   return settings;
 }
 

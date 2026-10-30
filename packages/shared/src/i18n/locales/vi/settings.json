@@ -18,7 +18,8 @@
       "scheduledTasks": "Tác vụ định kỳ",
       "channels": "Kênh chat",
       "background": "Chạy nền",
-      "browser": "Trình duyệt"
+      "browser": "Trình duyệt",
+      "computer": "Điều khiển máy tính"
     }
   },
   "general": {
@@ -495,5 +496,46 @@
       "done_other": "Đã nhập {{count}} cookie từ {{browser}} vào {{profile}}.",
       "skipped_other": "Đã bỏ qua {{count}} cookie (hết hạn hoặc không đọc được)."
     }
+  },
+  "computerSection": {
+    "title": "Điều khiển máy tính",
+    "description": "Cho phép agent dùng các ứng dụng trên máy này: agent đọc nội dung cửa sổ, rồi bấm, gõ chữ và dùng menu, thường là không chiếm màn hình của bạn.",
+    "risk": "Agent có thể làm trong một ứng dụng bất cứ điều gì bạn làm được ở đó. Nội dung agent đọc trong ứng dụng (một email, một tin nhắn) có thể tìm cách đánh lừa nó, nên hãy giữ chế độ “hỏi trước khi thao tác” trừ khi bạn tin tưởng tác vụ. Agent không bao giờ được dùng chính PP Agent, các terminal, hay phần cài đặt mật khẩu và quyền riêng tư.",
+    "enable": {
+      "title": "Cho phép agent dùng ứng dụng",
+      "description": "Việc xem cửa sổ chạy luôn. Bấm, gõ chữ và mở ứng dụng sẽ hỏi bạn trước, trừ khi bạn đặt công cụ điều khiển máy tính chạy không cần hỏi trong Cài đặt › Công cụ."
+    },
+    "status": {
+      "title": "Quyền truy cập",
+      "loading": "Đang kiểm tra quyền…",
+      "loadError": "Không kiểm tra được quyền truy cập",
+      "unsupported": "Máy này không hỗ trợ điều khiển máy tính.",
+      "missing": "PP Agent cần quyền {{what}} trong Cài đặt hệ thống › Quyền riêng tư & Bảo mật.",
+      "accessibility": "Trợ năng",
+      "screenRecording": "Ghi màn hình",
+      "both": "Trợ năng và Ghi màn hình",
+      "ready": "PP Agent đã có đủ quyền cần thiết.",
+      "grant": "Cấp quyền",
+      "oneAtATime": "macOS hỏi từng quyền một: cho phép Trợ năng trước, rồi bấm Cấp quyền lần nữa cho Ghi màn hình.",
+      "restartHint": "Sau khi bật quyền, nếu vẫn báo thiếu, hãy thoát rồi mở lại PP Agent."
+    },
+    "allowed": {
+      "title": "Luôn cho phép",
+      "description": "Agent được dùng các ứng dụng này mà không hỏi bạn trước về ứng dụng. Việc bấm và gõ chữ trong đó vẫn theo thiết lập ở trên.",
+      "empty": "Chưa có ứng dụng nào. Chọn “Luôn cho phép” khi agent xin dùng một ứng dụng."
+    },
+    "blocked": {
+      "title": "Bị chặn",
+      "description": "Agent không bao giờ được dùng các ứng dụng này.",
+      "empty": "Không có ứng dụng nào bị chặn."
+    },
+    "actions": {
+      "block": "Chặn {{name}}",
+      "allow": "Cho phép {{name}}",
+      "remove": "Gỡ {{name}}",
+      "blockLabel": "Chặn",
+      "allowLabel": "Cho phép"
+    },
+    "loadError": "Không tải được danh sách ứng dụng"
   }
 }

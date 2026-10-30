@@ -64,6 +64,9 @@ import {
   type SaveAgentInput,
   type SaveWorkspaceInput,
   type BrowserProfile,
+  type ComputerApp,
+  type ComputerAppAccess,
+  type ComputerAppRemember,
   type BrowserProfileImport,
   type SaveBrowserProfileInput,
   BROWSER_PROFILE_LIMITS,
@@ -140,6 +143,13 @@ import type {
 import { buildPrompt, splitAttachedFiles, withAttachedFiles } from "./attachments.ts";
 import { createBrowserTool } from "./browser-tool.ts";
 import {
+  COMPUTER_TOOL,
+  type ComputerAppNames,
+  computerActionTier,
+  createComputerTool,
+} from "./computer-tool.ts";
+import { checkApp, computerAppAccess, rememberApproval, withAccess } from "./computer-apps.ts";
+import {
   newProfileId,
   sortBrowserProfiles,
   validateImport,
@@ -163,7 +173,7 @@ import {
   userContent,
 } from "./history.ts";
 import { configureLanguage, currentLanguage, t } from "./i18n.ts";
-import type { BrowserBridge, HostEnvironment, ServiceControl } from "./host-io.ts";
+import type { BrowserBridge, ComputerBridge, HostEnvironment, ServiceControl } from "./host-io.ts";
 import { configureOutput, emit, errorMessage, openUrl } from "./ipc.ts";
 import { buildOverview, McpCommands, McpConfigFile, McpRegistrations } from "./mcp.ts";
 import { VaultMcpAuthStore } from "./mcp-auth.ts";
@@ -341,6 +351,8 @@ interface ConversationState {
   >;
   /** MCP servers connected for this conversation's agent. */
   mcpServers: McpRegistrations;
+  /** Ids of the apps the person let the `computer` tool use for the rest of this conversation. */
+  computerApps: Set<string>;
   running: boolean;
   /** Agent and workspace as of when it left the window; the host's own fields are the open one's. */
   agentId: string;
@@ -519,12 +531,17 @@ export class AgentHost {
   readonly service: ServiceControl;
   /** The window's side panel browser, for the agent's browser tool. */
   private readonly browser: BrowserBridge | undefined;
+  /** The window's cua-driver, for the agent's computer tool. */
+  private readonly computer: ComputerBridge | undefined;
+  /** App names the computer tool has seen, so its approvals name the app. */
+  private readonly computerAppNames: ComputerAppNames = new Map();
 
   constructor(environment: HostEnvironment) {
     configureOutput(environment.output);
     this.credentials = new VaultCredentialStore(environment.vault);
     this.service = environment.service;
     this.browser = environment.browser;
+    this.computer = environment.computer;
     // Commands wait for `ready`; a failed init must not also surface as an unhandled rejection.
     this.ready.promise.catch(() => undefined);
   }
@@ -682,7 +699,7 @@ export class AgentHost {
       case "new_chat":
         return this.openSession(null, command.workspaceId ?? null);
       case "respond_approval":
-        return this.resolveApproval(command.requestId, command.approved);
+        return this.resolveApproval(command.requestId, command.approved, command.remember);
       case "respond_question":
         return this.resolveQuestion(command.requestId, command.answers);
       case "list_sessions":
@@ -897,6 +914,11 @@ export class AgentHost {
         return this.deleteBrowserProfile(command.id);
       case "record_browser_import":
         return this.recordBrowserImport(command.id, command.lastImport);
+
+      case "list_computer_apps":
+        return services.settings.get().computerApps;
+      case "set_computer_app_access":
+        return this.setComputerAppAccess(command.app, command.access);
 
       default: {
         const unknown: never = command;
@@ -1545,6 +1567,8 @@ export class AgentHost {
       approvalGate: this.gateFor(
         () => this.agentOf(conversation),
         (request) => this.requestApproval(conversation, request),
+        undefined,
+        conversation.computerApps,
       ),
       askUser: (call, signal) => this.requestQuestion(conversation, call, signal),
       surface: { kind: "window", label: "in the desktop window" },
@@ -1573,6 +1597,7 @@ export class AgentHost {
       createWebSearchTool(webSearch),
       createWebFetchTool(),
       createBrowserTool(this.browser),
+      createComputerTool(this.computer, this.computerAppNames),
       ...createOfficeTools({
         workspaceDir: cwd,
         homeDir: join(paths.agentDir, "officecli"),
@@ -1691,6 +1716,7 @@ export class AgentHost {
         if (this.open === conversation) emit({ type: "message", message });
       }),
       approvals: new Map(),
+      computerApps: new Set(),
       questions: new Map(),
       mcpServers: new McpRegistrations(mcpConfig, (name) => {
         const { mcpServers } = this.agentOf(state);
@@ -1959,16 +1985,22 @@ export class AgentHost {
   /**
    * Extension that applies tool policies for `agent` and settles tools that need approval through
    * `ask`: the open conversation asks the person, a scheduled run (nobody there) denies.
+   * `computerApps` (the window's conversations only) holds the apps the person allowed for the
+   * conversation; without it the computer tool is blocked.
    */
   private gateFor(
     agent: () => AgentProfile,
     ask: (request: ApprovalRequest) => Promise<boolean>,
     declinedReason = "The user declined this action.",
+    computerApps?: Set<string>,
   ): ExtensionFactory {
     return (pi) => {
       pi.on("tool_call", async (event) => {
         const info = pi.getAllTools().find((tool) => tool.name === event.toolName);
-        const tier = toolTier(event.toolName, info?.annotations);
+        const computer = event.toolName === COMPUTER_TOOL;
+        const tier = computer
+          ? computerActionTier(event.input.action)
+          : toolTier(event.toolName, info?.annotations);
         const settings = this.services?.settings.get();
         if (!settings) return { block: true, reason: "The app is still starting." };
         // Tools that are off stay registered (codemode can reach any registered tool), so the gate
@@ -1979,7 +2011,19 @@ export class AgentHost {
         const profile = agent();
         if (!agentAllowsTool(profile.tools, event.toolName))
           return { block: true, reason: `${event.toolName} is not available to ${profile.name}.` };
-        if (rule.effective === "allow") return undefined;
+        let app: ComputerApp | undefined;
+        if (computer) {
+          if (!computerApps) return { block: true, reason: t("computerApps.windowOnly") };
+          const access = computerAppAccess(
+            event.input.app,
+            settings.computerApps,
+            computerApps,
+            (id) => this.computerAppNames.get(id),
+          );
+          if (access.kind === "refused") return { block: true, reason: access.reason };
+          if (access.kind === "ask") app = access.app;
+        }
+        if (rule.effective === "allow" && !app) return undefined;
         const approved = await ask({
           requestId: randomUUID(),
           toolCallId: event.toolCallId,
@@ -1987,14 +2031,30 @@ export class AgentHost {
           toolName: event.toolName,
           tier,
           ...describeToolCall(event.toolName, this.approvalInput(event.toolName, event.input)),
+          ...(app ? { app } : {}),
         });
-        return approved ? undefined : { block: true, reason: declinedReason };
+        if (!approved) return { block: true, reason: declinedReason };
+        // The person may have blocked the app while the card waited; that wins over the approval.
+        if (computer) {
+          const again = computerAppAccess(
+            event.input.app,
+            this.services?.settings.get().computerApps ?? settings.computerApps,
+            computerApps ?? new Set(),
+            (id) => this.computerAppNames.get(id),
+          );
+          if (again.kind === "refused") return { block: true, reason: again.reason };
+        }
+        return undefined;
       });
     };
   }
 
   /** What the approval card describes: a note to forget is shown by its text, not its id. */
   private approvalInput(toolName: string, input: Record<string, unknown>): Record<string, unknown> {
+    if (toolName === COMPUTER_TOOL && typeof input.app === "string") {
+      const appName = this.computerAppNames.get(input.app.trim());
+      return appName ? { ...input, appName } : input;
+    }
     if (toolName !== MEMORY_FORGET_TOOL || typeof input.id !== "string") return input;
     const note = this.services?.memory.find(input.id.trim());
     return note ? { ...input, text: note.text } : input;
@@ -2058,11 +2118,32 @@ export class AgentHost {
     return this.conversations().find((conversation) => conversation[kind].has(requestId));
   }
 
-  private resolveApproval(requestId: string, approved: boolean): void {
+  private resolveApproval(
+    requestId: string,
+    approved: boolean,
+    remember?: ComputerAppRemember,
+  ): void {
     const conversation = this.waitingOn(requestId, "approvals");
     const entry = conversation?.approvals.get(requestId);
     if (!conversation || !entry) return;
     conversation.approvals.delete(requestId);
+    const { app } = entry.request;
+    // An app blocked while the card waited stays blocked: "Always" must not take it off that list.
+    // The approval gate then refuses the call.
+    const blocked =
+      app !== undefined &&
+      (this.services?.settings.get().computerApps.blocked.some((other) => other.id === app.id) ??
+        false);
+    if (approved && app && !blocked) {
+      const failed = rememberApproval(app, remember, conversation.computerApps, (always) =>
+        this.setComputerAppAccess(always, "allowed"),
+      );
+      if (failed)
+        emit({
+          type: "error",
+          message: t("computerApps.saveFailed", { name: app.name, error: failed.message }),
+        });
+    }
     conversation.transcript.setToolStatus(
       entry.request.toolCallId,
       approved ? "running" : "denied",
@@ -2799,6 +2880,24 @@ export class AgentHost {
     const saved = { ...this.requireBrowserProfile(id), lastImport: validateImport(lastImport) };
     this.putBrowserProfile(saved);
     return saved;
+  }
+
+  private setComputerAppAccess(
+    input: ComputerApp,
+    access: "allowed" | "blocked" | null,
+  ): ComputerAppAccess {
+    const app = checkApp(input);
+    if (!app) throw new Error("This app id is not valid.");
+    const { settings } = this.requireServices();
+    const next = withAccess(settings.get().computerApps, app, access);
+    settings.update((draft) => {
+      draft.computerApps = next;
+    });
+    // A blocked app stops for the conversations that had it allowed as well.
+    if (access === "blocked")
+      for (const conversation of this.conversations()) conversation.computerApps.delete(app.id);
+    emit({ type: "settings_changed", scopes: ["computerApps"] });
+    return next;
   }
 
   private putBrowserProfile(saved: BrowserProfile): void {
@@ -3947,6 +4046,7 @@ function cleanGatewayModels(models: readonly GatewayModel[]): GatewayModel[] {
 
 export type {
   BrowserBridge,
+  ComputerBridge,
   HostEnvironment,
   HostOutput,
   ServiceControl,

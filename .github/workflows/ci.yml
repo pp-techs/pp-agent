@@ -64,6 +64,8 @@ jobs:
           test -d ../../packages/agent-core/node_modules/@officecli/officecli/vendor
           # webclaw is not an npm package: download the binary for this runner (checksum-pinned).
           node scripts/fetch-webclaw.mjs --require
+          # cua-driver (computer use) has no Linux build in the app; this only prints a note.
+          node scripts/fetch-cua-driver.mjs
           vp exec electron-builder --config electron-builder.yml --linux --x64 --publish never
           # The release workflow uploads this feed; the installed app finds updates through it.
           test -f release/latest-linux.yml
@@ -99,6 +101,8 @@ jobs:
           test -d ../../packages/agent-core/node_modules/@officecli/officecli/vendor
           # webclaw is not an npm package: download the binary for this runner (checksum-pinned).
           node scripts/fetch-webclaw.mjs --require
+          # cua-driver (computer use) is not an npm package either (checksum-pinned).
+          node scripts/fetch-cua-driver.mjs --require
           vp exec electron-builder --config electron-builder.yml --win --x64 --publish never
           # The release workflow uploads this feed; the installed app finds updates through it.
           test -f release/latest.yml

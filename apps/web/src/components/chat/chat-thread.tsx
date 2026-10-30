@@ -37,9 +37,9 @@ export function ChatThread({ bridge }: { bridge: DesktopBridge }) {
   const thread: ChatThreadContextValue = {
     state: { busy: running, approvals, responding },
     actions: {
-      respondApproval: (requestId, approved) =>
+      respondApproval: (requestId, approved, remember) =>
         respondToApproval(
-          { requestId, approved },
+          { requestId, approved, remember },
           { onError: (error) => toast.error(error.message) },
         ),
       regenerate,

@@ -96,6 +96,7 @@ const BUILT_IN_TOOL_NAMES = [
   "web_search",
   "web_fetch",
   "browser",
+  "computer",
   "memory_save",
   "memory_list",
   "memory_search",

@@ -217,7 +217,8 @@
       "workspace": "không gian làm việc",
       "pattern": "một mẫu",
       "text": "văn bản",
-      "page": "một trang"
+      "page": "một trang",
+      "app": "một ứng dụng"
     },
     "titles": {
       "read": {
@@ -346,6 +347,63 @@
           "done": "Đã dùng trình duyệt",
           "notDone": "Dùng trình duyệt"
         }
+      },
+      "computer": {
+        "apps": {
+          "active": "Đang xem các ứng dụng đang mở",
+          "done": "Đã xem các ứng dụng đang mở",
+          "notDone": "Xem các ứng dụng đang mở"
+        },
+        "look": {
+          "active": "Đang xem {{target}}",
+          "done": "Đã xem {{target}}",
+          "notDone": "Xem {{target}}"
+        },
+        "open": {
+          "active": "Đang mở {{target}}",
+          "done": "Đã mở {{target}}",
+          "notDone": "Mở {{target}}"
+        },
+        "click": {
+          "active": "Đang bấm trong {{target}}",
+          "done": "Đã bấm trong {{target}}",
+          "notDone": "Bấm trong {{target}}"
+        },
+        "drag": {
+          "active": "Đang kéo thả trong {{target}}",
+          "done": "Đã kéo thả trong {{target}}",
+          "notDone": "Kéo thả trong {{target}}"
+        },
+        "type": {
+          "active": "Đang gõ chữ trong {{target}}",
+          "done": "Đã gõ chữ trong {{target}}",
+          "notDone": "Gõ chữ trong {{target}}"
+        },
+        "keys": {
+          "active": "Đang nhấn phím trong {{target}}",
+          "done": "Đã nhấn phím trong {{target}}",
+          "notDone": "Nhấn phím trong {{target}}"
+        },
+        "set": {
+          "active": "Đang đổi một thiết lập trong {{target}}",
+          "done": "Đã đổi một thiết lập trong {{target}}",
+          "notDone": "Đổi một thiết lập trong {{target}}"
+        },
+        "scroll": {
+          "active": "Đang cuộn trong {{target}}",
+          "done": "Đã cuộn trong {{target}}",
+          "notDone": "Cuộn trong {{target}}"
+        },
+        "menu": {
+          "active": "Đang dùng menu của {{target}}",
+          "done": "Đã dùng menu của {{target}}",
+          "notDone": "Dùng menu của {{target}}"
+        },
+        "other": {
+          "active": "Đang dùng {{target}}",
+          "done": "Đã dùng {{target}}",
+          "notDone": "Dùng {{target}}"
+        }
       }
     },
     "ask": {
@@ -366,7 +424,15 @@
       "question": "{{title}}?",
       "description": "Agent muốn thực hiện một thay đổi. Hãy xem lại trước khi thay đổi được áp dụng.",
       "deny": "Từ chối",
-      "approve": "Duyệt"
+      "approve": "Duyệt",
+      "app": {
+        "question": "Cho phép agent dùng {{app}}?",
+        "description": "Đây là lần đầu agent muốn dùng {{app}} trong cuộc trò chuyện này. Agent có thể thấy những gì ứng dụng hiển thị và thao tác trong đó.",
+        "firstStep": "Bước đầu tiên: {{title}}",
+        "once": "Cho phép lần này",
+        "conversation": "Cho phép trong cuộc trò chuyện này",
+        "always": "Luôn cho phép"
+      }
     },
     "todo": {
       "title": "Danh sách việc cần làm",

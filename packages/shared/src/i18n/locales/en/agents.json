@@ -48,6 +48,10 @@
       "label": "Use the browser",
       "description": "Open pages in the side panel browser with your sign-ins, click and fill in forms."
     },
+    "computer": {
+      "label": "Use apps on this computer",
+      "description": "Read app windows, click, type and use menus in desktop apps you allow."
+    },
     "write": {
       "label": "Create and save files",
       "description": "Save new files; asks first."

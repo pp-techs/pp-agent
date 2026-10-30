@@ -1,4 +1,10 @@
-import type { ApprovalRequest, ChatMessage, ChatPart } from "@workspace/shared";
+import type {
+  ApprovalRequest,
+  ChatMessage,
+  ChatPart,
+  ComputerApp,
+  ComputerToolAction,
+} from "@workspace/shared";
 import { Button } from "@workspace/ui/components/button";
 import { CodeBlock, CodeBlockContent } from "@workspace/ui/components/code-block";
 import {
@@ -36,6 +42,7 @@ import {
   ListChecksIcon,
   type LucideIcon,
   MessageCircleQuestionIcon,
+  MonitorIcon,
   SaveIcon,
   SearchIcon,
   ShieldQuestionIcon,
@@ -45,6 +52,7 @@ import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import { useChatThread } from "@/components/chat/chat-thread-context";
+import { appLabel } from "@/lib/app-label";
 import { useChatStore } from "@/stores/chat-store";
 
 type ToolPart = Extract<ChatPart, { type: "tool" }>;
@@ -69,6 +77,7 @@ const ICONS: Record<string, LucideIcon> = {
   sessions: HistoryIcon,
   schedule_manage: CalendarClockIcon,
   browser: GlobeIcon,
+  computer: MonitorIcon,
   office_read: FileTextIcon,
   office_edit: SaveIcon,
 };
@@ -102,6 +111,35 @@ function browserTitle(args: Record<string, unknown>, state: StepState, t: TFunct
   const host = URL.canParse(url) ? new URL(url).hostname : "";
   const target = host || url || t("toolStep.fallbacks.page");
   return t(`toolStep.titles.browser.${kind}.${state}`, { target });
+}
+
+/** What the person reads for each action of the agent's computer tool. */
+const COMPUTER_STEP = {
+  apps: "apps",
+  windows: "look",
+  snapshot: "look",
+  screenshot: "look",
+  launch: "open",
+  click: "click",
+  double_click: "click",
+  right_click: "click",
+  drag: "drag",
+  type: "type",
+  press: "keys",
+  hotkey: "keys",
+  set_value: "set",
+  scroll: "scroll",
+  menu: "menu",
+} as const satisfies Record<ComputerToolAction, string>;
+
+function computerTitle(args: Record<string, unknown>, state: StepState, t: TFunction<"chat">) {
+  const action = stringArg(args, "action") ?? "";
+  const kind = Object.hasOwn(COMPUTER_STEP, action)
+    ? COMPUTER_STEP[action as ComputerToolAction]
+    : "other";
+  const app = stringArg(args, "app")?.trim();
+  const target = app ? appLabel(app) : t("toolStep.fallbacks.app");
+  return t(`toolStep.titles.computer.${kind}.${state}`, { target });
 }
 
 /** Plain-language step titles for people who do not know what `grep` is. */
@@ -162,6 +200,8 @@ function stepTitle(part: ToolPart, t: TFunction<"chat">) {
       return t(`toolStep.titles.scheduleManage.${state}`);
     case "browser":
       return browserTitle(part.args, state, t);
+    case "computer":
+      return computerTitle(part.args, state, t);
   }
   // MCP tools are named mcp__<server>__<tool>.
   const mcp = /^mcp__(.+?)__(.+)$/.exec(part.name);
@@ -170,12 +210,78 @@ function stepTitle(part: ToolPart, t: TFunction<"chat">) {
     : t(`toolStep.titles.other.${state}`, { name: part.name });
 }
 
+/** The agent asks to use an app for the first time in this chat; the person chooses for how long. */
+function AppApprovalCard({ approval, app }: { approval: ApprovalRequest; app: ComputerApp }) {
+  const { t } = useTranslation("chat");
+  const {
+    state: { responding },
+    actions: { respondApproval },
+  } = useChatThread();
+  return (
+    <Item variant="outline" size="sm" className="w-full">
+      <ItemMedia variant="icon">
+        <MonitorIcon />
+      </ItemMedia>
+      <ItemContent className="min-w-0">
+        <ItemTitle>{t("toolStep.approval.app.question", { app: app.name })}</ItemTitle>
+        <ItemDescription>
+          {t("toolStep.approval.app.description", { app: app.name })}
+        </ItemDescription>
+        <ItemDescription>
+          {t("toolStep.approval.app.firstStep", { title: approval.title })}
+        </ItemDescription>
+        {approval.detail && (
+          <CodeBlock size="sm" className="mt-2">
+            <CodeBlockContent wrap className="max-h-48">
+              {approval.detail}
+            </CodeBlockContent>
+          </CodeBlock>
+        )}
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={responding}
+            onClick={() => respondApproval(approval.requestId, false)}
+          >
+            {t("toolStep.approval.deny")}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={responding}
+            onClick={() => respondApproval(approval.requestId, true)}
+          >
+            {t("toolStep.approval.app.once")}
+          </Button>
+          <Button
+            size="sm"
+            disabled={responding}
+            onClick={() => respondApproval(approval.requestId, true, "conversation")}
+          >
+            {t("toolStep.approval.app.conversation")}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={responding}
+            onClick={() => respondApproval(approval.requestId, true, "always")}
+          >
+            {t("toolStep.approval.app.always")}
+          </Button>
+        </div>
+      </ItemContent>
+    </Item>
+  );
+}
+
 function ApprovalCard({ approval }: { approval: ApprovalRequest }) {
   const { t } = useTranslation("chat");
   const {
     state: { responding },
     actions: { respondApproval },
   } = useChatThread();
+  if (approval.app) return <AppApprovalCard approval={approval} app={approval.app} />;
   return (
     <Item variant="outline" size="sm" className="w-full">
       <ItemMedia variant="icon">

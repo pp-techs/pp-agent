@@ -217,7 +217,8 @@
       "workspace": "the workspace",
       "pattern": "a pattern",
       "text": "text",
-      "page": "a page"
+      "page": "a page",
+      "app": "an app"
     },
     "titles": {
       "read": {
@@ -346,6 +347,63 @@
           "done": "Used the browser",
           "notDone": "Use the browser"
         }
+      },
+      "computer": {
+        "apps": {
+          "active": "Checking which apps are open",
+          "done": "Checked which apps are open",
+          "notDone": "Check which apps are open"
+        },
+        "look": {
+          "active": "Looking at {{target}}",
+          "done": "Looked at {{target}}",
+          "notDone": "Look at {{target}}"
+        },
+        "open": {
+          "active": "Opening {{target}}",
+          "done": "Opened {{target}}",
+          "notDone": "Open {{target}}"
+        },
+        "click": {
+          "active": "Clicking in {{target}}",
+          "done": "Clicked in {{target}}",
+          "notDone": "Click in {{target}}"
+        },
+        "drag": {
+          "active": "Dragging in {{target}}",
+          "done": "Dragged in {{target}}",
+          "notDone": "Drag in {{target}}"
+        },
+        "type": {
+          "active": "Typing in {{target}}",
+          "done": "Typed in {{target}}",
+          "notDone": "Type in {{target}}"
+        },
+        "keys": {
+          "active": "Pressing keys in {{target}}",
+          "done": "Pressed keys in {{target}}",
+          "notDone": "Press keys in {{target}}"
+        },
+        "set": {
+          "active": "Changing a setting in {{target}}",
+          "done": "Changed a setting in {{target}}",
+          "notDone": "Change a setting in {{target}}"
+        },
+        "scroll": {
+          "active": "Scrolling in {{target}}",
+          "done": "Scrolled in {{target}}",
+          "notDone": "Scroll in {{target}}"
+        },
+        "menu": {
+          "active": "Using the menu of {{target}}",
+          "done": "Used the menu of {{target}}",
+          "notDone": "Use the menu of {{target}}"
+        },
+        "other": {
+          "active": "Using {{target}}",
+          "done": "Used {{target}}",
+          "notDone": "Use {{target}}"
+        }
       }
     },
     "ask": {
@@ -366,7 +424,15 @@
       "question": "{{title}}?",
       "description": "The agent wants to make a change. Review it before it happens.",
       "deny": "Deny",
-      "approve": "Approve"
+      "approve": "Approve",
+      "app": {
+        "question": "Let the agent use {{app}}?",
+        "description": "This is the first time the agent wants to use {{app}} in this chat. It can see what the app shows and act in it.",
+        "firstStep": "First step: {{title}}",
+        "once": "Allow once",
+        "conversation": "Allow in this chat",
+        "always": "Always allow"
+      }
     },
     "todo": {
       "title": "Checklist",

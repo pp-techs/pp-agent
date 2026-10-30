@@ -1,8 +1,15 @@
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import type { AppSettings, ToolPolicy, ToolTier, ToolWarning } from "@workspace/shared";
+import type {
+  AppSettings,
+  ComputerToolAction,
+  ToolPolicy,
+  ToolTier,
+  ToolWarning,
+} from "@workspace/shared";
 import { t } from "./i18n.ts";
 import { WEB_FETCH_TOOL, WEB_SEARCH_TOOL } from "./web/names.ts";
 import { BROWSER_TOOL } from "./browser-tool.ts";
+import { COMPUTER_TOOL } from "./computer-tool.ts";
 import { Type } from "typebox";
 import {
   MEMORY_FORGET_TOOL,
@@ -62,6 +69,7 @@ const MANAGED_TOOLS = [
   WEB_SEARCH_TOOL,
   WEB_FETCH_TOOL,
   BROWSER_TOOL,
+  COMPUTER_TOOL,
   ...MEMORY_TOOLS,
   TODO_TOOL,
   DELEGATE_TOOL,
@@ -83,6 +91,7 @@ export const AGENT_TOOLS = [
   WEB_SEARCH_TOOL,
   WEB_FETCH_TOOL,
   BROWSER_TOOL,
+  COMPUTER_TOOL,
   ...MEMORY_TOOLS,
   TODO_TOOL,
   DELEGATE_TOOL,
@@ -118,6 +127,9 @@ const TIERS: Record<string, ToolTier> = {
   // Runs on its own like the web tools; the person watches every step in the side panel and can
   // switch it to ask (or off) in Settings › Tools.
   [BROWSER_TOOL]: "read",
+  // Listed as write: what it does with an app is the person's to approve. The approval gate rates
+  // each call by its action instead (`computerActionTier`), so looking at a window runs on its own.
+  [COMPUTER_TOOL]: "write",
   [MEMORY_SAVE_TOOL]: "write",
   [MEMORY_FORGET_TOOL]: "write",
   [MEMORY_LIST_TOOL]: "read",
@@ -167,8 +179,10 @@ export function toolRule(name: string, tier: ToolTier, settings: AppSettings): T
   }
   if (name === FOREIGN_SHELL) return { policy: "off", effective: "off", locked: true };
   if (DISCOVERY_TOOLS[name] === true) return { policy: "allow", effective: "allow", locked: true };
-  // Untouched tools run on `auto`, except `edit`, which is off: non-developers use `write`.
-  const policy = settings.toolPolicies[name] ?? (name === "edit" ? "off" : "auto");
+  // Untouched tools run on `auto`, except `edit`, which is off (non-developers use `write`), and
+  // `computer`, which the person turns on once PP Agent may control the computer.
+  const policy =
+    settings.toolPolicies[name] ?? (name === "edit" || name === COMPUTER_TOOL ? "off" : "auto");
   const effective = policy === "auto" ? (tier === "read" ? "allow" : "ask") : policy;
   return { policy, effective, locked: false };
 }
@@ -318,6 +332,7 @@ export function describeToolCall(
     };
   }
   if (toolName === ASK_TOOL) return { title: t("approvals.askUser"), detail: "" };
+  if (toolName === COMPUTER_TOOL) return describeComputerCall(input);
   const mcp = parseMcpToolName(toolName);
   if (mcp) {
     return {
@@ -328,6 +343,63 @@ export function describeToolCall(
   return {
     title: t("approvals.run", { tool: toolName }),
     detail: preview(JSON.stringify(input, null, 2)),
+  };
+}
+
+const COMPUTER_TITLES = {
+  apps: "approvals.computer.apps",
+  windows: "approvals.computer.look",
+  snapshot: "approvals.computer.look",
+  screenshot: "approvals.computer.look",
+  launch: "approvals.computer.launch",
+  click: "approvals.computer.click",
+  double_click: "approvals.computer.click",
+  right_click: "approvals.computer.click",
+  type: "approvals.computer.type",
+  set_value: "approvals.computer.setValue",
+  press: "approvals.computer.press",
+  hotkey: "approvals.computer.press",
+  scroll: "approvals.computer.scroll",
+  drag: "approvals.computer.drag",
+  menu: "approvals.computer.menu",
+} as const satisfies Record<ComputerToolAction, string>;
+
+/** What a computer call types, presses or chooses, or where it points. */
+function computerCallDetail(action: string, input: Record<string, unknown>): string {
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
+  const list = (value: unknown) => (Array.isArray(value) ? value.map((item) => text(item)) : []);
+  switch (action) {
+    case "type":
+      return text(input.text);
+    case "set_value":
+      return text(input.value);
+    case "press":
+      return text(input.key);
+    case "hotkey":
+      return list(input.keys).join("+");
+    case "menu":
+      return list(input.path).join(" › ");
+    default:
+      if (typeof input.ref === "string") return input.ref;
+      if (typeof input.x === "number" && typeof input.y === "number")
+        return `${input.x}, ${input.y}`;
+      return "";
+  }
+}
+
+/** `appName` is added by the approval gate from the names the tool has seen. */
+function describeComputerCall(input: Record<string, unknown>): { title: string; detail: string } {
+  const action = typeof input.action === "string" ? input.action : "";
+  const app =
+    typeof input.appName === "string"
+      ? input.appName
+      : typeof input.app === "string"
+        ? input.app
+        : t("approvals.computer.anApp");
+  const detail = computerCallDetail(action, input);
+  return {
+    title: t(COMPUTER_TITLES[action as ComputerToolAction] ?? "approvals.computer.use", { app }),
+    detail: preview(detail),
   };
 }
 

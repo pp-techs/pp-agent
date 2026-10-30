@@ -22,6 +22,7 @@ System design, component interactions, data flows, deployment, and external inte
 | [providers-and-mcp.md](architecture/providers-and-mcp.md)                       | Provider sign-in with auth prompts, gateways, per-agent MCP registration, `/mcp` status                                 |
 | [build-and-packaging.md](architecture/build-and-packaging.md)                   | `vp pack` bundles, renderer build and CSP, electron-builder, dev flow on port 47821                                     |
 | [side-panel.md](architecture/side-panel.md)                                     | Right side panel: terminal (node-pty), workspace files, browser tabs with profiles, cookie import, `BrowserDriver` seam |
+| [computer-use.md](architecture/computer-use.md)                                 | The agent's `computer` tool: cua-driver as a child of main, macOS grants, per-app approvals, protected apps             |
 
 ## Codebase
 

@@ -18,7 +18,8 @@
       "scheduledTasks": "Scheduled tasks",
       "channels": "Channels",
       "background": "Background",
-      "browser": "Browser"
+      "browser": "Browser",
+      "computer": "Computer use"
     }
   },
   "general": {
@@ -503,5 +504,46 @@
       "skipped_one": "{{count}} cookie was skipped (expired or unreadable).",
       "skipped_other": "{{count}} cookies were skipped (expired or unreadable)."
     }
+  },
+  "computerSection": {
+    "title": "Computer use",
+    "description": "Lets the agent use apps on this computer: it reads what a window shows, then clicks, types and uses menus, usually without taking over your screen.",
+    "risk": "The agent can do in an app whatever you could do there. Text it reads in an app (an email, a chat) could try to trick it, so keep “acting asks first” unless you trust the task. The agent can never use PP Agent itself, terminals, or password and privacy settings.",
+    "enable": {
+      "title": "Let the agent use apps",
+      "description": "Looking at a window runs on its own. Clicking, typing and opening apps ask you first, unless you set the computer tool to run without asking in Settings › Tools."
+    },
+    "status": {
+      "title": "Access",
+      "loading": "Checking access…",
+      "loadError": "Could not check access",
+      "unsupported": "Computer use is not available on this computer.",
+      "missing": "PP Agent needs access to {{what}} in System Settings › Privacy & Security.",
+      "accessibility": "Accessibility",
+      "screenRecording": "Screen Recording",
+      "both": "Accessibility and Screen Recording",
+      "ready": "PP Agent has the access it needs.",
+      "grant": "Grant access",
+      "oneAtATime": "macOS asks for one at a time: allow Accessibility first, then click Grant access again for Screen Recording.",
+      "restartHint": "After you turn access on, quit and reopen PP Agent if it still shows as missing."
+    },
+    "allowed": {
+      "title": "Always allowed",
+      "description": "The agent may use these apps without asking you which app first. Clicking and typing in them still follow the setting above.",
+      "empty": "No apps yet. Choose “Always allow” when the agent asks to use an app."
+    },
+    "blocked": {
+      "title": "Blocked",
+      "description": "The agent may never use these apps.",
+      "empty": "No blocked apps."
+    },
+    "actions": {
+      "block": "Block {{name}}",
+      "allow": "Allow {{name}}",
+      "remove": "Remove {{name}}",
+      "blockLabel": "Block",
+      "allowLabel": "Allow"
+    },
+    "loadError": "Could not load the app lists"
   }
 }
