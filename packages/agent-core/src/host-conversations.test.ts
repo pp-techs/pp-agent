@@ -31,6 +31,13 @@ function modelServer() {
         const last = messages.filter((message) => message.role === "user").at(-1)?.content;
         const text = typeof last === "string" ? last : JSON.stringify(last);
         const message = /hold-[a-z]+/.exec(text)?.[0] ?? text;
+        // The background title and memory passes answer at once with nothing usable; only the
+        // chat is gated.
+        const background = messages.some(
+          (m) =>
+            m.role === "system" &&
+            /short title for it|lasting facts/.test(JSON.stringify(m.content)),
+        );
         response.writeHead(200, { "content-type": "text/event-stream" });
         const send = (delta: object, finish: string | null = null) =>
           response.write(
@@ -43,8 +50,8 @@ function modelServer() {
             })}\n\n`,
           );
         send({ role: "assistant", content: "" });
-        await gate(message).promise;
-        send({ content: `reply ${message}` });
+        if (!background) await gate(message).promise;
+        send({ content: background ? "" : `reply ${message}` });
         send({}, "stop");
         response.write("data: [DONE]\n\n");
         response.end();

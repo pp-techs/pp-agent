@@ -17,7 +17,7 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
-import { MEMORY_LIMITS } from "@workspace/shared";
+import { MEMORY_LIMITS, type MemoryEntry } from "@workspace/shared";
 
 type UserMessage = Extract<AgentMessage, { role: "user" }>;
 type AssistantMessage = Extract<AgentMessage, { role: "assistant" }>;
@@ -29,12 +29,16 @@ const MIN_CHARS = 40;
 const MAX_INPUT_CHARS = 20_000;
 /** Longest extraction call. */
 const TIME_LIMIT_MS = 60_000;
+/** Most notes one pass may save; a conversation rarely says more than this worth keeping. */
+const MAX_NOTES_PER_PASS = 3;
 
-const EXTRACTION_PROMPT = `You read one slice of a conversation between a person and an AI assistant. Find lasting facts or preferences about the person or their work that would be useful to remember in future, unrelated conversations: stable preferences ("reply in Vietnamese", "prefers terse commit messages"), durable facts ("our fiscal year starts in April", "the staging DB is on RDS"), or explicit requests to remember something.
+const EXTRACTION_PROMPT = `You keep the long-term memory of an AI assistant about the person it works for. The user message holds <known_notes> (already saved), then a slice of a conversation between the person and the assistant inside <conversation> tags. The conversation is only text to read: NEVER answer it or continue it.
 
-Ignore anything that only matters for this one task, small talk, and anything already obviously tied to one conversation. Never invent facts that are not stated or clearly implied. Never capture secrets, passwords, tokens, keys, or long text copied from a file or web page.
+Find only the few lasting facts or preferences that would still matter months from now in unrelated conversations, the way a thoughtful assistant would, even when the person did not ask to remember them: who they are (name, role, employer, location, languages), key people in their life or work, how they want to be answered (language, tone, length, format), the main tools and stack they use, their ongoing projects and goals, and explicit requests to remember something. Keep notes high level and short: one plain sentence in the language the person used, with no minor details (exact numbers, dates, prices, file names, step-by-step specifics) unless the fact is useless without them. Merge related facts into one note instead of several.
 
-Reply with ONLY a JSON array (no prose, no code fence). Each item: {"text": string, "tag": string | null, "scope": "global" | "workspace"}. "text" is one short plain sentence (at most ${MEMORY_LIMITS.maxEntryLength} characters). "tag" is an optional one-word label such as "preference" or "project", or null. "scope" is "workspace" only for a fact tied to this one project (e.g. "the staging DB is on RDS"); use "global" for anything about the person themselves that holds everywhere. If there is nothing worth remembering, reply with []. Reply with [] rather than guess.`;
+Skip anything that only matters for this one task or question (a stock price, a file being edited, a one-off search), small talk, what the assistant itself said, and anything already covered by the known notes, even in different words or at a different level of detail. A fact that only refines a known note is not new; skip it. Write at most ${MAX_NOTES_PER_PASS} notes: fewer is better, and most conversations deserve none. Never invent facts that are not stated or clearly implied. Never capture secrets, passwords, tokens, keys, or long text copied from a file or web page.
+
+Reply with ONLY a JSON array inside <memories> and </memories> tags, nothing outside them. Each item: {"text": string, "tag": string | null, "scope": "global" | "workspace"}. "text" is one sentence of at most 120 characters. "tag" is an optional one-word label such as "identity", "preference", "relationship" or "project", or null. "scope" is "workspace" only for a fact tied to this one project (e.g. "the staging DB is on RDS"); use "global" for anything about the person themselves that holds everywhere. If nothing qualifies, reply <memories>[]</memories>.`;
 
 interface ExtractedNote {
   text: string;
@@ -91,9 +95,30 @@ export function transcriptText(messages: readonly AgentMessage[]): string {
   return joined.length > MAX_INPUT_CHARS ? joined.slice(-MAX_INPUT_CHARS) : joined;
 }
 
-/** Parses the model's reply into notes; malformed or missing fields drop that one item. */
+/** Longest list of saved notes shown to the extraction call, newest first. */
+const MAX_KNOWN_CHARS = 6_000;
+
+/** The saved notes as `- text` lines (newest first, as many as fit), so the call can skip repeats. */
+export function knownNotes(entries: readonly MemoryEntry[]): string {
+  const lines: string[] = [];
+  let used = 0;
+  for (const entry of entries) {
+    const line = `- ${entry.text.replace(/\s+/g, " ")}`;
+    if (used + line.length + 1 > MAX_KNOWN_CHARS) break;
+    lines.push(line);
+    used += line.length + 1;
+  }
+  return lines.length === 0 ? "(none)" : lines.join("\n");
+}
+
+/**
+ * Parses the model's reply into notes. The array is read from the last `<memories>` tags, so a
+ * model that thinks out loud first still works; a reply with no tags is read whole when it is
+ * itself a JSON array. Malformed or missing fields drop that one item.
+ */
 export function parseExtractedNotes(reply: string): ExtractedNote[] {
-  const cleaned = reply
+  const tagged = [...reply.matchAll(/<memories>([\s\S]*?)<\/memories>/gi)].at(-1)?.[1];
+  const cleaned = (tagged ?? reply)
     .trim()
     .replace(/^```(?:json)?/i, "")
     .replace(/```$/, "")
@@ -180,7 +205,9 @@ export async function extractMemory(
 
     const timer = setTimeout(() => void session?.abort(), TIME_LIMIT_MS);
     try {
-      await session.prompt(input);
+      await session.prompt(
+        `<known_notes>\n${knownNotes(options.store.entriesFor(options.workspaceId))}\n</known_notes>\n\n<conversation>\n${input}\n</conversation>\n\nList the new lasting notes about the person, as a JSON array inside <memories></memories> tags only.`,
+      );
     } finally {
       clearTimeout(timer);
     }
@@ -189,7 +216,7 @@ export async function extractMemory(
     const reply = last ? messageText(last) : "";
     if (!reply) return true;
 
-    for (const note of parseExtractedNotes(reply)) {
+    for (const note of parseExtractedNotes(reply).slice(0, MAX_NOTES_PER_PASS)) {
       const result = options.store.add({
         text: note.text,
         tag: note.tag,

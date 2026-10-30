@@ -2072,6 +2072,7 @@ export class AgentHost {
       case "message_start":
         if (event.message.role === "user") {
           transcript.addUser(event.message);
+          this.titleFromFirstMessage(conversation, event.message);
           // A goal that was waiting for the person is running again: tell the banner.
           if (inWindow && conversation.goal) emit({ type: "snapshot", snapshot: this.snapshot() });
         } else if (event.message.role === "assistant") transcript.startAssistant();
@@ -2150,13 +2151,28 @@ export class AgentHost {
         .catch((error: unknown) => console.error("Background memory extraction failed.", error))
         .finally(() => this.passesInFlight.delete(key));
     }
-    if (title) {
-      const key = `title:${file}`;
-      this.passesInFlight.add(key);
-      this.runSessionTitle(file, title)
-        .catch((error: unknown) => console.error("Background auto-titling failed.", error))
-        .finally(() => this.passesInFlight.delete(key));
-    }
+    if (title) this.launchTitle(file, title);
+  }
+
+  private launchTitle(file: string, pass: TitlePass): void {
+    const key = `title:${file}`;
+    this.passesInFlight.add(key);
+    this.runSessionTitle(file, pass)
+      .catch((error: unknown) => console.error("Background auto-titling failed.", error))
+      .finally(() => this.passesInFlight.delete(key));
+  }
+
+  /**
+   * Titles a new conversation from its first message, as soon as it is sent, so the sidebar does
+   * not show the raw message until the reply is done. A first message too short to title is left
+   * to the pass after the reply, which sees the whole turn.
+   */
+  private titleFromFirstMessage(conversation: Conversation, message: AgentMessage): void {
+    const file = conversation.session.sessionFile;
+    if (!file) return;
+    if (conversation.session.messages.some((m) => m.role === "user" && m !== message)) return;
+    const pass = this.prepareSessionTitle(conversation, file, [message]);
+    if (pass) this.launchTitle(file, pass);
   }
 
   /**
@@ -2216,13 +2232,17 @@ export class AgentHost {
    * when the conversation already has a name (typed by the person, or given one at creation) or no
    * model is available.
    */
-  private prepareSessionTitle(conversation: Conversation, file: string): TitlePass | null {
+  private prepareSessionTitle(
+    conversation: Conversation,
+    file: string,
+    messages: AgentMessage[] = conversation.session.messages.slice(),
+  ): TitlePass | null {
     if (conversation.session.sessionName?.trim()) return null;
     if (this.passesInFlight.has(`title:${file}`)) return null;
     const model = this.chooseModel(this.agentOf(conversation).model);
     if (!model) return null;
     return {
-      messages: conversation.session.messages.slice(),
+      messages,
       cwd: conversation.session.sessionManager.getCwd(),
       model,
     };

@@ -63,7 +63,14 @@ function modelServer(): ModelServer {
         "research helper",
       );
       const toolMessage = body.messages.find((m) => m.role === "tool");
-      if (isHelper) {
+      // The background title and memory passes are not part of the scripted conversation.
+      const background = /short title for it|lasting facts/.test(
+        text(body.messages.find((m) => m.role === "system")),
+      );
+      if (background) {
+        send({ content: "[]" });
+        send({}, "stop");
+      } else if (isHelper) {
         helperRequests.push(body);
         // Answer once all three have asked, or after a short wait (a sequential run never gets there).
         if (helperRequests.length === 3) helperRelease.resolve();
