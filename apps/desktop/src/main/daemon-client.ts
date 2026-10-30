@@ -485,7 +485,8 @@ export class DaemonClient {
           )
           .finally(() => {
             conn.socket.off("close", onClose);
-            this.computerSteps.delete(id);
+            // A daemon that restarted counts ids from 1 again; keep a newer step's controller.
+            if (this.computerSteps.get(id) === controller) this.computerSteps.delete(id);
           });
         return;
       }

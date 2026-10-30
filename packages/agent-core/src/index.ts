@@ -2033,7 +2033,18 @@ export class AgentHost {
           ...describeToolCall(event.toolName, this.approvalInput(event.toolName, event.input)),
           ...(app ? { app } : {}),
         });
-        return approved ? undefined : { block: true, reason: declinedReason };
+        if (!approved) return { block: true, reason: declinedReason };
+        // The person may have blocked the app while the card waited; that wins over the approval.
+        if (computer) {
+          const again = computerAppAccess(
+            event.input.app,
+            this.services?.settings.get().computerApps ?? settings.computerApps,
+            computerApps ?? new Set(),
+            (id) => this.computerAppNames.get(id),
+          );
+          if (again.kind === "refused") return { block: true, reason: again.reason };
+        }
+        return undefined;
       });
     };
   }
@@ -2117,7 +2128,13 @@ export class AgentHost {
     if (!conversation || !entry) return;
     conversation.approvals.delete(requestId);
     const { app } = entry.request;
-    if (approved && app) {
+    // An app blocked while the card waited stays blocked: "Always" must not take it off that list.
+    // The approval gate then refuses the call.
+    const blocked =
+      app !== undefined &&
+      (this.services?.settings.get().computerApps.blocked.some((other) => other.id === app.id) ??
+        false);
+    if (approved && app && !blocked) {
       const failed = rememberApproval(app, remember, conversation.computerApps, (always) =>
         this.setComputerAppAccess(always, "allowed"),
       );
