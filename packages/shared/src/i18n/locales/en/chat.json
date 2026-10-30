@@ -87,7 +87,10 @@
       "editInSettings": "Edit in Settings",
       "delete": "Delete workspace",
       "deleteTitle": "Delete this workspace?",
-      "deleteDescription": "“{{name}}” will be removed. Its chats move to the built-in workspace, and its files stay in the folder."
+      "deleteDescription": "“{{name}}” will be removed. Its chats move to the built-in workspace, and its files stay in the folder.",
+      "clearSessions": "Clear all chats",
+      "clearSessionsTitle": "Clear all chats in this workspace?",
+      "clearSessionsDescription": "Every saved chat in “{{name}}” will be removed from your history. Files they saved stay in your workspace."
     },
     "session": {
       "actions": "Chat actions",

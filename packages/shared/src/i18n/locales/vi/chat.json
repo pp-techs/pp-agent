@@ -87,7 +87,10 @@
       "editInSettings": "Chỉnh sửa trong Cài đặt",
       "delete": "Xóa không gian làm việc",
       "deleteTitle": "Xóa không gian làm việc này?",
-      "deleteDescription": "“{{name}}” sẽ bị xóa. Các cuộc trò chuyện của nó sẽ chuyển sang không gian làm việc mặc định, còn các tệp vẫn nằm trong thư mục."
+      "deleteDescription": "“{{name}}” sẽ bị xóa. Các cuộc trò chuyện của nó sẽ chuyển sang không gian làm việc mặc định, còn các tệp vẫn nằm trong thư mục.",
+      "clearSessions": "Xóa tất cả cuộc trò chuyện",
+      "clearSessionsTitle": "Xóa tất cả cuộc trò chuyện trong không gian làm việc này?",
+      "clearSessionsDescription": "Mọi cuộc trò chuyện đã lưu trong “{{name}}” sẽ bị xóa khỏi lịch sử của bạn. Các tệp đã lưu vẫn nằm trong không gian làm việc của bạn."
     },
     "session": {
       "actions": "Thao tác với cuộc trò chuyện",

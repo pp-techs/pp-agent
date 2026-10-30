@@ -49,6 +49,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   CalendarClockIcon,
   DownloadIcon,
+  EraserIcon,
   MoreHorizontalIcon,
   PanelLeftIcon,
   PencilIcon,
@@ -225,7 +226,7 @@ export function ChatSidebar({
     return () => clearInterval(timer);
   }, []);
   const currentWorkspaceId = useChatStore((state) => state.workspace?.id);
-  const { newChat, openSession, renameSession, deleteSession, pinSession } =
+  const { newChat, openSession, renameSession, deleteSession, clearSessions, pinSession } =
     useAgentCommands(bridge);
   const exportSession = useExportSession(bridge);
   const deleteWorkspace = useDeleteWorkspace(bridge);
@@ -271,6 +272,15 @@ export function ChatSidebar({
       confirmLabel: t("common:actions.delete"),
     });
     if (confirmed) deleteWorkspace.mutate(workspace.id);
+  }
+
+  async function clearWorkspaceSessions(workspace: WorkspaceProfile) {
+    const confirmed = await ConfirmModal.show({
+      title: t("sidebar.workspace.clearSessionsTitle"),
+      description: t("sidebar.workspace.clearSessionsDescription", { name: workspace.name }),
+      confirmLabel: t("sidebar.workspace.clearSessions"),
+    });
+    if (confirmed) clearSessions.mutate(workspace.id, { onError });
   }
 
   async function rename(session: SessionSummary) {
@@ -387,6 +397,8 @@ export function ChatSidebar({
     // An empty open chat here already is a new chat in this workspace.
     const canStart =
       ready && (page !== "chat" || hasMessages || workspace.id !== currentWorkspaceId);
+    const hasSessions =
+      list.length > 0 || pinned.some((session) => session.workspaceId === workspace.id);
     return (
       <React.Fragment key={workspace.id}>
         <SidebarMenu>
@@ -433,6 +445,15 @@ export function ChatSidebar({
                   <PencilIcon />
                   {t("sidebar.workspace.editInSettings")}
                 </DropdownMenuItem>
+                {hasSessions && (
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() => void clearWorkspaceSessions(workspace)}
+                  >
+                    <EraserIcon />
+                    {t("sidebar.workspace.clearSessions")}
+                  </DropdownMenuItem>
+                )}
                 {workspace.id !== DEFAULT_WORKSPACE_ID && (
                   <>
                     <DropdownMenuSeparator />

@@ -208,3 +208,45 @@ test("a new chat is listed as soon as its first message is sent, and the list is
   const after = (await host.handle({ type: "list_sessions" })) as { path: string }[];
   expect(after.filter((row) => row.path === first)).toHaveLength(1);
 });
+
+test("clearing a workspace's sessions removes only its own, pinned or running", async () => {
+  const extra = await mkdtemp(join(tmpdir(), "pp-agent-workspace-"));
+  const workspace = await host.handle({
+    type: "save_workspace",
+    workspace: { name: "Extra", icon: "📁", dir: extra, agentId: null },
+  });
+  const { id: workspaceId } = workspace as { id: string };
+
+  // One session in the default workspace, kept as a control.
+  const kept = (await snapshot()).sessionPath as string;
+  await host.handle({ type: "prompt", text: "hold-f", attachments: [] });
+  await until(async () => (await snapshot()).status === "running");
+  model.release("hold-f");
+  await until(async () => (await snapshot()).activity.running.length === 0);
+  await host.handle({ type: "pin_session", path: kept, pinned: true });
+
+  // Two sessions in the new workspace: one finished, one still answering in the background.
+  await host.handle({ type: "new_chat", workspaceId });
+  const finished = (await snapshot()).sessionPath as string;
+  await host.handle({ type: "prompt", text: "hold-g", attachments: [] });
+  await until(async () => (await snapshot()).status === "running");
+  model.release("hold-g");
+  await until(async () => (await snapshot()).activity.running.length === 0);
+
+  await host.handle({ type: "new_chat", workspaceId });
+  const running = (await snapshot()).sessionPath as string;
+  await host.handle({ type: "prompt", text: "hold-h", attachments: [] });
+  await until(async () => (await snapshot()).status === "running");
+  await host.handle({ type: "new_chat" });
+  expect((await snapshot()).activity.running).toEqual([running]);
+
+  await host.handle({ type: "clear_sessions", workspaceId });
+
+  const rows = (await host.handle({ type: "list_sessions" })) as { path: string }[];
+  expect(rows.some((row) => row.path === kept)).toBe(true);
+  expect(rows.some((row) => row.path === finished)).toBe(false);
+  expect(rows.some((row) => row.path === running)).toBe(false);
+  expect((await snapshot()).activity.running).toEqual([]);
+
+  await rm(extra, { recursive: true, force: true });
+});

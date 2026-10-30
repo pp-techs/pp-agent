@@ -1016,6 +1016,8 @@ export interface AgentCommandMap {
   open_session: { params: { path: string }; result: void };
   rename_session: { params: { path: string; name: string }; result: void };
   delete_session: { params: { path: string }; result: void };
+  /** Deletes every saved conversation of one workspace. */
+  clear_sessions: { params: { workspaceId: string }; result: void };
   /** Pins or unpins a saved conversation; pinned ones are listed first. */
   pin_session: { params: { path: string; pinned: boolean }; result: void };
   /** Full-text search (ignoring case and accents) over the titles and messages of saved chats. */

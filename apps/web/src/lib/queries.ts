@@ -211,6 +211,10 @@ export function useAgentCommands(bridge: DesktopBridge) {
   const deleteSession = useMutation({
     mutationFn: (path: string) => bridge.agent.command({ type: "delete_session", path }),
   });
+  const clearSessions = useMutation({
+    mutationFn: (workspaceId: string) =>
+      bridge.agent.command({ type: "clear_sessions", workspaceId }),
+  });
   const pinSession = useMutation({
     mutationFn: (input: { path: string; pinned: boolean }) =>
       bridge.agent.command({ type: "pin_session", ...input }),
@@ -251,6 +255,7 @@ export function useAgentCommands(bridge: DesktopBridge) {
     openSession,
     renameSession,
     deleteSession,
+    clearSessions,
     pinSession,
     regenerate,
     editMessage,

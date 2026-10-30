@@ -712,6 +712,8 @@ export class AgentHost {
         return this.renameSession(this.requireSessionPath(command.path), command.name);
       case "delete_session":
         return this.deleteSession(this.requireSessionPath(command.path));
+      case "clear_sessions":
+        return this.clearWorkspaceSessions(command.workspaceId);
       case "pin_session":
         return this.pinSession(this.requireSessionPath(command.path), command.pinned);
       case "search_sessions":
@@ -1335,6 +1337,31 @@ export class AgentHost {
     await this.closeBackground(path);
     await rm(path, { force: true });
     this.setPinned(path, false);
+    emit({ type: "sessions_changed" });
+  }
+
+  /** Deletes every saved conversation that belongs to `workspaceId`, open or in the background. */
+  private async clearWorkspaceSessions(workspaceId: string): Promise<void> {
+    this.requireWorkspace(workspaceId);
+    const { paths, settings } = this.requireServices();
+    const { workspaces } = settings.get();
+    const infos = await SessionManager.listAll(paths.sessionDir);
+    const targets = infos
+      .filter(
+        (info) => workspaceForCwd(workspaces, info.cwd, paths.workspaceDir).id === workspaceId,
+      )
+      .map((info) => info.path);
+    for (const conversation of this.conversations()) {
+      const file = conversation.session.sessionFile;
+      const belongs = conversation === this.open ? this.workspaceId : conversation.workspaceId;
+      if (file && belongs === workspaceId && !targets.includes(file)) targets.push(file);
+    }
+    for (const path of targets) {
+      if (this.session?.sessionFile === path) await this.openSession(null);
+      await this.closeBackground(path);
+      await rm(path, { force: true });
+      this.setPinned(path, false);
+    }
     emit({ type: "sessions_changed" });
   }
 
