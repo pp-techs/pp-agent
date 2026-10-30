@@ -182,6 +182,8 @@ export function toolRule(name: string, tier: ToolTier, settings: AppSettings): T
     return { policy: "ask", effective: "ask", locked: false };
   }
   if (name === FOREIGN_SHELL) return { policy: "off", effective: "off", locked: true };
+  // The only way to end a goal: it cannot be turned off, or the goal could never finish.
+  if (name === GOAL_TOOL) return { policy: "allow", effective: "allow", locked: true };
   if (DISCOVERY_TOOLS[name] === true) return { policy: "allow", effective: "allow", locked: true };
   // Untouched tools run on `auto`, except `edit`, which is off (non-developers use `write`), and
   // `computer`, which the person turns on once PP Agent may control the computer.

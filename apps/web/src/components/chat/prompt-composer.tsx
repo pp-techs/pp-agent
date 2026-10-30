@@ -127,7 +127,8 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
     setDraft("");
     setGoal.mutate(params, {
       onError: (error) => {
-        setDraft(text);
+        // Keep what was typed while the command was pending.
+        if (useComposerStore.getState().draft === "") setDraft(text);
         toast.error(error.message);
       },
     });
