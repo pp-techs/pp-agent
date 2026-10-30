@@ -2296,12 +2296,19 @@ export class AgentHost {
     emit({ type: "sessions_changed" });
   }
 
-  /** Writes the title proposed during a turn to the session, now that the turn has settled. */
+  /**
+   * Writes the title proposed during a turn to the session, now that the turn has settled. A
+   * failed write is only logged: settling must go on, and the title is not worth a retry.
+   */
   private writePendingTitle(conversation: Conversation): void {
     const { pendingTitle } = conversation;
     conversation.pendingTitle = null;
-    if (pendingTitle && !conversation.session.sessionName?.trim())
+    if (!pendingTitle || conversation.session.sessionName?.trim()) return;
+    try {
       conversation.session.setSessionName(pendingTitle);
+    } catch (error) {
+      console.error("Could not save the auto-generated title.", error);
+    }
   }
 
   private refreshStatus(): void {
