@@ -111,6 +111,15 @@ export interface ContextUsage {
   window: number;
 }
 
+/** A goal the agent keeps working on across turns until it reports it done. */
+export interface GoalSummary {
+  objective: string;
+  /** `active` continues by itself after each turn; `paused` waits for the person to resume it. */
+  status: "active" | "paused";
+  /** The agent made no move on its last turn and waits for the person to write or resume. */
+  waiting: boolean;
+}
+
 export interface AgentSnapshot {
   status: AgentStatus;
   messages: ChatMessage[];
@@ -129,6 +138,8 @@ export interface AgentSnapshot {
    * switch does nothing there), or `"conversation"` while this conversation's own switch decides.
    */
   yolo: { active: boolean; source: "settings" | "conversation" };
+  /** Goal the open conversation is working toward, if any. */
+  goal: GoalSummary | null;
   /** Workspace of the open conversation. */
   workspace: WorkspaceSummary | null;
   /** Folder the open conversation works in (its workspace's folder). */
@@ -1120,6 +1131,16 @@ export interface AgentCommandMap {
   set_thinking_level: { params: { level: ThinkingLevel }; result: void };
   /** Yolo mode for the open conversation only; lost when it closes, and ignored while Settings forces it on. */
   set_conversation_yolo: { params: { active: boolean }; result: void };
+  /**
+   * Goal of the open conversation: `start` sets the objective and begins working on it (the agent
+   * keeps going turn after turn until it reports the goal done); `pause` stops it between turns,
+   * `resume` continues a paused one, and `clear` drops it. Refused while the conversation is answering
+   * (except `pause` and `clear`) or, for `start`, when it already has a goal.
+   */
+  set_goal: {
+    params: { action: "start"; objective: string } | { action: "pause" | "resume" | "clear" };
+    result: void;
+  };
   /** JSON text of an `AgentExportFile`. */
   export_agent: { params: { id: string }; result: string };
   /** Creates an agent from `AgentExportFile` JSON; a taken name gets a " (2)" suffix. */

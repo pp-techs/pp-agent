@@ -170,8 +170,24 @@
         "labelOn": "Turn on yolo mode",
         "labelOff": "Turn off yolo mode",
         "description": "Runs every allowed tool without asking, including which apps it opens, for this conversation only."
+      },
+      "goal": {
+        "label": "Set a goal",
+        "description": "The agent keeps working on its own until it is done. Type /goal and what to achieve; /goal pause, resume or clear manages it.",
+        "current": "Goal ({{status}}): {{objective}}"
       }
     }
+  },
+  "goal": {
+    "label": "Goal",
+    "status": {
+      "active": "Working on it",
+      "waiting": "Waiting for you",
+      "paused": "Paused"
+    },
+    "pause": "Pause goal",
+    "resume": "Resume goal",
+    "clear": "Clear goal"
   },
   "emptyChat": {
     "title": "What can I help with?",
@@ -312,6 +328,11 @@
         "active": "Updating the checklist",
         "done": "Updated the checklist",
         "notDone": "Update the checklist"
+      },
+      "goal": {
+        "active": "Finishing the goal",
+        "done": "Goal complete",
+        "notDone": "Complete the goal"
       },
       "ask": {
         "active": "Asking you a question",
@@ -463,7 +484,8 @@
     },
     "helper": {
       "task": "Task",
-      "working": "Working…"
+      "working": "Working…",
+      "done": "Finished"
     }
   },
   "panel": {

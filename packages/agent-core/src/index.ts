@@ -26,6 +26,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import {
   type AgentCommand,
+  type AgentCommandMap,
   type AgentPaths,
   type AgentProfile,
   type AgentSnapshot,
@@ -224,6 +225,20 @@ import {
 } from "./tools.ts";
 import { createTodoTool } from "./todo.ts";
 import {
+  createGoalTool,
+  GOAL_CONTINUE_TYPE,
+  GOAL_ENTRY_TYPE,
+  GOAL_TOOL,
+  type Goal,
+  goalContinuation,
+  goalEntry,
+  type GoalHost,
+  goalOutcome,
+  goalSection,
+  MAX_OBJECTIVE_LENGTH,
+  readGoal,
+} from "./goal.ts";
+import {
   createScheduleTool,
   SCHEDULE_TOOL,
   type ScheduleHost,
@@ -277,6 +292,31 @@ const NO_CHANGES: PendingChanges = {
   agentModel: false,
 };
 
+/** What `runMemoryExtraction` needs, gathered while the conversation's session is still alive. */
+interface MemoryPass {
+  file: string;
+  /** `messages.length` as of the prepare; committed to `memoryCursor` only on success. */
+  cursor: number;
+  messages: AgentMessage[];
+  cwd: string;
+  model: Model<Api>;
+  workspaceId: string | null;
+}
+
+/** What `runSessionTitle` needs, gathered while the conversation's session is still alive. */
+interface TitlePass {
+  messages: AgentMessage[];
+  cwd: string;
+  model: Model<Api>;
+}
+
+/** Both passes that follow a settled conversation; either is null when it has nothing to do. */
+interface SettledPasses {
+  file: string;
+  memory: MemoryPass | null;
+  title: TitlePass | null;
+}
+
 /** Everything that exists once `init` has finished. */
 interface Services {
   paths: AgentPaths;
@@ -310,6 +350,8 @@ interface SessionScope {
   askUser?: AskUser;
   /** Extra system prompt section: headless runs tell the model nobody is watching, chats where it replies. */
   systemNote?: { section: string; text: string };
+  /** The goal of a window conversation; absent elsewhere, where nobody can set one. */
+  goal?: GoalHost;
   /** What kind of session this is and how the model should call it ("a Telegram chat"). */
   surface: { kind: SessionKind; label: string };
   /** Which saved sessions the `sessions` tool shows: every one, or only the one running. */
@@ -355,7 +397,19 @@ interface ConversationState {
   computerApps: Set<string>;
   /** This conversation's own yolo switch; off until the person turns it on, lost when it closes. */
   yolo: boolean;
+  /** Goal the agent keeps working toward; null when there is none. Saved with the conversation, resumed paused. */
+  goal: Goal | null;
+  /** What the conversation's branch records of the goal (JSON of its entry), to save changes only. */
+  goalSaved: string;
+  /** Tool calls so far in the current run; a goal turn without any is not continued. */
+  toolCalls: number;
   running: boolean;
+  /**
+   * A title proposed while a turn was running, shown in the list at once but written to the
+   * session when the turn settles: a name entry in the middle of a turn would sit between a tool
+   * call and its result in the branch.
+   */
+  pendingTitle: string | null;
   /** Agent and workspace as of when it left the window; the host's own fields are the open one's. */
   agentId: string;
   workspaceId: string;
@@ -433,6 +487,8 @@ export class AgentHost {
   private readonly background = new Map<string, Conversation>();
   /** How many of a session's messages the memory-extraction pass has already read, by session file. */
   private readonly memoryCursor = new Map<string, number>();
+  /** Memory and title passes still running (`memory:<file>`, `title:<file>`): one at a time each. */
+  private readonly passesInFlight = new Set<string>();
   /** Registrations of no session, for the MCP section before any conversation is open. */
   private idleMcp: McpRegistrations | null = null;
   /** Agent of the open conversation; resolves to the default agent once deleted. */
@@ -698,6 +754,8 @@ export class AgentHost {
         return this.prompt(command.text, command.attachments);
       case "abort":
         return this.abort();
+      case "set_goal":
+        return this.setGoal(command);
       case "new_chat":
         return this.openSession(null, command.workspaceId ?? null);
       case "respond_approval":
@@ -1011,6 +1069,9 @@ export class AgentHost {
       context: this.contextUsage(),
       activity: this.activity(),
       yolo: this.yoloState(open),
+      goal: open?.goal
+        ? { objective: open.goal.objective, status: open.goal.status, waiting: open.goal.stalled }
+        : null,
     };
   }
 
@@ -1046,7 +1107,11 @@ export class AgentHost {
       : null;
   }
 
-  private async prompt(text: string, attachments: Attachment[]): Promise<void> {
+  private async prompt(
+    text: string,
+    attachments: Attachment[],
+    onRunError?: (error: unknown) => void,
+  ): Promise<void> {
     const session = this.requireSession();
     const trimmed = text.trim();
     if (!trimmed && attachments.length === 0) return;
@@ -1057,17 +1122,24 @@ export class AgentHost {
       attachments,
       session.sessionManager.getCwd(),
     );
-    this.startRun(session, message);
+    // Writing to the agent again picks up a goal that was waiting on the person.
+    if (this.open?.goal) this.open.goal.stalled = false;
+    this.startRun(session, message, onRunError);
   }
 
   /** Sends a message to the model without waiting for the run; progress arrives as events. */
-  private startRun(session: AgentSession, message: PromptMessage): void {
+  private startRun(
+    session: AgentSession,
+    message: PromptMessage,
+    onError: (error: unknown) => void = (error) =>
+      emit({ type: "error", message: errorMessage(error) }),
+  ): void {
     // prompt() resolves when the whole run finishes.
     const run = session.prompt(message.text, {
       images: message.images,
       ...(session.isStreaming ? { streamingBehavior: "followUp" as const } : {}),
     });
-    run.catch((error: unknown) => emit({ type: "error", message: errorMessage(error) }));
+    run.catch(onError);
   }
 
   private async compact(): Promise<void> {
@@ -1106,10 +1178,145 @@ export class AgentHost {
   /** Stops a conversation's answer. */
   private async stop(conversation: Conversation | null): Promise<void> {
     if (!conversation) return;
+    // Stopping the answer pauses the goal, or the next turn would start right after.
+    if (conversation.goal?.status === "active") {
+      conversation.goal.status = "paused";
+      this.goalChanged(conversation);
+    }
     // Pending approvals and questions block the run; settle them first or abort() would wait forever.
     this.denyAllApprovals(conversation);
     this.skipAllQuestions(conversation);
     await conversation.session.abort();
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Goals
+  // -------------------------------------------------------------------------------------------
+
+  private async setGoal(command: AgentCommandMap["set_goal"]["params"]): Promise<void> {
+    const conversation = this.requireOpen();
+    const busy = conversation.running || conversation.session.isStreaming;
+    const { goal } = conversation;
+    switch (command.action) {
+      case "start": {
+        const objective = command.objective.trim();
+        if (!objective) throw new Error(t("goal.empty"));
+        if (objective.length > MAX_OBJECTIVE_LENGTH)
+          throw new Error(t("goal.tooLong", { max: MAX_OBJECTIVE_LENGTH }));
+        if (goal) throw new Error(t("goal.exists"));
+        if (busy) throw new Error(t("conversations.waitForAnswer"));
+        if (!this.currentModel()) throw new Error(t("models.noneChosen"));
+        conversation.goal = { objective, status: "active", stalled: false };
+        this.goalChanged(conversation);
+        // The objective is the first message; the agent carries on by itself after each turn.
+        try {
+          // A run that cannot even start leaves nothing to carry the goal on: pause it.
+          await this.prompt(objective, [], (error) => {
+            if (conversation.goal?.status === "active") {
+              conversation.goal.status = "paused";
+              this.goalChanged(conversation);
+            }
+            emit({ type: "error", message: errorMessage(error) });
+          });
+        } catch (error) {
+          conversation.goal = null;
+          this.goalChanged(conversation);
+          throw error;
+        }
+        return;
+      }
+      case "resume":
+        if (goal?.status !== "paused") throw new Error(t("goal.nothingToResume"));
+        if (busy) throw new Error(t("conversations.waitForAnswer"));
+        if (!this.currentModel()) throw new Error(t("models.noneChosen"));
+        goal.status = "active";
+        goal.stalled = false;
+        this.goalChanged(conversation);
+        this.continueGoal(conversation);
+        return;
+      case "pause":
+        if (goal?.status === "active") {
+          goal.status = "paused";
+          this.goalChanged(conversation);
+        }
+        return;
+      case "clear":
+        if (goal) {
+          conversation.goal = null;
+          this.goalChanged(conversation);
+        }
+        return;
+    }
+  }
+
+  /**
+   * The goal changed: records it on the conversation and gives the agent the `complete_goal` tool
+   * while it is active. Mid-answer, both wait until the answer settles (a custom entry between a
+   * tool call and its result would split them in the saved branch).
+   */
+  private goalChanged(conversation: Conversation): void {
+    if (!conversation.running && !conversation.session.isStreaming) {
+      this.persistGoal(conversation);
+      this.applyActiveTools(conversation.session, this.liveScope(conversation));
+    }
+    if (conversation === this.open) emit({ type: "snapshot", snapshot: this.snapshot() });
+  }
+
+  private persistGoal(conversation: Conversation): void {
+    const entry = goalEntry(conversation.goal);
+    const saved = JSON.stringify(entry);
+    if (saved === conversation.goalSaved) return;
+    conversation.goalSaved = saved;
+    conversation.session.sessionManager.appendCustomEntry(GOAL_ENTRY_TYPE, entry);
+  }
+
+  /** Starts the next turn of the active goal with a message the chat does not show. */
+  private continueGoal(conversation: Conversation): void {
+    const goal = conversation.goal;
+    if (goal?.status !== "active") return;
+    conversation.session
+      .sendCustomMessage(
+        { customType: GOAL_CONTINUE_TYPE, content: goalContinuation(goal), display: false },
+        { triggerTurn: true },
+      )
+      .catch((error: unknown) => {
+        if (conversation.goal === goal) {
+          goal.status = "paused";
+          this.goalChanged(conversation);
+        }
+        emit({ type: "error", message: errorMessage(error) });
+      });
+  }
+
+  /**
+   * A run settled: saves the goal, then decides what an active goal does next. A turn that was
+   * stopped or failed pauses it, one without a tool call waits for the person, and any other one is
+   * followed by the next turn.
+   */
+  private afterGoalTurn(conversation: Conversation): void {
+    this.persistGoal(conversation);
+    this.applyActiveTools(conversation.session, this.liveScope(conversation));
+    const goal = conversation.goal;
+    if (goal?.status !== "active") return;
+    const last = conversation.session.messages.findLast(
+      (message): message is AssistantMessage => message.role === "assistant",
+    );
+    const outcome = goalOutcome({
+      stopReason: last?.stopReason,
+      toolCalls: conversation.toolCalls,
+    });
+    if (outcome === "pause") goal.status = "paused";
+    else if (outcome === "stall") goal.stalled = true;
+    if (outcome !== "continue") {
+      this.goalChanged(conversation);
+      return;
+    }
+    // Let the settled run finish unwinding before the next one starts.
+    setImmediate(() => {
+      if (conversation.goal !== goal || goal.status !== "active" || goal.stalled) return;
+      if (conversation.running || conversation.session.isStreaming) return;
+      this.continueGoal(conversation);
+    });
   }
 
   /**
@@ -1142,6 +1349,11 @@ export class AgentHost {
     if (!conversation) return;
     const file = conversation.session.sessionFile;
     if (file && (conversation.running || conversation.session.isStreaming)) {
+      // Nobody watches it there: the goal waits for the person to come back and resume it.
+      if (conversation.goal?.status === "active") {
+        conversation.goal.status = "paused";
+        this.goalChanged(conversation);
+      }
       conversation.agentId = this.agentId;
       conversation.workspaceId = this.workspaceId;
       this.background.set(file, conversation);
@@ -1222,12 +1434,20 @@ export class AgentHost {
     // Conversations of every workspace and agent.
     const sessions = await SessionManager.listAll(paths.sessionDir);
     const saved = new Set(sessions.map((info) => info.path));
+    // Titles proposed during a turn, not yet written to their session.
+    const proposed = new Map<string, string>();
+    for (const { session, pendingTitle } of this.conversations())
+      if (session.sessionFile && pendingTitle) proposed.set(session.sessionFile, pendingTitle);
     const rows: SessionSummary[] = sessions
       .filter((info) => info.messageCount > 0)
       .map((info) => ({
         path: info.path,
         workspaceId: workspaceForCwd(workspaces, info.cwd, paths.workspaceDir).id,
-        title: sessionTitle(info.name, info.firstMessage, this.titleFallbacks()),
+        title: sessionTitle(
+          info.name || proposed.get(info.path),
+          info.firstMessage,
+          this.titleFallbacks(),
+        ),
         modified: info.modified.getTime(),
         messageCount: info.messageCount,
         pinned: pins.has(pinKey(info.path)),
@@ -1244,7 +1464,7 @@ export class AgentHost {
         path: file,
         workspaceId: conversation === this.open ? this.workspaceId : conversation.workspaceId,
         title: sessionTitle(
-          session.sessionName,
+          session.sessionName || conversation.pendingTitle || undefined,
           first?.type === "message" ? userContent(first.message).text : "",
           this.titleFallbacks(),
         ),
@@ -1496,7 +1716,17 @@ export class AgentHost {
     } else {
       await session.navigateTree(entryId);
     }
-    this.requireOpen().transcript.load(branchEntries(manager));
+    // The chosen branch decides the goal: one that is not on it ends here, `complete_goal` with it.
+    const conversation = this.requireOpen();
+    const onBranch = readGoal(manager);
+    conversation.goal =
+      onBranch && conversation.goal?.objective === onBranch.objective
+        ? conversation.goal
+        : onBranch;
+    // Unknown what the branch recorded of a goal that stays: save it again with the next turn.
+    conversation.goalSaved = conversation.goal ? "" : JSON.stringify(goalEntry(null));
+    this.applyActiveTools(session, this.liveScope(conversation));
+    conversation.transcript.load(branchEntries(manager));
     emit({ type: "snapshot", snapshot: this.snapshot() });
     this.startRun(session, message);
   }
@@ -1612,6 +1842,14 @@ export class AgentHost {
       askUser: (call, signal) => this.requestQuestion(conversation, call, signal),
       surface: { kind: "window", label: "in the desktop window" },
       visibility: "all",
+      goal: {
+        current: () => conversation.goal,
+        complete: () => {
+          conversation.goal = null;
+          const live = this.conversations().find((other) => other === conversation);
+          if (live) this.goalChanged(live);
+        },
+      },
     };
   }
 
@@ -1707,6 +1945,7 @@ export class AgentHost {
           onChanged: () => emit({ type: "settings_changed", scopes: ["memory"] }),
         }),
         createTodoTool(),
+        ...(scope.goal ? [createGoalTool(scope.goal)] : []),
         ...(scope.askUser ? [createAskTool(scope.askUser)] : []),
         // Like ask_user, only where a person is present: a scheduled run cannot create tasks.
         ...(scope.askUser ? [createScheduleTool(this.scheduleHost(scope, sessionManager))] : []),
@@ -1727,6 +1966,14 @@ export class AgentHost {
           agentDir: paths.agentDir,
           customTools: appTools,
           allowedTools: () => helperTools(settings.get(), scope.agent().tools),
+          agents: () =>
+            settings.get().agents.map((agent) => ({
+              name: agent.name,
+              description: agent.description,
+              prompt: agentPromptSection(agent),
+              model: findAvailable(runtime, agent.model),
+              tools: helperTools(settings.get(), agent.tools),
+            })),
         }),
       ],
       resourceLoader,
@@ -1750,6 +1997,7 @@ export class AgentHost {
     preferredModel: ModelRef | null = sessionManager.buildSessionContext().model,
   ): Promise<void> {
     const { mcpConfig } = this.requireServices();
+    const restoredGoal = readGoal(sessionManager);
     const state: ConversationState = {
       transcript: new Transcript((message) => {
         if (this.open === conversation) emit({ type: "message", message });
@@ -1757,12 +2005,16 @@ export class AgentHost {
       approvals: new Map(),
       computerApps: new Set(),
       yolo: false,
+      goal: restoredGoal,
+      goalSaved: JSON.stringify(goalEntry(restoredGoal)),
+      toolCalls: 0,
       questions: new Map(),
       mcpServers: new McpRegistrations(mcpConfig, (name) => {
         const { mcpServers } = this.agentOf(state);
         return mcpServers === null || mcpServers.includes(name);
       }),
       running: false,
+      pendingTitle: null,
       agentId: this.agentId,
       workspaceId: this.workspaceId,
     };
@@ -1792,6 +2044,8 @@ export class AgentHost {
 
   /** Lets go of a conversation's session. */
   private release(conversation: Conversation): void {
+    // Cancels a goal turn that was about to start.
+    conversation.goal = null;
     conversation.unsubscribe();
     conversation.mcpServers.detach();
     conversation.session.dispose();
@@ -1806,6 +2060,7 @@ export class AgentHost {
         break;
       case "agent_start":
         conversation.running = true;
+        conversation.toolCalls = 0;
         if (inWindow) this.refreshStatus();
         emit({ type: "sessions_changed" });
         this.emitActivity();
@@ -1814,20 +2069,29 @@ export class AgentHost {
         conversation.running = false;
         transcript.setEntryIds(chatEntryIds(conversation.session.sessionManager));
         transcript.flush();
+        this.writePendingTitle(conversation);
         if (inWindow) {
+          // Read what the memory and title passes need now: `applyPending` may rebuild the session.
+          const passes = this.preparePasses(conversation);
           this.refreshStatus();
           void this.applyPending();
+          this.launchPasses(passes);
         } else {
           // Nobody is looking at it: close it now. Opening it later builds a session from
           // the saved file with the settings of the time.
           setImmediate(() => this.finishBackground(conversation));
         }
+        this.afterGoalTurn(conversation);
         emit({ type: "sessions_changed" });
         this.emitActivity();
         break;
       case "message_start":
-        if (event.message.role === "user") transcript.addUser(event.message);
-        else if (event.message.role === "assistant") transcript.startAssistant();
+        if (event.message.role === "user") {
+          transcript.addUser(event.message);
+          this.titleFromFirstMessage(conversation, event.message);
+          // A goal that was waiting for the person is running again: tell the banner.
+          if (inWindow && conversation.goal) emit({ type: "snapshot", snapshot: this.snapshot() });
+        } else if (event.message.role === "assistant") transcript.startAssistant();
         break;
       case "message_update":
         if (event.message.role === "assistant") transcript.updateAssistant(event.message, false);
@@ -1853,6 +2117,7 @@ export class AgentHost {
         break;
       }
       case "tool_execution_end": {
+        conversation.toolCalls += 1;
         const content: unknown = event.result?.content;
         transcript.finishTool(
           event.toolCallId,
@@ -1870,20 +2135,60 @@ export class AgentHost {
     if (!file || this.background.get(file) !== conversation || conversation.running) return;
     this.background.delete(file);
     // Read what the memory and title passes need before `release` disposes the session.
-    const pass = this.prepareMemoryExtraction(conversation, file);
-    const titlePass = this.prepareSessionTitle(conversation);
+    const passes = this.preparePasses(conversation);
     this.release(conversation);
     this.emitActivity();
-    // Both are best-effort: `.catch` keeps a failure from becoming an unhandled rejection, which
-    // would otherwise crash the process.
-    if (pass)
-      this.runMemoryExtraction(pass).catch((error: unknown) =>
-        console.error("Background memory extraction failed.", error),
-      );
-    if (titlePass)
-      this.runSessionTitle(file, titlePass).catch((error: unknown) =>
-        console.error("Background auto-titling failed.", error),
-      );
+    this.launchPasses(passes);
+  }
+
+  /** Gathers the inputs of both passes while the conversation's session is still alive. */
+  private preparePasses(conversation: Conversation): SettledPasses | null {
+    const file = conversation.session.sessionFile;
+    if (!file) return null;
+    return {
+      file,
+      memory: this.prepareMemoryExtraction(conversation, file),
+      title: this.prepareSessionTitle(conversation, file),
+    };
+  }
+
+  /**
+   * Starts the memory and title passes after a conversation settles, watched or not. Both are
+   * best-effort: `.catch` keeps a failure from becoming an unhandled rejection, which would
+   * otherwise crash the process.
+   */
+  private launchPasses(passes: SettledPasses | null): void {
+    if (!passes) return;
+    const { file, memory, title } = passes;
+    if (memory) {
+      const key = `memory:${file}`;
+      this.passesInFlight.add(key);
+      this.runMemoryExtraction(memory)
+        .catch((error: unknown) => console.error("Background memory extraction failed.", error))
+        .finally(() => this.passesInFlight.delete(key));
+    }
+    if (title) this.launchTitle(file, title);
+  }
+
+  private launchTitle(file: string, pass: TitlePass): void {
+    const key = `title:${file}`;
+    this.passesInFlight.add(key);
+    this.runSessionTitle(file, pass)
+      .catch((error: unknown) => console.error("Background auto-titling failed.", error))
+      .finally(() => this.passesInFlight.delete(key));
+  }
+
+  /**
+   * Titles a new conversation from its first message, as soon as it is sent, so the sidebar does
+   * not show the raw message until the reply is done. A first message too short to title is left
+   * to the pass after the reply, which sees the whole turn.
+   */
+  private titleFromFirstMessage(conversation: Conversation, message: AgentMessage): void {
+    const file = conversation.session.sessionFile;
+    if (!file) return;
+    if (conversation.session.messages.some((m) => m.role === "user" && m !== message)) return;
+    const pass = this.prepareSessionTitle(conversation, file, [message]);
+    if (pass) this.launchTitle(file, pass);
   }
 
   /**
@@ -1891,23 +2196,13 @@ export class AgentHost {
    * null when there is nothing to do (memory off for its agent, or no new messages since the last
    * pass).
    */
-  private prepareMemoryExtraction(
-    conversation: Conversation,
-    file: string,
-  ): {
-    file: string;
-    /** `messages.length` as of this prepare; committed to `memoryCursor` only on success. */
-    cursor: number;
-    messages: AgentMessage[];
-    cwd: string;
-    model: Model<Api>;
-    workspaceId: string | null;
-  } | null {
+  private prepareMemoryExtraction(conversation: Conversation, file: string): MemoryPass | null {
     const agent = this.agentOf(conversation);
     if (!this.memoryOn(agent)) {
       this.memoryCursor.delete(file);
       return null;
     }
+    if (this.passesInFlight.has(`memory:${file}`)) return null;
     const messages = conversation.session.messages;
     const stored = this.memoryCursor.get(file) ?? 0;
     // Compaction and editing/regenerating an earlier message reassign `session.messages` to a
@@ -1934,14 +2229,7 @@ export class AgentHost {
    * the pass actually succeeds, so a failure (model error, bad reply) leaves these messages
    * available for the next pass instead of skipping them for good.
    */
-  private async runMemoryExtraction(pass: {
-    file: string;
-    cursor: number;
-    messages: AgentMessage[];
-    cwd: string;
-    model: Model<Api>;
-    workspaceId: string | null;
-  }): Promise<void> {
+  private async runMemoryExtraction(pass: MemoryPass): Promise<void> {
     const { runtime, memory, paths } = this.requireServices();
     const succeeded = await extractMemory(pass.messages, {
       runtime,
@@ -1962,12 +2250,15 @@ export class AgentHost {
    */
   private prepareSessionTitle(
     conversation: Conversation,
-  ): { messages: AgentMessage[]; cwd: string; model: Model<Api> } | null {
-    if (conversation.session.sessionName?.trim()) return null;
+    file: string,
+    messages: AgentMessage[] = conversation.session.messages.slice(),
+  ): TitlePass | null {
+    if (conversation.session.sessionName?.trim() || conversation.pendingTitle) return null;
+    if (this.passesInFlight.has(`title:${file}`)) return null;
     const model = this.chooseModel(this.agentOf(conversation).model);
     if (!model) return null;
     return {
-      messages: conversation.session.messages,
+      messages,
       cwd: conversation.session.sessionManager.getCwd(),
       model,
     };
@@ -1975,14 +2266,11 @@ export class AgentHost {
 
   /**
    * Proposes a title for a conversation that has none yet (`session-title.ts`) and writes it to
-   * the session file directly, since the live session is gone by the time the LLM call returns.
+   * the session file or, when it is open again, through the live session.
    * Best-effort: a failure here never surfaces to the person, and the conversation just keeps its
    * default (first-message) title.
    */
-  private async runSessionTitle(
-    file: string,
-    pass: { messages: AgentMessage[]; cwd: string; model: Model<Api> },
-  ): Promise<void> {
+  private async runSessionTitle(file: string, pass: TitlePass): Promise<void> {
     const { runtime, paths } = this.requireServices();
     const title = await proposeSessionTitle(pass.messages, {
       runtime,
@@ -1996,8 +2284,9 @@ export class AgentHost {
     // instead of only the file a fresh read of it would see.
     const live = this.conversations().find((entry) => entry.session.sessionFile === file);
     if (live) {
-      if (live.session.sessionName?.trim()) return;
-      live.session.setSessionName(title);
+      if (live.session.sessionName?.trim() || live.pendingTitle) return;
+      if (live.running) live.pendingTitle = title;
+      else live.session.setSessionName(title);
     } else {
       // Nothing named it while the call was running (a rename, or the person naming it).
       const manager = SessionManager.open(file, paths.sessionDir);
@@ -2005,6 +2294,21 @@ export class AgentHost {
       manager.appendSessionInfo(title);
     }
     emit({ type: "sessions_changed" });
+  }
+
+  /**
+   * Writes the title proposed during a turn to the session, now that the turn has settled. A
+   * failed write is only logged: settling must go on, and the title is not worth a retry.
+   */
+  private writePendingTitle(conversation: Conversation): void {
+    const { pendingTitle } = conversation;
+    conversation.pendingTitle = null;
+    if (!pendingTitle || conversation.session.sessionName?.trim()) return;
+    try {
+      conversation.session.setSessionName(pendingTitle);
+    } catch (error) {
+      console.error("Could not save the auto-generated title.", error);
+    }
   }
 
   private refreshStatus(): void {
@@ -2145,6 +2449,9 @@ export class AgentHost {
         const ask = askSection(pi.getActiveTools());
         if (ask) sections.ask = ask;
         else delete sections.ask;
+        const goal = goalSection(scope.goal?.current() ?? null);
+        if (goal) sections.goal = goal;
+        else delete sections.goal;
       });
     };
   }
@@ -2351,9 +2658,16 @@ export class AgentHost {
       : allActive.filter((name) => !MEMORY_TOOLS.includes(name));
     // Where nobody can answer (a scheduled run), ask_user and schedule_task are not registered, so
     // they cannot be active.
-    const next = scope.askUser
+    const base = scope.askUser
       ? withMemory
       : withMemory.filter((name) => name !== ASK_TOOL && name !== SCHEDULE_TOOL);
+    // The agent can end the goal only while one is active.
+    const goalActive = scope.goal?.current()?.status === "active";
+    const next = goalActive
+      ? base.includes(GOAL_TOOL)
+        ? base
+        : [...base, GOAL_TOOL]
+      : base.filter((name) => name !== GOAL_TOOL);
     // Only touch the loadout when it changes: replacing it drops MCP tools still connecting.
     const same = next.length === current.length && next.every((name) => current.includes(name));
     if (!same) session.setActiveToolsByName(next);

@@ -46,6 +46,7 @@ import {
   SaveIcon,
   SearchIcon,
   ShieldQuestionIcon,
+  TargetIcon,
   WrenchIcon,
 } from "lucide-react";
 import type { TFunction } from "i18next";
@@ -72,6 +73,7 @@ const ICONS: Record<string, LucideIcon> = {
   memory_list: BrainIcon,
   memory_search: BrainIcon,
   todo_write: ListChecksIcon,
+  complete_goal: TargetIcon,
   delegate_task: BotIcon,
   ask_user: MessageCircleQuestionIcon,
   sessions: HistoryIcon,
@@ -190,6 +192,8 @@ function stepTitle(part: ToolPart, t: TFunction<"chat">) {
       return t(`toolStep.titles.memorySearch.${state}`);
     case "todo_write":
       return t(`toolStep.titles.todo.${state}`);
+    case "complete_goal":
+      return t(`toolStep.titles.goal.${state}`);
     case "delegate_task":
       return t(`toolStep.titles.delegate.${state}`);
     case "ask_user":
@@ -402,22 +406,42 @@ function TodoCard({ items }: { items: TodoItem[] }) {
   );
 }
 
-/** Steps the helper of `delegate_task` has taken so far: `<tool name>\t<what it works on>` lines. */
+/**
+ * Progress of the sub agents of `delegate_task`: `<helper>\t<tool name>\t<what it works on>` lines,
+ * where the tool `done` marks a helper that has finished.
+ */
 function HelperProgress({ output }: { output: string }) {
   const { t } = useTranslation("chat");
-  const steps = output
-    .split("\n")
-    .map((line) => line.split("\t"))
-    .slice(-6);
+  const helpers = new Map<string, { steps: string[][]; done: boolean }>();
+  for (const line of output.split("\n")) {
+    const [label = "", tool = "", target = ""] = line.split("\t");
+    const helper = helpers.get(label) ?? { steps: [], done: false };
+    if (tool === "done") helper.done = true;
+    else helper.steps.push([tool, target]);
+    helpers.set(label, helper);
+  }
   return (
     <ul
       aria-label={t("toolStep.helper.working")}
-      className="flex flex-col gap-0.5 pl-6 text-xs text-muted-foreground"
+      className="flex flex-col gap-1 pl-6 text-xs text-muted-foreground"
     >
-      {steps.map(([tool, target], index) => (
-        <li key={index} className="truncate">
-          <span className="font-mono">{tool}</span>
-          {target ? ` · ${target}` : ""}
+      {[...helpers].map(([label, helper]) => (
+        <li key={label} className="min-w-0">
+          {helpers.size > 1 && (
+            <div className="flex items-center gap-1 truncate font-medium">
+              {helper.done && <CircleCheckIcon className="size-3 shrink-0" aria-hidden />}
+              <span className="truncate">{label}</span>
+              {helper.done && <span className="sr-only">{t("toolStep.helper.done")}</span>}
+            </div>
+          )}
+          <ul className="flex flex-col gap-0.5">
+            {helper.steps.slice(-3).map(([tool, target], index) => (
+              <li key={index} className="truncate">
+                <span className="font-mono">{tool}</span>
+                {target ? ` · ${target}` : ""}
+              </li>
+            ))}
+          </ul>
         </li>
       ))}
     </ul>

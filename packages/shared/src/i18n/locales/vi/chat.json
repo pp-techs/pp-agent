@@ -170,8 +170,24 @@
         "labelOn": "Bật chế độ yolo",
         "labelOff": "Tắt chế độ yolo",
         "description": "Chạy mọi công cụ đã được cho phép mà không hỏi, kể cả việc mở ứng dụng nào, chỉ áp dụng cho cuộc trò chuyện này."
+      },
+      "goal": {
+        "label": "Đặt mục tiêu",
+        "description": "Trợ lý tự làm việc liên tục cho đến khi xong. Gõ /goal kèm điều cần đạt; /goal pause, resume hoặc clear để quản lý.",
+        "current": "Mục tiêu ({{status}}): {{objective}}"
       }
     }
+  },
+  "goal": {
+    "label": "Mục tiêu",
+    "status": {
+      "active": "Đang thực hiện",
+      "waiting": "Đang chờ bạn",
+      "paused": "Đã tạm dừng"
+    },
+    "pause": "Tạm dừng mục tiêu",
+    "resume": "Tiếp tục mục tiêu",
+    "clear": "Xóa mục tiêu"
   },
   "emptyChat": {
     "title": "Tôi có thể giúp gì cho bạn?",
@@ -312,6 +328,11 @@
         "active": "Đang cập nhật danh sách việc",
         "done": "Đã cập nhật danh sách việc",
         "notDone": "Cập nhật danh sách việc"
+      },
+      "goal": {
+        "active": "Đang hoàn tất mục tiêu",
+        "done": "Đã hoàn tất mục tiêu",
+        "notDone": "Hoàn tất mục tiêu"
       },
       "ask": {
         "active": "Đang hỏi bạn một câu",
@@ -463,7 +484,8 @@
     },
     "helper": {
       "task": "Việc",
-      "working": "Đang làm…"
+      "working": "Đang làm…",
+      "done": "Đã xong"
     }
   },
   "panel": {

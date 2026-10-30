@@ -136,6 +136,12 @@
     "toolLocked": "This tool's setting cannot be changed here.",
     "yoloForced": "Yolo mode is already on for every conversation in Settings › Tools."
   },
+  "goal": {
+    "empty": "Write what the goal should be.",
+    "tooLong": "The goal is too long (at most {{max}} characters).",
+    "exists": "This conversation already has a goal. Clear it first.",
+    "nothingToResume": "There is no paused goal to resume."
+  },
   "conversations": {
     "notInHistory": "That conversation is not in this app's history.",
     "enterName": "Enter a name.",
@@ -464,7 +470,8 @@
     },
     "cookies": {
       "sourceNotFound": "{{browser}} or the chosen profile was not found on this computer.",
-      "closeBrowser": "Quit {{browser}} completely, then try again. It keeps its cookies locked while it runs.",
+      "closeBrowser": "Quit {{browser}} completely, then try again. It keeps its cookies locked while it runs, also in the background: quit it from the system tray or end its processes in Task Manager, or turn off “Continue running background apps” in its settings.",
+      "copyBlocked": "The cookies of {{browser}} could not be copied although it is not running ({{error}}). Security software or file permissions may be blocking access.",
       "keyDenied": "macOS did not allow reading the key that protects the cookies of {{browser}}. Try again and choose “Allow” when macOS asks.",
       "keyUnavailable": "The key that protects the cookies of {{browser}} could not be read ({{error}})."
     }

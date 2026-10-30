@@ -136,6 +136,12 @@
     "toolLocked": "Không thể thay đổi cài đặt của công cụ này tại đây.",
     "yoloForced": "Chế độ yolo đã được bật cho mọi cuộc trò chuyện trong Cài đặt › Công cụ."
   },
+  "goal": {
+    "empty": "Hãy nhập mục tiêu cần đạt.",
+    "tooLong": "Mục tiêu quá dài (tối đa {{max}} ký tự).",
+    "exists": "Cuộc trò chuyện này đã có mục tiêu. Hãy xóa mục tiêu đó trước.",
+    "nothingToResume": "Không có mục tiêu nào đang tạm dừng để tiếp tục."
+  },
   "conversations": {
     "notInHistory": "Cuộc trò chuyện đó không có trong lịch sử của ứng dụng này.",
     "enterName": "Hãy nhập tên.",
@@ -464,7 +470,8 @@
     },
     "cookies": {
       "sourceNotFound": "Không tìm thấy {{browser}} hoặc hồ sơ đã chọn trên máy này.",
-      "closeBrowser": "Hãy thoát hẳn {{browser}} rồi thử lại. Trình duyệt khóa cookie khi đang chạy.",
+      "closeBrowser": "Hãy thoát hẳn {{browser}} rồi thử lại. Trình duyệt khóa cookie khi đang chạy, kể cả chạy nền: thoát từ khay hệ thống hoặc kết thúc các tiến trình của nó trong Task Manager, hoặc tắt “Tiếp tục chạy ứng dụng nền” trong phần cài đặt của trình duyệt.",
+      "copyBlocked": "Không thể sao chép cookie của {{browser}} dù trình duyệt không chạy ({{error}}). Phần mềm bảo mật hoặc quyền truy cập tệp có thể đang chặn.",
       "keyDenied": "macOS không cho phép đọc khóa bảo vệ cookie của {{browser}}. Hãy thử lại và chọn “Cho phép” khi macOS hỏi.",
       "keyUnavailable": "Không thể đọc khóa bảo vệ cookie của {{browser}} ({{error}})."
     }

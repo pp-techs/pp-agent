@@ -295,7 +295,8 @@ const TOOL_TEXT: Record<string, { label: string; description: string }> = {
   },
   delegate_task: {
     label: "Hand off research",
-    description: "Give a focused read-only task to a helper and get back a summary.",
+    description:
+      "Give focused read-only tasks to sub agents, several at once, and get back summaries.",
   },
   ask_user: {
     label: "Ask you questions",
