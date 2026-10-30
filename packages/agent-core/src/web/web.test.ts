@@ -200,6 +200,7 @@ describe("shell policy", () => {
   const settings = (overrides: Partial<AppSettings>): AppSettings => ({
     defaultModel: null,
     shellEnabled: true,
+    yoloMode: false,
     toolPolicies: {},
     disabledSkills: [],
     activeAgentId: "default",
@@ -236,6 +237,44 @@ describe("shell policy", () => {
     );
     expect(rule).toMatchObject({ effective: "allow", locked: false });
     expect(rule.warning).toBeTruthy();
+  });
+});
+
+describe("yolo mode", () => {
+  const settings = (overrides: Partial<AppSettings>): AppSettings => ({
+    defaultModel: null,
+    shellEnabled: true,
+    yoloMode: true,
+    toolPolicies: {},
+    disabledSkills: [],
+    activeAgentId: "default",
+    thinkingLevel: "off",
+    language: "system",
+    notifications: true,
+    tray: false,
+    shortcutEnabled: false,
+    shortcut: "CommandOrControl+Shift+Space",
+    ...overrides,
+  });
+
+  test("the shell stays off until enabled, whatever yolo says", () => {
+    const rule = toolRule(SHELL_TOOL, "exec", settings({ shellEnabled: false }));
+    expect(rule).toMatchObject({ effective: "off", locked: true });
+  });
+
+  test("the shell runs freely once enabled, with a warning", () => {
+    const rule = toolRule(SHELL_TOOL, "exec", settings({}));
+    expect(rule).toMatchObject({ effective: "allow", locked: false, warning: "yolo-mode" });
+  });
+
+  test("a write tool that would normally ask runs freely, with a warning", () => {
+    const rule = toolRule("write", "write", settings({ toolPolicies: { write: "ask" } }));
+    expect(rule).toMatchObject({ policy: "ask", effective: "allow", warning: "yolo-mode" });
+  });
+
+  test("a tool turned off stays off", () => {
+    const rule = toolRule("edit", "write", settings({}));
+    expect(rule).toMatchObject({ policy: "off", effective: "off" });
   });
 });
 

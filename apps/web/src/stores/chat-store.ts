@@ -35,8 +35,9 @@ interface ChatState {
   model: ModelSummary | null;
   /** Agent of the open conversation. */
   agent: AgentSummary | null;
-  /** Thinking level of the open conversation and the levels its model offers. */
   thinking: AgentSnapshot["thinking"];
+  /** Yolo mode of the open conversation: whether it is active now, and why. */
+  yolo: AgentSnapshot["yolo"];
   /** Workspace of the open conversation. */
   workspace: WorkspaceSummary | null;
   /** Folder the open conversation works in. */
@@ -60,6 +61,7 @@ export const useChatStore = create<ChatState>()((set) => ({
   model: null,
   agent: null,
   thinking: { level: "off", available: [] },
+  yolo: { active: false, source: "conversation" },
   workspace: null,
   workspaceDir: null,
   context: null,
@@ -87,6 +89,7 @@ export const useChatStore = create<ChatState>()((set) => ({
             model: snapshot.model,
             agent: snapshot.agent,
             thinking: snapshot.thinking,
+            yolo: snapshot.yolo,
             workspace: snapshot.workspace,
             workspaceDir: snapshot.workspaceDir,
             sessionPath: snapshot.sessionPath,

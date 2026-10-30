@@ -31,7 +31,16 @@
       "markdown": "Markdown (.md)",
       "html": "Web page (.html, printable)"
     },
-    "openFolder": "Open workspace folder"
+    "openFolder": "Open workspace folder",
+    "yolo": {
+      "on": "Yolo mode is on",
+      "off": "Turn on yolo mode",
+      "lockedBySettings": "Yolo mode is on for every conversation (Settings › Tools)",
+      "confirm": {
+        "title": "Turn on yolo mode for this chat?",
+        "description": "Every allowed tool will run right away in this conversation, without asking first, including shell commands once they are allowed, and it can open and act in any app on this computer without asking which ones first. It can change or delete files, run commands, and send data out of this computer. Turns off when the conversation closes."
+      }
+    }
   },
   "message": {
     "thinking": "Thinking",
@@ -156,6 +165,11 @@
         "description": "Frees up room in long conversations; the agent keeps a summary.",
         "loading": "Summarizing the conversation…",
         "success": "Conversation summarized"
+      },
+      "yolo": {
+        "labelOn": "Turn on yolo mode",
+        "labelOff": "Turn off yolo mode",
+        "description": "Runs every allowed tool without asking, including which apps it opens, for this conversation only."
       }
     }
   },

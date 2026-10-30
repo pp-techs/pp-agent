@@ -51,6 +51,7 @@ function parse(raw: unknown): SettingsFile {
   const settings: SettingsFile = {
     defaultModel: null,
     shellEnabled: false,
+    yoloMode: false,
     toolPolicies: {},
     disabledSkills: [],
     gateways: [],
@@ -76,6 +77,7 @@ function parse(raw: unknown): SettingsFile {
   const value = raw as Partial<Record<keyof SettingsFile, unknown>>;
   if (Value.Check(ModelRefSchema, value.defaultModel)) settings.defaultModel = value.defaultModel;
   settings.shellEnabled = value.shellEnabled === true;
+  settings.yoloMode = value.yoloMode === true;
   settings.notifications = value.notifications !== false;
   settings.tray = value.tray === true;
   settings.shortcutEnabled = value.shortcutEnabled === true;

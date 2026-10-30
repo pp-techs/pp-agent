@@ -123,6 +123,12 @@ export interface AgentSnapshot {
   agent: AgentSummary | null;
   /** Thinking (reasoning effort) of the open conversation; `available` is empty when its model can't think. */
   thinking: { level: ThinkingLevel; available: ThinkingLevel[] };
+  /**
+   * Yolo mode for this conversation: `active` is whether every tool runs without asking right
+   * now; `source` is `"settings"` while it is forced on in Settings › Tools (the conversation
+   * switch does nothing there), or `"conversation"` while this conversation's own switch decides.
+   */
+  yolo: { active: boolean; source: "settings" | "conversation" };
   /** Workspace of the open conversation. */
   workspace: WorkspaceSummary | null;
   /** Folder the open conversation works in (its workspace's folder). */
@@ -384,6 +390,11 @@ export interface AppSettings {
    * the shell's own policy is `allow`.
    */
   shellEnabled: boolean;
+  /**
+   * Every tool runs without asking, as if each had policy `allow` (shell included, bypassing its
+   * own ask default). Locked and off tools are unaffected.
+   */
+  yoloMode: boolean;
   /** Language of the app; `system` follows the operating system. */
   language: LanguageSetting;
   /** Tool name → policy; tools not listed use their default. */
@@ -537,7 +548,7 @@ export interface ToolSummary {
 }
 
 /** Risks the Tools page warns about; the renderer words each one. */
-export type ToolWarning = "shell-unrestricted";
+export type ToolWarning = "shell-unrestricted" | "yolo-mode";
 
 /** Contents of `AgentPaths.settingsFile`. */
 export interface SettingsFile extends AppSettings {
@@ -968,6 +979,7 @@ export type SettingsPatch = Partial<
     AppSettings,
     | "defaultModel"
     | "shellEnabled"
+    | "yoloMode"
     | "language"
     | "notifications"
     | "tray"
@@ -1106,6 +1118,8 @@ export interface AgentCommandMap {
   set_agent: { params: { id: string }; result: void };
   /** Thinking level for the open conversation (saved with it) and for new conversations. */
   set_thinking_level: { params: { level: ThinkingLevel }; result: void };
+  /** Yolo mode for the open conversation only; lost when it closes, and ignored while Settings forces it on. */
+  set_conversation_yolo: { params: { active: boolean }; result: void };
   /** JSON text of an `AgentExportFile`. */
   export_agent: { params: { id: string }; result: string };
   /** Creates an agent from `AgentExportFile` JSON; a taken name gets a " (2)" suffix. */

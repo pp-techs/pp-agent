@@ -23,6 +23,10 @@
       "shellUnrestricted": {
         "title": "Lệnh shell chạy không cần hỏi",
         "message": "Lệnh được chạy mà không hỏi bạn. Agent có thể thay đổi hoặc xóa tệp và gửi dữ liệu ra khỏi máy tính này."
+      },
+      "yoloMode": {
+        "title": "Chế độ yolo đang bật",
+        "message": "Mọi công cụ chạy mà không hỏi, kể cả lệnh shell khi đã được cho phép. Agent cũng có thể mở và thao tác trong bất kỳ ứng dụng nào trên máy tính này mà không hỏi trước. Agent có thể tự thay đổi hoặc xóa tệp, chạy lệnh và gửi dữ liệu ra khỏi máy tính này."
       }
     },
     "names": {
@@ -66,6 +70,16 @@
       "confirm": {
         "title": "Chạy lệnh shell không cần hỏi?",
         "description": "Agent sẽ chạy mọi lệnh ngay lập tức mà không cho bạn xem trước. Lệnh có thể thay đổi hoặc xóa tệp và gửi dữ liệu ra khỏi máy tính này. Chỉ bật tùy chọn này nếu bạn tin tưởng Agent, mô hình và nội dung mà Agent đọc."
+      }
+    },
+    "yolo": {
+      "enable": {
+        "label": "Chế độ yolo",
+        "description": "Bỏ qua bước hỏi xác nhận cho mọi công cụ đã được cho phép, kể cả lệnh shell khi “Cho phép lệnh shell” đang bật, và bước xác nhận lần đầu cho ứng dụng mà công cụ “Dùng ứng dụng trên máy tính này” mở. Không tự bật thêm công cụ nào."
+      },
+      "confirm": {
+        "title": "Bật chế độ yolo?",
+        "description": "Agent sẽ chạy ngay mọi công cụ đã được cho phép mà không hỏi trước, kể cả lệnh shell khi đã được cho phép, và có thể mở, thao tác trong bất kỳ ứng dụng nào trên máy tính này mà không hỏi trước. Agent có thể thay đổi hoặc xóa tệp, chạy lệnh và gửi dữ liệu ra khỏi máy tính này. Chỉ bật tùy chọn này nếu bạn tin tưởng Agent, mô hình và nội dung mà Agent đọc."
       }
     },
     "loadError": "Không thể tải danh sách công cụ",

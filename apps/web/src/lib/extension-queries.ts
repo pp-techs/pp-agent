@@ -261,6 +261,19 @@ export function useSetShellEnabled(bridge: DesktopBridge) {
   });
 }
 
+export function useSetYoloMode(bridge: DesktopBridge) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (yoloMode: boolean) =>
+      bridge.agent.command({ type: "update_settings", patch: { yoloMode } }),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(queryKeys.settings, settings);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.tools });
+    },
+    onError: showError,
+  });
+}
+
 export function useSetToolPolicy(bridge: DesktopBridge) {
   const queryClient = useQueryClient();
   return useMutation({

@@ -167,13 +167,14 @@ export interface ToolRule {
 export function toolRule(name: string, tier: ToolTier, settings: AppSettings): ToolRule {
   if (name === SHELL_TOOL) {
     if (!settings.shellEnabled) return { policy: "off", effective: "off", locked: true };
-    // The shell asks unless its own policy is `allow`; `auto` and `off` mean nothing for it.
-    if (settings.toolPolicies[name] === "allow")
+    // The shell asks unless its own policy is `allow`; `auto` and `off` mean nothing for it. Yolo
+    // mode runs it freely too, once it is enabled.
+    if (settings.toolPolicies[name] === "allow" || settings.yoloMode)
       return {
         policy: "allow",
         effective: "allow",
         locked: false,
-        warning: "shell-unrestricted",
+        warning: settings.yoloMode ? "yolo-mode" : "shell-unrestricted",
       };
     return { policy: "ask", effective: "ask", locked: false };
   }
@@ -183,6 +184,9 @@ export function toolRule(name: string, tier: ToolTier, settings: AppSettings): T
   // `computer`, which the person turns on once PP Agent may control the computer.
   const policy =
     settings.toolPolicies[name] ?? (name === "edit" || name === COMPUTER_TOOL ? "off" : "auto");
+  if (policy === "off") return { policy, effective: "off", locked: false };
+  // Yolo mode skips the ask step for every tool that is not off; it leaves `off` tools off.
+  if (settings.yoloMode) return { policy, effective: "allow", locked: false, warning: "yolo-mode" };
   const effective = policy === "auto" ? (tier === "read" ? "allow" : "ask") : policy;
   return { policy, effective, locked: false };
 }

@@ -133,7 +133,8 @@
     "unknownThinkingLevel": "Mức suy luận không xác định: {{level}}",
     "unknownPolicy": "Chính sách không xác định: {{policy}}",
     "shellPolicy": "Lệnh shell chỉ có thể hỏi trước hoặc chạy tự do.",
-    "toolLocked": "Không thể thay đổi cài đặt của công cụ này tại đây."
+    "toolLocked": "Không thể thay đổi cài đặt của công cụ này tại đây.",
+    "yoloForced": "Chế độ yolo đã được bật cho mọi cuộc trò chuyện trong Cài đặt › Công cụ."
   },
   "conversations": {
     "notInHistory": "Cuộc trò chuyện đó không có trong lịch sử của ứng dụng này.",

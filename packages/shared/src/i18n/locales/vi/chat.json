@@ -31,7 +31,16 @@
       "markdown": "Markdown (.md)",
       "html": "Trang web (.html, để in)"
     },
-    "openFolder": "Mở thư mục không gian làm việc"
+    "openFolder": "Mở thư mục không gian làm việc",
+    "yolo": {
+      "on": "Chế độ yolo đang bật",
+      "off": "Bật chế độ yolo",
+      "lockedBySettings": "Chế độ yolo đã bật cho mọi cuộc trò chuyện (Cài đặt › Công cụ)",
+      "confirm": {
+        "title": "Bật chế độ yolo cho cuộc trò chuyện này?",
+        "description": "Mọi công cụ đã được cho phép sẽ chạy ngay trong cuộc trò chuyện này mà không hỏi trước, kể cả lệnh shell khi đã được cho phép, và Agent có thể mở, thao tác trong bất kỳ ứng dụng nào trên máy tính này mà không hỏi trước. Agent có thể thay đổi hoặc xóa tệp, chạy lệnh và gửi dữ liệu ra khỏi máy tính này. Tự tắt khi cuộc trò chuyện này đóng lại."
+      }
+    }
   },
   "message": {
     "thinking": "Đang suy luận",
@@ -156,6 +165,11 @@
         "description": "Giải phóng dung lượng trong các cuộc trò chuyện dài; Agent sẽ giữ lại bản tóm tắt.",
         "loading": "Đang tóm tắt cuộc trò chuyện…",
         "success": "Đã tóm tắt cuộc trò chuyện"
+      },
+      "yolo": {
+        "labelOn": "Bật chế độ yolo",
+        "labelOff": "Tắt chế độ yolo",
+        "description": "Chạy mọi công cụ đã được cho phép mà không hỏi, kể cả việc mở ứng dụng nào, chỉ áp dụng cho cuộc trò chuyện này."
       }
     }
   },
