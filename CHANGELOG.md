@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.17.0] — 2026-10-30
+
+The agent can use the browser in the side panel. Ask it to fill in a form, check a dashboard you are signed in to, or collect information from a site, and it opens tabs (in the profile you name, otherwise the default one), reads the page, clicks, types, picks options, and takes screenshots, while the panel shows every step. It can also work in tabs you already opened. The browser tool runs without asking by default; switch it to ask or off in **Settings › Tools**. It works while the PP Agent window is open.
+
+A side panel next to the chat (the panel button in the top bar, or Cmd+J / Ctrl+J) with three tools; drag its edge to resize it, or expand it over the chat. **Terminal** opens your own shell in the conversation's workspace folder, with several terminals per workspace. **Files** lists the workspace folder, refreshes as files change, opens files in tabs with a preview of text, code, Markdown and images, and attaches a file to your message. **Browser** opens web pages in tabs, each tab in a profile with its own sign-ins. Manage profiles in **Settings › Browser** and import every cookie of a Chrome, Edge, Brave, Arc or Chromium profile (macOS), of Chrome, Edge, Brave or Chromium (Windows), or of Firefox, so you stay signed in to the same sites. Deleting a profile removes its sign-ins from PP Agent only.
+
 ## [0.16.0] — 2026-10-29
 
 A conversation left in the background now gets two things for free once it settles: a short title generated from how it started (if you have not named it yourself), and, when long-term memory is on, any lasting facts or preferences it mentioned are saved automatically — on top of the agent still being able to save a note itself when asked. Both run as a separate, one-shot background call and never block or show up in the chat; a failure in either is silent and leaves the conversation as it was.
