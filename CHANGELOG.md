@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.18.0] — 2026-10-30
+
+The agent can use desktop apps on macOS and Windows. Turn it on in **Settings › Computer use** (on macOS, grant Accessibility and Screen Recording there first), then ask it to work in an app: it reads the app's windows, clicks, types, presses keys and uses menus, usually without taking over your screen. The first time it uses an app in a chat, it asks: allow once, in this chat, or always. Looking at a window runs on its own; clicking and typing ask first unless you change that in **Settings › Tools**. It never uses PP Agent itself, terminals, or password and privacy settings, and you can block any other app. It works while the PP Agent window is open.
+
 ## [0.17.0] — 2026-10-30
 
 The agent can use the browser in the side panel. Ask it to fill in a form, check a dashboard you are signed in to, or collect information from a site, and it opens tabs (in the profile you name, otherwise the default one), reads the page, clicks, types, picks options, and takes screenshots, while the panel shows every step. It can also work in tabs you already opened. The browser tool runs without asking by default; switch it to ask or off in **Settings › Tools**. It works while the PP Agent window is open.
