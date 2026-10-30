@@ -1,5 +1,17 @@
 # @workspace/desktop
 
+## 0.19.0
+
+### Minor Changes
+
+- 6fafe10: Added yolo mode: skips the approval step for every tool that is already allowed, including shell commands once "Allow shell commands" is on, and skips the first-use "Let the agent use X?" card for an app the computer tool opens (protected apps still refuse). Turn it on for every conversation in Settings › Tools, or for just the open chat with the rabbit button in its header or the `/yolo` command. It does not turn on anything by itself, and locked or off tools stay off.
+- a540945: Added "Clear all chats" to each workspace's menu in the sidebar, to delete every saved conversation of that workspace at once.
+
+### Patch Changes
+
+- 3107d8f: Fixed the chat view jumping to the top whenever a tool call finished. The patched `@shadcn/react` message scroller no longer re-anchors an already-seen historical turn when a loader swaps for its result in the same render.
+- 924607c: When the model fails (timeout, rate limit, server error), the chat now shows one short sentence instead of the raw error text from the provider.
+
 ## 0.18.0
 
 ### Minor Changes
