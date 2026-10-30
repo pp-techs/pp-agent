@@ -366,6 +366,83 @@ describe("DaemonServer", () => {
   });
 });
 
+describe("DaemonServer browser bridge", () => {
+  async function browserClient(): Promise<TestClient> {
+    const client = await openClient();
+    await client.hello();
+    client.send({ kind: "browser_available", available: true });
+    // Let the server read the frame before the test asks for the browser.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    return client;
+  }
+
+  it("is unavailable until a client offers its browser", async () => {
+    const { server } = await startServer();
+    const client = await openClient();
+    await client.hello();
+    expect(server.browser.available()).toBe(false);
+    await expect(server.browser.request({ action: "tabs" })).rejects.toThrow(/window is open/);
+  });
+
+  it("sends a request to the newest client that offered its browser, and returns its answer", async () => {
+    const { server } = await startServer();
+    const older = await browserClient();
+    const newer = await browserClient();
+    expect(server.browser.available()).toBe(true);
+    const answer = server.browser.request({ action: "snapshot", tab: "tab-1" });
+    const frame = await newer.next();
+    expect(frame).toMatchObject({
+      kind: "browser_request",
+      request: { action: "snapshot", tab: "tab-1" },
+    });
+    if (frame.kind !== "browser_request") throw new Error("Expected a browser request");
+    // A response from a client that was not asked is ignored.
+    older.send({ kind: "browser_response", id: frame.id, ok: true, result: { text: "wrong" } });
+    newer.send({ kind: "browser_response", id: frame.id, ok: true, result: { text: "page" } });
+    await expect(answer).resolves.toEqual({ text: "page" });
+    expect(older.frames).toEqual([]);
+  });
+
+  it("passes on a client's error and fails requests of a client that leaves", async () => {
+    const { server } = await startServer();
+    const client = await browserClient();
+    const failing = server.browser.request({ action: "click", ref: "e1" });
+    const first = await client.next();
+    if (first.kind !== "browser_request") throw new Error("Expected a browser request");
+    client.send({
+      kind: "browser_response",
+      id: first.id,
+      ok: false,
+      error: "Element e1 is gone.",
+    });
+    await expect(failing).rejects.toThrow("Element e1 is gone.");
+
+    const pending = server.browser.request({ action: "tabs" });
+    await client.next();
+    client.close();
+    await expect(pending).rejects.toThrow(/window closed/);
+    expect(server.browser.available()).toBe(false);
+  });
+
+  it("stops waiting when the tool call is aborted", async () => {
+    const { server } = await startServer();
+    const client = await browserClient();
+    const controller = new AbortController();
+    const pending = server.browser.request({ action: "wait", ms: 5000 }, controller.signal);
+    await client.next();
+    controller.abort();
+    await expect(pending).rejects.toThrow(/stopped/);
+  });
+
+  it("forgets a client that withdraws its browser", async () => {
+    const { server } = await startServer();
+    const client = await browserClient();
+    client.send({ kind: "browser_available", available: false });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(server.browser.available()).toBe(false);
+  });
+});
+
 describe("ensureToken", () => {
   it("creates a 64-character hex token once and reuses it", async () => {
     const file = join(dir, "agentd.token");

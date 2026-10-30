@@ -40,9 +40,13 @@ extraResources:
   - from: resources/licenses/webclaw
     to: licenses/webclaw
 asar: true
-# Native addons cannot load from inside the asar archive (the daemon's OS keyring binding).
+# Native addons cannot load from inside the asar archive (the daemon's OS keyring binding, and
+# the side panel terminal with its spawn-helper program).
 asarUnpack:
   - node_modules/@napi-rs/**
+  - node_modules/node-pty/**
+# Gives node-pty's spawn-helper the execute bit its package lost, before the app is signed.
+afterPack: scripts/after-pack.cjs
 # Space-free names for release assets, e.g. pp-agent-0.1.0-mac-arm64.dmg.
 artifactName: pp-agent-${version}-${os}-${arch}.${ext}
 # Installers are attached to GitHub Releases by .github/workflows/release.yml (always run with

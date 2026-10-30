@@ -406,5 +406,48 @@
       "moreChoices": "…and {{count}} more. Type a part of the name after the command to find it.",
       "chooseHint": "Reply /{{command}} followed by a number or a name."
     }
+  },
+  "browserProfiles": {
+    "nameRequired": "Enter a name for the browser profile.",
+    "nameTaken": "A browser profile named {{name}} already exists.",
+    "tooMany": "You can have at most {{max}} browser profiles. Delete one you no longer use.",
+    "builtinCannotDelete": "The default browser profile cannot be deleted.",
+    "notFound": "This browser profile no longer exists.",
+    "importInvalid": "The import could not be recorded."
+  },
+  "panel": {
+    "notWorkspace": "This folder is not one of your workspaces.",
+    "terminal": {
+      "tooMany": "Close a terminal before opening another (at most {{max}}).",
+      "notFound": "This terminal is already closed.",
+      "startFailed": "The terminal could not start ({{error}})."
+    },
+    "files": {
+      "notFound": "This file or folder no longer exists.",
+      "outsideWorkspace": "This file is not inside the workspace.",
+      "notAFile": "Only files can be attached, not folders."
+    },
+    "browser": {
+      "tabNotFound": "This tab is already closed.",
+      "tooManyTabs": "Close a tab before opening another (at most {{max}}).",
+      "profileNotFound": "This browser profile no longer exists.",
+      "menu": {
+        "openLinkInNewTab": "Open link in new tab",
+        "copyLink": "Copy link address",
+        "cut": "Cut",
+        "copy": "Copy",
+        "paste": "Paste",
+        "selectAll": "Select all",
+        "back": "Back",
+        "forward": "Forward",
+        "reload": "Reload"
+      }
+    },
+    "cookies": {
+      "sourceNotFound": "{{browser}} or the chosen profile was not found on this computer.",
+      "closeBrowser": "Quit {{browser}} completely, then try again. It keeps its cookies locked while it runs.",
+      "keyDenied": "macOS did not allow reading the key that protects the cookies of {{browser}}. Try again and choose “Allow” when macOS asks.",
+      "keyUnavailable": "The key that protects the cookies of {{browser}} could not be read ({{error}})."
+    }
   }
 }

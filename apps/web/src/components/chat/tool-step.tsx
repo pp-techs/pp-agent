@@ -31,6 +31,7 @@ import {
   CodeIcon,
   FileTextIcon,
   FolderOpenIcon,
+  GlobeIcon,
   HistoryIcon,
   ListChecksIcon,
   type LucideIcon,
@@ -67,6 +68,7 @@ const ICONS: Record<string, LucideIcon> = {
   ask_user: MessageCircleQuestionIcon,
   sessions: HistoryIcon,
   schedule_manage: CalendarClockIcon,
+  browser: GlobeIcon,
   office_read: FileTextIcon,
   office_edit: SaveIcon,
 };
@@ -77,6 +79,30 @@ function stringArg(args: Record<string, unknown>, key: string) {
 }
 
 type StepState = "active" | "done" | "notDone";
+
+/** What the person reads for each action of the agent's browser tool. */
+const BROWSER_STEP: Record<string, "open" | "click" | "type" | "read" | "tabs" | "other"> = {
+  open: "open",
+  navigate: "open",
+  click: "click",
+  type: "type",
+  snapshot: "read",
+  text: "read",
+  screenshot: "read",
+  tabs: "tabs",
+  select: "tabs",
+  close: "tabs",
+};
+
+function browserTitle(args: Record<string, unknown>, state: StepState, t: TFunction<"chat">) {
+  const kind = BROWSER_STEP[stringArg(args, "action") ?? ""] ?? "other";
+  const url = stringArg(args, "url") ?? "";
+  // A host reads better than a whole address; words to search for stay as they are.
+  // `localhost:3000` parses with an empty hostname; keep the words then.
+  const host = URL.canParse(url) ? new URL(url).hostname : "";
+  const target = host || url || t("toolStep.fallbacks.page");
+  return t(`toolStep.titles.browser.${kind}.${state}`, { target });
+}
 
 /** Plain-language step titles for people who do not know what `grep` is. */
 function stepTitle(part: ToolPart, t: TFunction<"chat">) {
@@ -134,6 +160,8 @@ function stepTitle(part: ToolPart, t: TFunction<"chat">) {
       return t(`toolStep.titles.sessions.${state}`);
     case "schedule_manage":
       return t(`toolStep.titles.scheduleManage.${state}`);
+    case "browser":
+      return browserTitle(part.args, state, t);
   }
   // MCP tools are named mcp__<server>__<tool>.
   const mcp = /^mcp__(.+?)__(.+)$/.exec(part.name);

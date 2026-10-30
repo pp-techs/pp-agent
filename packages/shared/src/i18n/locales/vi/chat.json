@@ -216,7 +216,8 @@
       "file": "một tệp",
       "workspace": "không gian làm việc",
       "pattern": "một mẫu",
-      "text": "văn bản"
+      "text": "văn bản",
+      "page": "một trang"
     },
     "titles": {
       "read": {
@@ -313,6 +314,38 @@
         "active": "Trợ lý phụ đang tra cứu",
         "done": "Trợ lý phụ đã xong",
         "notDone": "Giao việc tra cứu cho trợ lý phụ"
+      },
+      "browser": {
+        "open": {
+          "active": "Đang mở {{target}}",
+          "done": "Đã mở {{target}}",
+          "notDone": "Mở {{target}}"
+        },
+        "click": {
+          "active": "Đang bấm trên trang",
+          "done": "Đã bấm trên trang",
+          "notDone": "Bấm trên trang"
+        },
+        "type": {
+          "active": "Đang nhập trên trang",
+          "done": "Đã nhập trên trang",
+          "notDone": "Nhập trên trang"
+        },
+        "read": {
+          "active": "Đang đọc trang",
+          "done": "Đã đọc trang",
+          "notDone": "Đọc trang"
+        },
+        "tabs": {
+          "active": "Đang sắp xếp tab trình duyệt",
+          "done": "Đã sắp xếp tab trình duyệt",
+          "notDone": "Sắp xếp tab trình duyệt"
+        },
+        "other": {
+          "active": "Đang dùng trình duyệt",
+          "done": "Đã dùng trình duyệt",
+          "notDone": "Dùng trình duyệt"
+        }
       }
     },
     "ask": {
@@ -349,5 +382,56 @@
       "task": "Việc",
       "working": "Đang làm…"
     }
+  },
+  "panel": {
+    "label": "Bảng bên",
+    "open": "Mở bảng bên",
+    "close": "Đóng bảng bên",
+    "closeWithShortcut": "Đóng bảng bên ({{shortcut}})",
+    "toggleWithShortcut": "{{label}} ({{shortcut}})",
+    "resize": "Đổi độ rộng bảng bên",
+    "tools": {
+      "terminal": "Terminal",
+      "files": "Tệp",
+      "browser": "Trình duyệt"
+    },
+    "terminal": {
+      "new": "Terminal mới",
+      "close": "Đóng terminal",
+      "tab": "{{name}} {{number}}",
+      "ended": "(đã kết thúc)",
+      "emptyTitle": "Chưa mở terminal nào",
+      "emptyDescription": "Mở một terminal trong thư mục của không gian làm việc này để tự chạy lệnh."
+    },
+    "files": {
+      "attach": "Đính kèm vào tin nhắn",
+      "attached": "Đã đính kèm {{name}} vào tin nhắn của bạn.",
+      "reveal": "Hiện trong thư mục",
+      "refresh": "Làm mới",
+      "openFolder": "Mở thư mục không gian làm việc",
+      "emptyFolder": "Thư mục trống",
+      "truncated": "Chỉ hiển thị phần đầu. Tệp có dung lượng {{size}}.",
+      "noPreviewTitle": "Không có bản xem trước",
+      "noPreview": "Không thể hiển thị tệp này ({{size}}) ở đây. Dùng “Hiện trong thư mục” để mở.",
+      "closeTab": "Đóng {{name}}"
+    },
+    "browser": {
+      "newTab": "Tab mới",
+      "closeTab": "Đóng {{name}}",
+      "back": "Quay lại",
+      "forward": "Tiến tới",
+      "reload": "Tải lại",
+      "stop": "Dừng tải",
+      "address": "Địa chỉ",
+      "addressPlaceholder": "Tìm kiếm hoặc nhập địa chỉ web",
+      "profile": "Hồ sơ trình duyệt: {{name}}",
+      "profileHint": "Hồ sơ của tab này. Mỗi hồ sơ có thông tin đăng nhập riêng.",
+      "newTabIn": "Tab mới trong hồ sơ",
+      "manageProfiles": "Quản lý hồ sơ…",
+      "emptyTitle": "Duyệt web",
+      "emptyDescription": "Nhập địa chỉ ở trên. Trang sẽ mở với thông tin đăng nhập của hồ sơ đã chọn."
+    },
+    "expand": "Mở rộng che khung chat",
+    "restore": "Hiện bên cạnh khung chat"
   }
 }

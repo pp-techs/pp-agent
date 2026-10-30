@@ -17,7 +17,8 @@
       "memory": "Bộ nhớ",
       "scheduledTasks": "Tác vụ định kỳ",
       "channels": "Kênh chat",
-      "background": "Chạy nền"
+      "background": "Chạy nền",
+      "browser": "Trình duyệt"
     }
   },
   "general": {
@@ -459,6 +460,40 @@
       "setUp": "Thiết lập",
       "manage": "Quản lý",
       "agentFollow": "Tác nhân của không gian làm việc"
+    }
+  },
+  "browserSection": {
+    "title": "Hồ sơ trình duyệt",
+    "description": "Trình duyệt trong bảng bên lưu thông tin đăng nhập theo từng hồ sơ. Nhập cookie từ một trình duyệt trên máy này để vẫn đăng nhập vào cùng các trang web.",
+    "newProfile": "Hồ sơ mới",
+    "newTitle": "Hồ sơ trình duyệt mới",
+    "renameTitle": "Đổi tên hồ sơ trình duyệt",
+    "nameLabel": "Tên hồ sơ",
+    "renameLabel": "Đổi tên {{name}}",
+    "deleteLabel": "Xóa {{name}}",
+    "defaultBadge": "Có sẵn",
+    "loadError": "Không tải được hồ sơ trình duyệt",
+    "noImport": "Chưa nhập cookie nào.",
+    "lastImport_other": "{{count}} cookie từ {{browser}} ({{profile}}), {{date}}",
+    "importButton": "Nhập cookie",
+    "deleted": "Đã xóa hồ sơ {{name}} và thông tin đăng nhập của nó.",
+    "deleteConfirm": {
+      "title": "Xóa hồ sơ trình duyệt này?",
+      "description": "{{name}} và mọi thứ nó lưu (thông tin đăng nhập, cookie, dữ liệu trang web) sẽ bị xóa khỏi PP Agent. Các trình duyệt khác của bạn không bị ảnh hưởng."
+    },
+    "privacy": "Cookie được sao chép một lần và chỉ nằm trên máy này. Đăng xuất ở đây không đăng xuất bạn khỏi trình duyệt kia.",
+    "import": {
+      "title": "Nhập cookie vào {{name}}",
+      "description": "Sao chép mọi cookie của một hồ sơ trình duyệt trên máy này, để các trang bạn đã đăng nhập ở đó cũng được đăng nhập ở đây. Cookie cùng tên đã có trong hồ sơ này sẽ bị thay thế.",
+      "browser": "Trình duyệt",
+      "sourceProfile": "Hồ sơ trong trình duyệt đó",
+      "hintMac": "macOS sẽ hỏi quyền truy cập khóa đã lưu của trình duyệt. Hãy chọn “Cho phép”.",
+      "hintWindows": "Nếu nhập không thành công, hãy thoát hẳn trình duyệt đó rồi thử lại.",
+      "hintFirefox": "Cookie của các tab container và cửa sổ riêng tư sẽ không được sao chép.",
+      "none": "Không tìm thấy trình duyệt nào được hỗ trợ có cookie trên máy này (Chrome, Edge, Brave, Arc, Chromium hoặc Firefox).",
+      "submit": "Nhập",
+      "done_other": "Đã nhập {{count}} cookie từ {{browser}} vào {{profile}}.",
+      "skipped_other": "Đã bỏ qua {{count}} cookie (hết hạn hoặc không đọc được)."
     }
   }
 }

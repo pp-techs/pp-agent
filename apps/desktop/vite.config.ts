@@ -7,8 +7,8 @@ const shared: PackUserConfig = {
   outDir: "dist",
   sourcemap: true,
   // Electron is provided by the runtime; pi stays in node_modules (it loads assets and wasm at runtime),
-  // and so does the keyring (a native addon).
-  deps: { neverBundle: ["electron", "@napi-rs/keyring"] },
+  // and so do the keyring and the terminal (native addons).
+  deps: { neverBundle: ["electron", "@napi-rs/keyring", "node-pty"] },
 };
 
 export default defineConfig({

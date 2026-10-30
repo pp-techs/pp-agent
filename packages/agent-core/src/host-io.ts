@@ -1,4 +1,10 @@
-import type { AgentEvent, ServiceStatus, StoredCredential } from "@workspace/shared";
+import type {
+  AgentEvent,
+  BrowserRequest,
+  BrowserResult,
+  ServiceStatus,
+  StoredCredential,
+} from "@workspace/shared";
 
 /** Where the host sends what it produces. The daemon forwards it to every connected client. */
 export interface HostOutput {
@@ -27,9 +33,22 @@ export interface ServiceControl {
   uninstall(): Promise<void>;
 }
 
+/**
+ * The browser the agent's `browser` tool drives: the side panel browser of a connected window. A
+ * headless browser the daemon starts itself could answer here too, for runs without a window.
+ */
+export interface BrowserBridge {
+  /** Whether a browser can take requests right now. */
+  available(): boolean;
+  /** Runs one tool call; rejects with a message the model can act on. */
+  request(request: BrowserRequest, signal?: AbortSignal): Promise<BrowserResult>;
+}
+
 /** Everything the host needs from the process that runs it. */
 export interface HostEnvironment {
   output: HostOutput;
   vault: VaultBackend;
   service: ServiceControl;
+  /** Absent where nothing can show a browser (tests, a host without clients). */
+  browser?: BrowserBridge;
 }

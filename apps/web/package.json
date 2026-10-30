@@ -12,6 +12,8 @@
     "@buiducnhat/better-modal": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@workspace/ui": "workspace:*",
+    "@xterm/addon-fit": "catalog:",
+    "@xterm/xterm": "catalog:",
     "i18next": "catalog:",
     "lucide-react": "catalog:",
     "react": "catalog:",

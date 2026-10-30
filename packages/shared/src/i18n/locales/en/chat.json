@@ -216,7 +216,8 @@
       "file": "a file",
       "workspace": "the workspace",
       "pattern": "a pattern",
-      "text": "text"
+      "text": "text",
+      "page": "a page"
     },
     "titles": {
       "read": {
@@ -313,6 +314,38 @@
         "active": "Helper is researching",
         "done": "Helper finished",
         "notDone": "Hand research to a helper"
+      },
+      "browser": {
+        "open": {
+          "active": "Opening {{target}}",
+          "done": "Opened {{target}}",
+          "notDone": "Open {{target}}"
+        },
+        "click": {
+          "active": "Clicking on the page",
+          "done": "Clicked on the page",
+          "notDone": "Click on the page"
+        },
+        "type": {
+          "active": "Typing on the page",
+          "done": "Typed on the page",
+          "notDone": "Type on the page"
+        },
+        "read": {
+          "active": "Reading the page",
+          "done": "Read the page",
+          "notDone": "Read the page"
+        },
+        "tabs": {
+          "active": "Arranging browser tabs",
+          "done": "Arranged browser tabs",
+          "notDone": "Arrange browser tabs"
+        },
+        "other": {
+          "active": "Using the browser",
+          "done": "Used the browser",
+          "notDone": "Use the browser"
+        }
       }
     },
     "ask": {
@@ -349,5 +382,56 @@
       "task": "Task",
       "working": "Working…"
     }
+  },
+  "panel": {
+    "label": "Side panel",
+    "open": "Open side panel",
+    "close": "Close side panel",
+    "closeWithShortcut": "Close side panel ({{shortcut}})",
+    "toggleWithShortcut": "{{label}} ({{shortcut}})",
+    "resize": "Resize side panel",
+    "tools": {
+      "terminal": "Terminal",
+      "files": "Files",
+      "browser": "Browser"
+    },
+    "terminal": {
+      "new": "New terminal",
+      "close": "Close terminal",
+      "tab": "{{name}} {{number}}",
+      "ended": "(ended)",
+      "emptyTitle": "No terminal open",
+      "emptyDescription": "Open a terminal in this workspace's folder to run commands yourself."
+    },
+    "files": {
+      "attach": "Attach to message",
+      "attached": "{{name}} is attached to your message.",
+      "reveal": "Show in folder",
+      "refresh": "Refresh",
+      "openFolder": "Open workspace folder",
+      "emptyFolder": "Empty folder",
+      "truncated": "Only the beginning is shown. The file is {{size}}.",
+      "noPreviewTitle": "No preview",
+      "noPreview": "This file ({{size}}) cannot be shown here. Use “Show in folder” to open it.",
+      "closeTab": "Close {{name}}"
+    },
+    "browser": {
+      "newTab": "New tab",
+      "closeTab": "Close {{name}}",
+      "back": "Back",
+      "forward": "Forward",
+      "reload": "Reload",
+      "stop": "Stop loading",
+      "address": "Address",
+      "addressPlaceholder": "Search or type a web address",
+      "profile": "Browser profile: {{name}}",
+      "profileHint": "Profile of this tab. Each profile has its own sign-ins.",
+      "newTabIn": "New tab in profile",
+      "manageProfiles": "Manage profiles…",
+      "emptyTitle": "Browse the web",
+      "emptyDescription": "Type an address above. Pages open with the chosen profile's sign-ins."
+    },
+    "expand": "Expand over the chat",
+    "restore": "Show beside the chat"
   }
 }

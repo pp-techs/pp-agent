@@ -406,5 +406,48 @@
       "moreChoices": "…và {{count}} mục nữa. Gõ một phần của tên sau lệnh để tìm.",
       "chooseHint": "Trả lời /{{command}} kèm một số hoặc một tên."
     }
+  },
+  "browserProfiles": {
+    "nameRequired": "Nhập tên cho hồ sơ trình duyệt.",
+    "nameTaken": "Đã có hồ sơ trình duyệt tên {{name}}.",
+    "tooMany": "Bạn chỉ có thể có tối đa {{max}} hồ sơ trình duyệt. Hãy xóa hồ sơ không còn dùng.",
+    "builtinCannotDelete": "Không thể xóa hồ sơ trình duyệt mặc định.",
+    "notFound": "Hồ sơ trình duyệt này không còn tồn tại.",
+    "importInvalid": "Không thể ghi lại lần nhập."
+  },
+  "panel": {
+    "notWorkspace": "Thư mục này không thuộc không gian làm việc nào của bạn.",
+    "terminal": {
+      "tooMany": "Hãy đóng một terminal trước khi mở thêm (tối đa {{max}}).",
+      "notFound": "Terminal này đã được đóng.",
+      "startFailed": "Không thể khởi động terminal ({{error}})."
+    },
+    "files": {
+      "notFound": "Tệp hoặc thư mục này không còn tồn tại.",
+      "outsideWorkspace": "Tệp này không nằm trong không gian làm việc.",
+      "notAFile": "Chỉ có thể đính kèm tệp, không phải thư mục."
+    },
+    "browser": {
+      "tabNotFound": "Tab này đã được đóng.",
+      "tooManyTabs": "Hãy đóng một tab trước khi mở thêm (tối đa {{max}}).",
+      "profileNotFound": "Hồ sơ trình duyệt này không còn tồn tại.",
+      "menu": {
+        "openLinkInNewTab": "Mở liên kết trong tab mới",
+        "copyLink": "Sao chép địa chỉ liên kết",
+        "cut": "Cắt",
+        "copy": "Sao chép",
+        "paste": "Dán",
+        "selectAll": "Chọn tất cả",
+        "back": "Quay lại",
+        "forward": "Tiến tới",
+        "reload": "Tải lại"
+      }
+    },
+    "cookies": {
+      "sourceNotFound": "Không tìm thấy {{browser}} hoặc hồ sơ đã chọn trên máy này.",
+      "closeBrowser": "Hãy thoát hẳn {{browser}} rồi thử lại. Trình duyệt khóa cookie khi đang chạy.",
+      "keyDenied": "macOS không cho phép đọc khóa bảo vệ cookie của {{browser}}. Hãy thử lại và chọn “Cho phép” khi macOS hỏi.",
+      "keyUnavailable": "Không thể đọc khóa bảo vệ cookie của {{browser}} ({{error}})."
+    }
   }
 }

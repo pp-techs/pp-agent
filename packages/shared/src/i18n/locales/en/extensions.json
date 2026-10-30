@@ -38,6 +38,7 @@
       "current_datetime": "Current date and time",
       "web_search": "Search the web",
       "web_fetch": "Open web pages",
+      "browser": "Use the browser",
       "codemode": "Run scripts with connected tools",
       "tool_search": "Look up connected tools",
       "list_mcp_resources": "List server resources",

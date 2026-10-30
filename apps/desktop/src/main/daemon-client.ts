@@ -11,6 +11,8 @@ import { type DaemonPaths, resolveDaemonPaths } from "@workspace/daemon/paths";
 import {
   type AgentCommand,
   type AgentEvent,
+  type BrowserRequest,
+  type BrowserResult,
   type ClientFrame,
   DAEMON_PROTOCOL,
   type DaemonFrame,
@@ -52,6 +54,8 @@ export interface DaemonClientOptions {
   appVersion: string;
   onEvent(event: AgentEvent): void;
   onOpenUrl(url: string): void;
+  /** Runs one call of the agent's browser tool in this window's side panel browser. */
+  onBrowserRequest(request: BrowserRequest): Promise<BrowserResult>;
   /** The connection broke after being up. Pending commands were already rejected. */
   onLost(): void;
   /** The daemon could not be started or reached; the client keeps trying. */
@@ -92,6 +96,8 @@ export class DaemonClient {
   private spawnedPid: number | null = null;
   private spawnError: Error | null = null;
   private ownsDaemon = false;
+  /** Last value given to `setBrowserAvailable`, sent again after every (re)connection. */
+  private browserAvailable = false;
 
   constructor(private readonly options: DaemonClientOptions) {
     this.paths = resolveDaemonPaths({ ...process.env, PP_AGENT_HOME: options.home });
@@ -115,6 +121,14 @@ export class DaemonClient {
   /** Hands the old desktop vault's credentials to the daemon. */
   async importCredentials(entries: Record<string, StoredCredential>): Promise<void> {
     await this.call((id) => ({ kind: "vault_import", id, entries }));
+  }
+
+  /** Tells the daemon whether the agent's browser tool can run here (a window is open). */
+  setBrowserAvailable(available: boolean): void {
+    this.browserAvailable = available;
+    this.conn?.socket.write(
+      encodeFrame({ kind: "browser_available", available } satisfies ClientFrame),
+    );
   }
 
   /** Quitting: stops the daemon this app started, leaves any other running. */
@@ -338,6 +352,13 @@ export class DaemonClient {
   private adopt(conn: Connection): void {
     this.conn = conn;
     this.ready.resolve(conn);
+    // A new daemon (or a reconnection) does not know whether this app has a window.
+    conn.socket.write(
+      encodeFrame({
+        kind: "browser_available",
+        available: this.browserAvailable,
+      } satisfies ClientFrame),
+    );
     for (const frame of conn.early.splice(0)) this.receive(conn, frame);
   }
 
@@ -400,6 +421,23 @@ export class DaemonClient {
       case "open_url":
         this.options.onOpenUrl(frame.url);
         return;
+      case "browser_request": {
+        const { id } = frame;
+        const reply = (response: ClientFrame) => {
+          if (!conn.socket.destroyed) conn.socket.write(encodeFrame(response));
+        };
+        this.options.onBrowserRequest(frame.request).then(
+          (result) => reply({ kind: "browser_response", id, ok: true, result }),
+          (error: unknown) =>
+            reply({
+              kind: "browser_response",
+              id,
+              ok: false,
+              error: error instanceof Error ? error.message : String(error),
+            }),
+        );
+        return;
+      }
       case "result": {
         const request = this.pending.get(frame.id);
         if (!request) return;
