@@ -353,6 +353,8 @@ interface ConversationState {
   mcpServers: McpRegistrations;
   /** Ids of the apps the person let the `computer` tool use for the rest of this conversation. */
   computerApps: Set<string>;
+  /** This conversation's own yolo switch; off until the person turns it on, lost when it closes. */
+  yolo: boolean;
   running: boolean;
   /** Agent and workspace as of when it left the window; the host's own fields are the open one's. */
   agentId: string;
@@ -832,6 +834,8 @@ export class AgentHost {
         return this.setAgent(command.id);
       case "set_thinking_level":
         return this.setThinkingLevel(command.level);
+      case "set_conversation_yolo":
+        return this.setConversationYolo(command.active);
       case "export_agent":
         return exportAgent(this.requireAgent(command.id));
       case "import_agent":
@@ -1006,7 +1010,14 @@ export class AgentHost {
       sessionPath: this.session?.sessionFile ?? null,
       context: this.contextUsage(),
       activity: this.activity(),
+      yolo: this.yoloState(open),
     };
+  }
+
+  /** Yolo state of `open`: forced on by Settings, or this conversation's own switch. */
+  private yoloState(open: ConversationState | null): AgentSnapshot["yolo"] {
+    if (this.services?.settings.get().yoloMode) return { active: true, source: "settings" };
+    return { active: open?.yolo === true, source: "conversation" };
   }
 
   /** Context window usage of the open conversation, null while it has no model. */
@@ -1596,6 +1607,7 @@ export class AgentHost {
         (request) => this.requestApproval(conversation, request),
         undefined,
         conversation.computerApps,
+        () => conversation.yolo,
       ),
       askUser: (call, signal) => this.requestQuestion(conversation, call, signal),
       surface: { kind: "window", label: "in the desktop window" },
@@ -1744,6 +1756,7 @@ export class AgentHost {
       }),
       approvals: new Map(),
       computerApps: new Set(),
+      yolo: false,
       questions: new Map(),
       mcpServers: new McpRegistrations(mcpConfig, (name) => {
         const { mcpServers } = this.agentOf(state);
@@ -2013,13 +2026,17 @@ export class AgentHost {
    * Extension that applies tool policies for `agent` and settles tools that need approval through
    * `ask`: the open conversation asks the person, a scheduled run (nobody there) denies.
    * `computerApps` (the window's conversations only) holds the apps the person allowed for the
-   * conversation; without it the computer tool is blocked.
+   * conversation; without it the computer tool is blocked. `yolo` (the window's conversations
+   * only) reports the conversation's own yolo switch; it runs every allowed tool without asking,
+   * on top of Settings › Tools, and auto-allows a computer app's first use in the conversation too
+   * (an app that is protected or blocked still refuses).
    */
   private gateFor(
     agent: () => AgentProfile,
     ask: (request: ApprovalRequest) => Promise<boolean>,
     declinedReason = "The user declined this action.",
     computerApps?: Set<string>,
+    yolo?: () => boolean,
   ): ExtensionFactory {
     return (pi) => {
       pi.on("tool_call", async (event) => {
@@ -2028,8 +2045,10 @@ export class AgentHost {
         const tier = computer
           ? computerActionTier(event.input.action)
           : toolTier(event.toolName, info?.annotations);
-        const settings = this.services?.settings.get();
-        if (!settings) return { block: true, reason: "The app is still starting." };
+        const saved = this.services?.settings.get();
+        if (!saved) return { block: true, reason: "The app is still starting." };
+        const active = saved.yoloMode || yolo?.() === true;
+        const settings = active ? { ...saved, yoloMode: true } : saved;
         // Tools that are off stay registered (codemode can reach any registered tool), so the gate
         // blocks them too.
         const rule = toolRule(event.toolName, tier, settings);
@@ -2048,7 +2067,10 @@ export class AgentHost {
             (id) => this.computerAppNames.get(id),
           );
           if (access.kind === "refused") return { block: true, reason: access.reason };
-          if (access.kind === "ask") app = access.app;
+          if (access.kind === "ask") {
+            if (active) computerApps.add(access.app.id);
+            else app = access.app;
+          }
         }
         if (rule.effective === "allow" && !app) return undefined;
         const approved = await ask({
@@ -2424,6 +2446,7 @@ export class AgentHost {
     const after = settings.update((draft) => {
       if (patch.defaultModel !== undefined) draft.defaultModel = patch.defaultModel;
       if (typeof patch.shellEnabled === "boolean") draft.shellEnabled = patch.shellEnabled;
+      if (typeof patch.yoloMode === "boolean") draft.yoloMode = patch.yoloMode;
       if (patch.language !== undefined) draft.language = patch.language;
       if (typeof patch.notifications === "boolean") draft.notifications = patch.notifications;
       if (typeof patch.tray === "boolean") draft.tray = patch.tray;
@@ -2436,6 +2459,10 @@ export class AgentHost {
       scopes.push("providers", "sessions");
     }
     if (after.shellEnabled !== before.shellEnabled) {
+      scopes.push("tools");
+      apply.tools = true;
+    }
+    if (after.yoloMode !== before.yoloMode) {
       scopes.push("tools");
       apply.tools = true;
     }
@@ -2602,6 +2629,15 @@ export class AgentHost {
       });
       this.changed(["settings"], {});
     }
+    emit({ type: "snapshot", snapshot: this.snapshot() });
+  }
+
+  /** Yolo for the open conversation only, unless Settings already forces it on everywhere. */
+  private setConversationYolo(active: boolean): void {
+    const conversation = this.requireOpen();
+    const settings = this.requireServices().settings.get();
+    if (settings.yoloMode) throw new Error(t("settings.yoloForced"));
+    conversation.yolo = active;
     emit({ type: "snapshot", snapshot: this.snapshot() });
   }
 
@@ -3965,6 +4001,7 @@ function appSettings(store: SettingsStore): AppSettings {
   const {
     defaultModel,
     shellEnabled,
+    yoloMode,
     language,
     toolPolicies,
     disabledSkills,
@@ -3978,6 +4015,7 @@ function appSettings(store: SettingsStore): AppSettings {
   return {
     defaultModel,
     shellEnabled,
+    yoloMode,
     language,
     notifications,
     tray,

@@ -133,7 +133,8 @@
     "unknownThinkingLevel": "Unknown thinking level: {{level}}",
     "unknownPolicy": "Unknown policy: {{policy}}",
     "shellPolicy": "Shell commands either ask first or run freely.",
-    "toolLocked": "This tool's setting cannot be changed here."
+    "toolLocked": "This tool's setting cannot be changed here.",
+    "yoloForced": "Yolo mode is already on for every conversation in Settings › Tools."
   },
   "conversations": {
     "notInHistory": "That conversation is not in this app's history.",

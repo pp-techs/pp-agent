@@ -23,6 +23,10 @@
       "shellUnrestricted": {
         "title": "Shell commands run without asking",
         "message": "Commands run without asking. The agent can change or delete files and send data out of this computer."
+      },
+      "yoloMode": {
+        "title": "Yolo mode is on",
+        "message": "Every tool runs without asking, including the shell once it is allowed. The agent can also open and act in any app on this computer without asking which ones first. It can change or delete files, run commands, and send data out of this computer on its own."
       }
     },
     "names": {
@@ -66,6 +70,16 @@
       "confirm": {
         "title": "Run shell commands without asking?",
         "description": "The agent will run every command right away, without showing it to you first. Commands can change or delete files and send data out of this computer. Only turn this on if you trust the agent, the model and the content it reads."
+      }
+    },
+    "yolo": {
+      "enable": {
+        "label": "Yolo mode",
+        "description": "Skips the approval step for every tool that is already allowed, including the shell once “Allow shell commands” is on, and the first-use check for apps the “Use apps on this computer” tool opens. It does not turn anything on by itself."
+      },
+      "confirm": {
+        "title": "Turn on yolo mode?",
+        "description": "The agent will run every allowed tool right away, without asking first, including shell commands once they are allowed, and it can open and act in any app on this computer without asking which ones first. It can change or delete files, run commands, and send data out of this computer. Only turn this on if you trust the agent, the model and the content it reads."
       }
     },
     "loadError": "Couldn't load the tools",

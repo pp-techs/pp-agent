@@ -48,6 +48,7 @@ import {
   toolsQuery,
   useSetShellEnabled,
   useSetToolPolicy,
+  useSetYoloMode,
   webSearchQuery,
 } from "@/lib/extension-queries";
 import { settingsQuery } from "@/lib/queries";
@@ -122,6 +123,7 @@ function isBuiltInToolName(name: string): name is (typeof BUILT_IN_TOOL_NAMES)[n
 /** Each warning code maps to the locale keys that word it. */
 const WARNING_KEYS = {
   "shell-unrestricted": "tools.warnings.shellUnrestricted",
+  "yolo-mode": "tools.warnings.yoloMode",
 } as const satisfies Record<ToolWarning, string>;
 
 /** Tools above this count get a search box. */
@@ -253,6 +255,53 @@ function ToolGroup({
         </ItemGroup>
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+/**
+ * A single switch that makes every tool run without asking, as if each had policy "allow" (the
+ * shell too, once its own master switch is on). It does not turn off tools, or re-enable the
+ * shell: Settings › Tools and "Allow shell commands" still decide what the agent can reach at
+ * all, yolo mode only removes the approval step for what is already allowed.
+ */
+function YoloModeSettings({ bridge }: { bridge: DesktopBridge }) {
+  const { t } = useTranslation("extensions");
+  const settings = useQuery(settingsQuery(bridge));
+  const setYolo = useSetYoloMode(bridge);
+  const checked = setYolo.isPending
+    ? (setYolo.variables ?? false)
+    : (settings.data?.yoloMode ?? false);
+
+  async function onCheckedChange(value: boolean) {
+    if (value) {
+      const confirmed = await ConfirmModal.show({
+        title: t("tools.yolo.confirm.title"),
+        description: t("tools.yolo.confirm.description"),
+        confirmLabel: t("tools.yolo.enable.label"),
+      });
+      if (!confirmed) return;
+    }
+    setYolo.mutate(value);
+  }
+
+  return (
+    <div className="flex flex-col gap-2.5 rounded-lg border border-border/70 p-3">
+      <SwitchRow
+        id="yolo-mode"
+        label={t("tools.yolo.enable.label")}
+        description={t("tools.yolo.enable.description")}
+        checked={checked}
+        disabled={settings.isPending || setYolo.isPending}
+        onCheckedChange={(value) => void onCheckedChange(value)}
+      />
+      {checked && (
+        <Alert variant="destructive">
+          <TriangleAlertIcon />
+          <AlertTitle>{t(`${WARNING_KEYS["yolo-mode"]}.title`)}</AlertTitle>
+          <AlertDescription>{t(`${WARNING_KEYS["yolo-mode"]}.message`)}</AlertDescription>
+        </Alert>
+      )}
+    </div>
   );
 }
 
@@ -474,6 +523,8 @@ export function ToolsSection({ bridge }: { bridge: DesktopBridge }) {
           components={{ strong: <strong className="font-medium text-foreground" /> }}
         />
       </p>
+
+      <YoloModeSettings bridge={bridge} />
 
       {tools.isPending ? (
         <ToolsSkeleton />

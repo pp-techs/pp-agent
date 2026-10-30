@@ -243,6 +243,10 @@ export function useAgentCommands(bridge: DesktopBridge) {
     mutationFn: (level: ThinkingLevel) =>
       bridge.agent.command({ type: "set_thinking_level", level }),
   });
+  const setConversationYolo = useMutation({
+    mutationFn: (active: boolean) =>
+      bridge.agent.command({ type: "set_conversation_yolo", active }),
+  });
   const compact = useMutation({
     mutationFn: () => bridge.agent.command({ type: "compact" }),
   });
@@ -263,6 +267,7 @@ export function useAgentCommands(bridge: DesktopBridge) {
     setModel,
     setAgent,
     setThinkingLevel,
+    setConversationYolo,
     compact,
   };
 }

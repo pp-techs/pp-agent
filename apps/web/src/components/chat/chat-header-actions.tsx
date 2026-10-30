@@ -17,15 +17,18 @@ import {
   FolderOpenIcon,
   GlobeIcon,
   PanelRightIcon,
+  RabbitIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { useExportSession } from "@/hooks/use-export-session";
 import { useAgentCommands, usageQuery } from "@/lib/queries";
 import { IS_MAC } from "@/hooks/use-panel-shortcut";
 import { useChatStore } from "@/stores/chat-store";
 import { usePanelStore } from "@/stores/panel-store";
+import { cn } from "@workspace/ui/lib/utils";
 
 const RING_SIZE = 18;
 const RING_STROKE = 2.5;
@@ -302,10 +305,59 @@ function SidePanelButton() {
   );
 }
 
+/**
+ * Runs every tool without asking for the rest of this conversation. Locked on while Settings ›
+ * Tools already forces it everywhere; otherwise this conversation's own switch.
+ */
+function YoloButton({ bridge }: { bridge: DesktopBridge }) {
+  const yolo = useChatStore((state) => state.yolo);
+  const { setConversationYolo } = useAgentCommands(bridge);
+  const { t } = useTranslation("chat");
+  const locked = yolo.source === "settings";
+  const label = yolo.active ? t("header.yolo.on") : t("header.yolo.off");
+
+  async function onClick() {
+    if (locked) return;
+    if (!yolo.active) {
+      const confirmed = await ConfirmModal.show({
+        title: t("header.yolo.confirm.title"),
+        description: t("header.yolo.confirm.description"),
+        confirmLabel: t("header.yolo.on"),
+      });
+      if (!confirmed) return;
+    }
+    setConversationYolo.mutate(!yolo.active, {
+      onError: (error: Error) => toast.error(error.message),
+    });
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={label}
+            aria-pressed={yolo.active}
+            disabled={locked || setConversationYolo.isPending}
+            onClick={() => void onClick()}
+            className={cn(yolo.active && "text-destructive hover:text-destructive")}
+          />
+        }
+      >
+        <RabbitIcon />
+      </TooltipTrigger>
+      <TooltipContent>{locked ? t("header.yolo.lockedBySettings") : label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 /** Right end of the chat's top bar: context window, export, the workspace folder, the panel. */
 export function ChatHeaderActions({ bridge }: { bridge: DesktopBridge }) {
   return (
     <div className="ml-auto flex items-center gap-0.5">
+      <YoloButton bridge={bridge} />
       <ContextButton bridge={bridge} />
       <ExportButton bridge={bridge} />
       <OpenFolderButton bridge={bridge} />

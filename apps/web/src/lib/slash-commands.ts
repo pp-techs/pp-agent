@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { skillsQuery, workspaceSkillsQuery } from "@/lib/extension-queries";
 import { agentsQuery, useAgentCommands } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
@@ -33,7 +34,8 @@ export function useSlashItems(bridge: DesktopBridge): {
   const skills = useQuery(skillsQuery(bridge));
   const workspaceSkills = useQuery(workspaceSkillsQuery(bridge, workspaceDir));
   const agents = useQuery(agentsQuery(bridge));
-  const { newChat, compact } = useAgentCommands(bridge);
+  const { newChat, compact, setConversationYolo } = useAgentCommands(bridge);
+  const yolo = useChatStore((state) => state.yolo);
   const { t } = useTranslation("chat");
 
   const commands = React.useMemo<SlashItem[]>(() => {
@@ -63,8 +65,34 @@ export function useSlashItems(bridge: DesktopBridge): {
           });
         },
       },
+      {
+        kind: "command",
+        name: "yolo",
+        label: yolo.active ? t("slash.commands.yolo.labelOff") : t("slash.commands.yolo.labelOn"),
+        description:
+          yolo.source === "settings"
+            ? t("header.yolo.lockedBySettings")
+            : t("slash.commands.yolo.description"),
+        run: () => {
+          if (yolo.source === "settings") {
+            toast.info(t("header.yolo.lockedBySettings"));
+            return;
+          }
+          void (async () => {
+            if (!yolo.active) {
+              const confirmed = await ConfirmModal.show({
+                title: t("header.yolo.confirm.title"),
+                description: t("header.yolo.confirm.description"),
+                confirmLabel: t("header.yolo.on"),
+              });
+              if (!confirmed) return;
+            }
+            setConversationYolo.mutate(!yolo.active, { onError });
+          })();
+        },
+      },
     ];
-  }, [newChat, compact, running, t]);
+  }, [newChat, compact, setConversationYolo, yolo, running, t]);
 
   const available = React.useMemo<SlashItem[]>(() => {
     const allowed = agents.data?.find((agent) => agent.id === agentId)?.skills ?? null;
