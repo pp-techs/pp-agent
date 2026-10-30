@@ -1,5 +1,19 @@
 # @workspace/desktop
 
+## 0.20.0
+
+### Minor Changes
+
+- f7a0b53: Added the `/goal` command. Type `/goal` and what you want done: the agent starts on it and keeps working turn after turn by itself until it reports the goal done. A banner above the message box shows the goal with pause, resume and clear (`/goal pause`, `/goal resume` and `/goal clear` do the same). Stopping the answer pauses the goal, and a turn where the agent only answers or asks something waits for your reply. A conversation opened again shows its goal paused.
+- f7a0b53: Sub agents. The agent can now hand up to five research tasks to sub agents in one go and they work at the same time, each showing its own steps in the chat. A task can name one of your Agents, and its sub agent then follows that agent's rules, model and tool list. Sub agents are still read-only: they can read, search and use the web, but cannot change anything.
+
+### Patch Changes
+
+- f7a0b53: A new conversation is titled as soon as you send its first message, without waiting for the reply. Lasting memory notes are now picked up after every reply, including ones you watch to the end, and without you asking: who you are, people you mention, how you want answers, your tools and projects. Notes already saved are not repeated. Before, both only happened when you moved to another conversation while it was still answering.
+- f7a0b53: Fixed importing cookies on Windows telling you to quit a browser you had already closed. The message now explains that Chrome, Edge and Brave can keep running in the background (system tray, “Continue running background apps”) and hold the cookies locked. When the browser is not running at all, it shows the real reason (security software or file permissions) instead.
+- f7a0b53: The agent's built-in instructions now only explain how to use its tools and skills, without describing the user as an office or non-technical audience.
+- f7a0b53: The right panel's buttons are now ordered Files, Browser, Terminal.
+
 ## 0.19.0
 
 ### Minor Changes
