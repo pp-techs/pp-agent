@@ -248,6 +248,15 @@ export class BrowserHost implements BrowserDriver {
     return tab;
   }
 
+  /** A link the page or its menu opens in a new tab; past the tab limit it is only logged. */
+  private openLink(tab: Tab, url: string, activate: boolean): void {
+    try {
+      this.openTab(tab.profileId, url, activate);
+    } catch (error) {
+      console.error("Could not open the link in a new tab:", error);
+    }
+  }
+
   private wire(tab: Tab): void {
     const contents = tab.view.webContents;
     guard(contents);
@@ -255,11 +264,7 @@ export class BrowserHost implements BrowserDriver {
       if (!isWebUrl(url)) return { action: "deny" };
       if (disposition === "new-window")
         return { action: "allow", overrideBrowserWindowOptions: POPUP_OPTIONS };
-      try {
-        this.openTab(tab.profileId, url, disposition !== "background-tab");
-      } catch (error) {
-        console.error("Could not open the link in a new tab:", error);
-      }
+      this.openLink(tab, url, disposition !== "background-tab");
       return { action: "deny" };
     });
     contents.on("did-create-window", (popup) => {
@@ -295,7 +300,7 @@ export class BrowserHost implements BrowserDriver {
       items.push(
         {
           label: t("panel.browser.menu.openLinkInNewTab"),
-          click: () => this.openTab(tab.profileId, params.linkURL, false),
+          click: () => this.openLink(tab, params.linkURL, false),
         },
         {
           label: t("panel.browser.menu.copyLink"),

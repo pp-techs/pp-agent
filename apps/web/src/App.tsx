@@ -99,13 +99,13 @@ function ChatBody({ bridge }: { bridge: DesktopBridge }) {
 function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("modals");
   useAgentConnection(bridge);
+  usePanelShortcut(bridge);
   React.useEffect(() => connectUpdates(bridge), [bridge]);
   const status = useChatStore((state) => state.status);
   const ready = status === "idle" || status === "running";
   const [page, setPage] = React.useState<"chat" | "schedules">("chat");
-  usePanelShortcut(bridge, setPage);
-  // An expanded side panel takes the chat's place; the chat stays mounted, only hidden.
-  const panelCovers = usePanelStore((state) => state.open && state.expanded) && page === "chat";
+  // An expanded side panel takes the page's place; the page stays mounted, only hidden.
+  const panelCovers = usePanelStore((state) => state.open && state.expanded);
   // Counts nested dragenter/dragleave pairs so the overlay does not flicker over child elements.
   const [dragDepth, setDragDepth] = React.useState(0);
 
@@ -168,7 +168,8 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
           </div>
         )}
       </SidebarInset>
-      {page === "chat" && <SidePanel bridge={bridge} />}
+      {/* On every page, so the agent's browser shows without leaving (and losing) a schedule draft. */}
+      <SidePanel bridge={bridge} />
     </SidebarProvider>
   );
 }
