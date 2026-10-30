@@ -404,6 +404,12 @@ interface ConversationState {
   /** Tool calls so far in the current run; a goal turn without any is not continued. */
   toolCalls: number;
   running: boolean;
+  /**
+   * A title proposed while a turn was running, shown in the list at once but written to the
+   * session when the turn settles: a name entry in the middle of a turn would sit between a tool
+   * call and its result in the branch.
+   */
+  pendingTitle: string | null;
   /** Agent and workspace as of when it left the window; the host's own fields are the open one's. */
   agentId: string;
   workspaceId: string;
@@ -1428,12 +1434,20 @@ export class AgentHost {
     // Conversations of every workspace and agent.
     const sessions = await SessionManager.listAll(paths.sessionDir);
     const saved = new Set(sessions.map((info) => info.path));
+    // Titles proposed during a turn, not yet written to their session.
+    const proposed = new Map<string, string>();
+    for (const { session, pendingTitle } of this.conversations())
+      if (session.sessionFile && pendingTitle) proposed.set(session.sessionFile, pendingTitle);
     const rows: SessionSummary[] = sessions
       .filter((info) => info.messageCount > 0)
       .map((info) => ({
         path: info.path,
         workspaceId: workspaceForCwd(workspaces, info.cwd, paths.workspaceDir).id,
-        title: sessionTitle(info.name, info.firstMessage, this.titleFallbacks()),
+        title: sessionTitle(
+          info.name || proposed.get(info.path),
+          info.firstMessage,
+          this.titleFallbacks(),
+        ),
         modified: info.modified.getTime(),
         messageCount: info.messageCount,
         pinned: pins.has(pinKey(info.path)),
@@ -1450,7 +1464,7 @@ export class AgentHost {
         path: file,
         workspaceId: conversation === this.open ? this.workspaceId : conversation.workspaceId,
         title: sessionTitle(
-          session.sessionName,
+          session.sessionName || conversation.pendingTitle || undefined,
           first?.type === "message" ? userContent(first.message).text : "",
           this.titleFallbacks(),
         ),
@@ -2000,6 +2014,7 @@ export class AgentHost {
         return mcpServers === null || mcpServers.includes(name);
       }),
       running: false,
+      pendingTitle: null,
       agentId: this.agentId,
       workspaceId: this.workspaceId,
     };
@@ -2054,6 +2069,7 @@ export class AgentHost {
         conversation.running = false;
         transcript.setEntryIds(chatEntryIds(conversation.session.sessionManager));
         transcript.flush();
+        this.writePendingTitle(conversation);
         if (inWindow) {
           // Read what the memory and title passes need now: `applyPending` may rebuild the session.
           const passes = this.preparePasses(conversation);
@@ -2237,7 +2253,7 @@ export class AgentHost {
     file: string,
     messages: AgentMessage[] = conversation.session.messages.slice(),
   ): TitlePass | null {
-    if (conversation.session.sessionName?.trim()) return null;
+    if (conversation.session.sessionName?.trim() || conversation.pendingTitle) return null;
     if (this.passesInFlight.has(`title:${file}`)) return null;
     const model = this.chooseModel(this.agentOf(conversation).model);
     if (!model) return null;
@@ -2268,8 +2284,9 @@ export class AgentHost {
     // instead of only the file a fresh read of it would see.
     const live = this.conversations().find((entry) => entry.session.sessionFile === file);
     if (live) {
-      if (live.session.sessionName?.trim()) return;
-      live.session.setSessionName(title);
+      if (live.session.sessionName?.trim() || live.pendingTitle) return;
+      if (live.running) live.pendingTitle = title;
+      else live.session.setSessionName(title);
     } else {
       // Nothing named it while the call was running (a rename, or the person naming it).
       const manager = SessionManager.open(file, paths.sessionDir);
@@ -2277,6 +2294,14 @@ export class AgentHost {
       manager.appendSessionInfo(title);
     }
     emit({ type: "sessions_changed" });
+  }
+
+  /** Writes the title proposed during a turn to the session, now that the turn has settled. */
+  private writePendingTitle(conversation: Conversation): void {
+    const { pendingTitle } = conversation;
+    conversation.pendingTitle = null;
+    if (pendingTitle && !conversation.session.sessionName?.trim())
+      conversation.session.setSessionName(pendingTitle);
   }
 
   private refreshStatus(): void {
