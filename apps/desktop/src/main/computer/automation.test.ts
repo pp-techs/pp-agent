@@ -95,6 +95,41 @@ describe("ComputerAutomation", () => {
     expect(result.apps).toEqual([{ id: "com.apple.calculator", name: "Calculator" }]);
   });
 
+  it.each([
+    {
+      case: "an AUMID",
+      app: { name: "Notepad", bundle_id: "Microsoft.WindowsNotepad_8wekyb3d8bbwe!App" },
+      args: { bundle_id: "Microsoft.WindowsNotepad_8wekyb3d8bbwe!App" },
+    },
+    {
+      case: "a launch path",
+      app: { name: "Excel", launch_path: "C:\\Program Files\\Microsoft Office\\EXCEL.EXE" },
+      args: { launch_path: "C:\\Program Files\\Microsoft Office\\EXCEL.EXE" },
+    },
+    { case: "a bare name", app: { name: "Paint" }, args: { name: "Paint" } },
+  ])("launches a Windows app by $case in its own field", async ({ app, args }) => {
+    const call = vi.fn<DriverCall>(async (name) =>
+      name === "list_apps"
+        ? reply("apps", { apps: [{ ...app, pid: 0, running: false }] })
+        : reply("Launched."),
+    );
+    const automation = new ComputerAutomation(call, () => [], "win32");
+    const id = app.bundle_id ?? app.launch_path ?? app.name;
+    await automation.run({ action: "launch", app: id });
+    expect(call).toHaveBeenLastCalledWith("launch_app", args, undefined);
+  });
+
+  it("launches a macOS app found by its path through name", async () => {
+    const path = "/Applications/Tool.app";
+    const call = vi.fn<DriverCall>(async (name) =>
+      name === "list_apps"
+        ? reply("apps", { apps: [{ name: "Tool", launch_path: path, running: false }] })
+        : reply("Launched."),
+    );
+    await new ComputerAutomation(call, () => [], "darwin").run({ action: "launch", app: path });
+    expect(call).toHaveBeenLastCalledWith("launch_app", { name: path }, undefined);
+  });
+
   it("snapshots the front window without a screenshot unless asked", async () => {
     const { automation, call } = fakeDriver();
     const result = await automation.run({ action: "snapshot", app: "com.apple.Notes" });

@@ -466,6 +466,15 @@ describe("DaemonServer computer bridge", () => {
     client.send({ kind: "computer_response", id: frame.id, ok: true, result: { text: "window" } });
     await expect(answer).resolves.toEqual({ text: "window" });
 
+    // A stopped tool call cancels the step in the window.
+    const controller = new AbortController();
+    const stopped = server.computer.request({ action: "click", app: "x" }, controller.signal);
+    const asked = await client.next();
+    if (asked.kind !== "computer_request") throw new Error("Expected a computer request");
+    controller.abort();
+    await expect(stopped).rejects.toThrow(/stopped/);
+    await expect(client.next()).resolves.toEqual({ kind: "computer_cancel", id: asked.id });
+
     const pending = server.computer.request({ action: "apps" });
     await client.next();
     client.close();

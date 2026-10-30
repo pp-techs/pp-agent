@@ -46,7 +46,7 @@ A login-service daemon runs outside PP Agent's process chain, so it never starts
 
 ## Grants (macOS)
 
-`ComputerHost.status()` reads `systemPreferences.isTrustedAccessibilityClient(false)` and `getMediaAccessStatus("screen")`. **Grant access** asks for Accessibility first (the system prompt, which opens its pane), then Screen Recording (a 1×1 `desktopCapturer` request prompts once; afterwards the Screen Recording pane is opened). macOS may ask to quit and reopen PP Agent before a new Screen Recording grant applies. While a grant is missing, every step fails with a message telling the model to send the person to Settings › Computer use. Windows needs no grant.
+`ComputerHost.status()` reads `systemPreferences.isTrustedAccessibilityClient(false)` and `getMediaAccessStatus("screen")`. **Grant access** asks for one grant per click: while Accessibility is missing it asks only for that (the system prompt, which opens its pane); once Accessibility is granted, the next click asks for Screen Recording (a 1×1 `desktopCapturer` request prompts once; afterwards the Screen Recording pane is opened). macOS may ask to quit and reopen PP Agent before a new Screen Recording grant applies. While a grant is missing, every step fails with a message telling the model to send the person to Settings › Computer use. Windows needs no grant.
 
 ## Calls
 

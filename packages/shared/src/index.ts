@@ -1813,7 +1813,12 @@ export type DaemonFrame =
   /** Asks one client that offered its browser to run a `browser` tool call. */
   | { kind: "browser_request"; id: number; request: BrowserRequest }
   /** Asks one client that offered computer use to run a `computer` tool call. */
-  | { kind: "computer_request"; id: number; request: ComputerRequest };
+  | { kind: "computer_request"; id: number; request: ComputerRequest }
+  /**
+   * The tool call stopped or timed out: the client stops that request if it still runs. A step
+   * that already happened is not undone.
+   */
+  | { kind: "computer_cancel"; id: number };
 
 /** Workspace folder (relative) that attached files are copied into. */
 export const ATTACHMENTS_DIR = "attachments";

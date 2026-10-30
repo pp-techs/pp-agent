@@ -123,7 +123,7 @@ const COMPUTER_STEP = {
   click: "click",
   double_click: "click",
   right_click: "click",
-  drag: "click",
+  drag: "drag",
   type: "type",
   press: "keys",
   hotkey: "keys",

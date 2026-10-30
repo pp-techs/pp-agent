@@ -79,6 +79,9 @@ function AccessStatus({ bridge }: { bridge: DesktopBridge }) {
       <ShieldAlertIcon />
       <AlertTitle>{t("computerSection.status.missing", { what: missing })}</AlertTitle>
       <AlertDescription className="flex flex-col items-start gap-2">
+        {!status.data.accessibility && !status.data.screenRecording && (
+          <span>{t("computerSection.status.oneAtATime")}</span>
+        )}
         <span>{t("computerSection.status.restartHint")}</span>
         <Button
           size="sm"

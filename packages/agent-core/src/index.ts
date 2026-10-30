@@ -148,7 +148,7 @@ import {
   computerActionTier,
   createComputerTool,
 } from "./computer-tool.ts";
-import { checkApp, computerAppAccess, withAccess } from "./computer-apps.ts";
+import { checkApp, computerAppAccess, rememberApproval, withAccess } from "./computer-apps.ts";
 import {
   newProfileId,
   sortBrowserProfiles,
@@ -2117,8 +2117,16 @@ export class AgentHost {
     if (!conversation || !entry) return;
     conversation.approvals.delete(requestId);
     const { app } = entry.request;
-    if (approved && app && remember === "conversation") conversation.computerApps.add(app.id);
-    if (approved && app && remember === "always") this.setComputerAppAccess(app, "allowed");
+    if (approved && app) {
+      const failed = rememberApproval(app, remember, conversation.computerApps, (always) =>
+        this.setComputerAppAccess(always, "allowed"),
+      );
+      if (failed)
+        emit({
+          type: "error",
+          message: t("computerApps.saveFailed", { name: app.name, error: failed.message }),
+        });
+    }
     conversation.transcript.setToolStatus(
       entry.request.toolCallId,
       approved ? "running" : "denied",

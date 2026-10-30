@@ -369,6 +369,11 @@
           "done": "Đã bấm trong {{target}}",
           "notDone": "Bấm trong {{target}}"
         },
+        "drag": {
+          "active": "Đang kéo thả trong {{target}}",
+          "done": "Đã kéo thả trong {{target}}",
+          "notDone": "Kéo thả trong {{target}}"
+        },
         "type": {
           "active": "Đang gõ chữ trong {{target}}",
           "done": "Đã gõ chữ trong {{target}}",

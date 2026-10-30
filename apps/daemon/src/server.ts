@@ -485,12 +485,18 @@ export class DaemonServer {
       clearTimeout(timer);
       signal?.removeEventListener("abort", onAbort);
     };
-    const timer = setTimeout(() => {
+    // A computer step still running in the window is stopped too; nobody waits for it any more.
+    const cancel = () => {
       this.relays.delete(id);
+      if (kind === "computer" && !client.socket.destroyed)
+        this.send(client, { kind: "computer_cancel", id });
+    };
+    const timer = setTimeout(() => {
+      cancel();
       result.reject(new Error(texts.timedOut));
     }, texts.timeoutMs);
     const onAbort = () => {
-      this.relays.delete(id);
+      cancel();
       result.reject(new Error(texts.stopped));
     };
     signal?.addEventListener("abort", onAbort, { once: true });

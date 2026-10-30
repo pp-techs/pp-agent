@@ -369,6 +369,11 @@
           "done": "Clicked in {{target}}",
           "notDone": "Click in {{target}}"
         },
+        "drag": {
+          "active": "Dragging in {{target}}",
+          "done": "Dragged in {{target}}",
+          "notDone": "Drag in {{target}}"
+        },
         "type": {
           "active": "Typing in {{target}}",
           "done": "Typed in {{target}}",

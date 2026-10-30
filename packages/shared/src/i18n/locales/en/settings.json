@@ -511,7 +511,7 @@
     "risk": "The agent can do in an app whatever you could do there. Text it reads in an app (an email, a chat) could try to trick it, so keep “acting asks first” unless you trust the task. The agent can never use PP Agent itself, terminals, or password and privacy settings.",
     "enable": {
       "title": "Let the agent use apps",
-      "description": "Looking at a window runs on its own; clicking, typing and opening apps ask you first. Change this in Settings › Tools."
+      "description": "Looking at a window runs on its own. Clicking, typing and opening apps ask you first, unless you set the computer tool to run without asking in Settings › Tools."
     },
     "status": {
       "title": "Access",
@@ -524,11 +524,12 @@
       "both": "Accessibility and Screen Recording",
       "ready": "PP Agent has the access it needs.",
       "grant": "Grant access",
+      "oneAtATime": "macOS asks for one at a time: allow Accessibility first, then click Grant access again for Screen Recording.",
       "restartHint": "After you turn access on, quit and reopen PP Agent if it still shows as missing."
     },
     "allowed": {
       "title": "Always allowed",
-      "description": "The agent uses these apps without asking you first.",
+      "description": "The agent may use these apps without asking you which app first. Clicking and typing in them still follow the setting above.",
       "empty": "No apps yet. Choose “Always allow” when the agent asks to use an app."
     },
     "blocked": {

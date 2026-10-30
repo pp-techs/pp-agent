@@ -467,6 +467,7 @@
   "computerApps": {
     "protected": "Agent không được dùng {{name}}.",
     "blocked": "{{name}} đã bị chặn với agent trong Cài đặt › Điều khiển máy tính.",
-    "windowOnly": "Điều khiển máy tính chỉ hoạt động trong các cuộc trò chuyện của cửa sổ PP Agent."
+    "windowOnly": "Điều khiển máy tính chỉ hoạt động trong các cuộc trò chuyện của cửa sổ PP Agent.",
+    "saveFailed": "{{name}} chỉ được cho phép trong cuộc trò chuyện này: không lưu được thành luôn cho phép ({{error}})."
   }
 }

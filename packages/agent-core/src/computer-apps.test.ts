@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
-import { computerAppAccess, readComputerApps, withAccess } from "./computer-apps.ts";
+import {
+  computerAppAccess,
+  readComputerApps,
+  rememberApproval,
+  withAccess,
+} from "./computer-apps.ts";
 
 const notes = { id: "com.apple.Notes", name: "Notes" };
 const excel = { id: "com.microsoft.Excel", name: "Microsoft Excel" };
@@ -65,5 +70,27 @@ describe("computerAppAccess", () => {
     expect(access("com.tinyspeck.slackmacgap", ["com.tinyspeck.slackmacgap"]).kind).toBe("refused");
     expect(access("com.pptechs.agent").kind).toBe("refused");
     expect(access("com.mitchellh.ghostty").kind).toBe("refused");
+  });
+});
+
+describe("rememberApproval", () => {
+  it("keeps an app for the conversation, or saves it always", () => {
+    const conversation = new Set<string>();
+    const save = vi.fn();
+    expect(rememberApproval(notes, undefined, conversation, save)).toBeNull();
+    expect(conversation.size).toBe(0);
+    expect(rememberApproval(notes, "conversation", conversation, save)).toBeNull();
+    expect([...conversation]).toEqual([notes.id]);
+    expect(rememberApproval(excel, "always", conversation, save)).toBeNull();
+    expect(save).toHaveBeenCalledWith(excel);
+  });
+
+  it("falls back to the conversation when saving fails, so the approval still settles", () => {
+    const conversation = new Set<string>();
+    const failed = rememberApproval(excel, "always", conversation, () => {
+      throw new Error("disk full");
+    });
+    expect(failed?.message).toBe("disk full");
+    expect([...conversation]).toEqual([excel.id]);
   });
 });

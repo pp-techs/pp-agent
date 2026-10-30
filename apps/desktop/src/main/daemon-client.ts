@@ -104,6 +104,8 @@ export class DaemonClient {
   private browserAvailable = false;
   /** Last value given to `setComputerAvailable`, likewise. */
   private computerAvailable = false;
+  /** Computer steps running for the daemon, by request id, so a `computer_cancel` can stop one. */
+  private readonly computerSteps = new Map<number, AbortController>();
 
   constructor(private readonly options: DaemonClientOptions) {
     this.paths = resolveDaemonPaths({ ...process.env, PP_AGENT_HOME: options.home });
@@ -463,8 +465,10 @@ export class DaemonClient {
         const reply = (response: ClientFrame) => {
           if (!conn.socket.destroyed) conn.socket.write(encodeFrame(response));
         };
-        // A step still running when the connection drops has nobody to answer; stop it.
+        // A step still running when the connection drops, or that the daemon cancels, has nobody
+        // to answer; stop it.
         const controller = new AbortController();
+        this.computerSteps.set(id, controller);
         const onClose = () => controller.abort();
         conn.socket.once("close", onClose);
         this.options
@@ -479,9 +483,15 @@ export class DaemonClient {
                 error: error instanceof Error ? error.message : String(error),
               }),
           )
-          .finally(() => conn.socket.off("close", onClose));
+          .finally(() => {
+            conn.socket.off("close", onClose);
+            this.computerSteps.delete(id);
+          });
         return;
       }
+      case "computer_cancel":
+        this.computerSteps.get(frame.id)?.abort();
+        return;
       case "result": {
         const request = this.pending.get(frame.id);
         if (!request) return;

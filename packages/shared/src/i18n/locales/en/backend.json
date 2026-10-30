@@ -467,6 +467,7 @@
   "computerApps": {
     "protected": "{{name}} cannot be used by the agent.",
     "blocked": "{{name}} is blocked for the agent in Settings › Computer use.",
-    "windowOnly": "Computer use works only in conversations of the PP Agent window."
+    "windowOnly": "Computer use works only in conversations of the PP Agent window.",
+    "saveFailed": "{{name}} stays allowed for this chat only: it could not be saved as always allowed ({{error}})."
   }
 }

@@ -40,6 +40,8 @@ interface DriverWindow {
 interface Target {
   app: ComputerApp;
   pid: number;
+  /** The `launch_app` arguments that start the app again. */
+  launch: Record<string, string>;
 }
 
 /** The id the agent uses for an app: its bundle id where it has one. */
@@ -74,6 +76,7 @@ export class ComputerAutomation {
     private readonly call: DriverCall,
     /** PIDs of PP Agent itself, which the agent may never drive. */
     private readonly ownPids: () => readonly number[],
+    private readonly platform: NodeJS.Platform = process.platform,
   ) {}
 
   async run(request: ComputerRequest, signal?: AbortSignal): Promise<ComputerResult> {
@@ -123,6 +126,20 @@ export class ComputerAutomation {
     return Array.isArray(apps) ? (apps as DriverApp[]) : [];
   }
 
+  /**
+   * `launch_app` takes each kind of id in its own field: a bundle id (an AUMID on Windows) as
+   * `bundle_id`; a `launch_path` from `list_apps` as `launch_path` on Windows (the exact command
+   * line) and as `name` on macOS (the `.app` path); a bare name as `name`.
+   */
+  private launchArgs(app: DriverApp): Record<string, string> {
+    if (app.bundle_id) return { bundle_id: app.bundle_id };
+    if (app.launch_path)
+      return this.platform === "win32"
+        ? { launch_path: app.launch_path }
+        : { name: app.launch_path };
+    return { name: app.name ?? "" };
+  }
+
   private usable(app: DriverApp): ComputerApp | null {
     const id = appId(app);
     if (!id) return null;
@@ -158,14 +175,11 @@ export class ComputerAutomation {
     if (!match) throw new Error(`No app has the id ${wanted}; call apps to see the ids.`);
     const app = this.usable(match);
     if (!app) throw new Error(`${match.name ?? wanted} cannot be used by the agent.`);
-    return { app, pid: match.running ? (match.pid ?? 0) : 0 };
+    return { app, pid: match.running ? (match.pid ?? 0) : 0, launch: this.launchArgs(match) };
   }
 
   private async launch(target: Target, signal?: AbortSignal): Promise<ComputerResult> {
-    const args = target.app.id.includes("/")
-      ? { name: target.app.id }
-      : { bundle_id: target.app.id };
-    const { text } = await this.tool("launch_app", args, signal);
+    const { text } = await this.tool("launch_app", target.launch, signal);
     return { text: clip(text || `Opened ${target.app.name}.`), apps: [target.app] };
   }
 

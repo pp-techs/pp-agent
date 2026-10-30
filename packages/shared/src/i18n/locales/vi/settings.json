@@ -503,7 +503,7 @@
     "risk": "Agent có thể làm trong một ứng dụng bất cứ điều gì bạn làm được ở đó. Nội dung agent đọc trong ứng dụng (một email, một tin nhắn) có thể tìm cách đánh lừa nó, nên hãy giữ chế độ “hỏi trước khi thao tác” trừ khi bạn tin tưởng tác vụ. Agent không bao giờ được dùng chính PP Agent, các terminal, hay phần cài đặt mật khẩu và quyền riêng tư.",
     "enable": {
       "title": "Cho phép agent dùng ứng dụng",
-      "description": "Việc xem cửa sổ chạy luôn; bấm, gõ chữ và mở ứng dụng sẽ hỏi bạn trước. Thay đổi trong Cài đặt › Công cụ."
+      "description": "Việc xem cửa sổ chạy luôn. Bấm, gõ chữ và mở ứng dụng sẽ hỏi bạn trước, trừ khi bạn đặt công cụ điều khiển máy tính chạy không cần hỏi trong Cài đặt › Công cụ."
     },
     "status": {
       "title": "Quyền truy cập",
@@ -516,11 +516,12 @@
       "both": "Trợ năng và Ghi màn hình",
       "ready": "PP Agent đã có đủ quyền cần thiết.",
       "grant": "Cấp quyền",
+      "oneAtATime": "macOS hỏi từng quyền một: cho phép Trợ năng trước, rồi bấm Cấp quyền lần nữa cho Ghi màn hình.",
       "restartHint": "Sau khi bật quyền, nếu vẫn báo thiếu, hãy thoát rồi mở lại PP Agent."
     },
     "allowed": {
       "title": "Luôn cho phép",
-      "description": "Agent dùng các ứng dụng này mà không hỏi lại là ứng dụng nào.",
+      "description": "Agent được dùng các ứng dụng này mà không hỏi bạn trước về ứng dụng. Việc bấm và gõ chữ trong đó vẫn theo thiết lập ở trên.",
       "empty": "Chưa có ứng dụng nào. Chọn “Luôn cho phép” khi agent xin dùng một ứng dụng."
     },
     "blocked": {

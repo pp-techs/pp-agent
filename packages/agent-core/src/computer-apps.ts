@@ -8,6 +8,7 @@ import {
   COMPUTER_APP_LIMITS,
   type ComputerApp,
   type ComputerAppAccess,
+  type ComputerAppRemember,
   isProtectedComputerApp,
 } from "@workspace/shared";
 import { t } from "./i18n.ts";
@@ -64,6 +65,28 @@ export function withAccess(
     allowed: access === "allowed" ? add(current.allowed) : others(current.allowed),
     blocked: access === "blocked" ? add(current.blocked) : others(current.blocked),
   };
+}
+
+/**
+ * Keeps an app the person approved: for the conversation, or always (`saveAlways`, which writes
+ * settings.json). A save that fails keeps it for the conversation instead and returns the error, so
+ * the approval itself still goes through.
+ */
+export function rememberApproval(
+  app: ComputerApp,
+  remember: ComputerAppRemember | undefined,
+  conversation: Set<string>,
+  saveAlways: (app: ComputerApp) => void,
+): Error | null {
+  if (remember === "conversation") conversation.add(app.id);
+  if (remember !== "always") return null;
+  try {
+    saveAlways(app);
+    return null;
+  } catch (error) {
+    conversation.add(app.id);
+    return error instanceof Error ? error : new Error(String(error));
+  }
 }
 
 /**
