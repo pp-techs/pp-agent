@@ -99,11 +99,11 @@ function ChatBody({ bridge }: { bridge: DesktopBridge }) {
 function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("modals");
   useAgentConnection(bridge);
-  usePanelShortcut(bridge);
   React.useEffect(() => connectUpdates(bridge), [bridge]);
   const status = useChatStore((state) => state.status);
   const ready = status === "idle" || status === "running";
   const [page, setPage] = React.useState<"chat" | "schedules">("chat");
+  usePanelShortcut(bridge, setPage);
   // An expanded side panel takes the chat's place; the chat stays mounted, only hidden.
   const panelCovers = usePanelStore((state) => state.open && state.expanded) && page === "chat";
   // Counts nested dragenter/dragleave pairs so the overlay does not flicker over child elements.

@@ -98,7 +98,9 @@ function browserTitle(args: Record<string, unknown>, state: StepState, t: TFunct
   const kind = BROWSER_STEP[stringArg(args, "action") ?? ""] ?? "other";
   const url = stringArg(args, "url") ?? "";
   // A host reads better than a whole address; words to search for stay as they are.
-  const target = URL.canParse(url) ? new URL(url).hostname : url || t("toolStep.fallbacks.page");
+  // `localhost:3000` parses with an empty hostname; keep the words then.
+  const host = URL.canParse(url) ? new URL(url).hostname : "";
+  const target = host || url || t("toolStep.fallbacks.page");
   return t(`toolStep.titles.browser.${kind}.${state}`, { target });
 }
 

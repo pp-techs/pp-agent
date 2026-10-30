@@ -9,9 +9,9 @@ export const IS_MAC = navigator.userAgent.includes("Mac");
 /**
  * Cmd+J / Ctrl+J opens and closes the side panel. A browser page in the panel has the keyboard to
  * itself, so main reports the shortcut pressed there. Main also asks for the browser to show while
- * the agent uses it.
+ * the agent uses it; the panel lives on the chat page, so `showPage` switches there first.
  */
-export function usePanelShortcut(bridge: DesktopBridge) {
+export function usePanelShortcut(bridge: DesktopBridge, showPage: (page: "chat") => void) {
   React.useEffect(() => {
     const toggle = () => usePanelStore.getState().toggle();
     function onKeyDown(event: KeyboardEvent) {
@@ -25,6 +25,7 @@ export function usePanelShortcut(bridge: DesktopBridge) {
     window.addEventListener("keydown", onKeyDown, true);
     const unsubscribe = bridge.shell.onTogglePanel(toggle);
     const unsubscribeReveal = bridge.browser.onReveal(() => {
+      showPage("chat");
       const panel = usePanelStore.getState();
       if (!panel.open || panel.tool !== "browser") panel.show("browser");
     });
@@ -33,5 +34,5 @@ export function usePanelShortcut(bridge: DesktopBridge) {
       unsubscribe();
       unsubscribeReveal();
     };
-  }, [bridge]);
+  }, [bridge, showPage]);
 }
