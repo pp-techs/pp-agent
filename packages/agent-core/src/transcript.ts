@@ -3,6 +3,7 @@ import { parseSkillBlock } from "@earendil-works/pi-coding-agent";
 import type { ChatMessage, ChatPart, ToolStatus } from "@workspace/shared";
 import { splitAttachedFiles } from "./attachments.ts";
 import { t } from "./i18n.ts";
+import { modelErrorText } from "./model-error.ts";
 
 type AssistantMessage = Extract<AgentMessage, { role: "assistant" }>;
 type UserMessage = Extract<AgentMessage, { role: "user" }>;
@@ -151,8 +152,7 @@ export class Transcript {
     const id = this.currentAssistantId;
     const chat: ChatMessage = { id, role: "assistant", parts: this.assistantParts(id, message) };
     if (final) {
-      if (message.stopReason === "error")
-        chat.error = message.errorMessage ?? t("conversations.modelError");
+      if (message.stopReason === "error") chat.error = modelErrorText(message.errorMessage);
       else if (message.stopReason === "aborted") chat.error = t("conversations.stopped");
       this.currentAssistantId = null;
     }
