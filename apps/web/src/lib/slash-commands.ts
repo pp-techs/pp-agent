@@ -8,6 +8,7 @@ import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { skillsQuery, workspaceSkillsQuery } from "@/lib/extension-queries";
 import { agentsQuery, useAgentCommands } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
+import { goalStatusKey } from "@/lib/goal";
 import { useComposerStore } from "@/stores/composer-store";
 
 /** Something the person can pick after typing `/`, or from the composer's + menu. */
@@ -36,6 +37,7 @@ export function useSlashItems(bridge: DesktopBridge): {
   const agents = useQuery(agentsQuery(bridge));
   const { newChat, compact, setConversationYolo } = useAgentCommands(bridge);
   const yolo = useChatStore((state) => state.yolo);
+  const goal = useChatStore((state) => state.goal);
   const { t } = useTranslation("chat");
 
   const commands = React.useMemo<SlashItem[]>(() => {
@@ -91,8 +93,27 @@ export function useSlashItems(bridge: DesktopBridge): {
           })();
         },
       },
+      {
+        kind: "command",
+        name: "goal",
+        label: t("slash.commands.goal.label"),
+        description: t("slash.commands.goal.description"),
+        run: () => {
+          if (goal) {
+            toast.info(
+              t("slash.commands.goal.current", {
+                status: t(goalStatusKey(goal)),
+                objective: goal.objective,
+              }),
+            );
+            return;
+          }
+          // The objective follows the command in the same message.
+          useComposerStore.getState().setDraft("/goal ");
+        },
+      },
     ];
-  }, [newChat, compact, setConversationYolo, yolo, running, t]);
+  }, [newChat, compact, setConversationYolo, yolo, goal, running, t]);
 
   const available = React.useMemo<SlashItem[]>(() => {
     const allowed = agents.data?.find((agent) => agent.id === agentId)?.skills ?? null;

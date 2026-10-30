@@ -20,6 +20,7 @@ import {
 } from "./memory.ts";
 import { DELEGATE_TOOL } from "./subagent.ts";
 import { TODO_TOOL } from "./todo.ts";
+import { GOAL_TOOL } from "./goal.ts";
 import { OFFICE_EDIT_TOOL, OFFICE_READ_TOOL } from "./office/names.ts";
 import { ASK_TOOL } from "./ask.ts";
 import { SCHEDULE_TOOL } from "./schedule-tool.ts";
@@ -142,6 +143,8 @@ const TIERS: Record<string, ToolTier> = {
   [ASK_TOOL]: "read",
   // sessions only reads what the app saved; it changes nothing.
   [SESSIONS_TOOL]: "read",
+  // complete_goal only ends the goal the person set; nothing else changes.
+  [GOAL_TOOL]: "read",
   // Both change something outside the chat: a task that runs by itself, a message to the phone.
   [SCHEDULE_TOOL]: "write",
   write: "write",

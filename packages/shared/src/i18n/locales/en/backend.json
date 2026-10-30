@@ -136,6 +136,12 @@
     "toolLocked": "This tool's setting cannot be changed here.",
     "yoloForced": "Yolo mode is already on for every conversation in Settings › Tools."
   },
+  "goal": {
+    "empty": "Write what the goal should be.",
+    "tooLong": "The goal is too long (at most {{max}} characters).",
+    "exists": "This conversation already has a goal. Clear it first.",
+    "nothingToResume": "There is no paused goal to resume."
+  },
   "conversations": {
     "notInHistory": "That conversation is not in this app's history.",
     "enterName": "Enter a name.",

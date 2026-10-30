@@ -46,6 +46,7 @@ import {
   SaveIcon,
   SearchIcon,
   ShieldQuestionIcon,
+  TargetIcon,
   WrenchIcon,
 } from "lucide-react";
 import type { TFunction } from "i18next";
@@ -72,6 +73,7 @@ const ICONS: Record<string, LucideIcon> = {
   memory_list: BrainIcon,
   memory_search: BrainIcon,
   todo_write: ListChecksIcon,
+  complete_goal: TargetIcon,
   delegate_task: BotIcon,
   ask_user: MessageCircleQuestionIcon,
   sessions: HistoryIcon,
@@ -190,6 +192,8 @@ function stepTitle(part: ToolPart, t: TFunction<"chat">) {
       return t(`toolStep.titles.memorySearch.${state}`);
     case "todo_write":
       return t(`toolStep.titles.todo.${state}`);
+    case "complete_goal":
+      return t(`toolStep.titles.goal.${state}`);
     case "delegate_task":
       return t(`toolStep.titles.delegate.${state}`);
     case "ask_user":

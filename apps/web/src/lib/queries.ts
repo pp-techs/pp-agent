@@ -1,4 +1,5 @@
 import type {
+  AgentCommandMap,
   Attachment,
   ComputerAppRemember,
   DesktopBridge,
@@ -247,6 +248,10 @@ export function useAgentCommands(bridge: DesktopBridge) {
     mutationFn: (active: boolean) =>
       bridge.agent.command({ type: "set_conversation_yolo", active }),
   });
+  const setGoal = useMutation({
+    mutationFn: (params: AgentCommandMap["set_goal"]["params"]) =>
+      bridge.agent.command({ type: "set_goal", ...params }),
+  });
   const compact = useMutation({
     mutationFn: () => bridge.agent.command({ type: "compact" }),
   });
@@ -268,6 +273,7 @@ export function useAgentCommands(bridge: DesktopBridge) {
     setAgent,
     setThinkingLevel,
     setConversationYolo,
+    setGoal,
     compact,
   };
 }

@@ -136,6 +136,12 @@
     "toolLocked": "Không thể thay đổi cài đặt của công cụ này tại đây.",
     "yoloForced": "Chế độ yolo đã được bật cho mọi cuộc trò chuyện trong Cài đặt › Công cụ."
   },
+  "goal": {
+    "empty": "Hãy nhập mục tiêu cần đạt.",
+    "tooLong": "Mục tiêu quá dài (tối đa {{max}} ký tự).",
+    "exists": "Cuộc trò chuyện này đã có mục tiêu. Hãy xóa mục tiêu đó trước.",
+    "nothingToResume": "Không có mục tiêu nào đang tạm dừng để tiếp tục."
+  },
   "conversations": {
     "notInHistory": "Cuộc trò chuyện đó không có trong lịch sử của ứng dụng này.",
     "enterName": "Hãy nhập tên.",

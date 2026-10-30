@@ -21,6 +21,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { ComposerMenu } from "@/components/chat/composer-menu";
+import { GoalBanner } from "@/components/chat/goal-banner";
 import { ModelPicker } from "@/components/chat/model-picker";
 import { SlashSuggestions } from "@/components/chat/slash-suggestions";
 import { ThinkingPicker } from "@/components/chat/thinking-picker";
@@ -29,6 +30,7 @@ import { SettingsModal } from "@/components/modals/settings-modal";
 import { useSendMessage } from "@/hooks/use-send-message";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { voiceQuery } from "@/lib/extension-queries";
+import { parseGoalCommand, type GoalParams } from "@/lib/goal";
 import { useAgentCommands } from "@/lib/queries";
 import {
   filterSlashItems,
@@ -55,7 +57,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
   const draft = useComposerStore((state) => state.draft);
   const attachments = useComposerStore((state) => state.attachments);
   const { setDraft, add, remove } = useComposerStore.getState();
-  const { abort, respondQuestion } = useAgentCommands(bridge);
+  const { abort, respondQuestion, setGoal } = useAgentCommands(bridge);
   // The agent's question takes the place of the composer until it is answered.
   const question = useChatStore((state) => Object.values(state.questions)[0]);
   const asking = question !== undefined;
@@ -119,11 +121,26 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
     focusComposer();
   }
 
+  /** Runs `/goal …` typed in full; the draft comes back when it fails. */
+  function runGoal(params: GoalParams) {
+    const text = draft;
+    setDraft("");
+    setGoal.mutate(params, {
+      onError: (error) => {
+        setDraft(text);
+        toast.error(error.message);
+      },
+    });
+  }
+
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const command = attachments.length === 0 ? findTypedCommand(commands, draft) : undefined;
+    const goal = attachments.length === 0 ? parseGoalCommand(draft) : null;
     if (command) pickItem(command);
-    else if (canSend && !running && !sending) send(draft);
+    else if (goal) {
+      if (!disabled && !sending && !setGoal.isPending) runGoal(goal);
+    } else if (canSend && !running && !sending) send(draft);
   }
 
   async function pick() {
@@ -200,6 +217,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
           />
         </div>
       )}
+      <GoalBanner bridge={bridge} />
       <form
         ref={formRef}
         onSubmit={onSubmit}

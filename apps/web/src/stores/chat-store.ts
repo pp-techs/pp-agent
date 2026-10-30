@@ -38,6 +38,8 @@ interface ChatState {
   thinking: AgentSnapshot["thinking"];
   /** Yolo mode of the open conversation: whether it is active now, and why. */
   yolo: AgentSnapshot["yolo"];
+  /** Goal the open conversation is working toward, if any. */
+  goal: AgentSnapshot["goal"];
   /** Workspace of the open conversation. */
   workspace: WorkspaceSummary | null;
   /** Folder the open conversation works in. */
@@ -62,6 +64,7 @@ export const useChatStore = create<ChatState>()((set) => ({
   agent: null,
   thinking: { level: "off", available: [] },
   yolo: { active: false, source: "conversation" },
+  goal: null,
   workspace: null,
   workspaceDir: null,
   context: null,
@@ -90,6 +93,7 @@ export const useChatStore = create<ChatState>()((set) => ({
             agent: snapshot.agent,
             thinking: snapshot.thinking,
             yolo: snapshot.yolo,
+            goal: snapshot.goal,
             workspace: snapshot.workspace,
             workspaceDir: snapshot.workspaceDir,
             sessionPath: snapshot.sessionPath,
