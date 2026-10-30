@@ -1727,6 +1727,14 @@ export class AgentHost {
           agentDir: paths.agentDir,
           customTools: appTools,
           allowedTools: () => helperTools(settings.get(), scope.agent().tools),
+          agents: () =>
+            settings.get().agents.map((agent) => ({
+              name: agent.name,
+              description: agent.description,
+              prompt: agentPromptSection(agent),
+              model: findAvailable(runtime, agent.model),
+              tools: helperTools(settings.get(), agent.tools),
+            })),
         }),
       ],
       resourceLoader,

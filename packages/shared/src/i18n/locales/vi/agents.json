@@ -90,7 +90,7 @@
     },
     "delegate_task": {
       "label": "Giao việc tra cứu",
-      "description": "Giao một việc tra cứu chỉ-đọc cho trợ lý phụ và nhận lại bản tóm tắt."
+      "description": "Giao các việc tra cứu chỉ-đọc cho trợ lý phụ, chạy song song, và nhận lại bản tóm tắt."
     },
     "ask_user": {
       "label": "Hỏi bạn khi cần quyết định",

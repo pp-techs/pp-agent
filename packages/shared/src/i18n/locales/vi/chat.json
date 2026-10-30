@@ -463,7 +463,8 @@
     },
     "helper": {
       "task": "Việc",
-      "working": "Đang làm…"
+      "working": "Đang làm…",
+      "done": "Đã xong"
     }
   },
   "panel": {

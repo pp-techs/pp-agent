@@ -463,7 +463,8 @@
     },
     "helper": {
       "task": "Task",
-      "working": "Working…"
+      "working": "Working…",
+      "done": "Finished"
     }
   },
   "panel": {

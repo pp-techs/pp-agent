@@ -458,7 +458,7 @@ export function planningSection(active: readonly string[]): string | null {
     );
   if (active.includes(DELEGATE_TOOL))
     lines.push(
-      "- Use delegate_task for research that would fill your context with raw material, such as reading many files or pages. The helper cannot see this conversation, so give it everything it needs; it returns only a summary and cannot change anything.",
+      "- Use delegate_task for research that would fill your context with raw material, such as reading many files or pages. Independent tasks can go in one call and run at the same time. A sub agent cannot see this conversation, so give it everything it needs (shared background goes in `context`); it returns only a summary and cannot change anything.",
     );
   return lines.length > 0 ? `## Planning and helpers\n${lines.join("\n")}` : null;
 }
