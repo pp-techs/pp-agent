@@ -29,6 +29,8 @@ const text = (message: ChatMessage | undefined): string =>
 let helperRequests: ChatRequest[];
 /** Settles with the tool result the parent saw in its follow-up request. */
 let parentSaw: PromiseWithResolvers<string>;
+/** Held until all three sub agents of the first test have asked, so they must run together. */
+let helperRelease: PromiseWithResolvers<void>;
 /** Arguments of the `delegate_task` call the parent makes. */
 let delegateArgs: Record<string, unknown>;
 
@@ -41,7 +43,7 @@ function modelServer(): ModelServer {
   const server: Server = createServer((request, response) => {
     const chunks: Buffer[] = [];
     request.on("data", (chunk: Buffer) => chunks.push(chunk));
-    request.on("end", () => {
+    request.on("end", async () => {
       const body = JSON.parse(Buffer.concat(chunks).toString()) as ChatRequest;
       response.writeHead(200, { "content-type": "text/event-stream" });
       const send = (delta: object, finish: string | null = null) =>
@@ -61,6 +63,9 @@ function modelServer(): ModelServer {
       const toolMessage = body.messages.find((m) => m.role === "tool");
       if (isHelper) {
         helperRequests.push(body);
+        // Answer only once all three have asked: a sequential run would wait here for ever.
+        if (helperRequests.length === 3) helperRelease.resolve();
+        await helperRelease.promise;
         const task = text(body.messages.findLast((m) => m.role === "user"));
         send({ content: `Found: ${task}` });
         send({}, "stop");
@@ -103,6 +108,7 @@ let host: AgentHost;
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "pp-agent-subagent-"));
   helperRequests = [];
+  helperRelease = Promise.withResolvers<void>();
   parentSaw = Promise.withResolvers<string>();
   model = modelServer();
   const store = new Map<string, StoredCredential>();

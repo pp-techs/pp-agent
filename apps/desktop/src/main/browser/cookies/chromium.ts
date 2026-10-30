@@ -2,7 +2,7 @@ import { createDecipheriv, pbkdf2Sync } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { CookieSourceBrowser, CookieSourceProfile } from "@workspace/shared";
 import { readDatabaseCopy, run } from "./database.ts";
 import { fromChromiumSameSite, fromChromiumSeconds, type PortableCookie } from "./portable.ts";
@@ -79,18 +79,29 @@ export function browserExecutable(definition: ChromiumBrowser): string | null {
 }
 
 /**
- * Processes of the browser still running (Windows). Closing every window does not quit a browser
- * that keeps running in the background (Chrome's "continue running background apps", Edge's
- * startup boost), and those processes keep the cookie database locked.
+ * Processes of the browser still running (Windows); null when that cannot be told. Closing every
+ * window does not quit a browser that keeps running in the background (Chrome's "continue running
+ * background apps", Edge's startup boost), and those processes keep the cookie database locked.
+ * Chrome and Chromium share `chrome.exe`, so processes are matched by their install folder; a
+ * process whose path cannot be read counts as running.
  */
-export async function runningProcessCount(definition: ChromiumBrowser): Promise<number> {
+export async function runningProcessCount(definition: ChromiumBrowser): Promise<number | null> {
   if (process.platform !== "win32" || !definition.exe) return 0;
-  const image = basename(definition.exe);
+  const name = basename(definition.exe, ".exe");
+  const folder = `\\${dirname(definition.exe).replaceAll("/", "\\")}\\`.toLowerCase();
   try {
-    const out = await run("tasklist", ["/FI", `IMAGENAME eq ${image}`, "/FO", "CSV", "/NH"]);
-    return out.split(/\r?\n/).filter((line) => line.startsWith('"')).length;
+    const out = await run("powershell", [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      `Get-Process -Name ${name} -ErrorAction SilentlyContinue | ForEach-Object { $_.Id.ToString() + '|' + $_.Path }`,
+    ]);
+    return out.split(/\r?\n/).filter((line) => {
+      const path = line.slice(line.indexOf("|") + 1).trim();
+      return line.includes("|") && (!path || path.toLowerCase().includes(folder));
+    }).length;
   } catch {
-    return 0;
+    return null;
   }
 }
 

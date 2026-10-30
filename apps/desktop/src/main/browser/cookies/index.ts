@@ -78,9 +78,9 @@ export async function readCookies(
 
 /**
  * Why the cookie database could not be copied. A lock held by background processes of a browser
- * whose windows are all closed is the usual case on Windows; otherwise report the real error
- * (security software, permissions) instead of telling the person to quit a browser that is not
- * running.
+ * whose windows are all closed is the usual case on Windows; when the browser is verifiably not
+ * running, report the real error (security software, permissions) instead of telling the person
+ * to quit it. If that cannot be told, give the quit advice together with the real error.
  */
 async function lockedMessage(
   browser: CookieSourceBrowser,
@@ -89,8 +89,11 @@ async function lockedMessage(
 ): Promise<Error> {
   const t = translator();
   const definition = CHROMIUM_BROWSERS.find((entry) => entry.browser === browser);
-  if (!definition || process.platform !== "win32" || (await runningProcessCount(definition)) > 0)
-    return new Error(t("panel.cookies.closeBrowser", { browser: name }));
+  const running =
+    definition && process.platform === "win32" ? await runningProcessCount(definition) : 1;
+  if (running === null)
+    return new Error(`${t("panel.cookies.closeBrowser", { browser: name })} (${error.message})`);
+  if (running > 0) return new Error(t("panel.cookies.closeBrowser", { browser: name }));
   return new Error(t("panel.cookies.copyBlocked", { browser: name, error: error.message }));
 }
 

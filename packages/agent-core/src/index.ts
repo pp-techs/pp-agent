@@ -1079,14 +1079,14 @@ export class AgentHost {
     const trimmed = text.trim();
     if (!trimmed && attachments.length === 0) return;
     if (!this.currentModel()) throw new Error(t("models.noneChosen"));
-    // Writing to the agent again picks up a goal that was waiting on the person.
-    if (this.open?.goal) this.open.goal.stalled = false;
     // Copy files and encode images before acknowledging, so a bad attachment fails the send.
     const message = await buildPrompt(
       trimmed || ATTACHMENTS_ONLY_PROMPT,
       attachments,
       session.sessionManager.getCwd(),
     );
+    // Writing to the agent again picks up a goal that was waiting on the person.
+    if (this.open?.goal) this.open.goal.stalled = false;
     this.startRun(session, message);
   }
 
@@ -2014,8 +2014,11 @@ export class AgentHost {
         this.emitActivity();
         break;
       case "message_start":
-        if (event.message.role === "user") transcript.addUser(event.message);
-        else if (event.message.role === "assistant") transcript.startAssistant();
+        if (event.message.role === "user") {
+          transcript.addUser(event.message);
+          // A goal that was waiting for the person is running again: tell the banner.
+          if (inWindow && conversation.goal) emit({ type: "snapshot", snapshot: this.snapshot() });
+        } else if (event.message.role === "assistant") transcript.startAssistant();
         break;
       case "message_update":
         if (event.message.role === "assistant") transcript.updateAssistant(event.message, false);

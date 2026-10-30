@@ -181,7 +181,17 @@ async function runHelper(
     settingsManager,
     sessionManager: SessionManager.inMemory(options.cwd),
   });
-  await session.bindExtensions({ mode: "rpc" });
+  try {
+    await session.bindExtensions({ mode: "rpc" });
+  } catch (error) {
+    session.dispose();
+    throw error;
+  }
+  // Stop pressed while the session was being set up: the listener below would never hear it.
+  if (signal?.aborted) {
+    session.dispose();
+    throw new Error("Stopped.");
+  }
 
   let toolCalls = 0;
   let toolTurns = 0;
@@ -365,14 +375,21 @@ export function createDelegateTool(options: DelegateToolOptions) {
       );
       if (signal?.aborted) throw new Error("Stopped.");
 
-      const perSummary = Math.floor(MAX_RESULT_CHARS / specs.length);
+      // The cap covers the whole text, so the headings and separators come off the budget first.
+      const single = specs.length === 1;
+      const framing = single
+        ? 0
+        : specs.reduce((sum, spec) => sum + `## ${spec.label}\n`.length, 0) +
+          2 * (specs.length - 1);
+      const perSummary = Math.max(0, Math.floor((MAX_RESULT_CHARS - framing) / specs.length));
       const sections = settled.map((result, index) => {
         const spec = specs[index];
-        const body =
+        const body = (
           result.status === "fulfilled"
-            ? result.value.slice(0, perSummary)
-            : `The helper failed: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`;
-        return specs.length === 1 ? body : `## ${spec?.label}\n${body}`;
+            ? result.value
+            : `The helper failed: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`
+        ).slice(0, perSummary);
+        return single ? body : `## ${spec?.label}\n${body}`;
       });
       const text = sections.join("\n\n");
       if (settled.every((result) => result.status === "rejected")) throw new Error(text);
