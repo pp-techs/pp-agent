@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.20.1] — 2026-10-31
+
+The agent's checklist is now pinned above the message box, so you can follow it while the chat scrolls. It shows how many steps are done and can be collapsed to a single line with the step in progress.
+
 ## [0.20.0] — 2026-10-30
 
 Added the `/goal` command. Type `/goal` and what you want done: the agent starts on it and keeps working turn after turn by itself until it reports the goal done. A banner above the message box shows the goal with pause, resume and clear (`/goal pause`, `/goal resume` and `/goal clear` do the same). Stopping the answer pauses the goal, and a turn where the agent only answers or asks something waits for your reply. A conversation opened again shows its goal paused.

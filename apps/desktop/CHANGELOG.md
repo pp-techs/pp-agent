@@ -1,5 +1,11 @@
 # @workspace/desktop
 
+## 0.20.1
+
+### Patch Changes
+
+- 75fa0ee: The agent's checklist is now pinned above the message box, so you can follow it while the chat scrolls. It shows how many steps are done and can be collapsed to a single line with the step in progress.
+
 ## 0.20.0
 
 ### Minor Changes
