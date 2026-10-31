@@ -22,6 +22,7 @@ import { toast } from "sonner";
 
 import { ComposerMenu } from "@/components/chat/composer-menu";
 import { GoalBanner } from "@/components/chat/goal-banner";
+import { TodoPanel } from "@/components/chat/todo-panel";
 import { ModelPicker } from "@/components/chat/model-picker";
 import { SlashSuggestions } from "@/components/chat/slash-suggestions";
 import { ThinkingPicker } from "@/components/chat/thinking-picker";
@@ -219,6 +220,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
           />
         </div>
       )}
+      <TodoPanel />
       <GoalBanner bridge={bridge} />
       <form
         ref={formRef}

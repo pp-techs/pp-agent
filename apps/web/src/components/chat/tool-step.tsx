@@ -1,10 +1,4 @@
-import type {
-  ApprovalRequest,
-  ChatMessage,
-  ChatPart,
-  ComputerApp,
-  ComputerToolAction,
-} from "@workspace/shared";
+import type { ApprovalRequest, ChatPart, ComputerApp, ComputerToolAction } from "@workspace/shared";
 import { Button } from "@workspace/ui/components/button";
 import { CodeBlock, CodeBlockContent } from "@workspace/ui/components/code-block";
 import {
@@ -31,8 +25,6 @@ import {
   BrainIcon,
   CalendarClockIcon,
   CircleCheckIcon,
-  CircleDashedIcon,
-  CircleDotIcon,
   ClockIcon,
   CodeIcon,
   FileTextIcon,
@@ -54,7 +46,6 @@ import { useTranslation } from "react-i18next";
 
 import { useChatThread } from "@/components/chat/chat-thread-context";
 import { appLabel } from "@/lib/app-label";
-import { useChatStore } from "@/stores/chat-store";
 
 type ToolPart = Extract<ChatPart, { type: "tool" }>;
 
@@ -323,89 +314,6 @@ function ApprovalCard({ approval }: { approval: ApprovalRequest }) {
   );
 }
 
-/** Id of the newest `todo_write` call in the chat. */
-function latestTodoCallId(state: { messages: ChatMessage[] }): string | undefined {
-  for (const message of state.messages.toReversed()) {
-    for (const part of message.parts.toReversed()) {
-      if (part.type === "tool" && part.name === "todo_write") return part.toolCallId;
-    }
-  }
-  return undefined;
-}
-
-interface TodoItem {
-  content: string;
-  status: "pending" | "in_progress" | "done";
-}
-
-/** The checklist in a `todo_write` call's arguments; arguments still streaming may be incomplete. */
-function todoItems(args: Record<string, unknown>): TodoItem[] {
-  if (!Array.isArray(args.todos)) return [];
-  const items: TodoItem[] = [];
-  for (const item of args.todos as unknown[]) {
-    if (typeof item !== "object" || item === null) continue;
-    const { content, status } = item as { content?: unknown; status?: unknown };
-    if (typeof content !== "string" || !content) continue;
-    items.push({
-      content,
-      status: status === "done" || status === "in_progress" ? status : "pending",
-    });
-  }
-  return items;
-}
-
-const TODO_ICONS: Record<TodoItem["status"], LucideIcon> = {
-  pending: CircleDashedIcon,
-  in_progress: CircleDotIcon,
-  done: CircleCheckIcon,
-};
-
-/** The model's checklist as a compact card; it is the call's own arguments, so it updates live. */
-function TodoCard({ items }: { items: TodoItem[] }) {
-  const { t } = useTranslation("chat");
-  const done = items.filter((item) => item.status === "done").length;
-  return (
-    <Item variant="outline" size="sm" className="w-full">
-      <ItemMedia variant="icon">
-        <ListChecksIcon />
-      </ItemMedia>
-      <ItemContent className="min-w-0">
-        <ItemTitle>
-          {t("toolStep.todo.title")}
-          <span className="text-xs font-normal text-muted-foreground">
-            {t("toolStep.todo.progress", { done, total: items.length })}
-          </span>
-        </ItemTitle>
-        {items.length === 0 ? (
-          <ItemDescription>{t("toolStep.todo.empty")}</ItemDescription>
-        ) : (
-          <ul className="mt-1 flex flex-col gap-1">
-            {items.map((item, index) => {
-              const StatusIcon = TODO_ICONS[item.status];
-              return (
-                <li
-                  key={index}
-                  aria-label={`${item.content} — ${t(`toolStep.todo.status.${item.status}`)}`}
-                  className={`flex items-start gap-2 text-sm ${
-                    item.status === "done"
-                      ? "text-muted-foreground line-through"
-                      : item.status === "in_progress"
-                        ? "font-medium"
-                        : ""
-                  }`}
-                >
-                  <StatusIcon aria-hidden className="mt-0.5 size-4 shrink-0" />
-                  <span className="min-w-0">{item.content}</span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </ItemContent>
-    </Item>
-  );
-}
-
 /**
  * Progress of the sub agents of `delegate_task`: `<helper>\t<tool name>\t<what it works on>` lines,
  * where the tool `done` marks a helper that has finished.
@@ -455,8 +363,6 @@ export function ToolStep({ part }: { part: ToolPart }) {
   const approvals = state.approvals.filter(
     (approval) => approval.anchorToolCallId === part.toolCallId,
   );
-  // Only the newest checklist of the chat is a card; earlier versions collapse into a step.
-  const latestTodoId = useChatStore(latestTodoCallId);
   const Icon = ICONS[part.name] ?? (part.name.startsWith("mcp__") ? BlocksIcon : WrenchIcon);
   const cards = approvals.map((approval) => (
     <ApprovalCard key={approval.requestId} approval={approval} />
@@ -464,10 +370,6 @@ export function ToolStep({ part }: { part: ToolPart }) {
 
   // A pending approval for this call is a question to the person, not activity, so it replaces the line.
   if (approvals.some((approval) => approval.toolCallId === part.toolCallId)) return <>{cards}</>;
-
-  // The checklist is one card that changes as the model rewrites it; older versions collapse.
-  if (part.name === "todo_write" && part.toolCallId === latestTodoId && part.status !== "denied")
-    return <TodoCard items={todoItems(part.args)} />;
 
   const status =
     part.status === "running" ? "running" : part.status === "error" ? "error" : undefined;

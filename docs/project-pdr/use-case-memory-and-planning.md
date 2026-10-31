@@ -24,7 +24,7 @@ Four features that make the agent more useful over long or repeated work. Paths 
 
 ## Checklist (`todo_write`)
 
-For work with three or more steps the model writes a checklist and updates it as it goes. The chat shows the newest list as a card with one icon per status and a "done of total" count; older versions of the list collapse to one-line steps. The list is the tool call's own arguments, so nothing extra is stored and it reappears when a saved conversation is reopened. The tool needs no approval.
+For work with three or more steps the model writes a checklist and updates it as it goes. The chat pins the newest list in a panel above the message box, so it stays in view while the chat scrolls: one icon per status, a "done of total" count, and a collapse button (collapsed, it shows the step in progress). Each `todo_write` call in the conversation is a one-line step. The list is the tool call's own arguments, so nothing extra is stored and it reappears when a saved conversation is reopened. The tool needs no approval.
 
 ## Questions (`ask_user`)
 
