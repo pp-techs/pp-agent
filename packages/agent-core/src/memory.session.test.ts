@@ -26,6 +26,9 @@ let memoryRequests: string[];
 let memoryFailures: number;
 /** Memory pass requests to cut short at the token limit. */
 let memoryTruncated: number;
+/** Failed memory passes, counted from the error each one logs (the observable failure signal). */
+let extractionFailures: number;
+let originalError: typeof console.error;
 /** System prompts of the conversation's own requests. */
 let chatSystems: string[];
 let events: AgentEvent[];
@@ -114,6 +117,12 @@ beforeEach(async () => {
   memoryRequests = [];
   memoryFailures = 0;
   memoryTruncated = 0;
+  extractionFailures = 0;
+  originalError = console.error;
+  console.error = (...args: unknown[]) => {
+    if (String(args[0]).includes("Background memory extraction failed")) extractionFailures += 1;
+    originalError(...args);
+  };
   chatSystems = [];
   events = [];
   server = modelServer();
@@ -160,6 +169,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   delete process.env.PP_AGENT_MEMORY_IDLE_MS;
+  console.error = originalError;
   await host.dispose();
   const { promise, resolve } = Promise.withResolvers<void>();
   server.close(() => resolve());
@@ -228,6 +238,9 @@ test("a failed pass keeps its messages for the next one instead of skipping them
   memoryFailures = 2;
   await say("I am Nhat, zebra-42, and this detail must not be lost.");
   await until(() => memoryRequests.length === 2);
+  // Request arrival is not pass completion: wait for the pass to give up before the next turn,
+  // or its in-flight entry would skip the next pass and leave this test waiting forever.
+  await until(() => extractionFailures === 1);
   expect(await notes()).toEqual([]);
   expect(events.some((event) => event.type === "memory_auto_saved")).toBe(false);
 
@@ -246,6 +259,7 @@ test("a reply cut short by the token limit is not read as an answer", async () =
   memoryTruncated = 1;
   await say("I am Nhat, zebra-42, and this detail must not be lost.");
   await until(() => memoryRequests.length === 1);
+  await until(() => extractionFailures === 1);
   await say("and one more thing worth noting today");
   await until(() => memoryRequests.length === 2);
   // The half-finished JSON saved nothing and left no cursor: the message is read again.
