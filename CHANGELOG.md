@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.21.0] — 2026-11-01
+
+Long-term memory is smarter and cheaper. The agent now reads a conversation for things worth remembering once it has been quiet for a few minutes or when you leave it, instead of after every reply, and it can correct or remove an outdated note instead of piling up contradictions. Each time it remembers something a "Remembered" notice appears with an **Undo** button. Notes can be pinned (Settings › Memory) so they are always in the agent's mind, and the notes a conversation starts with stay the same while it runs, which keeps replies fast. Searching notes now ignores accents ("tieng viet" finds "tiếng Việt"). A new **Fast model** setting (Settings › Models) chooses the model for conversation titles and memory; by default it is the cheapest model of the conversation's provider.
+
 ## [0.20.1] — 2026-10-31
 
 The agent's checklist is now pinned above the message box, so you can follow it while the chat scrolls. It shows how many steps are done and can be collapsed to a single line with the step in progress.
