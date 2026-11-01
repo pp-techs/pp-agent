@@ -522,6 +522,10 @@ export class AgentHost {
   private readonly passesInFlight = new Set<string>();
   /** Bumped whenever a memory switch turns off (or the host shuts down), dropping in-flight passes. */
   private memoryOff = 0;
+  /** Per-agent memory switches turning off, so one agent's opt-out does not drop another's passes. */
+  private readonly agentMemoryOff = new Map<string, number>();
+  /** Set when the host starts shutting down: no new passes are prepared after it. */
+  private disposed = false;
   /** Registrations of no session, for the MCP section before any conversation is open. */
   private idleMcp: McpRegistrations | null = null;
   /** Agent of the open conversation; resolves to the default agent once deleted. */
@@ -763,7 +767,8 @@ export class AgentHost {
    * chat sessions, and the open conversation. The process may exit afterwards.
    */
   async dispose(): Promise<void> {
-    // In-flight memory passes drop their changes instead of applying them after shutdown.
+    // No new passes from here on; the ones in flight drop their changes instead of applying them.
+    this.disposed = true;
     this.memoryOff += 1;
     for (const channel of this.channelServices())
       await channel.stop().catch((error: unknown) => console.error(error));
@@ -2253,6 +2258,11 @@ export class AgentHost {
       .finally(() => this.passesInFlight.delete(key));
   }
 
+  /** Whether a background memory or title pass is still running (what `passesInFlight` tracks). */
+  hasBackgroundPasses(): boolean {
+    return this.passesInFlight.size > 0;
+  }
+
   private launchTitle(file: string, pass: TitlePass): void {
     const key = `title:${file}`;
     this.passesInFlight.add(key);
@@ -2292,6 +2302,7 @@ export class AgentHost {
    * new messages since the last pass recorded on the branch).
    */
   private prepareMemoryExtraction(conversation: Conversation, file: string): MemoryPass | null {
+    if (this.disposed) return null;
     const manager = conversation.session.sessionManager;
     if (!conversation.memoryPass || !this.memoryReadable(manager, file)) return null;
     if (!this.memoryOn(this.agentOf(conversation))) return null;
@@ -2301,7 +2312,9 @@ export class AgentHost {
     const model = this.chooseFastModel(conversation);
     if (!model) return null;
     const workspaceId = this.workspaceOf(conversation).id;
+    const agentId = this.agentOf(conversation).id;
     const off = this.memoryOff;
+    const agentOff = this.agentMemoryOff.get(agentId) ?? 0;
     let dropped = false;
     return {
       file,
@@ -2311,11 +2324,14 @@ export class AgentHost {
       model,
       workspaceId,
       personal: workspaceId === DEFAULT_WORKSPACE_ID,
-      // Latched: once a pass learns it must not apply — its conversation deleted, or Memory
-      // switched off while it waits — it stays cancelled even if the switches come back.
+      // Latched: once a pass learns it must not apply — its conversation deleted, Memory switched
+      // off (globally or for its agent), or shutdown — it stays cancelled even if the switches
+      // come back while the model is answering.
       cancelled: () =>
         (dropped ||=
+          this.disposed ||
           this.memoryOff !== off ||
+          (this.agentMemoryOff.get(agentId) ?? 0) !== agentOff ||
           !conversation.memoryPass ||
           !this.memoryOn(this.agentOf(conversation))),
     };
@@ -3229,7 +3245,8 @@ export class AgentHost {
       id: before?.id ?? newAgentId(settings.get().agents, fields.name),
       ...fields,
     };
-    if (!saved.memory) this.memoryOff += 1;
+    if (!saved.memory)
+      this.agentMemoryOff.set(saved.id, (this.agentMemoryOff.get(saved.id) ?? 0) + 1);
     settings.update((draft) => {
       const index = draft.agents.findIndex((agent) => agent.id === saved.id);
       if (index === -1) draft.agents.push(saved);

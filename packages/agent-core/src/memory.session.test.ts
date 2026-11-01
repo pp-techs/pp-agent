@@ -413,6 +413,35 @@ test("turning Memory off drops the changes of a pass already running", async () 
   expect(events.filter((event) => event.type === "memory_auto_saved")).toHaveLength(1);
 });
 
+test("saving another agent with Memory off keeps this conversation's pass", async () => {
+  holdMemory = true;
+  memoryReplies.push(
+    '<memories>[{"op":"add","text":"From the kept pass","tag":null,"scope":"global"}]</memories>',
+  );
+  await say("Please always remember I work at Acme, zebra-42");
+  await until(() => releaseMemory !== null); // the pass is waiting on the model
+  // Another agent's opt-out must not drop a pass of an agent whose memory is still on.
+  await host.handle({
+    type: "save_agent",
+    agent: {
+      name: "Quiet",
+      icon: "🤫",
+      description: "",
+      instructions: "",
+      tools: null,
+      mcpServers: null,
+      skills: null,
+      model: null,
+      starterPrompts: [],
+      memory: false,
+    },
+  });
+  releaseMemory?.();
+  releaseMemory = null;
+  await until(() => events.some((event) => event.type === "memory_auto_saved"));
+  expect((await notes()).map((note) => note.text)).toEqual(["From the kept pass"]);
+});
+
 test("a pass in flight at shutdown applies nothing", async () => {
   holdMemory = true;
   memoryReplies.push(
@@ -424,11 +453,9 @@ test("a pass in flight at shutdown applies nothing", async () => {
   disposed = true;
   releaseMemory?.();
   releaseMemory = null;
-  // A dropped pass emits nothing; give its already-delivered reply time to be processed before
-  // checking the notes (fake timers cannot drive the host's real HTTP/model path).
-  const settle = Promise.withResolvers<void>();
-  setTimeout(settle.resolve, 250);
-  await settle.promise;
+  // Wait for the pass itself to finish before checking the file: a fixed delay could read it
+  // before an incorrect write lands.
+  await until(() => !host.hasBackgroundPasses());
   const saved = await readFile(join(dir, "agent", "MEMORY.md"), "utf8").catch(() => "");
   expect(saved).not.toContain("Saved during shutdown");
 });
