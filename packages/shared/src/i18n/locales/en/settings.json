@@ -156,7 +156,8 @@
       "more_one": "+{{count}} more",
       "more_other": "+{{count}} more",
       "undo": "Undo",
-      "undone": "Memory changes undone."
+      "undone": "Memory changes undone.",
+      "nothingUndone": "Nothing was undone: the notes changed since."
     },
     "deleted": "Note deleted.",
     "cleared": "All notes deleted.",

@@ -155,7 +155,8 @@
       "forgot": "Đã quên: {{text}}",
       "more_other": "+{{count}} mục khác",
       "undo": "Hoàn tác",
-      "undone": "Đã hoàn tác thay đổi bộ nhớ."
+      "undone": "Đã hoàn tác thay đổi bộ nhớ.",
+      "nothingUndone": "Không có gì được hoàn tác: ghi chú đã thay đổi từ đó."
     },
     "deleted": "Đã xóa ghi chú.",
     "cleared": "Đã xóa tất cả ghi chú.",

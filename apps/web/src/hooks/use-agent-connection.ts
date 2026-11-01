@@ -100,7 +100,10 @@ export function useAgentConnection(bridge: DesktopBridge) {
               onClick: () => {
                 bridge.agent
                   .command({ type: "undo_memory_pass", passId })
-                  .then(() => toast.success(i18n.t("settings:memory.autoSaved.undone")))
+                  .then(({ undone }) => {
+                    if (undone > 0) toast.success(i18n.t("settings:memory.autoSaved.undone"));
+                    else toast.info(i18n.t("settings:memory.autoSaved.nothingUndone"));
+                  })
                   .catch((error: unknown) =>
                     toast.error(error instanceof Error ? error.message : String(error)),
                   );

@@ -22,6 +22,8 @@ import { AgentHost } from "./index.ts";
 let memoryReplies: string[];
 /** Bodies of the memory pass requests. */
 let memoryRequests: string[];
+/** Memory pass requests to answer with a server error. */
+let memoryFailures: number;
 /** System prompts of the conversation's own requests. */
 let chatSystems: string[];
 let events: AgentEvent[];
@@ -39,6 +41,29 @@ function modelServer(): Server {
       let reply = "ok";
       if (/lasting facts/.test(raw)) {
         memoryRequests.push(raw);
+        if (memoryFailures > 0) {
+          memoryFailures -= 1;
+          // The connection drops mid-reply: the run settles with an error reply instead of
+          // rejecting, the case where a partial reply could be mistaken for an answer.
+          response.writeHead(200, { "content-type": "text/event-stream" });
+          response.write(
+            `data: ${JSON.stringify({
+              id: "chatcmpl-1",
+              object: "chat.completion.chunk",
+              created: 0,
+              model: "fake",
+              choices: [
+                {
+                  index: 0,
+                  delta: { role: "assistant", content: "partial notes, never finished" },
+                  finish_reason: null,
+                },
+              ],
+            })}\n\n`,
+          );
+          response.destroy();
+          return;
+        }
         reply = memoryReplies.shift() ?? "<memories>[]</memories>";
       } else if (/short title for it/.test(raw)) {
         reply = "<title>Test</title>";
@@ -75,6 +100,7 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "pp-agent-memory-"));
   memoryReplies = [];
   memoryRequests = [];
+  memoryFailures = 0;
   chatSystems = [];
   events = [];
   server = modelServer();
@@ -182,6 +208,25 @@ test("the idle pass reads each message once, announces its changes, and they can
     undone: 1,
   });
   expect(await notes()).toEqual([]);
+});
+
+test("a failed pass keeps its messages for the next one instead of skipping them", async () => {
+  // The call retries once; both attempts drop mid-reply, so the pass settles with no answer.
+  memoryFailures = 2;
+  await say("I am Nhat, zebra-42, and this detail must not be lost.");
+  await until(() => memoryRequests.length === 2);
+  expect(await notes()).toEqual([]);
+  expect(events.some((event) => event.type === "memory_auto_saved")).toBe(false);
+
+  memoryReplies.push(
+    '<memories>[{"op":"add","text":"Kept after a failed pass","tag":null,"scope":"global"}]</memories>',
+  );
+  await say("and one more thing worth noting today");
+  await until(() => memoryRequests.length === 3);
+  // The failed pass left no cursor: its message is read again, not skipped.
+  expect(memoryRequests[2]).toContain("zebra-42");
+  await until(() => events.some((event) => event.type === "memory_auto_saved"));
+  expect(await notes()).toMatchObject([{ text: "Kept after a failed pass" }]);
 });
 
 test("a new conversation's profile carries what earlier ones saved", async () => {
