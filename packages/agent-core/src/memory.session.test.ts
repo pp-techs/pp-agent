@@ -8,6 +8,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import type {
   AgentEvent,
   AgentPaths,
@@ -17,6 +18,7 @@ import type {
 } from "@workspace/shared";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { AgentHost } from "./index.ts";
+import { ORIGIN_ENTRY_TYPE } from "./memory-extraction.ts";
 
 /** Replies of the background memory pass, in order; then "nothing to keep". */
 let memoryReplies: string[];
@@ -32,6 +34,12 @@ let memoryEmpty: number;
 let holdChat: boolean;
 /** Completes the held chat request; null while none is held. */
 let releaseChat: (() => void) | null;
+/** When true, the next memory pass request is answered only once the test releases it. */
+let holdMemory: boolean;
+/** Completes the held memory pass request; null while none is held. */
+let releaseMemory: (() => void) | null;
+/** Id of the fake gateway, so a seeded session can name its model. */
+let gatewayId: string;
 /** Failed memory passes, counted from the error each one logs (the observable failure signal). */
 let extractionFailures: number;
 let originalError: typeof console.error;
@@ -109,6 +117,13 @@ function modelServer(): Server {
           reply = '<memories>[{"op":"add","text":"half';
           truncated = true;
         }
+        if (holdMemory) {
+          holdMemory = false;
+          const held = reply;
+          const cut = truncated;
+          releaseMemory = () => respond(held, cut);
+          return;
+        }
       } else if (/short title for it/.test(raw)) {
         reply = "<title>Test</title>";
       } else {
@@ -139,6 +154,8 @@ beforeEach(async () => {
   memoryEmpty = 0;
   holdChat = false;
   releaseChat = null;
+  holdMemory = false;
+  releaseMemory = null;
   extractionFailures = 0;
   originalError = console.error;
   console.error = (...args: unknown[]) => {
@@ -176,7 +193,7 @@ beforeEach(async () => {
   const { promise, resolve } = Promise.withResolvers<void>();
   server.listen(0, "127.0.0.1", resolve);
   await promise;
-  await host.handle({
+  const saved = (await host.handle({
     type: "save_gateway",
     gateway: {
       name: "Fake",
@@ -185,7 +202,8 @@ beforeEach(async () => {
       models: [{ id: "fake", images: false }],
       requiresApiKey: false,
     },
-  });
+  })) as { id: string };
+  gatewayId = saved.id;
   await host.handle({ type: "new_chat" });
 });
 
@@ -345,6 +363,73 @@ test("deleting a conversation that is still answering never extracts it", async 
   expect(memoryRequests).toHaveLength(1);
   expect(memoryRequests[0]).not.toContain("zebra-42");
   expect((await notes()).map((note) => note.text)).toEqual(["From the fresh conversation"]);
+});
+
+test("deleting a conversation drops the changes of a pass already running", async () => {
+  holdMemory = true;
+  memoryReplies.push(
+    '<memories>[{"op":"add","text":"From a deleted conversation","tag":null,"scope":"global"}]</memories>',
+  );
+  await say("I am Nhat, zebra-42, in a chat I am about to delete");
+  await until(() => releaseMemory !== null); // the pass is waiting on the model
+  const snapshot = (await host.handle({ type: "get_snapshot" })) as AgentSnapshot;
+  if (!snapshot.sessionPath) throw new Error("no open session");
+  await host.handle({ type: "delete_session", path: snapshot.sessionPath });
+  // The model answers after the deletion: its operations must not be applied.
+  releaseMemory?.();
+  releaseMemory = null;
+
+  memoryReplies.push(
+    '<memories>[{"op":"add","text":"From the fresh conversation","tag":null,"scope":"global"}]</memories>',
+  );
+  await say("a fresh marker worth noting today");
+  await until(() => events.some((event) => event.type === "memory_auto_saved"));
+  expect((await notes()).map((note) => note.text)).toEqual(["From the fresh conversation"]);
+  expect(events.filter((event) => event.type === "memory_auto_saved")).toHaveLength(1);
+});
+
+test("a session created for a run is never read, even reopened in the window", async () => {
+  // What runScheduledTask writes at creation; the mark outlives the task record.
+  const manager = SessionManager.create(join(dir, "workspace"), join(dir, "sessions"));
+  manager.appendCustomEntry(ORIGIN_ENTRY_TYPE, { kind: "task" });
+  manager.appendMessage({
+    role: "user",
+    content: "I am Nhat, zebra-42, from a scheduled run",
+    timestamp: Date.now(),
+  });
+  manager.appendMessage({
+    role: "assistant",
+    content: [{ type: "text", text: "done" }],
+    api: "openai-completions",
+    provider: gatewayId,
+    model: "fake",
+    // Pi reads prior usage when it settles a run; the shape is a real assistant message's.
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason: "stop",
+    timestamp: Date.now(),
+  });
+  manager.appendModelChange(gatewayId, "fake");
+  const file = manager.getSessionFile();
+  if (!file) throw new Error("no session file");
+  await host.handle({ type: "open_session", path: file });
+  await say("and a fresh marker worth noting today");
+  await host.handle({ type: "new_chat" });
+
+  memoryReplies.push(
+    '<memories>[{"op":"add","text":"From the fresh conversation","tag":null,"scope":"global"}]</memories>',
+  );
+  await say("another marker worth noting today");
+  await until(() => events.some((event) => event.type === "memory_auto_saved"));
+  // The run's messages never reach a pass; the only request is the fresh conversation's own.
+  expect(memoryRequests).toHaveLength(1);
+  expect(memoryRequests[0]).not.toContain("zebra-42");
 });
 
 test("undo never overwrites a note recreated since the pass", async () => {

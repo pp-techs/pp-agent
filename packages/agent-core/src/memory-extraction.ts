@@ -31,6 +31,20 @@ const MAX_KNOWN_CHARS = 6_000;
 export const MEMORY_ENTRY_TYPE = "pp-agent-memory";
 
 /**
+ * Custom entry marking why a session exists: `{ kind: "chat" | "task" }`, written where the
+ * session is created. A session that carries it is never read by the memory pass, wherever it is
+ * reopened and whatever happens to the chat or task that made it.
+ */
+export const ORIGIN_ENTRY_TYPE = "pp-agent-origin";
+
+/** Whether a session was created for a chat or a scheduled run. */
+export function isRunSession(manager: SessionManager): boolean {
+  return manager
+    .getBranch()
+    .some((entry) => entry.type === "custom" && entry.customType === ORIGIN_ENTRY_TYPE);
+}
+
+/**
  * The message entries on the branch after the last one a memory pass read, and the id of the
  * newest of them (what the next cursor entry records); null when there is none. When the recorded
  * entry is no longer on the branch (an earlier message was edited) the whole branch counts as
@@ -251,6 +265,8 @@ export interface MemoryExtractionOptions {
   workspaceId: string;
   /** The built-in Personal workspace: notes are only offered and written as global. */
   personal: boolean;
+  /** True when the conversation is gone (deleted) while the call ran: apply nothing. */
+  cancelled: () => boolean;
 }
 
 /** The note-count warnings for full places, so the call updates instead of adding there. */
@@ -310,5 +326,7 @@ export async function extractMemory(
     console.error("Background memory extraction failed; no notes were changed by this pass.");
     return null;
   }
+  // The conversation may have been deleted while the model was answering.
+  if (options.cancelled()) return null;
   return applyMemoryOps(ops, { store, refs: known.refs, workspaceId, personal });
 }

@@ -199,7 +199,13 @@ import { VoiceService } from "./transcription.ts";
 import { isWorkspaceSkill, listWorkspaceSkills, SkillLibrary } from "./skills.ts";
 import { seedBuiltInSkills } from "./skills-builtin.ts";
 import { createDelegateTool, DELEGATE_TOOL } from "./subagent.ts";
-import { extractMemory, MEMORY_ENTRY_TYPE, unreadMessages } from "./memory-extraction.ts";
+import {
+  extractMemory,
+  isRunSession,
+  MEMORY_ENTRY_TYPE,
+  ORIGIN_ENTRY_TYPE,
+  unreadMessages,
+} from "./memory-extraction.ts";
 import { proposeSessionTitle } from "./session-title.ts";
 import {
   createMemoryTools,
@@ -307,6 +313,8 @@ interface MemoryPass {
   workspaceId: string;
   /** The built-in Personal workspace: every note the pass writes is global. */
   personal: boolean;
+  /** True when the conversation is gone (deleted) while the call ran: apply nothing. */
+  cancelled: () => boolean;
 }
 
 /** What `runSessionTitle` needs, gathered while the conversation's session is still alive. */
@@ -1398,6 +1406,8 @@ export class AgentHost {
   private async closeBackground(file: string): Promise<void> {
     const conversation = this.background.get(file);
     if (!conversation) return;
+    // Only deletions get here: a memory pass still in flight must not apply its changes.
+    conversation.memoryPass = false;
     this.background.delete(file);
     await this.stop(conversation).catch(() => undefined);
     this.release(conversation);
@@ -2261,10 +2271,12 @@ export class AgentHost {
   }
 
   /**
-   * Whether the background memory pass may read a session file at all: never a chat's or a
-   * scheduled run's session, even when it has been reopened in the window.
+   * Whether the background memory pass may read a session at all: never a chat's or a scheduled
+   * run's session (marked at creation, wherever it is reopened), and — for files from before the
+   * mark — never one the chat or task record still points at.
    */
-  private memoryReadable(file: string): boolean {
+  private memoryReadable(manager: SessionManager, file: string): boolean {
+    if (isRunSession(manager)) return false;
     const { settings, chatSessions } = this.requireServices();
     if (chatSessions.entries().some(([, path]) => path === file)) return false;
     return !settings.get().scheduledTasks.some((task) => task.lastRun?.sessionPath === file);
@@ -2276,10 +2288,10 @@ export class AgentHost {
    * new messages since the last pass recorded on the branch).
    */
   private prepareMemoryExtraction(conversation: Conversation, file: string): MemoryPass | null {
-    if (!conversation.memoryPass || !this.memoryReadable(file)) return null;
+    const manager = conversation.session.sessionManager;
+    if (!conversation.memoryPass || !this.memoryReadable(manager, file)) return null;
     if (!this.memoryOn(this.agentOf(conversation))) return null;
     if (this.passesInFlight.has(`memory:${file}`)) return null;
-    const manager = conversation.session.sessionManager;
     const unread = unreadMessages(manager);
     if (!unread) return null;
     const model = this.chooseFastModel(conversation);
@@ -2293,6 +2305,7 @@ export class AgentHost {
       model,
       workspaceId,
       personal: workspaceId === DEFAULT_WORKSPACE_ID,
+      cancelled: () => !conversation.memoryPass,
     };
   }
 
@@ -2312,6 +2325,7 @@ export class AgentHost {
       store: memory,
       workspaceId: pass.workspaceId,
       personal: pass.personal,
+      cancelled: pass.cancelled,
     });
     if (!changes) return;
     this.recordMemoryCursor(pass.file, pass.lastEntryId);
@@ -3574,11 +3588,13 @@ export class AgentHost {
         } else {
           manager = SessionManager.create(cwd, paths.sessionDir);
           manager.appendCustomEntry(AGENT_ENTRY_TYPE, { agentId: agent.id });
+          manager.appendCustomEntry(ORIGIN_ENTRY_TYPE, { kind: "task" });
           manager.appendSessionInfo(task.name);
         }
       } else {
         manager = SessionManager.create(cwd, paths.sessionDir);
         manager.appendCustomEntry(AGENT_ENTRY_TYPE, { agentId: agent.id });
+        manager.appendCustomEntry(ORIGIN_ENTRY_TYPE, { kind: "task" });
         manager.appendSessionInfo(runTitle(task.name, new Date(startedAt), currentLanguage()));
       }
       let originContext = "";
@@ -4146,6 +4162,7 @@ export class AgentHost {
     } else {
       manager = SessionManager.create(cwd, paths.sessionDir);
       manager.appendCustomEntry(AGENT_ENTRY_TYPE, { agentId: agent.id });
+      manager.appendCustomEntry(ORIGIN_ENTRY_TYPE, { kind: "chat" });
       manager.appendSessionInfo(channelTitle(channel.label, new Date(), currentLanguage()));
     }
     const mcpServers = new McpRegistrations(mcpConfig, (name) => {
