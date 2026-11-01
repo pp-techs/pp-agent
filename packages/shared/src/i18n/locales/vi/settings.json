@@ -123,7 +123,7 @@
   },
   "memory": {
     "title": "Bộ nhớ",
-    "description": "Những ghi chú ngắn mà agent giữ lại giữa các cuộc trò chuyện, ví dụ sở thích của bạn. Chúng được thêm vào mỗi cuộc trò chuyện mới như thông tin tham khảo, không phải chỉ dẫn. Mỗi ghi chú được ghi nhớ ở mọi nơi hoặc chỉ trong một workspace. Ghi chú đã ghim luôn có trong hồ sơ của agent.",
+    "description": "Những ghi chú ngắn mà agent giữ lại giữa các cuộc trò chuyện, ví dụ sở thích của bạn. Chúng được thêm vào mỗi cuộc trò chuyện mới như thông tin tham khảo, không phải chỉ dẫn. Mỗi ghi chú được ghi nhớ ở mọi nơi hoặc chỉ trong một workspace. Ghi chú đã ghim đứng đầu hồ sơ của agent.",
     "enable": {
       "legend": "Bộ nhớ dài hạn",
       "label": "Ghi nhớ ghi chú giữa các cuộc trò chuyện",

@@ -123,7 +123,7 @@
   },
   "memory": {
     "title": "Memory",
-    "description": "Short notes the agent keeps across conversations, such as your preferences. They are added to every new conversation as information, never as instructions. Each note is remembered everywhere or in one workspace only. Pinned notes are always in the agent's profile.",
+    "description": "Short notes the agent keeps across conversations, such as your preferences. They are added to every new conversation as information, never as instructions. Each note is remembered everywhere or in one workspace only. Pinned notes come first in the agent's profile.",
     "enable": {
       "legend": "Long-term memory",
       "label": "Remember notes between conversations",

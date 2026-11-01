@@ -388,6 +388,33 @@ test("deleting a conversation drops the changes of a pass already running", asyn
   expect(events.filter((event) => event.type === "memory_auto_saved")).toHaveLength(1);
 });
 
+test("turning Memory off drops the changes of a pass already running", async () => {
+  holdMemory = true;
+  memoryReplies.push(
+    '<memories>[{"op":"add","text":"Saved while disabled","tag":null,"scope":"global"}]</memories>',
+  );
+  await say("Please always remember I work at Acme, zebra-42");
+  await until(() => releaseMemory !== null); // the pass is waiting on the model
+  await host.handle({ type: "set_memory_enabled", enabled: false });
+  releaseMemory?.();
+  releaseMemory = null;
+  // A cancelled pass emits nothing, so there is no event to wait for; give its already-delivered
+  // reply time to be processed before memory is switched back on (fake timers cannot drive the
+  // host's real HTTP/model path).
+  const settle = Promise.withResolvers<void>();
+  setTimeout(settle.resolve, 250);
+  await settle.promise;
+
+  await host.handle({ type: "set_memory_enabled", enabled: true });
+  memoryReplies.push(
+    '<memories>[{"op":"add","text":"From the fresh pass","tag":null,"scope":"global"}]</memories>',
+  );
+  await say("a fresh marker worth noting today");
+  await until(() => events.some((event) => event.type === "memory_auto_saved"));
+  expect((await notes()).map((note) => note.text)).toEqual(["From the fresh pass"]);
+  expect(events.filter((event) => event.type === "memory_auto_saved")).toHaveLength(1);
+});
+
 test("a session created for a run is never read, even reopened in the window", async () => {
   // What runScheduledTask writes at creation; the mark outlives the task record.
   const manager = SessionManager.create(join(dir, "workspace"), join(dir, "sessions"));

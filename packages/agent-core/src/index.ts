@@ -2305,7 +2305,8 @@ export class AgentHost {
       model,
       workspaceId,
       personal: workspaceId === DEFAULT_WORKSPACE_ID,
-      cancelled: () => !conversation.memoryPass,
+      // A pass is also cancelled when Memory is turned off while it waits on the model.
+      cancelled: () => !conversation.memoryPass || !this.memoryOn(this.agentOf(conversation)),
     };
   }
 

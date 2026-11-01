@@ -535,7 +535,7 @@ export function createMemoryTools({ store, isEnabled, workspaceId, onChanged }: 
         pin: Type.Optional(
           Type.Boolean({
             description:
-              "True when the user wants this always kept in mind: pinned notes are always in the profile.",
+              "True when the user wants this always kept in mind: pinned notes come first in the profile.",
           }),
         ),
       }),
