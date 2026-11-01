@@ -284,6 +284,29 @@ export function findAvailable(runtime: ModelRuntime, ref: ModelRef | null): Mode
     .find((model) => model.provider === ref.provider && model.id === ref.modelId);
 }
 
+/**
+ * The cheapest usable model of `main`'s provider (by input, then output price), for small
+ * background calls. On a provider that serves several vendors (ids like `anthropic/claude-…`)
+ * only `main`'s vendor counts, so a tiny unrelated model is never picked. Models with no price
+ * (free, or a gateway that states none) are left out: their cost says nothing about their size.
+ * Undefined when no priced model is known.
+ */
+export function cheapestModel(runtime: ModelRuntime, main: Model<Api>): Model<Api> | undefined {
+  const vendor = main.id.includes("/") ? main.id.slice(0, main.id.indexOf("/") + 1) : "";
+  let best: Model<Api> | undefined;
+  for (const model of runtime.getAvailableSnapshot()) {
+    if (model.provider !== main.provider || !model.id.startsWith(vendor)) continue;
+    if (!(model.cost.input > 0) || !model.input.includes("text")) continue;
+    if (
+      !best ||
+      model.cost.input < best.cost.input ||
+      (model.cost.input === best.cost.input && model.cost.output < best.cost.output)
+    )
+      best = model;
+  }
+  return best;
+}
+
 function authSource(runtime: ModelRuntime, providerId: string): string | undefined {
   const status = runtime.getProviderAuthStatus(providerId);
   if (!status.configured) return undefined;

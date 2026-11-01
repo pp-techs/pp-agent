@@ -245,7 +245,8 @@
       "too-long": "Ghi chú quá dài.",
       "full": "Nơi đó đã đầy. Hãy xóa bớt một ghi chú trước, hoặc lưu ghi chú ở nơi khác.",
       "duplicate": "Nơi đó đã có ghi chú khác nói điều này.",
-      "missing": "Ghi chú này không còn nữa."
+      "missing": "Ghi chú này không còn nữa.",
+      "undoExpired": "Không thể hoàn tác các thay đổi này nữa."
     }
   },
   "scheduler": {

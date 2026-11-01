@@ -30,7 +30,15 @@ import {
 } from "@workspace/ui/components/select";
 import { Textarea } from "@workspace/ui/components/textarea";
 import { useQuery } from "@tanstack/react-query";
-import { BrainIcon, PencilIcon, PlusIcon, Trash2Icon, TriangleAlertIcon } from "lucide-react";
+import {
+  BrainIcon,
+  PencilIcon,
+  PinIcon,
+  PinOffIcon,
+  PlusIcon,
+  Trash2Icon,
+  TriangleAlertIcon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -173,7 +181,17 @@ function NoteRow({
   onEdit: () => void;
 }) {
   const { t } = useTranslation(["settings", "common"]);
-  const { remove } = useMemoryCommands(bridge);
+  const { save, remove } = useMemoryCommands(bridge);
+
+  function onTogglePin() {
+    save.mutate({
+      id: entry.id,
+      text: entry.text,
+      tag: entry.tag,
+      workspaceId: entry.workspaceId,
+      pinned: !entry.pinned,
+    });
+  }
 
   async function onDelete() {
     const confirmed = await ConfirmModal.show({
@@ -191,10 +209,26 @@ function NoteRow({
         <ItemTitle className="flex-wrap whitespace-pre-wrap">
           {entry.text}
           {entry.tag && <Badge variant="secondary">{entry.tag}</Badge>}
+          {entry.pinned && (
+            <Badge variant="outline">
+              <PinIcon data-icon="inline-start" />
+              {t("memory.pinnedBadge")}
+            </Badge>
+          )}
         </ItemTitle>
       </ItemContent>
       <ItemActions>
-        {remove.isPending && <Spinner />}
+        {(remove.isPending || save.isPending) && <Spinner />}
+        <Button
+          variant="outline"
+          size="icon-sm"
+          aria-label={entry.pinned ? t("memory.unpinLabel") : t("memory.pinLabel")}
+          aria-pressed={entry.pinned}
+          disabled={save.isPending}
+          onClick={onTogglePin}
+        >
+          {entry.pinned ? <PinOffIcon /> : <PinIcon />}
+        </Button>
         <Button
           variant="outline"
           size="icon-sm"

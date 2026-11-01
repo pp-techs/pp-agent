@@ -19,6 +19,13 @@
       "allConnected": "Every provider is connected."
     }
   },
+  "fastModel": {
+    "label": "Fast model",
+    "automatic": "Automatic",
+    "notAvailable": "{{modelId}} (not available)",
+    "needsKey": "{{name}} (needs key)",
+    "hint": "Names conversations and keeps memory in the background. Automatic uses the cheapest model of the conversation's provider."
+  },
   "modelCount_one": "{{count}} model",
   "modelCount_other": "{{count}} models",
   "apiTypes": {

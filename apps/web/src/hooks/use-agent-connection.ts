@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { DesktopBridge, SettingsScope } from "@workspace/shared";
+import type { DesktopBridge, MemoryChange, SettingsScope } from "@workspace/shared";
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -29,6 +29,23 @@ const SCOPE_KEYS: Record<SettingsScope, QueryKey[]> = {
   browserProfiles: [queryKeys.browserProfiles],
   computerApps: [queryKeys.computerApps],
 };
+
+/** Lines of the "Remembered" toast shown at most; the rest are counted. */
+const AUTO_SAVED_LINES = 3;
+
+/** One line per remembered change: the new text, or what was forgotten. */
+function describeMemoryChanges(changes: MemoryChange[]): string {
+  const lines = changes
+    .slice(0, AUTO_SAVED_LINES)
+    .map((change) =>
+      change.after
+        ? change.after.text
+        : i18n.t("settings:memory.autoSaved.forgot", { text: change.before?.text ?? "" }),
+    );
+  const rest = changes.length - lines.length;
+  if (rest > 0) lines.push(i18n.t("settings:memory.autoSaved.more", { count: rest }));
+  return lines.join("\n");
+}
 
 /** Mirrors the agent process into the chat store: live events first, then a snapshot to catch up. */
 export function useAgentConnection(bridge: DesktopBridge) {
@@ -70,6 +87,25 @@ export function useAgentConnection(bridge: DesktopBridge) {
                   },
                 }
               : undefined,
+          });
+          break;
+        }
+        case "memory_auto_saved": {
+          const { passId } = event;
+          toast(i18n.t("settings:memory.autoSaved.title"), {
+            description: describeMemoryChanges(event.changes),
+            classNames: { description: "whitespace-pre-line" },
+            action: {
+              label: i18n.t("settings:memory.autoSaved.undo"),
+              onClick: () => {
+                bridge.agent
+                  .command({ type: "undo_memory_pass", passId })
+                  .then(() => toast.success(i18n.t("settings:memory.autoSaved.undone")))
+                  .catch((error: unknown) =>
+                    toast.error(error instanceof Error ? error.message : String(error)),
+                  );
+              },
+            },
           });
           break;
         }

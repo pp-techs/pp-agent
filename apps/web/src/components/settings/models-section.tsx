@@ -40,7 +40,9 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select";
@@ -63,11 +65,14 @@ import { useTranslation } from "react-i18next";
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { OptionGroup, SubOptions, SwitchRow } from "@/components/settings/option-group";
 import { SectionHeading } from "@/components/settings/section-heading";
-import { modelLabel } from "@/lib/models";
+import { groupByProvider, modelKey, modelLabel, modelLabeler } from "@/lib/models";
 import {
   gatewaysQuery,
+  modelsQuery,
   providersQuery,
+  settingsQuery,
   useProviderCommands,
+  useUpdateSettings,
   type ProviderCommands,
 } from "@/lib/queries";
 
@@ -88,6 +93,9 @@ function isHttpUrl(value: string) {
 
 /** Closing the key prompt rejects `connect_provider` with "Cancelled"; that is not an error. */
 const isCancelled = (error: Error) => /cancel/i.test(error.message);
+
+/** Select value for "no fast model": the cheapest model of the conversation's provider. */
+const AUTOMATIC = "automatic";
 
 function GroupHeading({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
@@ -762,6 +770,79 @@ function GatewayRow({
   );
 }
 
+/** The model that names conversations and keeps memory in the background. */
+function FastModelField({ bridge }: { bridge: DesktopBridge }) {
+  const { t } = useTranslation("models");
+  const settings = useQuery(settingsQuery(bridge));
+  const models = useQuery(modelsQuery(bridge));
+  const update = useUpdateSettings(bridge);
+
+  if (settings.isPending || models.isPending) return <Spinner />;
+
+  const available = models.data ?? [];
+  const label = modelLabeler(available);
+  const current = settings.data?.fastModel ?? null;
+  const currentKey = current ? modelKey(current) : AUTOMATIC;
+  const missing = current !== null && !available.some((model) => modelKey(model) === currentKey);
+  const items = [
+    { value: AUTOMATIC, label: t("fastModel.automatic") },
+    ...(missing && current
+      ? [
+          {
+            value: currentKey,
+            label: t("fastModel.notAvailable", { modelId: current.modelId }),
+          },
+        ]
+      : []),
+    ...available.map((model) => ({
+      value: modelKey(model),
+      label: `${label(model)} · ${model.providerName}`,
+    })),
+  ];
+
+  function onChange(value: string | null) {
+    if (value === null || value === currentKey) return;
+    const model = available.find((item) => modelKey(item) === value);
+    update.mutate(
+      { fastModel: model ? { provider: model.provider, modelId: model.modelId } : null },
+      { onError: (error) => toast.error(error.message) },
+    );
+  }
+
+  return (
+    <Field>
+      <Select items={items} value={currentKey} onValueChange={onChange}>
+        <SelectTrigger
+          className="w-full"
+          aria-label={t("fastModel.label")}
+          disabled={update.isPending}
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={AUTOMATIC}>{t("fastModel.automatic")}</SelectItem>
+          {missing && current && (
+            <SelectItem value={currentKey} disabled>
+              {t("fastModel.notAvailable", { modelId: current.modelId })}
+            </SelectItem>
+          )}
+          {groupByProvider(available).map(([provider, group]) => (
+            <SelectGroup key={provider}>
+              <SelectLabel>{group.name}</SelectLabel>
+              {group.models.map((model) => (
+                <SelectItem key={modelKey(model)} value={modelKey(model)} disabled={model.needsKey}>
+                  {model.needsKey ? t("fastModel.needsKey", { name: label(model) }) : label(model)}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          ))}
+        </SelectContent>
+      </Select>
+      <FieldDescription>{t("fastModel.hint")}</FieldDescription>
+    </Field>
+  );
+}
+
 export function ModelsSection({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("models");
   const providers = useQuery(providersQuery(bridge));
@@ -819,6 +900,11 @@ export function ModelsSection({ bridge }: { bridge: DesktopBridge }) {
             ))}
           </ItemGroup>
         )}
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <GroupHeading title={t("fastModel.label")} />
+        <FastModelField bridge={bridge} />
       </section>
 
       <section className="flex flex-col gap-2">
