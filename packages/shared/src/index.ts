@@ -200,6 +200,8 @@ export type AgentEvent =
   | { type: "auth_prompt_closed"; promptId: string }
   /** Progress or instructions from a sign-in flow (for example a URL that was opened). */
   | { type: "auth_info"; flowTitle: string; message: string; url?: string }
+  /** The background memory pass changed notes; `undo_memory_pass` with `passId` reverses it. */
+  | { type: "memory_auto_saved"; passId: string; changes: MemoryChange[] }
   | { type: "error"; message: string };
 
 /** Something the person attached to a message. Exactly one of `path` or `data` is set. */
@@ -397,6 +399,11 @@ export interface AppSettings {
   /** Model for new conversations. */
   defaultModel: ModelRef | null;
   /**
+   * Model for small background calls (conversation titles, memory). Null = the cheapest model of
+   * the conversation's provider.
+   */
+  fastModel: ModelRef | null;
+  /**
    * Lets the agent run shell commands (bash, or PowerShell on Windows). Each command asks unless
    * the shell's own policy is `allow`.
    */
@@ -467,8 +474,8 @@ export const MEMORY_LIMITS = {
   maxEntries: 200,
   maxEntryLength: 500,
   maxTagLength: 30,
-  /** Characters of notes added to the system prompt; the newest notes come first. */
-  maxInjectedLength: 4000,
+  /** Characters of notes in the system prompt's profile; pinned and personal notes come first. */
+  maxInjectedLength: 2000,
 } as const;
 
 /** A short fact or preference the agent keeps across conversations. */
@@ -479,6 +486,14 @@ export interface MemoryEntry {
   tag: string | null;
   /** Where the note lives: null = every workspace, else only that workspace's conversations. */
   workspaceId: string | null;
+  /** Always in the prompt's profile; the background memory pass never changes it. */
+  pinned: boolean;
+}
+
+/** One change the background memory pass made: `before` null = added, `after` null = deleted. */
+export interface MemoryChange {
+  before: MemoryEntry | null;
+  after: MemoryEntry | null;
 }
 
 export interface MemoryView {
@@ -989,6 +1004,7 @@ export type SettingsPatch = Partial<
   Pick<
     AppSettings,
     | "defaultModel"
+    | "fastModel"
     | "shellEnabled"
     | "yoloMode"
     | "language"
@@ -1162,13 +1178,22 @@ export interface AgentCommandMap {
   /**
    * Adds a note (`id` omitted) or edits one. A note that already exists in its place is not added
    * twice. `workspaceId`: null/omitted = every workspace, else one workspace; an edit can move the
-   * note, an omitted `workspaceId` keeps where it lives.
+   * note, an omitted `workspaceId` keeps where it lives. `pinned` omitted keeps it (false when
+   * adding).
    */
   save_memory_entry: {
-    params: { id?: string; text: string; tag?: string | null; workspaceId?: string | null };
+    params: {
+      id?: string;
+      text: string;
+      tag?: string | null;
+      workspaceId?: string | null;
+      pinned?: boolean;
+    };
     result: MemoryEntry;
   };
   delete_memory_entry: { params: { id: string }; result: void };
+  /** Reverses a background memory pass; a note changed since then is left alone. */
+  undo_memory_pass: { params: { passId: string }; result: { undone: number } };
   /** Forgets every note. */
   clear_memory: { params: NoParams; result: void };
 

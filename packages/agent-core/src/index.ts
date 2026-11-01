@@ -57,6 +57,7 @@ import {
   type GatewayView,
   type StoredCredential,
   type McpServerSettings,
+  type MemoryChange,
   type MemoryEntry,
   type MemoryView,
   type ModelRef,
@@ -181,6 +182,7 @@ import { VaultMcpAuthStore } from "./mcp-auth.ts";
 import {
   authInteraction,
   availableModels,
+  cheapestModel,
   fetchGatewayModels,
   findAvailable,
   gatewayNeedingKey,
@@ -197,7 +199,13 @@ import { VoiceService } from "./transcription.ts";
 import { isWorkspaceSkill, listWorkspaceSkills, SkillLibrary } from "./skills.ts";
 import { seedBuiltInSkills } from "./skills-builtin.ts";
 import { createDelegateTool, DELEGATE_TOOL } from "./subagent.ts";
-import { extractMemory } from "./memory-extraction.ts";
+import {
+  extractMemory,
+  isRunSession,
+  MEMORY_ENTRY_TYPE,
+  ORIGIN_ENTRY_TYPE,
+  unreadMessages,
+} from "./memory-extraction.ts";
 import { proposeSessionTitle } from "./session-title.ts";
 import {
   createMemoryTools,
@@ -207,6 +215,8 @@ import {
   memoryPlaces,
   memorySection,
   migrateMemoryJson,
+  noteKey,
+  type NoteInput,
 } from "./memory.ts";
 import {
   activeToolsFor,
@@ -295,12 +305,16 @@ const NO_CHANGES: PendingChanges = {
 /** What `runMemoryExtraction` needs, gathered while the conversation's session is still alive. */
 interface MemoryPass {
   file: string;
-  /** `messages.length` as of the prepare; committed to `memoryCursor` only on success. */
-  cursor: number;
+  /** Newest message entry the pass reads; recorded on the branch only on success. */
+  lastEntryId: string;
   messages: AgentMessage[];
   cwd: string;
   model: Model<Api>;
-  workspaceId: string | null;
+  workspaceId: string;
+  /** The built-in Personal workspace: every note the pass writes is global. */
+  personal: boolean;
+  /** True when the conversation is gone (deleted) while the call ran: apply nothing. */
+  cancelled: () => boolean;
 }
 
 /** What `runSessionTitle` needs, gathered while the conversation's session is still alive. */
@@ -410,6 +424,12 @@ interface ConversationState {
    * call and its result in the branch.
    */
   pendingTitle: string | null;
+  /** Runs the memory pass once the conversation has been idle for `MEMORY_IDLE_MS`. */
+  memoryTimer: NodeJS.Timeout | null;
+  /** How far a memory pass read, waiting for the turn to settle like `pendingTitle`. */
+  pendingMemoryCursor: string | null;
+  /** Whether the background memory pass may still read this conversation; false once deleted. */
+  memoryPass: boolean;
   /** Agent and workspace as of when it left the window; the host's own fields are the open one's. */
   agentId: string;
   workspaceId: string;
@@ -432,6 +452,17 @@ type ChatSession = ChatRuntime & {
 
 /** How often idle chat sessions are looked for. */
 const CHAT_SWEEP_MS = 60_000;
+
+/**
+ * Idle time after a window conversation's last turn before its memory pass runs (five minutes;
+ * `PP_AGENT_MEMORY_IDLE_MS` overrides it, for trying the pass out).
+ */
+function memoryIdleMs(): number {
+  const override = Number(process.env.PP_AGENT_MEMORY_IDLE_MS);
+  return Number.isFinite(override) && override > 0 ? override : 5 * 60_000;
+}
+/** How long the changes of a background memory pass can be undone. */
+const MEMORY_UNDO_MS = 10 * 60_000;
 
 /** System prompt section of a chat session: where the answer is shown. */
 function channelNote(label: string): string {
@@ -485,10 +516,16 @@ export class AgentHost {
   private open: Conversation | null = null;
   /** Conversations moved out of the window while they answer, by session file. */
   private readonly background = new Map<string, Conversation>();
-  /** How many of a session's messages the memory-extraction pass has already read, by session file. */
-  private readonly memoryCursor = new Map<string, number>();
+  /** Changes of recent background memory passes, by pass id, for `undo_memory_pass`. */
+  private readonly memoryPasses = new Map<string, MemoryChange[]>();
   /** Memory and title passes still running (`memory:<file>`, `title:<file>`): one at a time each. */
   private readonly passesInFlight = new Set<string>();
+  /** Bumped whenever a memory switch turns off (or the host shuts down), dropping in-flight passes. */
+  private memoryOff = 0;
+  /** Per-agent memory switches turning off, so one agent's opt-out does not drop another's passes. */
+  private readonly agentMemoryOff = new Map<string, number>();
+  /** Set when the host starts shutting down: no new passes are prepared after it. */
+  private disposed = false;
   /** Registrations of no session, for the MCP section before any conversation is open. */
   private idleMcp: McpRegistrations | null = null;
   /** Agent of the open conversation; resolves to the default agent once deleted. */
@@ -730,6 +767,9 @@ export class AgentHost {
    * chat sessions, and the open conversation. The process may exit afterwards.
    */
   async dispose(): Promise<void> {
+    // No new passes from here on; the ones in flight drop their changes instead of applying them.
+    this.disposed = true;
+    this.memoryOff += 1;
     for (const channel of this.channelServices())
       await channel.stop().catch((error: unknown) => console.error(error));
     this.scheduler?.stop();
@@ -915,14 +955,16 @@ export class AgentHost {
       case "set_memory_enabled":
         return this.setMemoryEnabled(command.enabled);
       case "save_memory_entry":
-        return this.saveMemoryEntry(
-          command.id,
-          command.text,
-          command.tag ?? null,
-          command.workspaceId,
-        );
+        return this.saveMemoryEntry(command.id, {
+          text: command.text,
+          tag: command.tag ?? null,
+          workspaceId: command.workspaceId,
+          pinned: command.pinned,
+        });
       case "delete_memory_entry":
         return this.deleteMemoryEntry(command.id);
+      case "undo_memory_pass":
+        return this.undoMemoryPass(command.passId);
       case "clear_memory":
         return this.clearMemory();
 
@@ -1343,7 +1385,9 @@ export class AgentHost {
     emit({ type: "snapshot", snapshot: this.snapshot() });
   }
 
-  /** Takes the open conversation out of the window: left to answer in the background, or closed. */
+  /**
+   * Takes the open conversation out of the window: left to answer in the background, or closed.
+   */
   private async leaveOpen(): Promise<void> {
     const conversation = this.open;
     if (!conversation) return;
@@ -1360,16 +1404,20 @@ export class AgentHost {
       this.open = null;
       return;
     }
+    // A conversation that is left is done for now: its memory pass need not wait for the timer.
+    const memoryPass = file ? this.prepareMemoryExtraction(conversation, file) : null;
     await this.abort();
     this.disposeSession();
+    if (memoryPass) this.launchMemory(memoryPass);
   }
 
   /** Closes a background conversation, stopping its answer if it still has one. */
   private async closeBackground(file: string): Promise<void> {
     const conversation = this.background.get(file);
     if (!conversation) return;
+    // Only deletions get here: a memory pass still in flight must not apply its changes.
+    conversation.memoryPass = false;
     this.background.delete(file);
-    this.memoryCursor.delete(file);
     await this.stop(conversation).catch(() => undefined);
     this.release(conversation);
     this.emitActivity();
@@ -1564,7 +1612,12 @@ export class AgentHost {
   }
 
   private async deleteSession(path: string): Promise<void> {
-    if (this.session?.sessionFile === path) await this.openSession(null);
+    const open = this.open;
+    if (open?.session.sessionFile === path) {
+      // A conversation being deleted is never read: its run may still settle on the way out.
+      open.memoryPass = false;
+      await this.openSession(null);
+    }
     await this.closeBackground(path);
     await rm(path, { force: true });
     this.setPinned(path, false);
@@ -1588,7 +1641,12 @@ export class AgentHost {
       if (file && belongs === workspaceId && !targets.includes(file)) targets.push(file);
     }
     for (const path of targets) {
-      if (this.session?.sessionFile === path) await this.openSession(null);
+      const open = this.open;
+      if (open?.session.sessionFile === path) {
+        // A conversation being deleted is never read: its run may still settle on the way out.
+        open.memoryPass = false;
+        await this.openSession(null);
+      }
       await this.closeBackground(path);
       await rm(path, { force: true });
       this.setPinned(path, false);
@@ -2015,6 +2073,9 @@ export class AgentHost {
       }),
       running: false,
       pendingTitle: null,
+      memoryTimer: null,
+      pendingMemoryCursor: null,
+      memoryPass: true,
       agentId: this.agentId,
       workspaceId: this.workspaceId,
     };
@@ -2046,6 +2107,8 @@ export class AgentHost {
   private release(conversation: Conversation): void {
     // Cancels a goal turn that was about to start.
     conversation.goal = null;
+    clearTimeout(conversation.memoryTimer ?? undefined);
+    conversation.memoryTimer = null;
     conversation.unsubscribe();
     conversation.mcpServers.detach();
     conversation.session.dispose();
@@ -2070,9 +2133,11 @@ export class AgentHost {
         transcript.setEntryIds(chatEntryIds(conversation.session.sessionManager));
         transcript.flush();
         this.writePendingTitle(conversation);
+        this.writePendingMemoryCursor(conversation);
         if (inWindow) {
-          // Read what the memory and title passes need now: `applyPending` may rebuild the session.
-          const passes = this.preparePasses(conversation);
+          // Read what the title pass needs now: `applyPending` may rebuild the session.
+          const passes = this.preparePasses(conversation, false);
+          this.scheduleMemory(conversation);
           this.refreshStatus();
           void this.applyPending();
           this.launchPasses(passes);
@@ -2135,21 +2200,43 @@ export class AgentHost {
     if (!file || this.background.get(file) !== conversation || conversation.running) return;
     this.background.delete(file);
     // Read what the memory and title passes need before `release` disposes the session.
-    const passes = this.preparePasses(conversation);
+    const passes = this.preparePasses(conversation, true);
     this.release(conversation);
     this.emitActivity();
     this.launchPasses(passes);
   }
 
-  /** Gathers the inputs of both passes while the conversation's session is still alive. */
-  private preparePasses(conversation: Conversation): SettledPasses | null {
+  /**
+   * Gathers the inputs of the title pass and, with `memory`, the memory pass while the
+   * conversation's session is still alive. A window conversation's memory pass waits until it has
+   * been idle (`scheduleMemory`) or is left (`leaveOpen`); a background one runs as it settles.
+   */
+  private preparePasses(conversation: Conversation, memory: boolean): SettledPasses | null {
     const file = conversation.session.sessionFile;
     if (!file) return null;
     return {
       file,
-      memory: this.prepareMemoryExtraction(conversation, file),
+      memory: memory ? this.prepareMemoryExtraction(conversation, file) : null,
       title: this.prepareSessionTitle(conversation, file),
     };
+  }
+
+  /**
+   * (Re)starts the idle timer of the open conversation's memory pass: every settled turn pushes it
+   * back, so a pass reads a whole stretch of conversation instead of every single turn.
+   */
+  private scheduleMemory(conversation: Conversation): void {
+    clearTimeout(conversation.memoryTimer ?? undefined);
+    conversation.memoryTimer = null;
+    if (!this.memoryOn(this.agentOf(conversation))) return;
+    conversation.memoryTimer = setTimeout(() => {
+      conversation.memoryTimer = null;
+      const file = conversation.session.sessionFile;
+      if (!file || conversation.running) return;
+      const pass = this.prepareMemoryExtraction(conversation, file);
+      if (pass) this.launchMemory(pass);
+    }, memoryIdleMs());
+    conversation.memoryTimer.unref();
   }
 
   /**
@@ -2159,15 +2246,21 @@ export class AgentHost {
    */
   private launchPasses(passes: SettledPasses | null): void {
     if (!passes) return;
-    const { file, memory, title } = passes;
-    if (memory) {
-      const key = `memory:${file}`;
-      this.passesInFlight.add(key);
-      this.runMemoryExtraction(memory)
-        .catch((error: unknown) => console.error("Background memory extraction failed.", error))
-        .finally(() => this.passesInFlight.delete(key));
-    }
-    if (title) this.launchTitle(file, title);
+    if (passes.memory) this.launchMemory(passes.memory);
+    if (passes.title) this.launchTitle(passes.file, passes.title);
+  }
+
+  private launchMemory(pass: MemoryPass): void {
+    const key = `memory:${pass.file}`;
+    this.passesInFlight.add(key);
+    this.runMemoryExtraction(pass)
+      .catch((error: unknown) => console.error("Background memory extraction failed.", error))
+      .finally(() => this.passesInFlight.delete(key));
+  }
+
+  /** Whether a background memory or title pass is still running (what `passesInFlight` tracks). */
+  hasBackgroundPasses(): boolean {
+    return this.passesInFlight.size > 0;
   }
 
   private launchTitle(file: string, pass: TitlePass): void {
@@ -2192,55 +2285,131 @@ export class AgentHost {
   }
 
   /**
+   * Whether the background memory pass may read a session at all: never a chat's or a scheduled
+   * run's session (marked at creation, wherever it is reopened), and — for files from before the
+   * mark — never one the chat or task record still points at.
+   */
+  private memoryReadable(manager: SessionManager, file: string): boolean {
+    if (isRunSession(manager)) return false;
+    const { settings, chatSessions } = this.requireServices();
+    if (chatSessions.entries().some(([, path]) => path === file)) return false;
+    return !settings.get().scheduledTasks.some((task) => task.lastRun?.sessionPath === file);
+  }
+
+  /**
    * What `runMemoryExtraction` needs, gathered while the conversation's session is still alive;
-   * null when there is nothing to do (memory off for its agent, or no new messages since the last
-   * pass).
+   * null when there is nothing to do (memory off for its agent, a pass already running, or no
+   * new messages since the last pass recorded on the branch).
    */
   private prepareMemoryExtraction(conversation: Conversation, file: string): MemoryPass | null {
-    const agent = this.agentOf(conversation);
-    if (!this.memoryOn(agent)) {
-      this.memoryCursor.delete(file);
-      return null;
-    }
+    if (this.disposed) return null;
+    const manager = conversation.session.sessionManager;
+    if (!conversation.memoryPass || !this.memoryReadable(manager, file)) return null;
+    if (!this.memoryOn(this.agentOf(conversation))) return null;
     if (this.passesInFlight.has(`memory:${file}`)) return null;
-    const messages = conversation.session.messages;
-    const stored = this.memoryCursor.get(file) ?? 0;
-    // Compaction and editing/regenerating an earlier message reassign `session.messages` to a
-    // shorter array; a cursor past the new end would otherwise hide every message as "already
-    // read" instead of starting over.
-    const since = stored > messages.length ? 0 : stored;
-    const unread = messages.slice(since);
-    if (unread.length === 0) return null;
-    const model = this.chooseModel(agent.model);
+    const unread = unreadMessages(manager);
+    if (!unread) return null;
+    const model = this.chooseFastModel(conversation);
     if (!model) return null;
+    const workspaceId = this.workspaceOf(conversation).id;
+    const agentId = this.agentOf(conversation).id;
+    const off = this.memoryOff;
+    const agentOff = this.agentMemoryOff.get(agentId) ?? 0;
+    let dropped = false;
     return {
       file,
-      cursor: messages.length,
-      messages: unread,
-      cwd: conversation.session.sessionManager.getCwd(),
+      lastEntryId: unread.lastEntryId,
+      messages: unread.messages,
+      cwd: manager.getCwd(),
       model,
-      workspaceId: this.workspaceOf(conversation).id,
+      workspaceId,
+      personal: workspaceId === DEFAULT_WORKSPACE_ID,
+      // Latched: once a pass learns it must not apply — its conversation deleted, Memory switched
+      // off (globally or for its agent), or shutdown — it stays cancelled even if the switches
+      // come back while the model is answering.
+      cancelled: () =>
+        (dropped ||=
+          this.disposed ||
+          this.memoryOff !== off ||
+          (this.agentMemoryOff.get(agentId) ?? 0) !== agentOff ||
+          !conversation.memoryPass ||
+          !this.memoryOn(this.agentOf(conversation))),
     };
   }
 
   /**
-   * Hands the gathered messages to a one-shot background LLM call that proposes lasting notes
-   * (`memory-extraction.ts`) and writes them to the memory store. The cursor only advances once
-   * the pass actually succeeds, so a failure (model error, bad reply) leaves these messages
-   * available for the next pass instead of skipping them for good.
+   * Hands the gathered messages to the one-shot extraction call (`memory-extraction.ts`), which
+   * changes the notes, then announces the changes (with an id `undo_memory_pass` takes) and
+   * records how far it read on the conversation's branch. The cursor only moves once the call
+   * succeeds, so a failure leaves these messages for the next pass.
    */
   private async runMemoryExtraction(pass: MemoryPass): Promise<void> {
     const { runtime, memory, paths } = this.requireServices();
-    const succeeded = await extractMemory(pass.messages, {
+    const changes = await extractMemory(pass.messages, {
       runtime,
       cwd: pass.cwd,
       agentDir: paths.agentDir,
       model: pass.model,
       store: memory,
       workspaceId: pass.workspaceId,
-      onSaved: () => emit({ type: "settings_changed", scopes: ["memory"] }),
+      personal: pass.personal,
+      cancelled: pass.cancelled,
     });
-    if (succeeded) this.memoryCursor.set(pass.file, pass.cursor);
+    if (!changes) return;
+    this.recordMemoryCursor(pass.file, pass.lastEntryId);
+    if (changes.length === 0) return;
+    const passId = randomUUID();
+    this.memoryPasses.set(passId, changes);
+    setTimeout(() => this.memoryPasses.delete(passId), MEMORY_UNDO_MS).unref();
+    emit({ type: "settings_changed", scopes: ["memory"] });
+    emit({ type: "memory_auto_saved", passId, changes });
+  }
+
+  /**
+   * Writes the memory cursor to the conversation's branch: through its live session when it is
+   * open (after the turn when one is running, like a title), else straight to the file, unless the
+   * conversation was deleted while the pass ran.
+   */
+  private recordMemoryCursor(file: string, lastEntryId: string): void {
+    const live = this.conversations().find((entry) => entry.session.sessionFile === file);
+    try {
+      if (live?.running) live.pendingMemoryCursor = lastEntryId;
+      else if (live)
+        live.session.sessionManager.appendCustomEntry(MEMORY_ENTRY_TYPE, { lastEntryId });
+      else if (existsSync(file))
+        SessionManager.open(file, this.requireServices().paths.sessionDir).appendCustomEntry(
+          MEMORY_ENTRY_TYPE,
+          { lastEntryId },
+        );
+    } catch (error) {
+      console.error("Could not record how far the memory pass read.", error);
+    }
+  }
+
+  /** Writes the memory cursor a pass recorded during a turn, now that the turn has settled. */
+  private writePendingMemoryCursor(conversation: Conversation): void {
+    const lastEntryId = conversation.pendingMemoryCursor;
+    conversation.pendingMemoryCursor = null;
+    if (!lastEntryId) return;
+    try {
+      conversation.session.sessionManager.appendCustomEntry(MEMORY_ENTRY_TYPE, { lastEntryId });
+    } catch (error) {
+      console.error("Could not record how far the memory pass read.", error);
+    }
+  }
+
+  /**
+   * Model of the background calls of `conversation`: the fast model of Settings when usable, else
+   * the cheapest priced model of the conversation's provider, else the conversation's own model.
+   */
+  private chooseFastModel(conversation: Conversation): Model<Api> | undefined {
+    const { runtime, settings } = this.requireServices();
+    const main = conversation.session.model ?? this.chooseModel(this.agentOf(conversation).model);
+    return (
+      findAvailable(runtime, settings.get().fastModel) ??
+      (main && cheapestModel(runtime, main)) ??
+      main
+    );
   }
 
   /**
@@ -2255,7 +2424,7 @@ export class AgentHost {
   ): TitlePass | null {
     if (conversation.session.sessionName?.trim() || conversation.pendingTitle) return null;
     if (this.passesInFlight.has(`title:${file}`)) return null;
-    const model = this.chooseModel(this.agentOf(conversation).model);
+    const model = this.chooseFastModel(conversation);
     if (!model) return null;
     return {
       messages,
@@ -2421,6 +2590,10 @@ export class AgentHost {
   private agentExtensionFor(scope: SessionScope, sessionManager: SessionManager): ExtensionFactory {
     return (pi) => {
       scope.mcpServers.attach(pi);
+      // The memory profile is taken at the first turn and kept for the session's life, so a note
+      // saved meanwhile (by a tool or the background pass) does not change the prompt and drop its
+      // cache; it shows from the next session on. A workspace change takes it afresh.
+      let profile: { workspaceId: string; text: string } | null = null;
       // Old tool output is replaced by a note in what the model reads; the chat keeps showing it.
       pi.on("context", (event) => ({ messages: pruneToolOutputs(event.messages) }));
       pi.on("before_agent_start", (event) => {
@@ -2440,9 +2613,12 @@ export class AgentHost {
           sessionsTool: pi.getActiveTools().includes(SESSIONS_TOOL),
         });
         const memory = this.services?.memory;
-        if (memory && this.memoryOn(scope.agent()))
-          sections.memory = memorySection(memory.entriesFor(scope.workspace().id));
-        else delete sections.memory;
+        const workspaceId = scope.workspace().id;
+        if (memory && this.memoryOn(scope.agent())) {
+          if (profile?.workspaceId !== workspaceId)
+            profile = { workspaceId, text: memorySection(memory.entriesFor(workspaceId)) };
+          sections.memory = profile.text;
+        } else delete sections.memory;
         const planning = planningSection(pi.getActiveTools());
         if (planning) sections.planning = planning;
         else delete sections.planning;
@@ -2744,10 +2920,11 @@ export class AgentHost {
     const scopes: SettingsScope[] = ["settings"];
     const apply: Partial<PendingChanges> = {};
     const before = settings.get();
-    if (patch.defaultModel) {
+    for (const ref of [patch.defaultModel, patch.fastModel]) {
+      if (!ref) continue;
       await runtime.getAvailable();
-      if (!findAvailable(runtime, patch.defaultModel)) {
-        const gateway = gatewayNeedingKey(runtime, this.gatewayIds, patch.defaultModel);
+      if (!findAvailable(runtime, ref)) {
+        const gateway = gatewayNeedingKey(runtime, this.gatewayIds, ref);
         throw new Error(
           gateway
             ? t("models.gatewayNeedsKey", { name: gateway })
@@ -2759,6 +2936,7 @@ export class AgentHost {
       throw new Error(t("settings.shortcutInvalid"));
     const after = settings.update((draft) => {
       if (patch.defaultModel !== undefined) draft.defaultModel = patch.defaultModel;
+      if (patch.fastModel !== undefined) draft.fastModel = patch.fastModel;
       if (typeof patch.shellEnabled === "boolean") draft.shellEnabled = patch.shellEnabled;
       if (typeof patch.yoloMode === "boolean") draft.yoloMode = patch.yoloMode;
       if (patch.language !== undefined) draft.language = patch.language;
@@ -2885,6 +3063,7 @@ export class AgentHost {
     const saved = settings.update((draft) => {
       draft.gateways = draft.gateways.filter((entry) => entry.id !== id);
       if (draft.defaultModel?.provider === id) draft.defaultModel = null;
+      if (draft.fastModel?.provider === id) draft.fastModel = null;
     });
     await this.credentials.delete(id);
     this.gatewayIds = await syncGateways(runtime, saved.gateways, this.gatewayIds);
@@ -3066,6 +3245,8 @@ export class AgentHost {
       id: before?.id ?? newAgentId(settings.get().agents, fields.name),
       ...fields,
     };
+    if (!saved.memory)
+      this.agentMemoryOff.set(saved.id, (this.agentMemoryOff.get(saved.id) ?? 0) + 1);
     settings.update((draft) => {
       const index = draft.agents.findIndex((agent) => agent.id === saved.id);
       if (index === -1) draft.agents.push(saved);
@@ -3437,11 +3618,13 @@ export class AgentHost {
         } else {
           manager = SessionManager.create(cwd, paths.sessionDir);
           manager.appendCustomEntry(AGENT_ENTRY_TYPE, { agentId: agent.id });
+          manager.appendCustomEntry(ORIGIN_ENTRY_TYPE, { kind: "task" });
           manager.appendSessionInfo(task.name);
         }
       } else {
         manager = SessionManager.create(cwd, paths.sessionDir);
         manager.appendCustomEntry(AGENT_ENTRY_TYPE, { agentId: agent.id });
+        manager.appendCustomEntry(ORIGIN_ENTRY_TYPE, { kind: "task" });
         manager.appendSessionInfo(runTitle(task.name, new Date(startedAt), currentLanguage()));
       }
       let originContext = "";
@@ -4009,6 +4192,7 @@ export class AgentHost {
     } else {
       manager = SessionManager.create(cwd, paths.sessionDir);
       manager.appendCustomEntry(AGENT_ENTRY_TYPE, { agentId: agent.id });
+      manager.appendCustomEntry(ORIGIN_ENTRY_TYPE, { kind: "chat" });
       manager.appendSessionInfo(channelTitle(channel.label, new Date(), currentLanguage()));
     }
     const mcpServers = new McpRegistrations(mcpConfig, (name) => {
@@ -4218,6 +4402,9 @@ export class AgentHost {
     settings.update((draft) => {
       draft.memoryEnabled = enabled;
     });
+    // Switching memory off drops the passes still waiting on the model; switching it back on
+    // does not revive them.
+    if (!enabled) this.memoryOff += 1;
     // The memory tools join or leave the active set; the notes follow with the next message.
     this.changed(["memory"], { tools: true });
     return this.memoryView();
@@ -4228,23 +4415,61 @@ export class AgentHost {
     return { enabled: settings.get().memoryEnabled, entries: memory.entries() };
   }
 
-  private saveMemoryEntry(
-    id: string | undefined,
-    text: string,
-    tag: string | null,
-    workspaceId: string | null | undefined,
-  ): MemoryEntry {
+  private saveMemoryEntry(id: string | undefined, input: NoteInput): MemoryEntry {
     const { memory } = this.requireServices();
-    if (typeof workspaceId === "string") this.requireWorkspace(workspaceId);
+    if (typeof input.workspaceId === "string") this.requireWorkspace(input.workspaceId);
     // A new note lands in `workspaceId` (null = every workspace); an edit keeps its place
     // unless the caller moves it.
     const result =
       id === undefined
-        ? memory.add({ text, tag, workspaceId: workspaceId ?? null })
-        : memory.edit(id, { text, tag, workspaceId });
+        ? memory.add({ ...input, workspaceId: input.workspaceId ?? null })
+        : memory.edit(id, input);
     if (!result.ok) throw new Error(t(`memory.problems.${result.problem}`));
     this.changed(["memory"], {});
     return result.entry;
+  }
+
+  /**
+   * Reverses the changes of a background memory pass, newest first. A note the person (or a
+   * later pass) changed since is left as it is now; a deleted note comes back unless its place
+   * already holds it again.
+   */
+  private undoMemoryPass(passId: string): { undone: number } {
+    const { memory } = this.requireServices();
+    const changes = this.memoryPasses.get(passId);
+    if (!changes) throw new Error(t("memory.problems.undoExpired"));
+    this.memoryPasses.delete(passId);
+    let undone = 0;
+    for (const { before, after } of changes.toReversed()) {
+      const current = after && memory.find(after.id);
+      const unchanged =
+        !!after &&
+        !!current &&
+        current.text === after.text &&
+        current.tag === after.tag &&
+        current.pinned === after.pinned &&
+        current.workspaceId === after.workspaceId;
+      if (after && !unchanged) continue;
+      if (!before) {
+        if (after && memory.remove(after.id)) undone += 1;
+        continue;
+      }
+      if (!after) {
+        // A note deleted and recreated since is left as it is now: restoring over it would only
+        // rewrite the recreated note's tag and pin, since `add` reads the same text as itself.
+        const key = noteKey(before.text);
+        const recreated = memory
+          .entries()
+          .some((entry) => entry.workspaceId === before.workspaceId && noteKey(entry.text) === key);
+        if (recreated) continue;
+        if (memory.add(before).ok) undone += 1;
+        continue;
+      }
+      const result = memory.edit(after.id, before);
+      if (result.ok && result.status !== "same") undone += 1;
+    }
+    if (undone > 0) this.changed(["memory"], {});
+    return { undone };
   }
 
   private deleteMemoryEntry(id: string): void {
@@ -4314,6 +4539,7 @@ export class AgentHost {
 function appSettings(store: SettingsStore): AppSettings {
   const {
     defaultModel,
+    fastModel,
     shellEnabled,
     yoloMode,
     language,
@@ -4328,6 +4554,7 @@ function appSettings(store: SettingsStore): AppSettings {
   } = store.get();
   return {
     defaultModel,
+    fastModel,
     shellEnabled,
     yoloMode,
     language,

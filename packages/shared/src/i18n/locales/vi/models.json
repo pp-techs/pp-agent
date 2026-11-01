@@ -19,6 +19,13 @@
       "allConnected": "Tất cả nhà cung cấp đã được kết nối."
     }
   },
+  "fastModel": {
+    "label": "Mô hình nhanh",
+    "automatic": "Tự động",
+    "notAvailable": "{{modelId}} (không khả dụng)",
+    "needsKey": "{{name}} (cần khóa)",
+    "hint": "Dùng để đặt tên cuộc trò chuyện và ghi nhớ trong nền. Tự động sẽ dùng mô hình rẻ nhất của nhà cung cấp mà cuộc trò chuyện đang dùng."
+  },
   "modelCount_other": "{{count}} mô hình",
   "apiTypes": {
     "openaiCompletions": "Tương thích OpenAI (Chat Completions)",

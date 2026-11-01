@@ -50,6 +50,7 @@ const PolicySchema = Type.Union(TOOL_POLICIES.map((policy) => Type.Literal(polic
 function parse(raw: unknown): SettingsFile {
   const settings: SettingsFile = {
     defaultModel: null,
+    fastModel: null,
     shellEnabled: false,
     yoloMode: false,
     toolPolicies: {},
@@ -76,6 +77,7 @@ function parse(raw: unknown): SettingsFile {
   if (typeof raw !== "object" || raw === null) return settings;
   const value = raw as Partial<Record<keyof SettingsFile, unknown>>;
   if (Value.Check(ModelRefSchema, value.defaultModel)) settings.defaultModel = value.defaultModel;
+  if (Value.Check(ModelRefSchema, value.fastModel)) settings.fastModel = value.fastModel;
   settings.shellEnabled = value.shellEnabled === true;
   settings.yoloMode = value.yoloMode === true;
   settings.notifications = value.notifications !== false;

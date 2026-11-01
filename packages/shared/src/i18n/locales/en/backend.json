@@ -245,7 +245,8 @@
       "too-long": "The note is too long.",
       "full": "That place is full. Delete a note first, or save the note in another place.",
       "duplicate": "Another note in the same place already says this.",
-      "missing": "That note no longer exists."
+      "missing": "That note no longer exists.",
+      "undoExpired": "These changes can no longer be undone."
     }
   },
   "scheduler": {

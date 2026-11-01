@@ -143,6 +143,7 @@ export const useChatStore = create<ChatState>()((set) => ({
         case "auth_prompt":
         case "auth_prompt_closed":
         case "auth_info":
+        case "memory_auto_saved":
           return {};
         // The run died before it echoed the message being sent: drop its optimistic copy so the
         // composer does not stay blocked behind a send that never happened.

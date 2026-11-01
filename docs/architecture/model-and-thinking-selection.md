@@ -37,6 +37,14 @@ Changes after the session started:
 
 The renderer disables the model picker while a run is active (`apps/web/src/components/chat/model-picker.tsx`).
 
+## Fast model (background calls)
+
+Conversation titles (`session-title.ts`) and the memory pass (`memory-extraction.ts`) are one-shot calls (`one-shot.ts`) that never use the conversation's model when a cheaper one fits. `chooseFastModel` takes the first available of:
+
+1. **The fast model** — `settings.json` `fastModel` (Settings › Models › Fast model). `update_settings { fastModel }` must name an available model; removing its gateway resets it to null.
+2. **The cheapest priced model of the conversation's provider** (`cheapestModel` in `providers.ts`): lowest input, then output price. On a provider that serves several vendors (ids like `anthropic/claude-…`) only the conversation model's vendor counts. Models without a price (free, or a gateway that states none) are left out.
+3. **The conversation's own model.**
+
 ## Thinking level
 
 Levels are `THINKING_LEVELS`: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`.

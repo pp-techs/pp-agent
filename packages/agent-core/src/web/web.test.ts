@@ -199,6 +199,7 @@ describe("SearXNG provider", () => {
 describe("shell policy", () => {
   const settings = (overrides: Partial<AppSettings>): AppSettings => ({
     defaultModel: null,
+    fastModel: null,
     shellEnabled: true,
     yoloMode: false,
     toolPolicies: {},
@@ -243,6 +244,7 @@ describe("shell policy", () => {
 describe("yolo mode", () => {
   const settings = (overrides: Partial<AppSettings>): AppSettings => ({
     defaultModel: null,
+    fastModel: null,
     shellEnabled: true,
     yoloMode: true,
     toolPolicies: {},

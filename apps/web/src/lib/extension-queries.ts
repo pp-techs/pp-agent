@@ -47,6 +47,8 @@ export function useMemoryCommands(bridge: DesktopBridge) {
       text: string;
       tag: string | null;
       workspaceId: string | null;
+      /** Omitted keeps the note's pin when editing. */
+      pinned?: boolean;
     }) => bridge.agent.command({ type: "save_memory_entry", ...input }),
     onSuccess: invalidate,
     onError: showError,

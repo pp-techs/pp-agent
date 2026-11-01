@@ -123,7 +123,7 @@
   },
   "memory": {
     "title": "Bộ nhớ",
-    "description": "Những ghi chú ngắn mà agent giữ lại giữa các cuộc trò chuyện, ví dụ sở thích của bạn. Chúng được thêm vào mỗi cuộc trò chuyện mới như thông tin tham khảo, không phải chỉ dẫn. Mỗi ghi chú được ghi nhớ ở mọi nơi hoặc chỉ trong một workspace.",
+    "description": "Những ghi chú ngắn mà agent giữ lại giữa các cuộc trò chuyện, ví dụ sở thích của bạn. Chúng được thêm vào mỗi cuộc trò chuyện mới như thông tin tham khảo, không phải chỉ dẫn. Mỗi ghi chú được ghi nhớ ở mọi nơi hoặc chỉ trong một workspace. Ghi chú đã ghim đứng đầu hồ sơ của agent.",
     "enable": {
       "legend": "Bộ nhớ dài hạn",
       "label": "Ghi nhớ ghi chú giữa các cuộc trò chuyện",
@@ -147,6 +147,17 @@
     },
     "editLabel": "Sửa ghi chú",
     "deleteLabel": "Xóa ghi chú",
+    "pinLabel": "Ghim ghi chú",
+    "unpinLabel": "Bỏ ghim ghi chú",
+    "pinnedBadge": "Đã ghim",
+    "autoSaved": {
+      "title": "Đã ghi nhớ",
+      "forgot": "Đã quên: {{text}}",
+      "more_other": "+{{count}} mục khác",
+      "undo": "Hoàn tác",
+      "undone": "Đã hoàn tác thay đổi bộ nhớ.",
+      "nothingUndone": "Không có gì được hoàn tác: ghi chú đã thay đổi từ đó."
+    },
     "deleted": "Đã xóa ghi chú.",
     "cleared": "Đã xóa tất cả ghi chú.",
     "deleteConfirm": {
