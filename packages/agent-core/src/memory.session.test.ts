@@ -285,6 +285,26 @@ test("an empty reply is not read as an answer", async () => {
   expect(memoryRequests[1]).toContain("zebra-42");
 });
 
+test("deleting a conversation does not run its memory pass", async () => {
+  // The idle timer is held far off: only closing the conversation could run the pass now.
+  process.env.PP_AGENT_MEMORY_IDLE_MS = "60000";
+  await say("I am Nhat, zebra-42, in a chat I am about to delete");
+  const snapshot = (await host.handle({ type: "get_snapshot" })) as AgentSnapshot;
+  if (!snapshot.sessionPath) throw new Error("no open session");
+  await host.handle({ type: "delete_session", path: snapshot.sessionPath });
+
+  process.env.PP_AGENT_MEMORY_IDLE_MS = "100";
+  memoryReplies.push(
+    '<memories>[{"op":"add","text":"From the fresh conversation","tag":null,"scope":"global"}]</memories>',
+  );
+  await say("a fresh marker worth noting today");
+  await until(() => events.some((event) => event.type === "memory_auto_saved"));
+  // The only pass is the fresh conversation's; the deleted one left no request and no note.
+  expect(memoryRequests).toHaveLength(1);
+  expect(memoryRequests[0]).not.toContain("zebra-42");
+  expect((await notes()).map((note) => note.text)).toEqual(["From the fresh conversation"]);
+});
+
 test("undo never overwrites a note recreated since the pass", async () => {
   await host.handle({
     type: "save_memory_entry",
