@@ -138,6 +138,20 @@ describe("applyMemoryOps", () => {
     expect(changes).toHaveLength(1);
   });
 
+  test("a duplicate add never rewrites the note already there, pinned or not", () => {
+    store.add({ text: "Answer in Vietnamese", workspaceId: null, pinned: true });
+    store.add({ text: "Plays the piano", tag: "identity", workspaceId: null });
+    const changes = apply([
+      { op: "add", text: "answer in vietnamese!", tag: "preference", scope: "global" },
+      { op: "add", text: "Plays  the piano.", tag: "hobby", scope: "global" },
+    ]);
+    expect(changes).toEqual([]);
+    expect(store.entries().map((e) => [e.text, e.tag, e.pinned])).toEqual([
+      ["Plays the piano", "identity", false],
+      ["Answer in Vietnamese", null, true],
+    ]);
+  });
+
   test("puts workspace notes in the workspace, but everything in Personal is global", () => {
     apply([{ op: "add", text: "Staging DB is on RDS", tag: null, scope: "workspace" }]);
     expect(store.entriesFor("ws1")[0]?.workspaceId).toBe("ws1");

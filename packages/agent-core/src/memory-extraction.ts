@@ -10,7 +10,7 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { MEMORY_LIMITS, type MemoryChange, type MemoryEntry } from "@workspace/shared";
-import type { MemoryStore } from "./memory.ts";
+import { noteKey, type MemoryStore } from "./memory.ts";
 import { runOneShot, transcript } from "./one-shot.ts";
 
 /** Turns shorter than this are very unlikely to contain a lasting fact; skip the LLM call. */
@@ -183,8 +183,8 @@ export interface ApplyContext {
 
 /**
  * Applies `ops` (at most `MAX_OPS_PER_PASS`) and returns what changed. Unknown ids, a note
- * touched twice, pinned notes, and operations the store refuses (a full place, a duplicate) are
- * skipped one by one.
+ * touched twice, pinned notes, duplicate adds, and operations the store refuses (a full place, a
+ * duplicate) are skipped one by one.
  */
 export function applyMemoryOps(ops: readonly MemoryOp[], context: ApplyContext): MemoryChange[] {
   const { store, workspaceId, personal } = context;
@@ -195,7 +195,15 @@ export function applyMemoryOps(ops: readonly MemoryOp[], context: ApplyContext):
   for (const op of ops.slice(0, MAX_OPS_PER_PASS)) {
     try {
       if (op.op === "add") {
-        const result = store.add({ text: op.text, tag: op.tag, workspaceId: placeFor(op.scope) });
+        const place = placeFor(op.scope);
+        // A duplicate add would only rewrite the tag of the note already there (possibly a pinned
+        // or an unshown one) and stay out of the reported changes: only new notes are added here.
+        const key = noteKey(op.text);
+        const duplicate = store
+          .entriesFor(workspaceId)
+          .some((entry) => entry.workspaceId === place && noteKey(entry.text) === key);
+        if (duplicate) continue;
+        const result = store.add({ text: op.text, tag: op.tag, workspaceId: place });
         if (result.ok && result.status === "added")
           changes.push({ before: null, after: result.entry });
         continue;
