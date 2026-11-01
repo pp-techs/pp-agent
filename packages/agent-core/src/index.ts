@@ -520,6 +520,8 @@ export class AgentHost {
   private readonly memoryPasses = new Map<string, MemoryChange[]>();
   /** Memory and title passes still running (`memory:<file>`, `title:<file>`): one at a time each. */
   private readonly passesInFlight = new Set<string>();
+  /** Bumped whenever a memory switch turns off (or the host shuts down), dropping in-flight passes. */
+  private memoryOff = 0;
   /** Registrations of no session, for the MCP section before any conversation is open. */
   private idleMcp: McpRegistrations | null = null;
   /** Agent of the open conversation; resolves to the default agent once deleted. */
@@ -761,6 +763,8 @@ export class AgentHost {
    * chat sessions, and the open conversation. The process may exit afterwards.
    */
   async dispose(): Promise<void> {
+    // In-flight memory passes drop their changes instead of applying them after shutdown.
+    this.memoryOff += 1;
     for (const channel of this.channelServices())
       await channel.stop().catch((error: unknown) => console.error(error));
     this.scheduler?.stop();
@@ -2297,6 +2301,8 @@ export class AgentHost {
     const model = this.chooseFastModel(conversation);
     if (!model) return null;
     const workspaceId = this.workspaceOf(conversation).id;
+    const off = this.memoryOff;
+    let dropped = false;
     return {
       file,
       lastEntryId: unread.lastEntryId,
@@ -2305,8 +2311,13 @@ export class AgentHost {
       model,
       workspaceId,
       personal: workspaceId === DEFAULT_WORKSPACE_ID,
-      // A pass is also cancelled when Memory is turned off while it waits on the model.
-      cancelled: () => !conversation.memoryPass || !this.memoryOn(this.agentOf(conversation)),
+      // Latched: once a pass learns it must not apply — its conversation deleted, or Memory
+      // switched off while it waits — it stays cancelled even if the switches come back.
+      cancelled: () =>
+        (dropped ||=
+          this.memoryOff !== off ||
+          !conversation.memoryPass ||
+          !this.memoryOn(this.agentOf(conversation))),
     };
   }
 
@@ -3218,6 +3229,7 @@ export class AgentHost {
       id: before?.id ?? newAgentId(settings.get().agents, fields.name),
       ...fields,
     };
+    if (!saved.memory) this.memoryOff += 1;
     settings.update((draft) => {
       const index = draft.agents.findIndex((agent) => agent.id === saved.id);
       if (index === -1) draft.agents.push(saved);
@@ -4373,6 +4385,9 @@ export class AgentHost {
     settings.update((draft) => {
       draft.memoryEnabled = enabled;
     });
+    // Switching memory off drops the passes still waiting on the model; switching it back on
+    // does not revive them.
+    if (!enabled) this.memoryOff += 1;
     // The memory tools join or leave the active set; the notes follow with the next message.
     this.changed(["memory"], { tools: true });
     return this.memoryView();

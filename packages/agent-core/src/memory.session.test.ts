@@ -3,7 +3,7 @@
  * once a window conversation has been idle, reads only what it has not read before, announces
  * what it changed so it can be undone, and never changes the open conversation's prompt.
  */
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -49,6 +49,8 @@ let events: AgentEvent[];
 let dir: string;
 let server: Server;
 let host: AgentHost;
+/** Set by the shutdown test, which disposes the host itself. */
+let disposed: boolean;
 
 function modelServer(): Server {
   return createServer((request, response) => {
@@ -157,6 +159,7 @@ beforeEach(async () => {
   holdMemory = false;
   releaseMemory = null;
   extractionFailures = 0;
+  disposed = false;
   originalError = console.error;
   console.error = (...args: unknown[]) => {
     if (String(args[0]).includes("Background memory extraction failed")) extractionFailures += 1;
@@ -210,7 +213,7 @@ beforeEach(async () => {
 afterEach(async () => {
   delete process.env.PP_AGENT_MEMORY_IDLE_MS;
   console.error = originalError;
-  await host.dispose();
+  if (!disposed) await host.dispose();
   const { promise, resolve } = Promise.withResolvers<void>();
   server.close(() => resolve());
   await promise;
@@ -398,13 +401,8 @@ test("turning Memory off drops the changes of a pass already running", async () 
   await host.handle({ type: "set_memory_enabled", enabled: false });
   releaseMemory?.();
   releaseMemory = null;
-  // A cancelled pass emits nothing, so there is no event to wait for; give its already-delivered
-  // reply time to be processed before memory is switched back on (fake timers cannot drive the
-  // host's real HTTP/model path).
-  const settle = Promise.withResolvers<void>();
-  setTimeout(settle.resolve, 250);
-  await settle.promise;
 
+  // The pass is latched cancelled: switching Memory right back on must not revive it.
   await host.handle({ type: "set_memory_enabled", enabled: true });
   memoryReplies.push(
     '<memories>[{"op":"add","text":"From the fresh pass","tag":null,"scope":"global"}]</memories>',
@@ -413,6 +411,26 @@ test("turning Memory off drops the changes of a pass already running", async () 
   await until(() => events.some((event) => event.type === "memory_auto_saved"));
   expect((await notes()).map((note) => note.text)).toEqual(["From the fresh pass"]);
   expect(events.filter((event) => event.type === "memory_auto_saved")).toHaveLength(1);
+});
+
+test("a pass in flight at shutdown applies nothing", async () => {
+  holdMemory = true;
+  memoryReplies.push(
+    '<memories>[{"op":"add","text":"Saved during shutdown","tag":null,"scope":"global"}]</memories>',
+  );
+  await say("Please always remember I work at Acme, zebra-42");
+  await until(() => releaseMemory !== null);
+  await host.dispose();
+  disposed = true;
+  releaseMemory?.();
+  releaseMemory = null;
+  // A dropped pass emits nothing; give its already-delivered reply time to be processed before
+  // checking the notes (fake timers cannot drive the host's real HTTP/model path).
+  const settle = Promise.withResolvers<void>();
+  setTimeout(settle.resolve, 250);
+  await settle.promise;
+  const saved = await readFile(join(dir, "agent", "MEMORY.md"), "utf8").catch(() => "");
+  expect(saved).not.toContain("Saved during shutdown");
 });
 
 test("a session created for a run is never read, even reopened in the window", async () => {
