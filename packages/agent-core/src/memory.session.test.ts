@@ -28,6 +28,10 @@ let memoryFailures: number;
 let memoryTruncated: number;
 /** Memory pass requests to answer with no text at all. */
 let memoryEmpty: number;
+/** When true, the next chat request is answered only once the test releases it. */
+let holdChat: boolean;
+/** Completes the held chat request; null while none is held. */
+let releaseChat: (() => void) | null;
 /** Failed memory passes, counted from the error each one logs (the observable failure signal). */
 let extractionFailures: number;
 let originalError: typeof console.error;
@@ -45,6 +49,27 @@ function modelServer(): Server {
     request.on("end", () => {
       const raw = Buffer.concat(chunks).toString();
       const body = JSON.parse(raw) as { messages: { role: string; content: unknown }[] };
+      const respond = (text: string, cut = false) => {
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        const steps: [object, string | null][] = cut
+          ? [[{ role: "assistant", content: text }, "length"]]
+          : [
+              [{ role: "assistant", content: text }, null],
+              [{}, "stop"],
+            ];
+        for (const [delta, finish] of steps)
+          response.write(
+            `data: ${JSON.stringify({
+              id: "chatcmpl-1",
+              object: "chat.completion.chunk",
+              created: 0,
+              model: "fake",
+              choices: [{ index: 0, delta, finish_reason: finish }],
+            })}\n\n`,
+          );
+        response.write("data: [DONE]\n\n");
+        response.end();
+      };
       let reply = "ok";
       let truncated = false;
       if (/lasting facts/.test(raw)) {
@@ -93,26 +118,13 @@ function modelServer(): Server {
             .map((m) => (typeof m.content === "string" ? m.content : JSON.stringify(m.content)))
             .join("\n"),
         );
+        if (holdChat) {
+          holdChat = false;
+          releaseChat = () => respond("ok");
+          return;
+        }
       }
-      response.writeHead(200, { "content-type": "text/event-stream" });
-      const steps: [object, string | null][] = truncated
-        ? [[{ role: "assistant", content: reply }, "length"]]
-        : [
-            [{ role: "assistant", content: reply }, null],
-            [{}, "stop"],
-          ];
-      for (const [delta, finish] of steps)
-        response.write(
-          `data: ${JSON.stringify({
-            id: "chatcmpl-1",
-            object: "chat.completion.chunk",
-            created: 0,
-            model: "fake",
-            choices: [{ index: 0, delta, finish_reason: finish }],
-          })}\n\n`,
-        );
-      response.write("data: [DONE]\n\n");
-      response.end();
+      respond(reply, truncated);
     });
   });
 }
@@ -125,6 +137,8 @@ beforeEach(async () => {
   memoryFailures = 0;
   memoryTruncated = 0;
   memoryEmpty = 0;
+  holdChat = false;
+  releaseChat = null;
   extractionFailures = 0;
   originalError = console.error;
   console.error = (...args: unknown[]) => {
@@ -300,6 +314,34 @@ test("deleting a conversation does not run its memory pass", async () => {
   await say("a fresh marker worth noting today");
   await until(() => events.some((event) => event.type === "memory_auto_saved"));
   // The only pass is the fresh conversation's; the deleted one left no request and no note.
+  expect(memoryRequests).toHaveLength(1);
+  expect(memoryRequests[0]).not.toContain("zebra-42");
+  expect((await notes()).map((note) => note.text)).toEqual(["From the fresh conversation"]);
+});
+
+test("deleting a conversation that is still answering never extracts it", async () => {
+  process.env.PP_AGENT_MEMORY_IDLE_MS = "60000";
+  holdChat = true;
+  await host.handle({
+    type: "prompt",
+    text: "I am Nhat, zebra-42, in a busy chat",
+    attachments: [],
+  });
+  await until(() => releaseChat !== null);
+  const snapshot = (await host.handle({ type: "get_snapshot" })) as AgentSnapshot;
+  if (!snapshot.sessionPath) throw new Error("no open session");
+  const deletion = host.handle({ type: "delete_session", path: snapshot.sessionPath });
+  // The turn settles while the deletion is under way: the window where a pass could start.
+  releaseChat?.();
+  releaseChat = null;
+  await deletion;
+
+  process.env.PP_AGENT_MEMORY_IDLE_MS = "100";
+  memoryReplies.push(
+    '<memories>[{"op":"add","text":"From the fresh conversation","tag":null,"scope":"global"}]</memories>',
+  );
+  await say("a fresh marker worth noting today");
+  await until(() => events.some((event) => event.type === "memory_auto_saved"));
   expect(memoryRequests).toHaveLength(1);
   expect(memoryRequests[0]).not.toContain("zebra-42");
   expect((await notes()).map((note) => note.text)).toEqual(["From the fresh conversation"]);

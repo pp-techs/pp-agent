@@ -420,6 +420,8 @@ interface ConversationState {
   memoryTimer: NodeJS.Timeout | null;
   /** How far a memory pass read, waiting for the turn to settle like `pendingTitle`. */
   pendingMemoryCursor: string | null;
+  /** Whether the background memory pass may still read this conversation; false once deleted. */
+  memoryPass: boolean;
   /** Agent and workspace as of when it left the window; the host's own fields are the open one's. */
   agentId: string;
   workspaceId: string;
@@ -1347,14 +1349,10 @@ export class AgentHost {
    * An answer in progress carries on in the background, and comes back when its conversation is
    * opened again.
    */
-  private async openSession(
-    path: string | null,
-    workspaceId: string | null = null,
-    options: { extractMemory?: boolean } = {},
-  ): Promise<void> {
+  private async openSession(path: string | null, workspaceId: string | null = null): Promise<void> {
     const resumed = path ? this.background.get(path) : undefined;
     if (resumed && resumed === this.open) return;
-    await this.leaveOpen(options.extractMemory !== false);
+    await this.leaveOpen();
     if (resumed) {
       this.background.delete(path ?? "");
       this.open = resumed;
@@ -1372,10 +1370,8 @@ export class AgentHost {
 
   /**
    * Takes the open conversation out of the window: left to answer in the background, or closed.
-   * `extractMemory` false (a conversation being deleted) skips the memory pass it would otherwise
-   * run before the timer.
    */
-  private async leaveOpen(extractMemory = true): Promise<void> {
+  private async leaveOpen(): Promise<void> {
     const conversation = this.open;
     if (!conversation) return;
     const file = conversation.session.sessionFile;
@@ -1392,8 +1388,7 @@ export class AgentHost {
       return;
     }
     // A conversation that is left is done for now: its memory pass need not wait for the timer.
-    const memoryPass =
-      extractMemory && file ? this.prepareMemoryExtraction(conversation, file) : null;
+    const memoryPass = file ? this.prepareMemoryExtraction(conversation, file) : null;
     await this.abort();
     this.disposeSession();
     if (memoryPass) this.launchMemory(memoryPass);
@@ -1598,8 +1593,12 @@ export class AgentHost {
   }
 
   private async deleteSession(path: string): Promise<void> {
-    if (this.session?.sessionFile === path)
-      await this.openSession(null, null, { extractMemory: false });
+    const open = this.open;
+    if (open?.session.sessionFile === path) {
+      // A conversation being deleted is never read: its run may still settle on the way out.
+      open.memoryPass = false;
+      await this.openSession(null);
+    }
     await this.closeBackground(path);
     await rm(path, { force: true });
     this.setPinned(path, false);
@@ -1623,8 +1622,12 @@ export class AgentHost {
       if (file && belongs === workspaceId && !targets.includes(file)) targets.push(file);
     }
     for (const path of targets) {
-      if (this.session?.sessionFile === path)
-        await this.openSession(null, null, { extractMemory: false });
+      const open = this.open;
+      if (open?.session.sessionFile === path) {
+        // A conversation being deleted is never read: its run may still settle on the way out.
+        open.memoryPass = false;
+        await this.openSession(null);
+      }
       await this.closeBackground(path);
       await rm(path, { force: true });
       this.setPinned(path, false);
@@ -2053,6 +2056,7 @@ export class AgentHost {
       pendingTitle: null,
       memoryTimer: null,
       pendingMemoryCursor: null,
+      memoryPass: true,
       agentId: this.agentId,
       workspaceId: this.workspaceId,
     };
@@ -2257,11 +2261,22 @@ export class AgentHost {
   }
 
   /**
+   * Whether the background memory pass may read a session file at all: never a chat's or a
+   * scheduled run's session, even when it has been reopened in the window.
+   */
+  private memoryReadable(file: string): boolean {
+    const { settings, chatSessions } = this.requireServices();
+    if (chatSessions.entries().some(([, path]) => path === file)) return false;
+    return !settings.get().scheduledTasks.some((task) => task.lastRun?.sessionPath === file);
+  }
+
+  /**
    * What `runMemoryExtraction` needs, gathered while the conversation's session is still alive;
    * null when there is nothing to do (memory off for its agent, a pass already running, or no
    * new messages since the last pass recorded on the branch).
    */
   private prepareMemoryExtraction(conversation: Conversation, file: string): MemoryPass | null {
+    if (!conversation.memoryPass || !this.memoryReadable(file)) return null;
     if (!this.memoryOn(this.agentOf(conversation))) return null;
     if (this.passesInFlight.has(`memory:${file}`)) return null;
     const manager = conversation.session.sessionManager;
