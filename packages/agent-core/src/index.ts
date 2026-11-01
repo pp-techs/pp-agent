@@ -209,6 +209,7 @@ import {
   memoryPlaces,
   memorySection,
   migrateMemoryJson,
+  noteKey,
   type NoteInput,
 } from "./memory.ts";
 import {
@@ -4377,7 +4378,18 @@ export class AgentHost {
         if (after && memory.remove(after.id)) undone += 1;
         continue;
       }
-      const result = after ? memory.edit(after.id, before) : memory.add(before);
+      if (!after) {
+        // A note deleted and recreated since is left as it is now: restoring over it would only
+        // rewrite the recreated note's tag and pin, since `add` reads the same text as itself.
+        const key = noteKey(before.text);
+        const recreated = memory
+          .entries()
+          .some((entry) => entry.workspaceId === before.workspaceId && noteKey(entry.text) === key);
+        if (recreated) continue;
+        if (memory.add(before).ok) undone += 1;
+        continue;
+      }
+      const result = memory.edit(after.id, before);
       if (result.ok && result.status !== "same") undone += 1;
     }
     if (undone > 0) this.changed(["memory"], {});

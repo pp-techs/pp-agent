@@ -127,8 +127,10 @@ export function knownNotes(entries: readonly MemoryEntry[]): {
  * Parses the model's reply into operations. The array is read from the last `<memories>` tags, so
  * a model that thinks out loud first still works; a reply with no tags is read whole when it is
  * itself a JSON array. An item without `op` but with text is an add. Malformed items are dropped.
+ * Null when the reply is not that shape at all (nothing, prose, broken JSON): not the answer the
+ * prompt asks for, so the caller must not read it as "no operations".
  */
-export function parseMemoryOps(reply: string): MemoryOp[] {
+export function parseMemoryOps(reply: string): MemoryOp[] | null {
   const tagged = [...reply.matchAll(/<memories>([\s\S]*?)<\/memories>/gi)].at(-1)?.[1];
   const cleaned = (tagged ?? reply)
     .trim()
@@ -139,9 +141,9 @@ export function parseMemoryOps(reply: string): MemoryOp[] {
   try {
     raw = JSON.parse(cleaned);
   } catch {
-    return [];
+    return null;
   }
-  if (!Array.isArray(raw)) return [];
+  if (!Array.isArray(raw)) return null;
   const ops: MemoryOp[] = [];
   for (const item of raw) {
     if (typeof item !== "object" || item === null) continue;
@@ -210,9 +212,16 @@ export function applyMemoryOps(ops: readonly MemoryOp[], context: ApplyContext):
       }
       const index = /^n(\d+)$/i.exec(op.ref)?.[1];
       const known = index === undefined ? undefined : context.refs[Number(index) - 1];
-      // The note may have changed since the call read it; only the note as shown is touched.
       const current = known && store.find(known.id);
       if (!known || !current || current.pinned || touched.has(current.id)) continue;
+      // Only the note exactly as the call saw it is touched. A retag keeps the note's id, so an
+      // edit made while the call ran must not be overwritten or deleted behind the person's back.
+      const asShown =
+        current.text === known.text &&
+        current.tag === known.tag &&
+        current.pinned === known.pinned &&
+        current.workspaceId === known.workspaceId;
+      if (!asShown) continue;
       touched.add(current.id);
       if (op.op === "delete") {
         if (store.remove(current.id)) changes.push({ before: current, after: null });
@@ -259,9 +268,10 @@ function fullPlaces(entries: readonly MemoryEntry[], personal: boolean): string 
 
 /**
  * Runs the extraction call over `messages` and applies what it proposes. Returns the changes
- * (empty for the intentional no-ops of a too-short turn or an empty reply), or null when the call
- * itself failed, so the caller knows whether it is safe to treat these messages as read. Errors
- * are logged, never surfaced: this is a best-effort background pass.
+ * (empty when the turn is too short to hold anything or the call answered with no operations), or
+ * null when the call failed or gave no readable answer, so the caller knows whether it is safe to
+ * treat these messages as read. Errors are logged, never surfaced: this is a best-effort
+ * background pass.
  */
 export async function extractMemory(
   messages: readonly AgentMessage[],
@@ -293,6 +303,12 @@ export async function extractMemory(
     );
     return null;
   }
-  if (!reply) return [];
-  return applyMemoryOps(parseMemoryOps(reply), { store, refs: known.refs, workspaceId, personal });
+  const ops = parseMemoryOps(reply);
+  // An empty or unreadable reply is not the `<memories>[]</memories>` the prompt asks for: the
+  // call gets no answer to act on, and treating it as "no operations" would skip these messages.
+  if (!ops) {
+    console.error("Background memory extraction failed; no notes were changed by this pass.");
+    return null;
+  }
+  return applyMemoryOps(ops, { store, refs: known.refs, workspaceId, personal });
 }

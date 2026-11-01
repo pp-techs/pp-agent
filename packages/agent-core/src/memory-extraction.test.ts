@@ -68,11 +68,17 @@ describe("parseMemoryOps", () => {
     ]);
   });
 
-  test("caps the text and saves nothing from prose or broken JSON", () => {
-    const [op] = parseMemoryOps(JSON.stringify([{ text: "y".repeat(600) }]));
+  test("caps the text; prose or broken JSON is no answer at all", () => {
+    const [op] = parseMemoryOps(JSON.stringify([{ text: "y".repeat(600) }])) ?? [];
     expect(op?.op === "add" && op.text.length).toBe(MEMORY_LIMITS.maxEntryLength);
-    expect(parseMemoryOps("Mình sẽ nhớ điều đó nhé!")).toEqual([]);
-    expect(parseMemoryOps("```json\n[{broken\n```")).toEqual([]);
+    expect(parseMemoryOps("Mình sẽ nhớ điều đó nhé!")).toBeNull();
+    expect(parseMemoryOps("```json\n[{broken\n```")).toBeNull();
+    expect(parseMemoryOps("")).toBeNull();
+  });
+
+  test("an empty memories block is the contract's no-op, not an unreadable reply", () => {
+    expect(parseMemoryOps("Nothing else.\n<memories>[]</memories>")).toEqual([]);
+    expect(parseMemoryOps("<memories>[{broken</memories>")).toBeNull();
   });
 });
 
@@ -150,6 +156,22 @@ describe("applyMemoryOps", () => {
       ["Plays the piano", "identity", false],
       ["Answer in Vietnamese", null, true],
     ]);
+  });
+
+  test("an operation never touches a note changed since the call read it", () => {
+    store.add({ text: "Works at Acme", tag: "identity", workspaceId: null });
+    const refs = knownNotes(store.entriesFor("ws1")).refs;
+    // The person retags the note while the call runs; a retag keeps its id.
+    store.add({ text: "Works at Acme", tag: "project", workspaceId: null });
+    const changes = applyMemoryOps(
+      [
+        { op: "delete", ref: "n1" },
+        { op: "update", ref: "n1", text: "Works at Globex", tag: undefined, scope: undefined },
+      ],
+      { store, refs, workspaceId: "ws1", personal: false },
+    );
+    expect(changes).toEqual([]);
+    expect(store.entries().map((e) => [e.text, e.tag])).toEqual([["Works at Acme", "project"]]);
   });
 
   test("puts workspace notes in the workspace, but everything in Personal is global", () => {

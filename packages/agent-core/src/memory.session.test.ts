@@ -26,6 +26,8 @@ let memoryRequests: string[];
 let memoryFailures: number;
 /** Memory pass requests to cut short at the token limit. */
 let memoryTruncated: number;
+/** Memory pass requests to answer with no text at all. */
+let memoryEmpty: number;
 /** Failed memory passes, counted from the error each one logs (the observable failure signal). */
 let extractionFailures: number;
 let originalError: typeof console.error;
@@ -71,6 +73,11 @@ function modelServer(): Server {
           return;
         }
         reply = memoryReplies.shift() ?? "<memories>[]</memories>";
+        if (memoryEmpty > 0) {
+          memoryEmpty -= 1;
+          // The model completed with no text at all.
+          reply = "";
+        }
         if (memoryTruncated > 0) {
           memoryTruncated -= 1;
           // The model hit its output limit mid-reply: the JSON is cut in half.
@@ -117,6 +124,7 @@ beforeEach(async () => {
   memoryRequests = [];
   memoryFailures = 0;
   memoryTruncated = 0;
+  memoryEmpty = 0;
   extractionFailures = 0;
   originalError = console.error;
   console.error = (...args: unknown[]) => {
@@ -264,6 +272,47 @@ test("a reply cut short by the token limit is not read as an answer", async () =
   await until(() => memoryRequests.length === 2);
   // The half-finished JSON saved nothing and left no cursor: the message is read again.
   expect(memoryRequests[1]).toContain("zebra-42");
+});
+
+test("an empty reply is not read as an answer", async () => {
+  memoryEmpty = 1;
+  await say("I am Nhat, zebra-42, and this detail must not be lost.");
+  await until(() => memoryRequests.length === 1);
+  await until(() => extractionFailures === 1);
+  await say("and one more thing worth noting today");
+  await until(() => memoryRequests.length === 2);
+  // The empty reply is not the contract's `<memories>[]</memories>`: the message is read again.
+  expect(memoryRequests[1]).toContain("zebra-42");
+});
+
+test("undo never overwrites a note recreated since the pass", async () => {
+  await host.handle({
+    type: "save_memory_entry",
+    text: "Answer in Vietnamese",
+    tag: "preference",
+    workspaceId: null,
+    pinned: false,
+  });
+  memoryReplies.push('<memories>[{"op":"delete","id":"n1"}]</memories>');
+  await say("forget that preference please, I changed my mind");
+  await until(() => events.some((event) => event.type === "memory_auto_saved"));
+  const saved = events.find((event) => event.type === "memory_auto_saved");
+  if (saved?.type !== "memory_auto_saved") throw new Error("no memory_auto_saved event");
+  expect(await notes()).toEqual([]);
+
+  await host.handle({
+    type: "save_memory_entry",
+    text: "Answer in Vietnamese",
+    tag: "hobby",
+    pinned: true,
+  });
+  // The deleted note was recreated: restoring over it would rewrite its tag and pin.
+  expect(await host.handle({ type: "undo_memory_pass", passId: saved.passId })).toEqual({
+    undone: 0,
+  });
+  expect(await notes()).toMatchObject([
+    { text: "Answer in Vietnamese", tag: "hobby", pinned: true },
+  ]);
 });
 
 test("a new conversation's profile carries what earlier ones saved", async () => {
