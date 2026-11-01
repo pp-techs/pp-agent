@@ -128,9 +128,14 @@ export async function runOneShot(options: OneShotOptions): Promise<string> {
     }
     const last = session.messages.toReversed().find((message) => message.role === "assistant");
     if (!last) return "";
-    // A resolved prompt can still end in a model error or the abort of the timeout: its reply is
-    // not an answer, and treating it as one would read messages that were never processed.
-    if (last.stopReason === "error" || last.stopReason === "aborted")
+    // A resolved prompt can still end in a model error, the abort of the timeout, or the token
+    // limit: its reply is not a finished answer (truncated JSON and all), and treating it as one
+    // would read messages that were never processed.
+    if (
+      last.stopReason === "error" ||
+      last.stopReason === "aborted" ||
+      last.stopReason === "length"
+    )
       throw new Error(last.errorMessage ?? `One-shot call ended: ${last.stopReason}`);
     return messageText(last);
   } finally {

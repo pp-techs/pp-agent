@@ -24,6 +24,8 @@ let memoryReplies: string[];
 let memoryRequests: string[];
 /** Memory pass requests to answer with a server error. */
 let memoryFailures: number;
+/** Memory pass requests to cut short at the token limit. */
+let memoryTruncated: number;
 /** System prompts of the conversation's own requests. */
 let chatSystems: string[];
 let events: AgentEvent[];
@@ -39,6 +41,7 @@ function modelServer(): Server {
       const raw = Buffer.concat(chunks).toString();
       const body = JSON.parse(raw) as { messages: { role: string; content: unknown }[] };
       let reply = "ok";
+      let truncated = false;
       if (/lasting facts/.test(raw)) {
         memoryRequests.push(raw);
         if (memoryFailures > 0) {
@@ -65,6 +68,12 @@ function modelServer(): Server {
           return;
         }
         reply = memoryReplies.shift() ?? "<memories>[]</memories>";
+        if (memoryTruncated > 0) {
+          memoryTruncated -= 1;
+          // The model hit its output limit mid-reply: the JSON is cut in half.
+          reply = '<memories>[{"op":"add","text":"half';
+          truncated = true;
+        }
       } else if (/short title for it/.test(raw)) {
         reply = "<title>Test</title>";
       } else {
@@ -76,10 +85,13 @@ function modelServer(): Server {
         );
       }
       response.writeHead(200, { "content-type": "text/event-stream" });
-      for (const [delta, finish] of [
-        [{ role: "assistant", content: reply }, null],
-        [{}, "stop"],
-      ] as const)
+      const steps: [object, string | null][] = truncated
+        ? [[{ role: "assistant", content: reply }, "length"]]
+        : [
+            [{ role: "assistant", content: reply }, null],
+            [{}, "stop"],
+          ];
+      for (const [delta, finish] of steps)
         response.write(
           `data: ${JSON.stringify({
             id: "chatcmpl-1",
@@ -101,6 +113,7 @@ beforeEach(async () => {
   memoryReplies = [];
   memoryRequests = [];
   memoryFailures = 0;
+  memoryTruncated = 0;
   chatSystems = [];
   events = [];
   server = modelServer();
@@ -227,6 +240,16 @@ test("a failed pass keeps its messages for the next one instead of skipping them
   expect(memoryRequests[2]).toContain("zebra-42");
   await until(() => events.some((event) => event.type === "memory_auto_saved"));
   expect(await notes()).toMatchObject([{ text: "Kept after a failed pass" }]);
+});
+
+test("a reply cut short by the token limit is not read as an answer", async () => {
+  memoryTruncated = 1;
+  await say("I am Nhat, zebra-42, and this detail must not be lost.");
+  await until(() => memoryRequests.length === 1);
+  await say("and one more thing worth noting today");
+  await until(() => memoryRequests.length === 2);
+  // The half-finished JSON saved nothing and left no cursor: the message is read again.
+  expect(memoryRequests[1]).toContain("zebra-42");
 });
 
 test("a new conversation's profile carries what earlier ones saved", async () => {
