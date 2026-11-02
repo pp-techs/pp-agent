@@ -58,6 +58,16 @@
       "title": "Updates",
       "check": "Check for updates"
     },
+    "diagnostics": {
+      "legend": "Diagnostics",
+      "description": "PP Agent keeps a local log of errors, including what the model's provider said when it failed. Send the exported file to whoever helps you. It never contains your conversations; keys and tokens are hidden.",
+      "size": "Log size: {{size}}",
+      "export": "Export diagnostics",
+      "exported": "Diagnostics saved.",
+      "reveal": "Show log folder",
+      "clear": "Clear log",
+      "cleared": "Log cleared."
+    },
     "desktop": {
       "legend": "Desktop",
       "description": "How PP Agent behaves next to your other apps.",

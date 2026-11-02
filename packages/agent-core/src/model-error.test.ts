@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vite-plus/test";
-import { modelErrorText } from "./model-error.ts";
+import { modelErrorDetail, modelErrorText } from "./model-error.ts";
 
 const cloudflare524 =
   '524 {"type":"https://developers.cloudflare.com/...","status":524,"error_code":524,"retry_after":120}';
@@ -25,5 +25,17 @@ describe("modelErrorText", () => {
 
   test("falls back to the generic text for unknown or empty errors", () => {
     expect(modelErrorText(undefined)).toBe(modelErrorText("something odd happened"));
+  });
+});
+
+describe("modelErrorDetail", () => {
+  test("keeps the provider's own text and says which model failed", () => {
+    expect(
+      modelErrorDetail({ provider: "openai", model: "gpt-x", errorMessage: cloudflare524 }),
+    ).toBe(`openai/gpt-x: ${cloudflare524}`);
+  });
+
+  test("still names the model when the provider gave no text", () => {
+    expect(modelErrorDetail({ provider: "openai", model: "gpt-x" })).toContain("openai/gpt-x");
   });
 });

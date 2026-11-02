@@ -60,6 +60,7 @@
     "attachedImage": "Hình ảnh đính kèm",
     "compacted": "Các tin nhắn trước đó đã được tóm tắt",
     "actions": {
+      "copyError": "Sao chép chi tiết lỗi",
       "copy": "Sao chép tin nhắn",
       "copied": "Đã sao chép",
       "regenerate": "Tạo lại câu trả lời",
