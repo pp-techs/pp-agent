@@ -13,6 +13,7 @@ import {
   readChromiumCookies,
   readMacPassword,
   readWindowsKey,
+  quitBrowser,
   runningProcessCount,
   userDataDir,
 } from "./chromium.ts";
@@ -73,6 +74,29 @@ export async function readCookies(
   } catch (error) {
     if (error instanceof LockedError) throw await lockedMessage(browser, name, error);
     throw error;
+  }
+}
+
+/** Whether a browser is running and so keeps its cookies locked; only told on Windows. */
+export async function isCookieBrowserRunning(browser: CookieSourceBrowser): Promise<boolean> {
+  const definition = CHROMIUM_BROWSERS.find((entry) => entry.browser === browser);
+  if (!definition || process.platform !== "win32") return false;
+  return ((await runningProcessCount(definition)) ?? 0) > 0;
+}
+
+/** Quits a browser (every window and background process), so its cookies can be copied. */
+export async function quitCookieBrowser(browser: CookieSourceBrowser): Promise<void> {
+  const definition = CHROMIUM_BROWSERS.find((entry) => entry.browser === browser);
+  if (!definition || process.platform !== "win32") return;
+  try {
+    await quitBrowser(definition);
+  } catch (error) {
+    throw new Error(
+      translator()("panel.cookies.quitFailed", {
+        browser: COOKIE_SOURCE_NAMES[browser],
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
   }
 }
 

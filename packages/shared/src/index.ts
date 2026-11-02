@@ -1749,11 +1749,20 @@ export interface DesktopBridge {
     onReveal(listener: () => void): () => void;
     /** Installed browsers and their profiles whose cookies can be imported. */
     cookieSources(): Promise<CookieSource[]>;
-    /** Copies every cookie of a source browser profile into a profile. */
+    /**
+     * Whether the source browser is running and so keeps its cookies locked. Only told on Windows,
+     * where closing its windows may leave it running in the background.
+     */
+    cookieSourceRunning(browser: CookieSourceBrowser): Promise<boolean>;
+    /**
+     * Copies every cookie of a source browser profile into a profile. `quitSource` first quits the
+     * source browser, with its background processes (Windows).
+     */
     importCookies(
       profileId: string,
       browser: CookieSourceBrowser,
       sourceProfile: string,
+      quitSource?: boolean,
     ): Promise<CookieImportResult>;
   };
   computer: {
@@ -1806,6 +1815,7 @@ export const IPC = {
   browserSetBounds: "browser:set-bounds",
   browserChanged: "browser:changed",
   browserCookieSources: "browser:cookie-sources",
+  browserCookieSourceRunning: "browser:cookie-source-running",
   browserImportCookies: "browser:import-cookies",
   browserReveal: "browser:reveal",
   computerStatus: "computer:status",
