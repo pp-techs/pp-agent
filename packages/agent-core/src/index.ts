@@ -3,7 +3,7 @@
  * the process around it; `HostEnvironment` supplies the event sink, the vault, and service control.
  */
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { constants, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { copyFile, mkdir } from "node:fs/promises";
 import { rm } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -2167,21 +2167,31 @@ export class AgentHost {
 
   /**
    * Copies attached files of a temporary conversation from `oldCwd` into `newCwd`, keeping each
-   * file's path relative to its workspace so the \`<attached_files>\` references in carried entries
-   * (not rewritten here) still resolve. A file that fails to copy is dropped silently: it was
-   * already unreadable in the old workspace, so the conversation could not have opened it either.
+   * file's path relative to its workspace so the `<attached_files>` references in carried entries
+   * (not rewritten here) still resolve. Returns the new paths; the originals are the caller's to
+   * remove. A path already taken in `newCwd`, or a copy that fails, stops the move with nothing
+   * copied left behind: the transcript names those files, so none may be dropped silently. A file
+   * already gone from `oldCwd` is skipped, as nothing could have read it there either.
    */
   private async moveCopies(files: string[], oldCwd: string, newCwd: string): Promise<string[]> {
+    const targets = files.map((file) => ({ file, target: join(newCwd, relative(oldCwd, file)) }));
+    for (const { file, target } of targets) {
+      if (!existsSync(file)) continue;
+      if (existsSync(target))
+        throw new Error(t("conversations.attachmentExists", { path: target }));
+    }
     const moved: string[] = [];
-    for (const file of files) {
-      const target = join(newCwd, relative(oldCwd, file));
-      try {
+    try {
+      for (const { file, target } of targets) {
+        if (!existsSync(file)) continue;
         await mkdir(dirname(target), { recursive: true });
-        await copyFile(file, target);
+        // Exclusive: never replaces a file that appeared since the check above.
+        await copyFile(file, target, constants.COPYFILE_EXCL);
         moved.push(target);
-      } catch {
-        // Leave it out; nothing else references it once the old workspace's copy is gone.
       }
+    } catch (error) {
+      for (const copy of moved) rmSync(copy, { force: true });
+      throw error;
     }
     return moved;
   }
@@ -2884,8 +2894,13 @@ export class AgentHost {
     const model = session.model
       ? { provider: session.model.provider, modelId: session.model.id }
       : null;
+    // Copied before anything is closed, so a clash or a failed copy leaves the conversation as is.
+    const sameFolder = oldCwd === cwd;
+    const carriedFiles =
+      temporary && !sameFolder ? await this.moveCopies(oldCopies, oldCwd, cwd) : oldCopies;
     this.disposeSession(true);
-    const carriedFiles = temporary ? await this.moveCopies(oldCopies, oldCwd, cwd) : [];
+    // The originals are no longer tracked by anyone: a temporary chat leaves nothing in the old folder.
+    if (temporary && !sameFolder) for (const copy of oldCopies) rmSync(copy, { force: true });
     let manager: SessionManager;
     if (temporary) {
       manager = SessionManager.inMemory(cwd, undefined, entries);
@@ -2895,7 +2910,13 @@ export class AgentHost {
       manager = SessionManager.create(cwd, paths.sessionDir);
       manager.appendCustomEntry(AGENT_ENTRY_TYPE, { agentId: this.agentId });
     }
-    await this.startSession(manager, model);
+    try {
+      await this.startSession(manager, model);
+    } catch (error) {
+      // The conversation did not reopen: the copies made for it have no owner.
+      if (!sameFolder) for (const copy of carriedFiles) rmSync(copy, { force: true });
+      throw error;
+    }
     if (this.open) this.attachedCopies.set(this.open, carriedFiles);
     const next = this.requireSession();
     this.requireOpen().transcript.load(branchEntries(next.sessionManager));

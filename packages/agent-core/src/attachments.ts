@@ -82,8 +82,9 @@ export async function buildPrompt(
     }
   } catch (error) {
     // Nothing of a failed attempt stays in the workspace, including a target `copyFile` left
-    // behind when it failed partway through.
-    await Promise.all(copied.map((file) => rm(file, { force: true })));
+    // behind when it failed partway through. A removal that itself fails must not replace the
+    // attachment error below, and must not stop the others from running.
+    await Promise.allSettled(copied.map((file) => rm(file, { force: true })));
     throw error;
   }
 

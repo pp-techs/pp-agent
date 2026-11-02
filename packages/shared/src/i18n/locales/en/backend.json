@@ -148,6 +148,7 @@
     "waitForAnswer": "Wait for the answer to finish.",
     "tooShort": "This conversation is still short, so there is nothing to summarize yet.",
     "attachmentNoFile": "{{name}} has no file to copy.",
+    "attachmentExists": "The file {{path}} already exists in the other workspace, so this temporary chat cannot move there.",
     "skillTitle": "Skill: {{name}}",
     "untitled": "Untitled chat",
     "interrupted": "Interrupted before it finished.",

@@ -148,6 +148,7 @@
     "waitForAnswer": "Hãy đợi câu trả lời hoàn tất.",
     "tooShort": "Cuộc trò chuyện này còn ngắn nên chưa có gì để tóm tắt.",
     "attachmentNoFile": "{{name}} không có tệp nào để sao chép.",
+    "attachmentExists": "Tệp {{path}} đã tồn tại trong không gian làm việc kia nên cuộc trò chuyện tạm này không thể chuyển sang đó.",
     "skillTitle": "Kỹ năng: {{name}}",
     "untitled": "Cuộc trò chuyện chưa đặt tên",
     "interrupted": "Bị gián đoạn trước khi hoàn tất.",
