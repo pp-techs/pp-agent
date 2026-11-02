@@ -168,8 +168,8 @@ catalogs:
       specifier: ^1.9.0
       version: 1.9.0
     '@buiducnhat/better-modal':
-      specifier: ^0.0.6
-      version: 0.0.6
+      specifier: ^1.0.0
+      version: 1.0.0
     '@changesets/cli':
       specifier: ^3.0.3
       version: 3.0.3
@@ -404,7 +404,7 @@ importers:
     dependencies:
       '@buiducnhat/better-modal':
         specifier: 'catalog:'
-        version: 0.0.6(@types/react@19.3.0)(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1))
+        version: 1.0.0(@types/react@19.3.0)(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1))
       '@tanstack/react-query':
         specifier: 'catalog:'
         version: 5.104.5(@types/react@19.3.0)(react@19.3.1)
@@ -840,12 +840,12 @@ packages:
   '@borewit/text-codec@0.2.2':
     resolution: {integrity: sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ==}
 
-  '@buiducnhat/better-modal@0.0.6':
-    resolution: {integrity: sha512-ssSsxSbG0KdLpcRJizGNcOYilBLIvcr4AMeexulY2XFo48Jk70cqfEaxvTAU5D+AUlX2Pm0K2jDRZBBiLbWwrw==}
+  '@buiducnhat/better-modal@1.0.0':
+    resolution: {integrity: sha512-RERhWXb5qSrQyU+nIJ/jFdf+rvrw2T/cCAz5LErQtnNBo1Sio9bCiNOKk+y7mVA3u/hnSMLUVKH+5KsH5lktrA==}
     engines: {node: '>=18'}
     peerDependencies:
-      '@types/react': ^19
-      react: ^19
+      '@types/react': ^19.2.14
+      react: ^19.2.4
 
   '@changesets/apply-release-plan@8.1.1':
     resolution: {integrity: sha512-nk2Hbq3M9NeHMdaIRBDvawKrQJzXB9sGyBUE5yWnIKtvdcNCPj75zBekJYr0gTT2ecJH3eFeTrc8eisPImcv0Q==}
@@ -1842,6 +1842,7 @@ packages:
   '@smithy/core@3.36.1':
     resolution: {integrity: sha512-WC5W1Jrsfxu1y6LeqXMie7N14qmcdafij/Haye4feVlyMMXLGpYxBeOX6Ee1iRJbDzGG5LVman8U1rrt9MYFHA==}
     engines: {node: '>=18.0.0'}
+    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/credential-provider-imds@4.5.2':
     resolution: {integrity: sha512-A9uSdn72ozbRUSit0eib0TW7nXuNPlaeM0zcGkJ+nE6tFcSDbnmtwoxbTCFBukVQcszDAyvsd7+rTduPTXpygg==}
@@ -5933,7 +5934,7 @@ snapshots:
 
   '@borewit/text-codec@0.2.2': {}
 
-  '@buiducnhat/better-modal@0.0.6(@types/react@19.3.0)(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1))':
+  '@buiducnhat/better-modal@1.0.0(@types/react@19.3.0)(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1))':
     dependencies:
       '@types/react': 19.3.0
       react: 19.3.1
