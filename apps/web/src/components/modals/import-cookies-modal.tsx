@@ -68,15 +68,19 @@ function ImportForm({ bridge, profile, onDone }: ImportCookiesModalProps & { onD
   });
   const running = runningQuery.data === true;
 
-  function submit(event: React.FormEvent) {
+  async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!source || !chosenProfile) return;
+    // The browser may have started since the last check: ask again, and when it has, show the
+    // note and the "Quit and import" button instead of quitting a browser nobody was told about.
+    const { data: runningNow } = await runningQuery.refetch();
+    if (runningNow === true && !running) return;
     importCookies.mutate(
       {
         profileId: profile.id,
         browser: source.browser,
         sourceProfile: chosenProfile.id,
-        quitSource: running,
+        quitSource: runningNow === true,
       },
       {
         onSuccess: (result) => {
