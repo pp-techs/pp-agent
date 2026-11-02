@@ -1,5 +1,13 @@
 # @workspace/desktop
 
+## 0.22.0
+
+### Minor Changes
+
+- f924df4: Added a local audit log for debugging. PP Agent now keeps a record of errors and key events (model failures with what the provider actually said and which model it was, approvals asked, background-service drops, app and page crashes) in `logs/audit.log` next to the app's data. It never holds the text of conversations, and keys, tokens, cookies and your account name in file paths are hidden. A failed answer now has a button to copy the provider's error, and Settings › General › Diagnostics exports the log together with the system details and the tail of the background service's log, so you can send one file when you hit "The model returned an error". You can also show the log folder or clear the log there.
+- a5ec7aa: The Files tool in the side panel does more. Markdown files can be switched between the rendered preview and their text with the button next to the path. Cmd+W (Ctrl+W on Windows and Linux) closes the file tab in front; with no file tab showing it closes the window as before. Create a file or folder with the new buttons above the tree, and rename (also F2) or move to the trash (also Delete) any file or folder from its right-click menu. Cmd+K (Ctrl+K) opens the chat search from the sidebar, and closes it again.
+- a5ec7aa: Added temporary chats. Press the dashed-bubble toggle in the top bar, or type `/temp`, to start a chat that is kept in memory only: it never appears in the chat list or search, is not summarized into long-term memory, cannot be exported or branched, and is deleted when you open another chat or start a new one. The toggle reads "Temporary" while it is on; press it again to leave for a normal chat. A note on the empty chat marks it too.
+
 ## 0.21.1
 
 ### Patch Changes

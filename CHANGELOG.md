@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.22.0] — 2026-11-02
+
+Added a local audit log for debugging. PP Agent now keeps a record of errors and key events (model failures with what the provider actually said and which model it was, approvals asked, background-service drops, app and page crashes) in `logs/audit.log` next to the app's data. It never holds the text of conversations, and keys, tokens, cookies and your account name in file paths are hidden. A failed answer now has a button to copy the provider's error, and Settings › General › Diagnostics exports the log together with the system details and the tail of the background service's log, so you can send one file when you hit "The model returned an error". You can also show the log folder or clear the log there.
+
+The Files tool in the side panel does more. Markdown files can be switched between the rendered preview and their text with the button next to the path. Cmd+W (Ctrl+W on Windows and Linux) closes the file tab in front; with no file tab showing it closes the window as before. Create a file or folder with the new buttons above the tree, and rename (also F2) or move to the trash (also Delete) any file or folder from its right-click menu. Cmd+K (Ctrl+K) opens the chat search from the sidebar, and closes it again.
+
+Added temporary chats. Press the dashed-bubble toggle in the top bar, or type `/temp`, to start a chat that is kept in memory only: it never appears in the chat list or search, is not summarized into long-term memory, cannot be exported or branched, and is deleted when you open another chat or start a new one. The toggle reads "Temporary" while it is on; press it again to leave for a normal chat. A note on the empty chat marks it too.
+
 ## [0.21.1] — 2026-11-02
 
 Importing cookies on Windows no longer sends you to the system tray. When the browser you import from is running, also in the background, the import dialog says so and its button becomes **Quit Chrome and import**: it closes the browser, waits until its cookies are free, and imports. If you quit the browser yourself, the note disappears on its own.
