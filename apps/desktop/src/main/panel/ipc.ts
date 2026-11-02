@@ -12,7 +12,12 @@ import {
   type TerminalSize,
 } from "@workspace/shared";
 import { type BrowserWindow, ipcMain } from "electron";
-import { readCookies, listCookieSources } from "../browser/cookies/index.ts";
+import {
+  isCookieBrowserRunning,
+  listCookieSources,
+  quitCookieBrowser,
+  readCookies,
+} from "../browser/cookies/index.ts";
 import { BrowserAutomation } from "../browser/automation.ts";
 import { BrowserHost } from "../browser/host.ts";
 import { translator } from "../i18n.ts";
@@ -167,6 +172,10 @@ export function createSidePanel(options: SidePanelOptions) {
     browser.setBounds(isBounds(bounds) ? bounds : null),
   );
   ipcMain.handle(IPC.browserCookieSources, () => listCookieSources());
+  ipcMain.handle(IPC.browserCookieSourceRunning, (_event, source: unknown) => {
+    const known = COOKIE_SOURCE_BROWSERS.find((candidate) => candidate === source);
+    return known ? isCookieBrowserRunning(known) : false;
+  });
   ipcMain.handle(
     IPC.browserImportCookies,
     async (
@@ -174,11 +183,13 @@ export function createSidePanel(options: SidePanelOptions) {
       profileId: unknown,
       source: unknown,
       sourceProfile: unknown,
+      quitSource: unknown,
     ): Promise<CookieImportResult> => {
       const id = await requireProfile(profileId);
       const known = COOKIE_SOURCE_BROWSERS.find((candidate) => candidate === source);
       if (!known || !isString(sourceProfile))
         throw new Error(translator()("panel.cookies.sourceNotFound", { browser: String(source) }));
+      if (quitSource === true) await quitCookieBrowser(known);
       const read = await readCookies(known, sourceProfile);
       const { written, refused } = await browser.setCookies(id, read.cookies);
       const profile = (await options.command({

@@ -32,7 +32,11 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { IS_MAC } from "@/hooks/use-panel-shortcut";
-import { cookieSourcesQuery, useBrowserProfileCommands } from "@/lib/panel-queries";
+import {
+  cookieSourceRunningQuery,
+  cookieSourcesQuery,
+  useBrowserProfileCommands,
+} from "@/lib/panel-queries";
 
 type ImportCookiesModalProps = { bridge: DesktopBridge; profile: BrowserProfile };
 
@@ -57,12 +61,26 @@ function ImportForm({ bridge, profile, onDone }: ImportCookiesModalProps & { onD
     label: entry.name,
   }));
 
+  // Windows: a browser that is still running, also in the background, keeps its cookies locked.
+  const runningQuery = useQuery({
+    ...cookieSourceRunningQuery(bridge, source?.browser ?? "chrome"),
+    enabled: Boolean(source),
+  });
+  const running = runningQuery.data === true;
+
   function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!source || !chosenProfile) return;
     importCookies.mutate(
-      { profileId: profile.id, browser: source.browser, sourceProfile: chosenProfile.id },
       {
+        profileId: profile.id,
+        browser: source.browser,
+        sourceProfile: chosenProfile.id,
+        quitSource: running,
+      },
+      {
+        // The browser may have started since the last check: show the note and the quit button.
+        onError: () => void runningQuery.refetch(),
         onSuccess: (result) => {
           toast.success(
             t("browserSection.import.done", {
@@ -147,14 +165,22 @@ function ImportForm({ bridge, profile, onDone }: ImportCookiesModalProps & { onD
                 ))}
               </SelectContent>
             </Select>
-            <FieldDescription>
-              {source?.browser === "firefox"
-                ? t("browserSection.import.hintFirefox")
-                : IS_MAC
-                  ? t("browserSection.import.hintMac")
-                  : t("browserSection.import.hintWindows")}
-            </FieldDescription>
+            {source?.browser === "firefox" ? (
+              <FieldDescription>{t("browserSection.import.hintFirefox")}</FieldDescription>
+            ) : IS_MAC ? (
+              <FieldDescription>{t("browserSection.import.hintMac")}</FieldDescription>
+            ) : null}
           </Field>
+          {running && source && (
+            <Alert>
+              <InfoIcon />
+              <AlertDescription>
+                {t("browserSection.import.running", {
+                  browser: COOKIE_SOURCE_NAMES[source.browser],
+                })}
+              </AlertDescription>
+            </Alert>
+          )}
           {importCookies.isError && (
             <Alert variant="destructive">
               <InfoIcon />
@@ -168,9 +194,16 @@ function ImportForm({ bridge, profile, onDone }: ImportCookiesModalProps & { onD
         <Button type="button" variant="outline" onClick={onDone}>
           {t("common:actions.cancel")}
         </Button>
-        <Button type="submit" disabled={!chosenProfile || importCookies.isPending}>
+        <Button
+          type="submit"
+          disabled={!chosenProfile || runningQuery.isPending || importCookies.isPending}
+        >
           {importCookies.isPending && <Spinner />}
-          {t("browserSection.import.submit")}
+          {running && source
+            ? t("browserSection.import.submitQuit", {
+                browser: COOKIE_SOURCE_NAMES[source.browser],
+              })
+            : t("browserSection.import.submit")}
         </Button>
       </DialogFooter>
     </form>

@@ -27,6 +27,15 @@ export const cookieSourcesQuery = (bridge: DesktopBridge) =>
     staleTime: 0,
   });
 
+/** Whether a source browser is running (Windows); checked again while the dialog is open, so starting or quitting it meanwhile is noticed. */
+export const cookieSourceRunningQuery = (bridge: DesktopBridge, browser: CookieSourceBrowser) =>
+  queryOptions({
+    queryKey: queryKeys.cookieSourceRunning(browser),
+    queryFn: () => bridge.browser.cookieSourceRunning(browser),
+    staleTime: 0,
+    refetchInterval: 2000,
+  });
+
 export const workspaceFolderQuery = (bridge: DesktopBridge, root: string, dir: string) =>
   queryOptions({
     queryKey: queryKeys.workspaceFolder(root, dir),
@@ -59,7 +68,14 @@ export function useBrowserProfileCommands(bridge: DesktopBridge) {
       profileId: string;
       browser: CookieSourceBrowser;
       sourceProfile: string;
-    }) => bridge.browser.importCookies(input.profileId, input.browser, input.sourceProfile),
+      quitSource?: boolean;
+    }) =>
+      bridge.browser.importCookies(
+        input.profileId,
+        input.browser,
+        input.sourceProfile,
+        input.quitSource,
+      ),
     onSuccess: invalidate,
   });
   return { save, remove, importCookies };

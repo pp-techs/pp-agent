@@ -108,8 +108,9 @@ const bridge: DesktopBridge = {
     onState: (listener) => subscribe<[BrowserState]>(IPC.browserChanged, listener),
     onReveal: (listener) => subscribe(IPC.browserReveal, listener),
     cookieSources: () => invoke(IPC.browserCookieSources),
-    importCookies: (profileId, browser, sourceProfile) =>
-      invoke(IPC.browserImportCookies, profileId, browser, sourceProfile),
+    cookieSourceRunning: (browser) => invoke(IPC.browserCookieSourceRunning, browser),
+    importCookies: (profileId, browser, sourceProfile, quitSource) =>
+      invoke(IPC.browserImportCookies, profileId, browser, sourceProfile, quitSource),
   },
   computer: {
     status: () => invoke(IPC.computerStatus),

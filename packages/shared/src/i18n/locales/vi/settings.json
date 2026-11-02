@@ -500,10 +500,11 @@
       "browser": "Trình duyệt",
       "sourceProfile": "Hồ sơ trong trình duyệt đó",
       "hintMac": "macOS sẽ hỏi quyền truy cập khóa đã lưu của trình duyệt. Hãy chọn “Cho phép”.",
-      "hintWindows": "Nếu nhập không thành công, hãy thoát hẳn trình duyệt đó rồi thử lại.",
+      "running": "{{browser}} đang chạy, kể cả chạy nền, nên khóa cookie của nó. Khi nhập, trình duyệt này sẽ được thoát và đóng các cửa sổ; các tab sẽ được khôi phục khi bạn mở lại. Bạn cũng có thể tự thoát nó, ghi chú này sẽ tự mất.",
       "hintFirefox": "Cookie của các tab container và cửa sổ riêng tư sẽ không được sao chép.",
       "none": "Không tìm thấy trình duyệt nào được hỗ trợ có cookie trên máy này (Chrome, Edge, Brave, Arc, Chromium hoặc Firefox).",
       "submit": "Nhập",
+      "submitQuit": "Thoát {{browser}} và nhập",
       "done_other": "Đã nhập {{count}} cookie từ {{browser}} vào {{profile}}.",
       "skipped_other": "Đã bỏ qua {{count}} cookie (hết hạn hoặc không đọc được)."
     }

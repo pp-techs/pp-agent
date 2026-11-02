@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import type { CookieSourceBrowser, CookieSourceProfile } from "@workspace/shared";
 import { readDatabaseCopy, run } from "./database.ts";
 import { fromChromiumSameSite, fromChromiumSeconds, type PortableCookie } from "./portable.ts";
@@ -84,20 +85,17 @@ function installFolder(definition: ChromiumBrowser): string {
 }
 
 /**
- * Processes of the browser still running (Windows); null when that cannot be told. Closing every
+ * Process ids of the browser still running (Windows); null when that cannot be told. Closing every
  * window does not quit a browser that keeps running in the background (Chrome's "continue running
  * background apps", Edge's startup boost), and those processes keep the cookie database locked.
- * Chrome and Chromium share `chrome.exe`: a process counts for this browser unless it runs from
- * the install folder of another browser with the same program name. A process whose path cannot
- * be read, or that runs from elsewhere (a Chromium build), counts as running.
+ * A process counts for this browser when it runs from the browser's own install folder, so another
+ * build that shares the program name (Chrome Beta, a Chromium elsewhere) is never listed, and so
+ * never quit. A process whose path cannot be read counts as running.
  */
-export async function runningProcessCount(definition: ChromiumBrowser): Promise<number | null> {
-  if (process.platform !== "win32" || !definition.exe) return 0;
+async function runningProcessIds(definition: ChromiumBrowser): Promise<number[] | null> {
+  if (process.platform !== "win32" || !definition.exe) return [];
   const name = basename(definition.exe, ".exe").toLowerCase();
-  const others = CHROMIUM_BROWSERS.filter(
-    (other) =>
-      other !== definition && other.exe && basename(other.exe, ".exe").toLowerCase() === name,
-  ).map(installFolder);
+  const folder = installFolder(definition);
   try {
     // Filtering instead of `Get-Process -Name`, which fails when nothing matches.
     const out = await run("powershell", [
@@ -106,17 +104,55 @@ export async function runningProcessCount(definition: ChromiumBrowser): Promise<
       "-Command",
       `Get-Process | Where-Object { $_.ProcessName -eq '${name}' } | ForEach-Object { $_.Id.ToString() + '|' + $_.Path }`,
     ]);
-    return out.split(/\r?\n/).filter((line) => {
-      if (!line.includes("|")) return false;
+    const ids: number[] = [];
+    for (const line of out.split(/\r?\n/)) {
+      const split = line.indexOf("|");
+      if (split < 0) continue;
       const path = line
-        .slice(line.indexOf("|") + 1)
+        .slice(split + 1)
         .trim()
         .toLowerCase();
-      return !others.some((folder) => path.includes(folder));
-    }).length;
+      const id = Number(line.slice(0, split));
+      if (Number.isInteger(id) && (path === "" || path.includes(folder))) ids.push(id);
+    }
+    return ids;
   } catch {
     return null;
   }
+}
+
+/** How many processes of the browser are running (Windows); null when that cannot be told. */
+export async function runningProcessCount(definition: ChromiumBrowser): Promise<number | null> {
+  return (await runningProcessIds(definition))?.length ?? null;
+}
+
+const QUIT_TIMEOUT_MS = 15_000;
+
+/**
+ * Quits every process of the browser (Windows). Windows are asked to close first, so the browser
+ * can write its state; whatever keeps running after that (background processes have no window)
+ * is ended. Resolves once nothing of it is left, so its cookie database is free to copy.
+ */
+export async function quitBrowser(definition: ChromiumBrowser): Promise<void> {
+  const ids = await runningProcessIds(definition);
+  if (ids === null) throw new Error("The running processes of the browser could not be listed.");
+  if (ids.length === 0) return;
+  const list = ids.join(",");
+  await run("powershell", [
+    "-NoProfile",
+    "-NonInteractive",
+    "-Command",
+    `$ids = @(${list}); Get-Process -Id $ids -ErrorAction SilentlyContinue | ForEach-Object { [void]$_.CloseMainWindow() }; Start-Sleep -Seconds 2; Get-Process -Id $ids -ErrorAction SilentlyContinue | Stop-Process -Force`,
+  ]);
+  const deadline = Date.now() + QUIT_TIMEOUT_MS;
+  for (;;) {
+    const left = await runningProcessIds(definition);
+    if (left === null || left.length === 0) break;
+    if (Date.now() > deadline) throw new Error("The browser did not quit.");
+    await delay(500);
+  }
+  // Windows lets go of the file a moment after the last process is gone.
+  await delay(500);
 }
 
 /** The cookie database of a profile: newer versions keep it in `Network/`. */
