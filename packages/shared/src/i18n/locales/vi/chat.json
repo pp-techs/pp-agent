@@ -32,6 +32,16 @@
       "html": "Trang web (.html, để in)"
     },
     "openFolder": "Mở thư mục không gian làm việc",
+    "temporary": {
+      "label": "Tạm thời",
+      "on": "Đang ở chat tạm thời. Nhấn để thoát sang chat thường.",
+      "off": "Bắt đầu chat tạm thời (không lưu vào lịch sử)",
+      "confirm": {
+        "title": "Rời khỏi chat tạm thời này?",
+        "description": "Tin nhắn không được lưu nên sẽ bị xóa khi bạn rời đi.",
+        "action": "Rời đi và xóa"
+      }
+    },
     "yolo": {
       "on": "Chế độ yolo đang bật",
       "off": "Bật chế độ yolo",
@@ -160,6 +170,10 @@
         "label": "Cuộc trò chuyện mới",
         "description": "Bắt đầu một cuộc trò chuyện mới."
       },
+      "temp": {
+        "label": "Cuộc trò chuyện tạm thời",
+        "description": "Bắt đầu một cuộc trò chuyện không được lưu và kết thúc khi bạn rời đi."
+      },
       "compact": {
         "label": "Tóm tắt cuộc trò chuyện đến lúc này",
         "description": "Giải phóng dung lượng trong các cuộc trò chuyện dài; Agent sẽ giữ lại bản tóm tắt.",
@@ -192,7 +206,8 @@
   "emptyChat": {
     "title": "Tôi có thể giúp gì cho bạn?",
     "description": "Tôi có thể đọc và tìm kiếm các tệp trong {{location}}, kể cả PDF, Word, Excel và PowerPoint. Hãy đính kèm tệp hoặc hình ảnh vào tin nhắn, tôi sẽ lưu tệp mới sau khi bạn duyệt.",
-    "yourWorkspace": "không gian làm việc của bạn"
+    "yourWorkspace": "không gian làm việc của bạn",
+    "temporary": "Đây là cuộc trò chuyện tạm thời. Nó không được lưu vào lịch sử và sẽ bị xóa khi bạn rời đi."
   },
   "modelPicker": {
     "choose": "Chọn một mô hình",
@@ -518,7 +533,14 @@
       "truncated": "Chỉ hiển thị phần đầu. Tệp có dung lượng {{size}}.",
       "noPreviewTitle": "Không có bản xem trước",
       "noPreview": "Không thể hiển thị tệp này ({{size}}) ở đây. Dùng “Hiện trong thư mục” để mở.",
-      "closeTab": "Đóng {{name}}"
+      "closeTab": "Đóng {{name}}",
+      "showSource": "Xem mã nguồn",
+      "showPreview": "Xem bản xem trước",
+      "newFile": "Tệp mới",
+      "newFolder": "Thư mục mới",
+      "rename": "Đổi tên",
+      "moveToTrash": "Chuyển vào thùng rác",
+      "name": "Tên"
     },
     "browser": {
       "newTab": "Tab mới",

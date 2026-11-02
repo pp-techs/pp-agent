@@ -146,6 +146,8 @@ export interface AgentSnapshot {
   workspaceDir: string | null;
   /** Session file of the open conversation. */
   sessionPath: string | null;
+  /** The open conversation is temporary: it has no session file and is dropped when left. */
+  temporary: boolean;
   /** Context window usage of the open conversation; null while it has no model. */
   context: ContextUsage | null;
   /** Which conversations are answering right now, the open one and those left running. */
@@ -1037,8 +1039,11 @@ export interface AgentCommandMap {
   get_snapshot: { params: NoParams; result: AgentSnapshot };
   prompt: { params: { text: string; attachments: Attachment[] }; result: void };
   abort: { params: NoParams; result: void };
-  /** Without `workspaceId`: in the workspace of the open conversation. */
-  new_chat: { params: { workspaceId?: string }; result: void };
+  /**
+   * Without `workspaceId`: in the workspace of the open conversation. `temporary` starts a chat
+   * that is kept in memory only: never saved to history, and gone when the person leaves it.
+   */
+  new_chat: { params: { workspaceId?: string; temporary?: boolean }; result: void };
   /** `remember` applies to a request with an `app`: keep that app allowed for the conversation or always. */
   respond_approval: {
     params: { requestId: string; approved: boolean; remember?: ComputerAppRemember };
@@ -1708,6 +1713,10 @@ export interface DesktopBridge {
     takePendingFocus(): Promise<boolean>;
     /** The side panel shortcut was pressed while a browser page had the keyboard. */
     onTogglePanel(listener: () => void): () => void;
+    /** Cmd+W / Ctrl+W was pressed in the app window; the app decides whether it closes a tab. */
+    onCloseTab(listener: () => void): () => void;
+    /** Closes the app window (as Cmd+W / Ctrl+W did before the app handled it). */
+    closeWindow(): Promise<void>;
   };
   terminal: {
     list(): Promise<TerminalInfo[]>;
@@ -1729,6 +1738,12 @@ export interface DesktopBridge {
     reveal(root: string, path: string): Promise<void>;
     /** The file as an attachment for the message box. */
     attachment(root: string, path: string): Promise<Attachment>;
+    /** Creates an empty file or folder named `name` inside `dir`; resolves to its path. */
+    create(root: string, dir: string, name: string, kind: "file" | "folder"): Promise<string>;
+    /** Renames the file or folder at `path` within its folder; resolves to the new path. */
+    rename(root: string, path: string, name: string): Promise<string>;
+    /** Moves the file or folder to the system trash. */
+    remove(root: string, path: string): Promise<void>;
     /** Watches `root` for changes (replacing the previous watch); null stops watching. */
     watch(root: string | null): Promise<void>;
     onChanged(listener: (root: string) => void): () => void;
@@ -1792,6 +1807,8 @@ export const IPC = {
   shellFocusComposer: "shell:focus-composer",
   shellTakePendingFocus: "shell:take-pending-focus",
   shellTogglePanel: "shell:toggle-panel",
+  shellCloseTab: "shell:close-tab",
+  shellCloseWindow: "shell:close-window",
   terminalList: "terminal:list",
   terminalCreate: "terminal:create",
   terminalBacklog: "terminal:backlog",
@@ -1804,6 +1821,9 @@ export const IPC = {
   workspacePreview: "workspace:preview",
   workspaceReveal: "workspace:reveal",
   workspaceAttachment: "workspace:attachment",
+  workspaceCreate: "workspace:create",
+  workspaceRename: "workspace:rename",
+  workspaceRemove: "workspace:remove",
   workspaceWatch: "workspace:watch",
   workspaceChanged: "workspace:changed",
   browserState: "browser:state",

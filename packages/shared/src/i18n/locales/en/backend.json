@@ -148,6 +148,7 @@
     "waitForAnswer": "Wait for the answer to finish.",
     "tooShort": "This conversation is still short, so there is nothing to summarize yet.",
     "attachmentNoFile": "{{name}} has no file to copy.",
+    "attachmentExists": "The file {{path}} already exists in the other workspace, so this temporary chat cannot move there.",
     "skillTitle": "Skill: {{name}}",
     "untitled": "Untitled chat",
     "interrupted": "Interrupted before it finished.",
@@ -451,7 +452,9 @@
     "files": {
       "notFound": "This file or folder no longer exists.",
       "outsideWorkspace": "This file is not inside the workspace.",
-      "notAFile": "Only files can be attached, not folders."
+      "notAFile": "Only files can be attached, not folders.",
+      "invalidName": "This is not a valid file or folder name.",
+      "exists": "“{{name}}” already exists here."
     },
     "browser": {
       "tabNotFound": "This tab is already closed.",

@@ -71,7 +71,9 @@ import { PromptModal } from "@/components/modals/prompt-modal";
 import { SettingsModal } from "@/components/modals/settings-modal";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useExportSession } from "@/hooks/use-export-session";
+import { IS_MAC } from "@/hooks/use-panel-shortcut";
 import { useDeleteWorkspace } from "@/lib/extension-queries";
+import { confirmLeaveTemporary } from "@/lib/confirm-leave-temporary";
 import { i18n } from "@/lib/i18n";
 import {
   MIN_SEARCH_LENGTH,
@@ -226,6 +228,7 @@ export function ChatSidebar({
     return () => clearInterval(timer);
   }, []);
   const currentWorkspaceId = useChatStore((state) => state.workspace?.id);
+  const temporary = useChatStore((state) => state.temporary);
   const { newChat, openSession, renameSession, deleteSession, clearSessions, pinSession } =
     useAgentCommands(bridge);
   const exportSession = useExportSession(bridge);
@@ -233,6 +236,22 @@ export function ChatSidebar({
   const [collapsed, setCollapsed] = React.useState<ReadonlySet<string>>(new Set());
   const [expanded, setExpanded] = React.useState<ReadonlySet<string>>(new Set());
   const [searchOpen, setSearchOpen] = React.useState(false);
+  // Cmd+K / Ctrl+K opens the chat search, and closes it again.
+  React.useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      const modifier = IS_MAC ? event.metaKey : event.ctrlKey;
+      if (!modifier || event.altKey || event.shiftKey || event.key.toLowerCase() !== "k") return;
+      // Cmd+K clears the terminal; leave it there.
+      if (event.target instanceof Element && event.target.closest(".xterm")) return;
+      event.preventDefault();
+      if (searchOpen) setSearchOpen(false);
+      // Not over another dialog (settings, a confirmation).
+      else if (!document.querySelector('[role="dialog"], [role="alertdialog"]'))
+        setSearchOpen(true);
+    }
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [searchOpen]);
   const ready = status === "idle" || status === "running";
   const { t } = useTranslation(["chat", "common"]);
   const onError = (error: Error) => toast.error(error.message);
@@ -302,9 +321,11 @@ export function ChatSidebar({
     if (confirmed) deleteSession.mutate(session.path, { onError });
   }
 
-  function openFound(hit: SessionSearchHit) {
+  async function openFound(hit: SessionSearchHit): Promise<boolean> {
+    if (hit.path !== sessionPath && !(await confirmLeaveTemporary())) return false;
     navigate("chat");
     if (hit.path !== sessionPath) openSession.mutate(hit.path, { onError });
+    return true;
   }
 
   function exportAs(session: SessionSummary, format: ExportFormat) {
@@ -318,9 +339,11 @@ export function ChatSidebar({
           isActive={page === "chat" && session.path === sessionPath}
           disabled={!ready}
           title={session.title}
-          onClick={() => {
+          onClick={async () => {
+            if (session.path === sessionPath) return navigate("chat");
+            if (!(await confirmLeaveTemporary())) return;
             navigate("chat");
-            if (session.path !== sessionPath) openSession.mutate(session.path, { onError });
+            openSession.mutate(session.path, { onError });
           }}
         >
           <span className="min-w-0 flex-1 truncate">{session.title}</span>
@@ -392,11 +415,12 @@ export function ChatSidebar({
     // The open chat is not listed yet (no reply so far): mark its workspace instead.
     const holdsEmptyChat =
       page === "chat" &&
+      !temporary &&
       workspace.id === currentWorkspaceId &&
       !(sessions.data ?? []).some((session) => session.path === sessionPath);
     // An empty open chat here already is a new chat in this workspace.
     const canStart =
-      ready && (page !== "chat" || hasMessages || workspace.id !== currentWorkspaceId);
+      ready && (page !== "chat" || hasMessages || temporary || workspace.id !== currentWorkspaceId);
     const hasSessions =
       list.length > 0 || pinned.some((session) => session.workspaceId === workspace.id);
     return (
@@ -421,9 +445,10 @@ export function ChatSidebar({
               title={t("sidebar.workspace.newChat", { name: workspace.name })}
               aria-label={t("sidebar.workspace.newChat", { name: workspace.name })}
               disabled={!canStart}
-              onClick={() =>
-                newChat.mutate(workspace.id, { onError, onSuccess: () => navigate("chat") })
-              }
+              onClick={async () => {
+                if (await confirmLeaveTemporary())
+                  newChat.mutate(workspace.id, { onError, onSuccess: () => navigate("chat") });
+              }}
             >
               <SquarePenIcon />
             </SidebarMenuAction>
@@ -524,7 +549,7 @@ export function ChatSidebar({
               size="icon-sm"
               className="text-muted-foreground hover:text-foreground"
               aria-label={t("sidebar.search.label")}
-              title={t("sidebar.search.label")}
+              title={`${t("sidebar.search.label")} (${IS_MAC ? "⌘K" : "Ctrl+K"})`}
               onClick={() => setSearchOpen(true)}
             >
               <SearchIcon />
@@ -580,8 +605,7 @@ export function ChatSidebar({
         onOpenChange={setSearchOpen}
         ready={ready}
         onOpenHit={(hit) => {
-          openFound(hit);
-          setSearchOpen(false);
+          void openFound(hit).then((opened) => opened && setSearchOpen(false));
         }}
       />
       <SidebarFooter className="shrink-0">

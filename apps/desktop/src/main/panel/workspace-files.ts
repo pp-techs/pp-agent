@@ -1,6 +1,16 @@
 import { type FSWatcher, watch } from "node:fs";
-import { open, readdir, readFile, realpath, stat } from "node:fs/promises";
-import { basename, extname, join, relative, sep } from "node:path";
+import {
+  lstat,
+  mkdir,
+  open,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import { basename, dirname, extname, join, relative, sep } from "node:path";
 import type { Attachment, FilePreview, WorkspaceEntry } from "@workspace/shared";
 import { shell } from "electron";
 import { isInside, mimeTypeOf } from "../files.ts";
@@ -112,6 +122,105 @@ export async function entryAttachment(root: string, path: string): Promise<Attac
   const file = await resolveInside(root, path);
   if (!(await stat(file)).isFile()) throw new Error(translator()("panel.files.notAFile"));
   return { name: basename(file), mimeType: mimeTypeOf(file), path: file };
+}
+
+/** A new file or folder name: one path segment, trimmed, that no system refuses. */
+function checkName(name: unknown): string {
+  const t = translator();
+  if (typeof name !== "string") throw new Error(t("panel.files.invalidName"));
+  const trimmed = name.trim();
+  const forbidden = process.platform === "win32" ? /[\\/\0<>:"|?*]/ : /[/\0]/;
+  if (
+    !trimmed ||
+    trimmed === "." ||
+    trimmed === ".." ||
+    trimmed.length > 255 ||
+    forbidden.test(trimmed)
+  )
+    throw new Error(t("panel.files.invalidName"));
+  return trimmed;
+}
+
+function workspacePath(realRoot: string, absolute: string): string {
+  return relative(realRoot, absolute).split(sep).join("/");
+}
+
+function exists(path: string): Promise<boolean> {
+  return lstat(path).then(
+    () => true,
+    () => false,
+  );
+}
+
+/**
+ * The entry at `path` itself, not what a symbolic link points to (renaming or trashing a link must
+ * not touch its target). Only its folder is resolved, so the entry stays inside the workspace.
+ */
+async function resolveEntry(
+  root: string,
+  path: string,
+): Promise<{ parent: string; target: string }> {
+  const t = translator();
+  const parts = typeof path === "string" ? path.split("/").filter(Boolean) : [];
+  const name = parts.pop();
+  if (!name || name === "." || name === "..") throw new Error(t("panel.files.outsideWorkspace"));
+  const parent = await resolveInside(root, parts.join("/"));
+  const target = join(parent, name);
+  // A name that did not split on "/" (a backslash on Windows) must not lead out of the folder.
+  if (dirname(target) !== parent) throw new Error(t("panel.files.outsideWorkspace"));
+  if (!(await exists(target))) throw new Error(t("panel.files.notFound"));
+  return { parent, target };
+}
+
+/** Creates an empty file or folder in `dir`; returns its path relative to the workspace. */
+export async function createEntry(
+  root: string,
+  dir: string,
+  name: unknown,
+  kind: unknown,
+): Promise<string> {
+  const t = translator();
+  const entryName = checkName(name);
+  if (kind !== "file" && kind !== "folder") throw new Error(t("panel.files.invalidName"));
+  const parent = await resolveInside(root, dir);
+  if (!(await stat(parent)).isDirectory()) throw new Error(t("panel.files.notFound"));
+  const target = join(parent, entryName);
+  try {
+    // `wx` and a non-recursive `mkdir` fail instead of replacing what is there.
+    if (kind === "file") await writeFile(target, "", { flag: "wx" });
+    else await mkdir(target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST")
+      throw new Error(t("panel.files.exists", { name: entryName }));
+    throw error;
+  }
+  return workspacePath(await realpath(root), target);
+}
+
+/** Renames an entry within its folder; returns its new path relative to the workspace. */
+export async function renameEntry(root: string, path: string, name: unknown): Promise<string> {
+  const entryName = checkName(name);
+  const { parent, target } = await resolveEntry(root, path);
+  const renamed = join(parent, entryName);
+  if (renamed === target) return workspacePath(await realpath(root), target);
+  if (await exists(renamed)) {
+    // The same entry under another case (a case-insensitive disk) is a rename, anything else a
+    // clash. `bigint: true` avoids precision loss turning two distinct inodes into one number.
+    const [source, destination] = await Promise.all([
+      lstat(target, { bigint: true }),
+      lstat(renamed, { bigint: true }),
+    ]);
+    const sameEntry =
+      source.ino !== 0n && source.dev === destination.dev && source.ino === destination.ino;
+    if (!sameEntry) throw new Error(translator()("panel.files.exists", { name: entryName }));
+  }
+  await rename(target, renamed);
+  return workspacePath(await realpath(root), renamed);
+}
+
+/** Moves an entry to the system trash, so it can be restored from there. */
+export async function removeEntry(root: string, path: string): Promise<void> {
+  await shell.trashItem((await resolveEntry(root, path)).target);
 }
 
 /** Tells the panel when anything in the watched workspace changes, a moment after it settles. */

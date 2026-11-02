@@ -78,6 +78,8 @@ const bridge: DesktopBridge = {
     },
     takePendingFocus: () => invoke(IPC.shellTakePendingFocus),
     onTogglePanel: (listener) => subscribe(IPC.shellTogglePanel, listener),
+    onCloseTab: (listener) => subscribe(IPC.shellCloseTab, listener),
+    closeWindow: () => invoke(IPC.shellCloseWindow),
   },
   terminal: {
     list: () => invoke(IPC.terminalList),
@@ -94,6 +96,9 @@ const bridge: DesktopBridge = {
     preview: (root, path) => invoke(IPC.workspacePreview, root, path),
     reveal: (root, path) => invoke(IPC.workspaceReveal, root, path),
     attachment: (root, path) => invoke(IPC.workspaceAttachment, root, path),
+    create: (root, dir, name, kind) => invoke(IPC.workspaceCreate, root, dir, name, kind),
+    rename: (root, path, name) => invoke(IPC.workspaceRename, root, path, name),
+    remove: (root, path) => invoke(IPC.workspaceRemove, root, path),
     watch: (root) => invoke(IPC.workspaceWatch, root),
     onChanged: (listener) => subscribe<[string]>(IPC.workspaceChanged, listener),
   },

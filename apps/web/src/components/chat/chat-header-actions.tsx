@@ -16,6 +16,7 @@ import {
   FileTextIcon,
   FolderOpenIcon,
   GlobeIcon,
+  MessageSquareDashedIcon,
   PanelRightIcon,
   RabbitIcon,
 } from "lucide-react";
@@ -23,6 +24,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { ConfirmModal } from "@/components/modals/confirm-modal";
+import { confirmLeaveTemporary } from "@/lib/confirm-leave-temporary";
 import { useExportSession } from "@/hooks/use-export-session";
 import { useAgentCommands, usageQuery } from "@/lib/queries";
 import { IS_MAC } from "@/hooks/use-panel-shortcut";
@@ -353,10 +355,56 @@ function YoloButton({ bridge }: { bridge: DesktopBridge }) {
   );
 }
 
+/**
+ * Switch between a temporary chat and a saved one. A chat cannot change kind in place, so turning
+ * it on opens a new temporary chat (the current one stays in history) and turning it off leaves
+ * the temporary chat, which deletes it, for a new saved one.
+ */
+function TemporaryToggle({ bridge }: { bridge: DesktopBridge }) {
+  const temporary = useChatStore((state) => state.temporary);
+  const status = useChatStore((state) => state.status);
+  const { newChat, newTemporaryChat } = useAgentCommands(bridge);
+  const { t } = useTranslation("chat");
+  const label = temporary ? t("header.temporary.on") : t("header.temporary.off");
+
+  async function onClick() {
+    if (!temporary) {
+      newTemporaryChat.mutate(undefined, {
+        onError: (error: Error) => toast.error(error.message),
+      });
+      return;
+    }
+    if (!(await confirmLeaveTemporary())) return;
+    newChat.mutate(undefined, { onError: (error: Error) => toast.error(error.message) });
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant={temporary ? "secondary" : "ghost"}
+            size={temporary ? "sm" : "icon-sm"}
+            aria-label={label}
+            aria-pressed={temporary}
+            disabled={status === "starting" || newChat.isPending || newTemporaryChat.isPending}
+            onClick={() => void onClick()}
+          />
+        }
+      >
+        <MessageSquareDashedIcon />
+        {temporary && t("header.temporary.label")}
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 /** Right end of the chat's top bar: context window, export, the workspace folder, the panel. */
 export function ChatHeaderActions({ bridge }: { bridge: DesktopBridge }) {
   return (
     <div className="ml-auto flex items-center gap-0.5">
+      <TemporaryToggle bridge={bridge} />
       <YoloButton bridge={bridge} />
       <ContextButton bridge={bridge} />
       <ExportButton bridge={bridge} />

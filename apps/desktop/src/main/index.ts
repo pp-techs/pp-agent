@@ -329,6 +329,9 @@ ipcMain.handle(IPC.shellTakePendingFocus, () => {
   return wasPending;
 });
 
+// Cmd+W / Ctrl+W with no tab to close: close the window, as the default menu would have.
+ipcMain.handle(IPC.shellCloseWindow, () => window?.close());
+
 ipcMain.handle(IPC.computerStatus, () => computer.status());
 ipcMain.handle(IPC.computerRequestPermissions, () => computer.requestPermissions());
 

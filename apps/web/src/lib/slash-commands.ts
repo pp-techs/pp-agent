@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { skillsQuery, workspaceSkillsQuery } from "@/lib/extension-queries";
+import { confirmLeaveTemporary } from "@/lib/confirm-leave-temporary";
 import { agentsQuery, useAgentCommands } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
 import { goalStatusKey } from "@/lib/goal";
@@ -35,7 +36,7 @@ export function useSlashItems(bridge: DesktopBridge): {
   const skills = useQuery(skillsQuery(bridge));
   const workspaceSkills = useQuery(workspaceSkillsQuery(bridge, workspaceDir));
   const agents = useQuery(agentsQuery(bridge));
-  const { newChat, compact, setConversationYolo } = useAgentCommands(bridge);
+  const { newChat, newTemporaryChat, compact, setConversationYolo } = useAgentCommands(bridge);
   const yolo = useChatStore((state) => state.yolo);
   const goal = useChatStore((state) => state.goal);
   const { t } = useTranslation("chat");
@@ -48,7 +49,18 @@ export function useSlashItems(bridge: DesktopBridge): {
         name: "new",
         label: t("slash.commands.new.label"),
         description: t("slash.commands.new.description"),
-        run: () => newChat.mutate(undefined, { onError }),
+        run: () =>
+          void confirmLeaveTemporary().then((ok) => ok && newChat.mutate(undefined, { onError })),
+      },
+      {
+        kind: "command",
+        name: "temp",
+        label: t("slash.commands.temp.label"),
+        description: t("slash.commands.temp.description"),
+        run: () =>
+          void confirmLeaveTemporary().then(
+            (ok) => ok && newTemporaryChat.mutate(undefined, { onError }),
+          ),
       },
       {
         kind: "command",
@@ -113,7 +125,7 @@ export function useSlashItems(bridge: DesktopBridge): {
         },
       },
     ];
-  }, [newChat, compact, setConversationYolo, yolo, goal, running, t]);
+  }, [newChat, newTemporaryChat, compact, setConversationYolo, yolo, goal, running, t]);
 
   const available = React.useMemo<SlashItem[]>(() => {
     const allowed = agents.data?.find((agent) => agent.id === agentId)?.skills ?? null;

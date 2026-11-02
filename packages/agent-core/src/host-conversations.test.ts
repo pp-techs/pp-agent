@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent, AgentPaths, AgentSnapshot, StoredCredential } from "@workspace/shared";
@@ -256,4 +256,35 @@ test("clearing a workspace's sessions removes only its own, pinned or running", 
   expect((await snapshot()).activity.running).toEqual([]);
 
   await rm(extra, { recursive: true, force: true });
+});
+
+test("a temporary chat answers but is never saved, and ends when the person leaves it", async () => {
+  const saved = async () =>
+    (await readdir(join(dir, "sessions"), { recursive: true })).filter((file) =>
+      file.endsWith(".jsonl"),
+    );
+  await host.handle({ type: "new_chat", temporary: true });
+  const open = await snapshot();
+  expect(open.temporary).toBe(true);
+  expect(open.sessionPath).toBeNull();
+
+  model.release("hold-temp");
+  await host.handle({ type: "prompt", text: "hold-temp", attachments: [] });
+  await until(async () => texts(await snapshot()).includes("reply hold-temp"));
+  await until(async () => (await snapshot()).status === "idle");
+
+  // Not in history, not on disk, and not offered for branching.
+  expect(await host.handle({ type: "list_sessions" })).toEqual([]);
+  expect(await saved()).toEqual([]);
+  await expect(
+    host.handle({ type: "branch_session", entryId: (await snapshot()).messages[0]?.entryId ?? "" }),
+  ).rejects.toThrow();
+
+  // Leaving it drops it for good.
+  await host.handle({ type: "new_chat" });
+  const next = await snapshot();
+  expect(next.temporary).toBe(false);
+  expect(next.messages).toEqual([]);
+  expect(await host.handle({ type: "list_sessions" })).toEqual([]);
+  expect(await saved()).toEqual([]);
 });

@@ -3,7 +3,8 @@
  * the process around it; `HostEnvironment` supplies the event sink, the vault, and service control.
  */
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { constants, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFile, mkdir } from "node:fs/promises";
 import { rm } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
@@ -142,7 +143,12 @@ import type {
   TurnHooks,
   TurnResult,
 } from "./channels/types.ts";
-import { buildPrompt, splitAttachedFiles, withAttachedFiles } from "./attachments.ts";
+import {
+  buildPrompt,
+  type BuiltPrompt,
+  splitAttachedFiles,
+  withAttachedFiles,
+} from "./attachments.ts";
 import { createBrowserTool } from "./browser-tool.ts";
 import {
   COMPUTER_TOOL,
@@ -274,8 +280,8 @@ import { WebSearchService } from "./web/search.ts";
 /** Sent to the model when a message has attachments but no text. The model reads English. */
 const ATTACHMENTS_ONLY_PROMPT = "Please take a look at the attached files.";
 
-/** What a prompt sends to the model: text (with the attached-files block) and inline images. */
-type PromptMessage = Awaited<ReturnType<typeof buildPrompt>>;
+/** What `resend` and `startRun` need of a built message: `buildPrompt`'s `copied` is not theirs to track. */
+type PromptMessage = Pick<BuiltPrompt, "text" | "images">;
 
 /** Changes to apply to the open conversation once no run is active. */
 interface PendingChanges {
@@ -516,6 +522,8 @@ export class AgentHost {
   private open: Conversation | null = null;
   /** Conversations moved out of the window while they answer, by session file. */
   private readonly background = new Map<string, Conversation>();
+  /** Absolute paths of the attached files copied into the workspace for temporary conversations. */
+  private readonly attachedCopies = new WeakMap<Conversation, string[]>();
   /** Changes of recent background memory passes, by pass id, for `undo_memory_pass`. */
   private readonly memoryPasses = new Map<string, MemoryChange[]>();
   /** Memory and title passes still running (`memory:<file>`, `title:<file>`): one at a time each. */
@@ -797,7 +805,7 @@ export class AgentHost {
       case "set_goal":
         return this.setGoal(command);
       case "new_chat":
-        return this.openSession(null, command.workspaceId ?? null);
+        return this.openSession(null, command.workspaceId ?? null, command.temporary === true);
       case "respond_approval":
         return this.resolveApproval(command.requestId, command.approved, command.remember);
       case "respond_question":
@@ -1108,6 +1116,7 @@ export class AgentHost {
       workspace: this.services ? summarizeWorkspace(this.currentWorkspace()) : null,
       workspaceDir: this.session?.sessionManager.getCwd() ?? null,
       sessionPath: this.session?.sessionFile ?? null,
+      temporary: this.session ? !this.session.sessionManager.isPersisted() : false,
       context: this.contextUsage(),
       activity: this.activity(),
       yolo: this.yoloState(open),
@@ -1158,15 +1167,40 @@ export class AgentHost {
     const trimmed = text.trim();
     if (!trimmed && attachments.length === 0) return;
     if (!this.currentModel()) throw new Error(t("models.noneChosen"));
+    const promptedOn = this.open;
     // Copy files and encode images before acknowledging, so a bad attachment fails the send.
     const message = await buildPrompt(
       trimmed || ATTACHMENTS_ONLY_PROMPT,
       attachments,
       session.sessionManager.getCwd(),
     );
+    this.keepTemporaryCopies(promptedOn, session, message.copied);
     // Writing to the agent again picks up a goal that was waiting on the person.
     if (this.open?.goal) this.open.goal.stalled = false;
     this.startRun(session, message, onRunError);
+  }
+
+  /**
+   * Files copied into the workspace for a temporary conversation are removed when it ends; a saved
+   * conversation keeps its attachments, which its messages list. `promptedOn` is the conversation
+   * open when `buildPrompt` started: if the window has since moved to a different conversation (a
+   * `new_chat` or `open_session` landed while the copy was in flight), these copies belong to
+   * nobody still open, so they are removed instead of attached to whatever replaced it.
+   */
+  private keepTemporaryCopies(
+    promptedOn: Conversation | null,
+    session: AgentSession,
+    copied: string[],
+  ): void {
+    if (copied.length === 0 || session.sessionManager.isPersisted()) return;
+    if (promptedOn && promptedOn === this.open) {
+      this.attachedCopies.set(this.open, [
+        ...(this.attachedCopies.get(this.open) ?? []),
+        ...copied,
+      ]);
+    } else {
+      for (const file of copied) rmSync(file, { force: true });
+    }
   }
 
   /** Sends a message to the model without waiting for the run; progress arrives as events. */
@@ -1362,11 +1396,16 @@ export class AgentHost {
   }
 
   /**
-   * Switch to a saved conversation, or to a new one (in `workspaceId`, else the open workspace).
-   * An answer in progress carries on in the background, and comes back when its conversation is
-   * opened again.
+   * Switch to a saved conversation, or to a new one (in `workspaceId`, else the open workspace;
+   * `temporary` keeps it out of history). An answer in progress carries on in the background, and
+   * comes back when its conversation is opened again; a temporary conversation has no file to
+   * come back to, so leaving it ends it.
    */
-  private async openSession(path: string | null, workspaceId: string | null = null): Promise<void> {
+  private async openSession(
+    path: string | null,
+    workspaceId: string | null = null,
+    temporary = false,
+  ): Promise<void> {
     const resumed = path ? this.background.get(path) : undefined;
     if (resumed && resumed === this.open) return;
     await this.leaveOpen();
@@ -1378,7 +1417,7 @@ export class AgentHost {
       this.refreshStatus();
     } else {
       await this.startSession(
-        path ? this.savedSessionManager(path) : this.newSessionManager(workspaceId),
+        path ? this.savedSessionManager(path) : this.newSessionManager(workspaceId, temporary),
       );
       this.requireOpen().transcript.load(branchEntries(this.requireSession().sessionManager));
     }
@@ -1425,9 +1464,9 @@ export class AgentHost {
 
   /**
    * A new conversation in a workspace, with the workspace's agent (else the agent picked last).
-   * Kept in memory until the first reply.
+   * Kept in memory until the first reply; a temporary one is never written at all.
    */
-  private newSessionManager(workspaceId: string | null = null): SessionManager {
+  private newSessionManager(workspaceId: string | null = null, temporary = false): SessionManager {
     const { paths, settings } = this.requireServices();
     const { agents, workspaces, activeAgentId } = settings.get();
     const workspace = findWorkspace(workspaces, workspaceId ?? this.workspaceId);
@@ -1435,7 +1474,9 @@ export class AgentHost {
     const cwd = this.workspaceFor(workspace);
     // The folder may have fallen back to the default one, so name the workspace it belongs to.
     this.workspaceId = workspaceForCwd(workspaces, cwd, paths.workspaceDir).id;
-    const manager = SessionManager.create(cwd, paths.sessionDir);
+    const manager = temporary
+      ? SessionManager.inMemory(cwd)
+      : SessionManager.create(cwd, paths.sessionDir);
     manager.appendCustomEntry(AGENT_ENTRY_TYPE, { agentId: this.agentId });
     return manager;
   }
@@ -1829,7 +1870,9 @@ export class AgentHost {
       ? `/skill:${skill.name}${typed ? ` ${typed}` : ""}`
       : typed || ATTACHMENTS_ONLY_PROMPT;
     // Files and images are prepared before anything is dropped, so a bad attachment fails the edit.
+    const addedTo = this.open;
     const added = await buildPrompt(base, params.attachments, session.sessionManager.getCwd());
+    this.keepTemporaryCopies(addedTo, session, added.copied);
     const addedFiles = splitAttachedFiles(added.text).files.map((file) => file.path);
     await this.resend(session, params.entryId, {
       text: withAttachedFiles(base, [...keptFiles, ...addedFiles]),
@@ -2096,15 +2139,18 @@ export class AgentHost {
     this.watchMcp(conversation);
   }
 
-  /** Closes the open conversation. */
-  private disposeSession(): void {
+  /**
+   * Closes the open conversation. A conversation that continues elsewhere (`keepFiles`) keeps its
+   * attached files.
+   */
+  private disposeSession(keepFiles = false): void {
     const conversation = this.open;
     this.open = null;
-    if (conversation) this.release(conversation);
+    if (conversation) this.release(conversation, keepFiles);
   }
 
   /** Lets go of a conversation's session. */
-  private release(conversation: Conversation): void {
+  private release(conversation: Conversation, keepFiles = false): void {
     // Cancels a goal turn that was about to start.
     conversation.goal = null;
     clearTimeout(conversation.memoryTimer ?? undefined);
@@ -2112,6 +2158,42 @@ export class AgentHost {
     conversation.unsubscribe();
     conversation.mcpServers.detach();
     conversation.session.dispose();
+    // A temporary conversation leaves nothing behind, the files it was given included.
+    if (!keepFiles) {
+      for (const file of this.attachedCopies.get(conversation) ?? []) rmSync(file, { force: true });
+      this.attachedCopies.delete(conversation);
+    }
+  }
+
+  /**
+   * Copies attached files of a temporary conversation from `oldCwd` into `newCwd`, keeping each
+   * file's path relative to its workspace so the `<attached_files>` references in carried entries
+   * (not rewritten here) still resolve. Returns the new paths; the originals are the caller's to
+   * remove. A path already taken in `newCwd`, or a copy that fails, stops the move with nothing
+   * copied left behind: the transcript names those files, so none may be dropped silently. A file
+   * already gone from `oldCwd` is skipped, as nothing could have read it there either.
+   */
+  private async moveCopies(files: string[], oldCwd: string, newCwd: string): Promise<string[]> {
+    const targets = files.map((file) => ({ file, target: join(newCwd, relative(oldCwd, file)) }));
+    for (const { file, target } of targets) {
+      if (!existsSync(file)) continue;
+      if (existsSync(target))
+        throw new Error(t("conversations.attachmentExists", { path: target }));
+    }
+    const moved: string[] = [];
+    try {
+      for (const { file, target } of targets) {
+        if (!existsSync(file)) continue;
+        await mkdir(dirname(target), { recursive: true });
+        // Exclusive: never replaces a file that appeared since the check above.
+        await copyFile(file, target, constants.COPYFILE_EXCL);
+        moved.push(target);
+      }
+    } catch (error) {
+      for (const copy of moved) rmSync(copy, { force: true });
+      throw error;
+    }
+    return moved;
   }
 
   private onSessionEvent(conversation: Conversation, event: AgentSessionEvent): void {
@@ -2798,24 +2880,44 @@ export class AgentHost {
 
   /**
    * Reopens the conversation in its agent's workspace, keeping the transcript and model. A
-   * conversation that has not been saved yet (no reply so far) starts over in the new folder.
+   * conversation that has not been saved yet (no reply so far) starts over in the new folder; a
+   * temporary one carries its entries over, since it has no file to reopen.
    */
   private async moveToWorkspace(session: AgentSession): Promise<AgentSession> {
     const { paths } = this.requireServices();
     const cwd = this.workspaceFor(this.currentWorkspace());
     const file = session.sessionFile;
+    const temporary = !session.sessionManager.isPersisted();
+    const entries = temporary ? session.sessionManager.getEntries() : [];
+    const oldCwd = session.sessionManager.getCwd();
+    const oldCopies = this.open ? (this.attachedCopies.get(this.open) ?? []) : [];
     const model = session.model
       ? { provider: session.model.provider, modelId: session.model.id }
       : null;
-    this.disposeSession();
+    // Copied before anything is closed, so a clash or a failed copy leaves the conversation as is.
+    const sameFolder = oldCwd === cwd;
+    const carriedFiles =
+      temporary && !sameFolder ? await this.moveCopies(oldCopies, oldCwd, cwd) : oldCopies;
+    this.disposeSession(true);
+    // The originals are no longer tracked by anyone: a temporary chat leaves nothing in the old folder.
+    if (temporary && !sameFolder) for (const copy of oldCopies) rmSync(copy, { force: true });
     let manager: SessionManager;
-    if (file && existsSync(file)) {
+    if (temporary) {
+      manager = SessionManager.inMemory(cwd, undefined, entries);
+    } else if (file && existsSync(file)) {
       manager = SessionManager.open(file, paths.sessionDir, cwd);
     } else {
       manager = SessionManager.create(cwd, paths.sessionDir);
       manager.appendCustomEntry(AGENT_ENTRY_TYPE, { agentId: this.agentId });
     }
-    await this.startSession(manager, model);
+    try {
+      await this.startSession(manager, model);
+    } catch (error) {
+      // The conversation did not reopen: the copies made for it have no owner.
+      if (!sameFolder) for (const copy of carriedFiles) rmSync(copy, { force: true });
+      throw error;
+    }
+    if (this.open) this.attachedCopies.set(this.open, carriedFiles);
     const next = this.requireSession();
     this.requireOpen().transcript.load(branchEntries(next.sessionManager));
     return next;

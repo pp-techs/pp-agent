@@ -38,6 +38,7 @@ import { Markdown } from "@/components/markdown";
 import { MessageEditor } from "@/components/chat/message-editor";
 import { useChatThread } from "@/components/chat/chat-thread-context";
 import { ToolStep } from "@/components/chat/tool-step";
+import { useChatStore } from "@/stores/chat-store";
 
 type StepPart = Extract<ChatPart, { type: "thinking" | "tool" }>;
 type Block = { kind: "text"; text: string } | { kind: "steps"; parts: StepPart[] };
@@ -114,6 +115,7 @@ function MessageActions({
     state: { busy: disabled },
     actions: { regenerate, branchSession },
   } = useChatThread();
+  const temporary = useChatStore((state) => state.temporary);
   const [copied, setCopied] = React.useState(false);
   const { entryId } = message;
   const onError = (error: Error) => toast.error(error.message);
@@ -157,13 +159,15 @@ function MessageActions({
           <RefreshCwIcon />
         </ActionButton>
       )}
-      <ActionButton
-        label={t("message.actions.branch")}
-        disabled={disabled || !entryId || branchSession.isPending}
-        onClick={() => entryId && branchSession.mutate(entryId, { onError })}
-      >
-        <GitBranchIcon />
-      </ActionButton>
+      {!temporary && (
+        <ActionButton
+          label={t("message.actions.branch")}
+          disabled={disabled || !entryId || branchSession.isPending}
+          onClick={() => entryId && branchSession.mutate(entryId, { onError })}
+        >
+          <GitBranchIcon />
+        </ActionButton>
+      )}
     </MessageFooter>
   );
 }
