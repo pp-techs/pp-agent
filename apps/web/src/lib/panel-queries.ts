@@ -27,13 +27,13 @@ export const cookieSourcesQuery = (bridge: DesktopBridge) =>
     staleTime: 0,
   });
 
-/** Whether a source browser is running (Windows); checked again while it is, so quitting it by hand is noticed. */
+/** Whether a source browser is running (Windows); checked again while the dialog is open, so starting or quitting it meanwhile is noticed. */
 export const cookieSourceRunningQuery = (bridge: DesktopBridge, browser: CookieSourceBrowser) =>
   queryOptions({
     queryKey: queryKeys.cookieSourceRunning(browser),
     queryFn: () => bridge.browser.cookieSourceRunning(browser),
     staleTime: 0,
-    refetchInterval: (query) => (query.state.data ? 2000 : false),
+    refetchInterval: 2000,
   });
 
 export const workspaceFolderQuery = (bridge: DesktopBridge, root: string, dir: string) =>

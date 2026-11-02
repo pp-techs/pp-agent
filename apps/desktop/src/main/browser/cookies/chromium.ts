@@ -88,17 +88,14 @@ function installFolder(definition: ChromiumBrowser): string {
  * Process ids of the browser still running (Windows); null when that cannot be told. Closing every
  * window does not quit a browser that keeps running in the background (Chrome's "continue running
  * background apps", Edge's startup boost), and those processes keep the cookie database locked.
- * Chrome and Chromium share `chrome.exe`: a process counts for this browser unless it runs from
- * the install folder of another browser with the same program name. A process whose path cannot
- * be read, or that runs from elsewhere (a Chromium build), counts as running.
+ * A process counts for this browser when it runs from the browser's own install folder, so another
+ * build that shares the program name (Chrome Beta, a Chromium elsewhere) is never listed, and so
+ * never quit. A process whose path cannot be read counts as running.
  */
 async function runningProcessIds(definition: ChromiumBrowser): Promise<number[] | null> {
   if (process.platform !== "win32" || !definition.exe) return [];
   const name = basename(definition.exe, ".exe").toLowerCase();
-  const others = CHROMIUM_BROWSERS.filter(
-    (other) =>
-      other !== definition && other.exe && basename(other.exe, ".exe").toLowerCase() === name,
-  ).map(installFolder);
+  const folder = installFolder(definition);
   try {
     // Filtering instead of `Get-Process -Name`, which fails when nothing matches.
     const out = await run("powershell", [
@@ -116,7 +113,7 @@ async function runningProcessIds(definition: ChromiumBrowser): Promise<number[] 
         .trim()
         .toLowerCase();
       const id = Number(line.slice(0, split));
-      if (Number.isInteger(id) && !others.some((folder) => path.includes(folder))) ids.push(id);
+      if (Number.isInteger(id) && (path === "" || path.includes(folder))) ids.push(id);
     }
     return ids;
   } catch {

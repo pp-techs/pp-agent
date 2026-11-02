@@ -192,7 +192,10 @@ function ImportForm({ bridge, profile, onDone }: ImportCookiesModalProps & { onD
         <Button type="button" variant="outline" onClick={onDone}>
           {t("common:actions.cancel")}
         </Button>
-        <Button type="submit" disabled={!chosenProfile || importCookies.isPending}>
+        <Button
+          type="submit"
+          disabled={!chosenProfile || runningQuery.isPending || importCookies.isPending}
+        >
           {importCookies.isPending && <Spinner />}
           {running && source
             ? t("browserSection.import.submitQuit", {
