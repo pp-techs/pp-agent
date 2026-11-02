@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.21.1] — 2026-11-02
+
+Importing cookies on Windows no longer sends you to the system tray. When the browser you import from is running, also in the background, the import dialog says so and its button becomes **Quit Chrome and import**: it closes the browser, waits until its cookies are free, and imports. If you quit the browser yourself, the note disappears on its own.
+
 ## [0.21.0] — 2026-11-01
 
 Long-term memory is smarter and cheaper. The agent now reads a conversation for things worth remembering once it has been quiet for a few minutes or when you leave it, instead of after every reply, and it can correct or remove an outdated note instead of piling up contradictions. Each time it remembers something a "Remembered" notice appears with an **Undo** button. Notes can be pinned (Settings › Memory) so they are always in the agent's mind, and the notes a conversation starts with stay the same while it runs, which keeps replies fast. Searching notes now ignores accents ("tieng viet" finds "tiếng Việt"). A new **Fast model** setting (Settings › Models) chooses the model for conversation titles and memory; by default it is the cheapest model of the conversation's provider.
