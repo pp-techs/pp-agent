@@ -20,3 +20,16 @@ export function modelErrorText(raw: string | undefined): string {
   if (status >= 500) return t("conversations.modelUnavailable");
   return t("conversations.modelError");
 }
+
+/**
+ * What the provider said, with who said it, for the person to hand to whoever debugs the failure.
+ * `modelErrorText` hides this behind one sentence; this is the part that sentence leaves out.
+ */
+export function modelErrorDetail(message: {
+  provider: string;
+  model: string;
+  errorMessage?: string;
+}): string {
+  const raw = message.errorMessage?.trim() || "(no error text)";
+  return `${message.provider}/${message.model}: ${raw}`;
+}

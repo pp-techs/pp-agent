@@ -58,6 +58,16 @@
       "title": "Cập nhật",
       "check": "Kiểm tra cập nhật"
     },
+    "diagnostics": {
+      "legend": "Chẩn đoán",
+      "description": "PP Agent lưu nhật ký lỗi trên máy, gồm cả nội dung nhà cung cấp mô hình trả về khi lỗi. Hãy gửi tệp đã xuất cho người hỗ trợ bạn. Nhật ký không chứa nội dung cuộc trò chuyện; khóa và token được ẩn đi.",
+      "size": "Dung lượng nhật ký: {{size}}",
+      "export": "Xuất thông tin chẩn đoán",
+      "exported": "Đã lưu thông tin chẩn đoán.",
+      "reveal": "Mở thư mục nhật ký",
+      "clear": "Xóa nhật ký",
+      "cleared": "Đã xóa nhật ký."
+    },
     "desktop": {
       "legend": "Máy tính",
       "description": "Cách PP Agent hoạt động cạnh các ứng dụng khác của bạn.",

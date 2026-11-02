@@ -1,0 +1,245 @@
+import {
+  appendFileSync,
+  closeSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  renameSync,
+  rmSync,
+  statSync,
+} from "node:fs";
+import { join } from "node:path";
+import type { AgentEvent } from "@workspace/shared";
+
+/** The log is rotated once it passes this, so the current file and its predecessor stay under 2×. */
+const MAX_LOG_BYTES = 1024 * 1024;
+/** Longest text kept in one field; a provider's error page or a stack trace is cut here. */
+const MAX_FIELD_CHARS = 4_000;
+/** How deep a field's objects are followed before they are cut off. */
+const MAX_DEPTH = 4;
+/** Model errors already logged, so an event sent again does not log twice. */
+const MAX_SEEN_ERRORS = 500;
+
+const REDACTED = "[redacted]";
+
+/**
+ * Hides what must not leave the machine in a log the person sends away: keys, tokens, sign-in
+ * cookies, inline files, and the account name inside file paths.
+ */
+export function redact(text: string, home?: string): string {
+  let result = text;
+  if (home && home.length > 1) result = result.split(home).join("~");
+  return result
+    .replace(/data:[\w/+.-]+;base64,[A-Za-z0-9+/=]{64,}/g, "data:[base64 omitted]")
+    .replace(/\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]+/g, REDACTED)
+    .replace(/\b(Bearer|Basic)\s+[\w.~+/=-]{8,}/gi, `$1 ${REDACTED}`)
+    .replace(/\b(?:sk|pk|rk)-[\w-]{16,}/g, REDACTED)
+    .replace(
+      /("?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password|passwd|authorization|cookie|set-cookie)"?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;&}]+)/gi,
+      `$1${REDACTED}`,
+    )
+    .replace(
+      /([?&](?:key|api_?key|token|access_token|auth|code|signature|sig)=)[^&\s"']+/gi,
+      `$1${REDACTED}`,
+    );
+}
+
+function sanitize(value: unknown, home: string | undefined, depth = 0): unknown {
+  if (typeof value === "string") {
+    const clipped =
+      value.length > MAX_FIELD_CHARS ? `${value.slice(0, MAX_FIELD_CHARS)}… [cut]` : value;
+    return redact(clipped, home);
+  }
+  if (typeof value !== "object" || value === null) return value;
+  if (depth >= MAX_DEPTH) return "[cut]";
+  if (Array.isArray(value)) return value.map((item) => sanitize(item, home, depth + 1));
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, sanitize(item, home, depth + 1)]),
+  );
+}
+
+/** What the audit log keeps of an event the agent sent; null for the ones that are not worth a line. */
+export function auditEntryFor(
+  event: AgentEvent,
+): { kind: string; data: Record<string, unknown> } | null {
+  switch (event.type) {
+    case "status":
+      return { kind: "status", data: { status: event.status } };
+    case "message":
+      // The text of messages is the conversation; only a failed turn is kept, as the model said it.
+      return event.message.errorDetail
+        ? {
+            kind: "model_error",
+            data: {
+              messageId: event.message.id,
+              shown: event.message.error,
+              detail: event.message.errorDetail,
+            },
+          }
+        : null;
+    case "approval_requested":
+      return {
+        kind: "approval_requested",
+        data: {
+          requestId: event.request.requestId,
+          tool: event.request.toolName,
+          tier: event.request.tier,
+        },
+      };
+    case "approval_resolved":
+      return { kind: "approval_resolved", data: { requestId: event.requestId } };
+    case "settings_changed":
+      return { kind: "settings_changed", data: { scopes: event.scopes } };
+    case "error":
+      return { kind: "agent_error", data: { message: event.message } };
+    default:
+      return null;
+  }
+}
+
+export interface AuditLogOptions {
+  /** Folder for the log files; created when missing. */
+  dir: string;
+  /** The person's home folder, written as `~` in the log. */
+  home?: string;
+  maxBytes?: number;
+}
+
+/**
+ * A local record, one JSON object per line, of what went wrong or changed while the app ran: for
+ * the person to hand to whoever debugs it. Writing never throws; a log that cannot be written
+ * must not break the app.
+ */
+export class AuditLog {
+  readonly file: string;
+  private readonly previous: string;
+  private readonly home: string | undefined;
+  private readonly maxBytes: number;
+  private size = 0;
+  private readonly seenErrors = new Set<string>();
+
+  constructor(options: AuditLogOptions) {
+    this.file = join(options.dir, "audit.log");
+    this.previous = join(options.dir, "audit.1.log");
+    this.home = options.home;
+    this.maxBytes = options.maxBytes ?? MAX_LOG_BYTES;
+    try {
+      mkdirSync(options.dir, { recursive: true });
+      this.size = statSync(this.file).size;
+    } catch {
+      // No file yet.
+    }
+  }
+
+  record(kind: string, data: Record<string, unknown> = {}): void {
+    try {
+      const line = `${JSON.stringify({
+        time: new Date().toISOString(),
+        kind,
+        ...(sanitize(data, this.home) as Record<string, unknown>),
+      })}\n`;
+      const bytes = Buffer.byteLength(line);
+      if (this.size > 0 && this.size + bytes > this.maxBytes) {
+        renameSync(this.file, this.previous);
+        this.size = 0;
+      }
+      appendFileSync(this.file, line);
+      this.size += bytes;
+    } catch (error) {
+      console.error("Could not write the audit log:", error);
+    }
+  }
+
+  /** Logs what an event from the agent means for the audit log, if anything. */
+  event(event: AgentEvent, context: Record<string, unknown> = {}): void {
+    const entry = auditEntryFor(event);
+    if (!entry) return;
+    if (event.type === "message") {
+      const key = `${event.message.id}\n${event.message.errorDetail}`;
+      if (this.seenErrors.has(key)) return;
+      if (this.seenErrors.size >= MAX_SEEN_ERRORS) this.seenErrors.clear();
+      this.seenErrors.add(key);
+    }
+    this.record(entry.kind, { ...entry.data, ...context });
+  }
+
+  /** The older file first, then the current one. */
+  read(): string {
+    return [this.previous, this.file]
+      .map((path) => {
+        try {
+          return readFileSync(path, "utf8");
+        } catch {
+          return "";
+        }
+      })
+      .join("");
+  }
+
+  /** Bytes the log files take. */
+  bytes(): number {
+    return [this.previous, this.file].reduce((sum, path) => {
+      try {
+        return sum + statSync(path).size;
+      } catch {
+        return sum;
+      }
+    }, 0);
+  }
+
+  clear(): void {
+    rmSync(this.previous, { force: true });
+    rmSync(this.file, { force: true });
+    this.size = 0;
+    this.seenErrors.clear();
+  }
+}
+
+/** The last `bytes` of a text file, cut at a line start; "" when it cannot be read. */
+export function readTail(path: string, bytes: number): string {
+  let fd: number | null = null;
+  try {
+    fd = openSync(path, "r");
+    const { size } = statSync(path);
+    const length = Math.min(size, bytes);
+    const buffer = Buffer.alloc(length);
+    readSync(fd, buffer, 0, length, size - length);
+    const text = buffer.toString("utf8");
+    if (length === size) return text;
+    const firstLine = text.indexOf("\n");
+    return firstLine === -1 ? text : text.slice(firstLine + 1);
+  } catch {
+    return "";
+  } finally {
+    if (fd !== null) closeSync(fd);
+  }
+}
+
+export interface ReportInput {
+  /** Facts about the app and the system, one line each. */
+  facts: Record<string, string>;
+  /** The daemon's own log, whose tail is included. */
+  daemonLog: string;
+  daemonLogBytes: number;
+  home?: string;
+}
+
+/** The text a person sends to whoever debugs a problem: system facts, the audit log, the daemon's log tail. */
+export function buildReport(audit: AuditLog, input: ReportInput): string {
+  const facts = Object.entries(input.facts)
+    .map(([name, value]) => `${name}: ${redact(value, input.home)}`)
+    .join("\n");
+  const daemon = redact(readTail(input.daemonLog, input.daemonLogBytes), input.home);
+  return [
+    "PP Agent diagnostics",
+    facts,
+    "",
+    "=== Audit log (one JSON object per line) ===",
+    audit.read().trim() || "(empty)",
+    "",
+    `=== Background service log (last ${Math.round(input.daemonLogBytes / 1024)} KB) ===`,
+    daemon.trim() || "(empty)",
+    "",
+  ].join("\n");
+}

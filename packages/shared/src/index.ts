@@ -42,6 +42,11 @@ export interface ChatMessage {
   parts: ChatPart[];
   error?: string;
   /**
+   * What the model's provider actually said (with its name and the model), when the turn failed.
+   * `error` is the one readable sentence; this is for the person to copy to whoever debugs it.
+   */
+  errorDetail?: string;
+  /**
    * Id of the message's entry in the saved conversation, which message actions (edit, regenerate,
    * branch) refer to. Absent while the message is still streaming.
    */
@@ -1785,6 +1790,35 @@ export interface DesktopBridge {
     /** Asks macOS for the grants PP Agent lacks, or opens their System Settings pane. */
     requestPermissions(): Promise<ComputerStatus>;
   };
+  /**
+   * The audit log: a local record of what went wrong and what the app did (errors, model
+   * failures, approvals, connection drops), kept to hand to whoever debugs a problem. It never
+   * holds what was said in a conversation.
+   */
+  diagnostics: {
+    info(): Promise<DiagnosticsInfo>;
+    /** Asks where to save the audit log with the daemon's log and system details; false when cancelled. */
+    export(): Promise<boolean>;
+    /** Shows the folder with the log files in Finder / Explorer. */
+    reveal(): Promise<void>;
+    clear(): Promise<void>;
+    /** Records an error of the page itself (an uncaught exception). Never rejects. */
+    report(report: RendererReport): void;
+  };
+}
+
+export interface DiagnosticsInfo {
+  /** The audit log file. */
+  file: string;
+  /** Bytes the audit log takes, rotated file included. */
+  size: number;
+}
+
+/** An error the page raised that nobody handled. */
+export interface RendererReport {
+  kind: "error" | "unhandledrejection";
+  message: string;
+  stack?: string;
 }
 
 export const IPC = {
@@ -1840,6 +1874,11 @@ export const IPC = {
   browserReveal: "browser:reveal",
   computerStatus: "computer:status",
   computerRequestPermissions: "computer:request-permissions",
+  diagnosticsInfo: "diagnostics:info",
+  diagnosticsExport: "diagnostics:export",
+  diagnosticsReveal: "diagnostics:reveal",
+  diagnosticsClear: "diagnostics:clear",
+  diagnosticsReport: "diagnostics:report",
 } as const;
 
 // ---------------------------------------------------------------------------------------------

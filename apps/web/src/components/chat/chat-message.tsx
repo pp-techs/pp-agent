@@ -99,6 +99,43 @@ function ActionButton({
   );
 }
 
+/** Why a turn failed, in one sentence, with a button that copies what the provider said. */
+function ErrorNotice({ message }: { message: ChatMessage }) {
+  const { t } = useTranslation("chat");
+  const [copied, setCopied] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!copied) return;
+    const timeout = setTimeout(() => setCopied(false), COPIED_MS);
+    return () => clearTimeout(timeout);
+  }, [copied]);
+
+  const { error, errorDetail } = message;
+  function copy() {
+    if (!errorDetail) return;
+    navigator.clipboard.writeText(`${error}\n${errorDetail}`).then(
+      () => setCopied(true),
+      (failure: unknown) =>
+        toast.error(failure instanceof Error ? failure.message : String(failure)),
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 text-sm text-destructive">
+      <CircleAlertIcon className="size-4 shrink-0" />
+      <span>{error}</span>
+      {errorDetail && (
+        <ActionButton
+          label={copied ? t("message.actions.copied") : t("message.actions.copyError")}
+          onClick={copy}
+        >
+          {copied ? <CheckIcon /> : <CopyIcon />}
+        </ActionButton>
+      )}
+    </div>
+  );
+}
+
 /** Copy, regenerate, edit, and branch under a message. Hidden until hovered or focused. */
 function MessageActions({
   message,
@@ -351,12 +388,7 @@ export function ChatMessageView({
             </Trace>
           ),
         )}
-        {message.error && (
-          <div className="flex items-center gap-2 text-sm text-destructive">
-            <CircleAlertIcon className="size-4 shrink-0" />
-            <span>{message.error}</span>
-          </div>
-        )}
+        {message.error && <ErrorNotice message={message} />}
         {!streaming && (last || blocks.some((block) => block.kind === "text")) && (
           <MessageActions message={message} canRegenerate={last} />
         )}

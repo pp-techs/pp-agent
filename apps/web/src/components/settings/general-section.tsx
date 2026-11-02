@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import { useTheme } from "@/components/theme-provider";
 import { SectionHeading } from "@/components/settings/section-heading";
 import { DesktopGroup } from "@/components/settings/desktop-group";
+import { DiagnosticsGroup } from "@/components/settings/diagnostics-group";
 import { groupByProvider, modelKey, modelLabeler } from "@/lib/models";
 import { modelsQuery, settingsQuery, useUpdateSettings } from "@/lib/queries";
 import { describeUpdate, updateAction } from "@/components/update-actions";
@@ -250,6 +251,7 @@ export function GeneralSection({ bridge }: { bridge: DesktopBridge }) {
         <DefaultModelField bridge={bridge} />
         <DesktopGroup bridge={bridge} />
         <UpdatesField bridge={bridge} />
+        <DiagnosticsGroup bridge={bridge} />
       </FieldGroup>
     </div>
   );

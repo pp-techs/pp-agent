@@ -234,7 +234,9 @@
     "exportButton": "Export",
     "exportConversationTitle": "Export conversation",
     "markdownFiles": "Markdown document",
-    "htmlFiles": "Web page (printable)"
+    "htmlFiles": "Web page (printable)",
+    "exportDiagnosticsTitle": "Export diagnostics",
+    "logFiles": "Log file"
   },
   "updates": {
     "checkFailed": "Could not check for updates. Check your internet connection and try again.",

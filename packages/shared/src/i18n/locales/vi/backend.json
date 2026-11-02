@@ -234,7 +234,9 @@
     "exportButton": "Xuất",
     "exportConversationTitle": "Xuất cuộc trò chuyện",
     "markdownFiles": "Tài liệu Markdown",
-    "htmlFiles": "Trang web (để in)"
+    "htmlFiles": "Trang web (để in)",
+    "exportDiagnosticsTitle": "Xuất thông tin chẩn đoán",
+    "logFiles": "Tệp nhật ký"
   },
   "updates": {
     "checkFailed": "Không thể kiểm tra cập nhật. Hãy kiểm tra kết nối internet và thử lại.",

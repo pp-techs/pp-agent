@@ -179,6 +179,27 @@ export async function saveExportFile(
   return true;
 }
 
+/** Asks where to save the diagnostics report and writes it; false when cancelled. */
+export async function saveDiagnosticsFile(
+  window: BrowserWindow | null,
+  suggestedName: string,
+  content: string,
+): Promise<boolean> {
+  const t = translator();
+  const options: Electron.SaveDialogOptions = {
+    title: t("files.exportDiagnosticsTitle"),
+    buttonLabel: t("files.exportButton"),
+    defaultPath: suggestedName,
+    filters: [{ name: t("files.logFiles"), extensions: ["log", "txt"] }],
+  };
+  const result = window
+    ? await dialog.showSaveDialog(window, options)
+    : await dialog.showSaveDialog(options);
+  if (result.canceled || !result.filePath) return false;
+  await writeFile(result.filePath, content, "utf8");
+  return true;
+}
+
 /** Opens an existing folder in Finder / Explorer. */
 export async function openFolder(dir: string): Promise<void> {
   const info = await stat(dir).catch(() => null);

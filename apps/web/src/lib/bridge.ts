@@ -8,3 +8,22 @@ declare global {
 }
 
 export const bridge = window.ppAgent ?? null;
+
+/** Hands errors nobody handled to the audit log, so a bug report can show them. */
+if (bridge) {
+  window.addEventListener("error", (event) => {
+    bridge.diagnostics.report({
+      kind: "error",
+      message: event.message,
+      stack: event.error instanceof Error ? event.error.stack : undefined,
+    });
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    const reason: unknown = event.reason;
+    bridge.diagnostics.report({
+      kind: "unhandledrejection",
+      message: reason instanceof Error ? reason.message : String(reason),
+      stack: reason instanceof Error ? reason.stack : undefined,
+    });
+  });
+}

@@ -60,6 +60,7 @@
     "attachedImage": "Attached image",
     "compacted": "Earlier messages summarized",
     "actions": {
+      "copyError": "Copy error details",
       "copy": "Copy message",
       "copied": "Copied",
       "regenerate": "Regenerate answer",

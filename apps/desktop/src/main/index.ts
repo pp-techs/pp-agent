@@ -1,12 +1,16 @@
+import { homedir, release } from "node:os";
 import { isAbsolute, join } from "node:path";
+import { resolveDaemonPaths } from "@workspace/daemon/paths";
 import {
   type AgentCommand,
   type AgentEvent,
   type AgentSnapshot,
   EXPORT_FORMATS,
   IPC,
+  type RendererReport,
 } from "@workspace/shared";
 import { app, BrowserWindow, ipcMain, session, shell } from "electron";
+import { AuditLog, buildReport } from "./audit-log.ts";
 import { DaemonClient } from "./daemon-client.ts";
 import {
   isInside,
@@ -16,6 +20,7 @@ import {
   pickFolder,
   pickSkill,
   saveAgentFile,
+  saveDiagnosticsFile,
   saveExportFile,
 } from "./files.ts";
 import { initI18n, translator } from "./i18n.ts";
@@ -47,6 +52,30 @@ const WORKSPACE_DIR = join(app.getPath("documents"), "PP Agent");
 const USER_DATA_DIR = app.getPath("userData");
 const SETTINGS_FILE = join(USER_DATA_DIR, "settings.json");
 initI18n(SETTINGS_FILE);
+
+/** What the person sends to whoever debugs a problem; see "Diagnostics" in Settings › General. */
+const audit = new AuditLog({ dir: join(USER_DATA_DIR, "logs"), home: homedir() });
+/** The background service's own log, whose tail goes into the diagnostics report. */
+const DAEMON_LOG_FILE = resolveDaemonPaths({
+  ...process.env,
+  PP_AGENT_HOME: USER_DATA_DIR,
+}).logFile;
+const DAEMON_LOG_REPORT_BYTES = 256 * 1024;
+audit.record("app_start", {
+  version: app.getVersion(),
+  packaged: app.isPackaged,
+  platform: process.platform,
+  arch: process.arch,
+  os: release(),
+  electron: process.versions.electron,
+  chrome: process.versions.chrome,
+  node: process.versions.node,
+  locale: app.getLocale(),
+});
+// Only watches: the app keeps handling these as it did, the log just notes them.
+process.on("uncaughtExceptionMonitor", (error, origin) => {
+  audit.record("main_exception", { origin, error: error.stack ?? error.message });
+});
 
 const updater = createUpdater((state) => window?.webContents.send(IPC.updatesEvent, state));
 
@@ -161,6 +190,7 @@ const daemon = new DaemonClient({
   resourcesDir: RESOURCES_DIR,
   appVersion: app.getVersion(),
   onEvent(event) {
+    audit.event(event, { session: notifier.currentSession() });
     sendToRenderer(event);
     notifier.handle(event);
     if (event.type === "settings_changed" && event.scopes.includes("settings"))
@@ -182,14 +212,17 @@ const daemon = new DaemonClient({
     return computer.run(request, signal);
   },
   onLost() {
+    audit.record("daemon_lost");
     sendToRenderer({ type: "error", message: translator()("app.stoppedUnexpectedly") });
     sendToRenderer({ type: "status", status: "starting" });
   },
   onStartFailed(error) {
+    audit.record("daemon_start_failed", { error: error.message });
     sendToRenderer({ type: "error", message: error.message });
     sendToRenderer({ type: "status", status: "starting" });
   },
   onConnected() {
+    audit.record("daemon_connected");
     void syncWithDaemon();
   },
 });
@@ -222,7 +255,15 @@ async function startDaemon(): Promise<void> {
 }
 
 function commandAgent(command: AgentCommand): Promise<unknown> {
-  return daemon.command(command);
+  return daemon.command(command).catch((error: unknown) => {
+    // The command's own fields are left out: they carry what the person typed.
+    audit.record("command_failed", {
+      command: command.type,
+      error: error instanceof Error ? error.message : String(error),
+      session: notifier.currentSession(),
+    });
+    throw error;
+  });
 }
 
 const sidePanel = createSidePanel({
@@ -250,6 +291,10 @@ function createWindow(): void {
     },
   });
   window.once("ready-to-show", () => window?.show());
+  window.webContents.on("render-process-gone", (_event, details) => {
+    audit.record("render_process_gone", { reason: details.reason, exitCode: details.exitCode });
+  });
+  window.on("unresponsive", () => audit.record("window_unresponsive"));
   // With the tray icon on, closing the window keeps the app running in the tray.
   window.on("close", (event) => {
     if (quitting || !trayActive()) return;
@@ -334,6 +379,36 @@ ipcMain.handle(IPC.shellCloseWindow, () => window?.close());
 
 ipcMain.handle(IPC.computerStatus, () => computer.status());
 ipcMain.handle(IPC.computerRequestPermissions, () => computer.requestPermissions());
+
+ipcMain.handle(IPC.diagnosticsInfo, () => ({ file: audit.file, size: audit.bytes() }));
+ipcMain.handle(IPC.diagnosticsExport, () => {
+  const report = buildReport(audit, {
+    facts: {
+      Generated: new Date().toISOString(),
+      "PP Agent": `${app.getVersion()}${app.isPackaged ? "" : " (development)"}`,
+      System: `${process.platform} ${process.arch} (${release()})`,
+      Electron: `${process.versions.electron} (Chrome ${process.versions.chrome}, Node ${process.versions.node})`,
+      Language: app.getLocale(),
+    },
+    daemonLog: DAEMON_LOG_FILE,
+    daemonLogBytes: DAEMON_LOG_REPORT_BYTES,
+    home: homedir(),
+  });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  return saveDiagnosticsFile(window, `pp-agent-diagnostics-${stamp}.log`, report);
+});
+ipcMain.handle(IPC.diagnosticsReveal, () => shell.showItemInFolder(audit.file));
+ipcMain.handle(IPC.diagnosticsClear, () => audit.clear());
+// Fire and forget from the page: whatever arrives is checked, since the page is not trusted with the log.
+ipcMain.on(IPC.diagnosticsReport, (_event, report: unknown) => {
+  const { kind, message, stack } = (report ?? {}) as Partial<RendererReport>;
+  if ((kind !== "error" && kind !== "unhandledrejection") || typeof message !== "string") return;
+  audit.record("renderer_error", {
+    kind,
+    message,
+    ...(typeof stack === "string" ? { stack } : {}),
+  });
+});
 
 ipcMain.handle(IPC.updatesState, () => updater.state());
 ipcMain.handle(IPC.updatesCheck, () => updater.check(true));

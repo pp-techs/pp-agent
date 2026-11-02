@@ -121,6 +121,13 @@ const bridge: DesktopBridge = {
     status: () => invoke(IPC.computerStatus),
     requestPermissions: () => invoke(IPC.computerRequestPermissions),
   },
+  diagnostics: {
+    info: () => invoke(IPC.diagnosticsInfo),
+    export: () => invoke(IPC.diagnosticsExport),
+    reveal: () => invoke(IPC.diagnosticsReveal),
+    clear: () => invoke(IPC.diagnosticsClear),
+    report: (report) => ipcRenderer.send(IPC.diagnosticsReport, report),
+  },
 };
 
 contextBridge.exposeInMainWorld("ppAgent", bridge);
