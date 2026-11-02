@@ -204,10 +204,14 @@ export async function renameEntry(root: string, path: string, name: unknown): Pr
   const renamed = join(parent, entryName);
   if (renamed === target) return workspacePath(await realpath(root), target);
   if (await exists(renamed)) {
-    // The same entry under another case (a case-insensitive disk) is a rename, anything else a clash.
-    const [source, destination] = await Promise.all([lstat(target), lstat(renamed)]);
+    // The same entry under another case (a case-insensitive disk) is a rename, anything else a
+    // clash. `bigint: true` avoids precision loss turning two distinct inodes into one number.
+    const [source, destination] = await Promise.all([
+      lstat(target, { bigint: true }),
+      lstat(renamed, { bigint: true }),
+    ]);
     const sameEntry =
-      source.ino !== 0 && source.dev === destination.dev && source.ino === destination.ino;
+      source.ino !== 0n && source.dev === destination.dev && source.ino === destination.ino;
     if (!sameEntry) throw new Error(translator()("panel.files.exists", { name: entryName }));
   }
   await rename(target, renamed);

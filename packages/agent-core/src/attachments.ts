@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { resizeImage } from "@earendil-works/pi-coding-agent";
 import { ATTACHMENTS_DIR, type Attachment } from "@workspace/shared";
@@ -55,28 +55,36 @@ export async function buildPrompt(
   const copied: string[] = [];
   const stamp = timestamp(new Date());
 
-  for (const attachment of attachments) {
-    if (MODEL_IMAGE_TYPES[attachment.mimeType]) {
-      const bytes = attachment.path
-        ? await readFile(attachment.path)
-        : Buffer.from(attachment.data ?? "", "base64");
-      // Downscale large photos so they fit provider limits and do not flood the context window.
-      const resized = await resizeImage(bytes, attachment.mimeType);
-      images.push({
-        type: "image",
-        data: resized?.data ?? bytes.toString("base64"),
-        mimeType: resized?.mimeType ?? attachment.mimeType,
-      });
-      continue;
+  try {
+    for (const attachment of attachments) {
+      if (MODEL_IMAGE_TYPES[attachment.mimeType]) {
+        const bytes = attachment.path
+          ? await readFile(attachment.path)
+          : Buffer.from(attachment.data ?? "", "base64");
+        // Downscale large photos so they fit provider limits and do not flood the context window.
+        const resized = await resizeImage(bytes, attachment.mimeType);
+        images.push({
+          type: "image",
+          data: resized?.data ?? bytes.toString("base64"),
+          mimeType: resized?.mimeType ?? attachment.mimeType,
+        });
+        continue;
+      }
+      if (!attachment.path)
+        throw new Error(t("conversations.attachmentNoFile", { name: attachment.name }));
+      const relative = `${ATTACHMENTS_DIR}/${stamp}-${basename(attachment.name)}`;
+      await mkdir(join(workspaceDir, ATTACHMENTS_DIR), { recursive: true });
+      const target = join(workspaceDir, relative);
+      // Tracked before the copy settles: a failure partway through still leaves a target to clean up.
+      copied.push(target);
+      await copyFile(attachment.path, target);
+      files.push(relative);
     }
-    if (!attachment.path)
-      throw new Error(t("conversations.attachmentNoFile", { name: attachment.name }));
-    const relative = `${ATTACHMENTS_DIR}/${stamp}-${basename(attachment.name)}`;
-    await mkdir(join(workspaceDir, ATTACHMENTS_DIR), { recursive: true });
-    const target = join(workspaceDir, relative);
-    await copyFile(attachment.path, target);
-    files.push(relative);
-    copied.push(target);
+  } catch (error) {
+    // Nothing of a failed attempt stays in the workspace, including a target `copyFile` left
+    // behind when it failed partway through.
+    await Promise.all(copied.map((file) => rm(file, { force: true })));
+    throw error;
   }
 
   return { text: withAttachedFiles(text, files), images, copied };

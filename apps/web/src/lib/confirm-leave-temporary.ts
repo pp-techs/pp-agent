@@ -7,8 +7,8 @@ import { useChatStore } from "@/stores/chat-store";
  * open chat is not temporary, or has no messages) or when the person agrees to lose it.
  */
 export async function confirmLeaveTemporary(): Promise<boolean> {
-  const { temporary, messages } = useChatStore.getState();
-  if (!temporary || messages.length === 0) return true;
+  const { temporary, messages, pending } = useChatStore.getState();
+  if (!temporary || (messages.length === 0 && !pending)) return true;
   return ConfirmModal.show({
     title: i18n.t("chat:header.temporary.confirm.title"),
     description: i18n.t("chat:header.temporary.confirm.description"),
