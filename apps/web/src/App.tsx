@@ -30,7 +30,7 @@ import { SidePanel } from "@/components/panel/side-panel";
 import { SettingsModal } from "@/components/modals/settings-modal";
 import { ScheduledTasksSection } from "@/components/settings/scheduled-tasks-section";
 import { useAgentConnection } from "@/hooks/use-agent-connection";
-import { usePanelShortcut } from "@/hooks/use-panel-shortcut";
+import { useCloseTabShortcut, usePanelShortcut } from "@/hooks/use-panel-shortcut";
 import { bridge } from "@/lib/bridge";
 import { useChatStore } from "@/stores/chat-store";
 import { usePanelStore } from "@/stores/panel-store";
@@ -100,6 +100,7 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("modals");
   useAgentConnection(bridge);
   usePanelShortcut(bridge);
+  useCloseTabShortcut(bridge);
   React.useEffect(() => connectUpdates(bridge), [bridge]);
   const status = useChatStore((state) => state.status);
   const ready = status === "idle" || status === "running";

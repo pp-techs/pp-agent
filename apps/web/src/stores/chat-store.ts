@@ -45,6 +45,8 @@ interface ChatState {
   /** Folder the open conversation works in. */
   workspaceDir: string | null;
   sessionPath: string | null;
+  /** The open conversation is kept in memory only and ends when the person leaves it. */
+  temporary: boolean;
   /** Context window usage of the open conversation. */
   context: ContextUsage | null;
   /** Conversations that are answering, including those the person has moved away from. */
@@ -69,6 +71,7 @@ export const useChatStore = create<ChatState>()((set) => ({
   workspaceDir: null,
   context: null,
   sessionPath: null,
+  temporary: false,
   activity: { running: [], waiting: [] },
 
   apply: (event) =>
@@ -97,6 +100,7 @@ export const useChatStore = create<ChatState>()((set) => ({
             workspace: snapshot.workspace,
             workspaceDir: snapshot.workspaceDir,
             sessionPath: snapshot.sessionPath,
+            temporary: snapshot.temporary,
             context: snapshot.context,
             activity: snapshot.activity,
           };

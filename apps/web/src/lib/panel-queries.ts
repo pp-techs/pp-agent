@@ -7,6 +7,7 @@ import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query
 import { toast } from "sonner";
 
 import { queryKeys } from "@/lib/queries";
+import { useFileTabsStore } from "@/stores/file-tabs-store";
 
 function showError(error: Error) {
   toast.error(error.message);
@@ -47,6 +48,44 @@ export const filePreviewQuery = (bridge: DesktopBridge, root: string, path: stri
     queryKey: queryKeys.filePreview(root, path),
     queryFn: () => bridge.workspace.preview(root, path),
   });
+
+/**
+ * Creating, renaming and trashing files of a workspace. Errors (a name that is taken, a file that
+ * is gone) are shown as a toast; the tree and the open tabs follow what changed.
+ */
+export function useWorkspaceFileCommands(bridge: DesktopBridge, root: string) {
+  const queryClient = useQueryClient();
+  const refresh = () => queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFiles(root) });
+  const tabs = useFileTabsStore.getState;
+  const create = useMutation({
+    mutationFn: (input: { dir: string; name: string; kind: "file" | "folder" }) =>
+      bridge.workspace.create(root, input.dir, input.name, input.kind),
+    onSuccess: (path, input) => {
+      void refresh();
+      if (input.kind === "file") tabs().open(root, path);
+    },
+    onError: showError,
+  });
+  const rename = useMutation({
+    mutationFn: (input: { path: string; name: string }) =>
+      bridge.workspace.rename(root, input.path, input.name),
+    onSuccess: (renamed, input) => {
+      tabs().rename(root, input.path, renamed);
+      void refresh();
+      void queryClient.invalidateQueries({ queryKey: queryKeys.filePreviews(root) });
+    },
+    onError: showError,
+  });
+  const remove = useMutation({
+    mutationFn: (path: string) => bridge.workspace.remove(root, path),
+    onSuccess: (_result, path) => {
+      tabs().forget(root, path);
+      void refresh();
+    },
+    onError: showError,
+  });
+  return { create, rename, remove };
+}
 
 /** Mutations of Settings › Browser; the agent also reports changes with `settings_changed`. */
 export function useBrowserProfileCommands(bridge: DesktopBridge) {

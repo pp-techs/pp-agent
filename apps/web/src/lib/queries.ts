@@ -204,6 +204,10 @@ export function useAgentCommands(bridge: DesktopBridge) {
     /** Without a workspace id: in the workspace of the open conversation. */
     mutationFn: (workspaceId?: string) => bridge.agent.command({ type: "new_chat", workspaceId }),
   });
+  /** In the workspace of the open conversation, kept out of history. */
+  const newTemporaryChat = useMutation({
+    mutationFn: () => bridge.agent.command({ type: "new_chat", temporary: true }),
+  });
   const respondApproval = useMutation({
     mutationFn: (input: { requestId: string; approved: boolean; remember?: ComputerAppRemember }) =>
       bridge.agent.command({ type: "respond_approval", ...input }),
@@ -270,6 +274,7 @@ export function useAgentCommands(bridge: DesktopBridge) {
     prompt,
     abort,
     newChat,
+    newTemporaryChat,
     respondApproval,
     respondQuestion,
     openSession,

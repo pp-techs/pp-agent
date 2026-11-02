@@ -9,6 +9,7 @@ import {
   EmptyTitle,
 } from "@workspace/ui/components/empty";
 import { useQuery } from "@tanstack/react-query";
+import { MessageSquareDashedIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Logo } from "@/components/logo";
@@ -20,6 +21,7 @@ import { useChatStore } from "@/stores/chat-store";
 export function EmptyChat({ bridge }: { bridge: DesktopBridge }) {
   const summary = useChatStore((state) => state.agent);
   const workspaceDir = useChatStore((state) => state.workspaceDir);
+  const temporary = useChatStore((state) => state.temporary);
   const agents = useQuery(agentsQuery(bridge));
   const send = useSendMessage(bridge);
   const agent = agents.data?.find((item) => item.id === (summary?.id ?? DEFAULT_AGENT_ID));
@@ -53,6 +55,12 @@ export function EmptyChat({ bridge }: { bridge: DesktopBridge }) {
               {agent?.description || t("emptyChat.title")}
             </EmptyDescription>
           </>
+        )}
+        {temporary && (
+          <p className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
+            <MessageSquareDashedIcon className="size-4 shrink-0" />
+            {t("emptyChat.temporary")}
+          </p>
         )}
       </EmptyHeader>
       {starters.length > 0 && (

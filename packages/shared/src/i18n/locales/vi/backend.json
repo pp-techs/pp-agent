@@ -451,7 +451,9 @@
     "files": {
       "notFound": "Tệp hoặc thư mục này không còn tồn tại.",
       "outsideWorkspace": "Tệp này không nằm trong không gian làm việc.",
-      "notAFile": "Chỉ có thể đính kèm tệp, không phải thư mục."
+      "notAFile": "Chỉ có thể đính kèm tệp, không phải thư mục.",
+      "invalidName": "Đây không phải là tên tệp hoặc thư mục hợp lệ.",
+      "exists": "“{{name}}” đã tồn tại ở đây."
     },
     "browser": {
       "tabNotFound": "Tab này đã được đóng.",

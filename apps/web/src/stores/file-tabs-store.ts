@@ -21,6 +21,10 @@ interface FileTabsState {
   close: (root: string, path: string) => void;
   /** Shows a file tab, or the folder tree for null. */
   activate: (root: string, path: string | null) => void;
+  /** A file or folder was renamed: its tabs and expanded folders follow it. */
+  rename: (root: string, from: string, to: string) => void;
+  /** A file or folder is gone: its tabs close (those of the files inside, for a folder). */
+  forget: (root: string, path: string) => void;
   toggleFolder: (root: string, path: string) => void;
 }
 
@@ -50,6 +54,26 @@ export const useFileTabsStore = create<FileTabsState>()((set) => {
         return { ...tabs, open, active };
       }),
     activate: (root, path) => update(root, (tabs) => ({ ...tabs, active: path })),
+    rename: (root, from, to) =>
+      update(root, (tabs) => {
+        const remap = (path: string) =>
+          path === from || path.startsWith(`${from}/`) ? to + path.slice(from.length) : path;
+        return {
+          open: tabs.open.map(remap),
+          active: tabs.active === null ? null : remap(tabs.active),
+          expanded: tabs.expanded.map(remap),
+        };
+      }),
+    forget: (root, path) =>
+      update(root, (tabs) => {
+        const gone = (item: string) => item === path || item.startsWith(`${path}/`);
+        const open = tabs.open.filter((item) => !gone(item));
+        const active =
+          tabs.active !== null && gone(tabs.active)
+            ? (open[Math.min(tabs.open.findIndex(gone), open.length - 1)] ?? null)
+            : tabs.active;
+        return { open, active, expanded: tabs.expanded.filter((item) => !gone(item)) };
+      }),
     toggleFolder: (root, path) =>
       update(root, (tabs) => ({
         ...tabs,

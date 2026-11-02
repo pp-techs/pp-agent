@@ -32,6 +32,16 @@
       "html": "Web page (.html, printable)"
     },
     "openFolder": "Open workspace folder",
+    "temporary": {
+      "label": "Temporary",
+      "on": "Temporary chat is on. Click to leave it for a normal chat.",
+      "off": "Start a temporary chat (not saved to history)",
+      "confirm": {
+        "title": "Leave this temporary chat?",
+        "description": "Its messages are not saved, so they are deleted when you leave.",
+        "action": "Leave and delete"
+      }
+    },
     "yolo": {
       "on": "Yolo mode is on",
       "off": "Turn on yolo mode",
@@ -160,6 +170,10 @@
         "label": "New chat",
         "description": "Start a fresh conversation."
       },
+      "temp": {
+        "label": "Temporary chat",
+        "description": "Start a chat that is not saved and ends when you leave it."
+      },
       "compact": {
         "label": "Summarize the chat so far",
         "description": "Frees up room in long conversations; the agent keeps a summary.",
@@ -192,7 +206,8 @@
   "emptyChat": {
     "title": "What can I help with?",
     "description": "I can read and search the files in {{location}}, including PDF, Word, Excel, and PowerPoint. Attach files or images to a message, and I'll save new files after you approve.",
-    "yourWorkspace": "your workspace"
+    "yourWorkspace": "your workspace",
+    "temporary": "This is a temporary chat. It is not saved to your history and is deleted when you leave it."
   },
   "modelPicker": {
     "choose": "Choose a model",
@@ -518,7 +533,14 @@
       "truncated": "Only the beginning is shown. The file is {{size}}.",
       "noPreviewTitle": "No preview",
       "noPreview": "This file ({{size}}) cannot be shown here. Use “Show in folder” to open it.",
-      "closeTab": "Close {{name}}"
+      "closeTab": "Close {{name}}",
+      "showSource": "Show source",
+      "showPreview": "Show preview",
+      "newFile": "New file",
+      "newFolder": "New folder",
+      "rename": "Rename",
+      "moveToTrash": "Move to trash",
+      "name": "Name"
     },
     "browser": {
       "newTab": "New tab",

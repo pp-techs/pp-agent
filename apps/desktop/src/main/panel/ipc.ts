@@ -24,9 +24,12 @@ import { translator } from "../i18n.ts";
 import { readWorkspaceFolders } from "../settings.ts";
 import { TerminalHost } from "./terminals.ts";
 import {
+  createEntry,
   entryAttachment,
   listEntries,
   previewFile,
+  removeEntry,
+  renameEntry,
   revealEntry,
   WorkspaceWatcher,
 } from "./workspace-files.ts";
@@ -148,6 +151,15 @@ export function createSidePanel(options: SidePanelOptions) {
   ipcMain.handle(IPC.workspaceAttachment, (_event, root: unknown, path: unknown) =>
     entryAttachment(requireWorkspace(root), requireText(path)),
   );
+  ipcMain.handle(IPC.workspaceCreate, (_event, root: unknown, dir: unknown, name: unknown, kind) =>
+    createEntry(requireWorkspace(root), requireText(dir), name, kind),
+  );
+  ipcMain.handle(IPC.workspaceRename, (_event, root: unknown, path: unknown, name: unknown) =>
+    renameEntry(requireWorkspace(root), requireText(path), name),
+  );
+  ipcMain.handle(IPC.workspaceRemove, (_event, root: unknown, path: unknown) =>
+    removeEntry(requireWorkspace(root), requireText(path)),
+  );
   ipcMain.handle(IPC.workspaceWatch, (_event, root: unknown) =>
     watcher.watch(root === null ? null : requireWorkspace(root)),
   );
@@ -209,6 +221,15 @@ export function createSidePanel(options: SidePanelOptions) {
   return {
     attach(window: BrowserWindow): void {
       browser.attach(window);
+      // Cmd+W / Ctrl+W: the app decides whether it closes a file tab or the window. Stopping the
+      // key here also keeps the default menu from closing the window first.
+      window.webContents.on("before-input-event", (event, input) => {
+        const modifier = process.platform === "darwin" ? input.meta : input.control;
+        if (input.type !== "keyDown" || input.key.toLowerCase() !== "w") return;
+        if (!modifier || input.alt || input.shift) return;
+        event.preventDefault();
+        send(IPC.shellCloseTab);
+      });
     },
     /** The window was destroyed: its pages, shells and watch end with it. */
     windowClosed(): void {

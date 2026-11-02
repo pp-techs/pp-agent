@@ -35,7 +35,7 @@ export function useSlashItems(bridge: DesktopBridge): {
   const skills = useQuery(skillsQuery(bridge));
   const workspaceSkills = useQuery(workspaceSkillsQuery(bridge, workspaceDir));
   const agents = useQuery(agentsQuery(bridge));
-  const { newChat, compact, setConversationYolo } = useAgentCommands(bridge);
+  const { newChat, newTemporaryChat, compact, setConversationYolo } = useAgentCommands(bridge);
   const yolo = useChatStore((state) => state.yolo);
   const goal = useChatStore((state) => state.goal);
   const { t } = useTranslation("chat");
@@ -49,6 +49,13 @@ export function useSlashItems(bridge: DesktopBridge): {
         label: t("slash.commands.new.label"),
         description: t("slash.commands.new.description"),
         run: () => newChat.mutate(undefined, { onError }),
+      },
+      {
+        kind: "command",
+        name: "temp",
+        label: t("slash.commands.temp.label"),
+        description: t("slash.commands.temp.description"),
+        run: () => newTemporaryChat.mutate(undefined, { onError }),
       },
       {
         kind: "command",
@@ -113,7 +120,7 @@ export function useSlashItems(bridge: DesktopBridge): {
         },
       },
     ];
-  }, [newChat, compact, setConversationYolo, yolo, goal, running, t]);
+  }, [newChat, newTemporaryChat, compact, setConversationYolo, yolo, goal, running, t]);
 
   const available = React.useMemo<SlashItem[]>(() => {
     const allowed = agents.data?.find((agent) => agent.id === agentId)?.skills ?? null;

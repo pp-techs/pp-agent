@@ -797,7 +797,7 @@ export class AgentHost {
       case "set_goal":
         return this.setGoal(command);
       case "new_chat":
-        return this.openSession(null, command.workspaceId ?? null);
+        return this.openSession(null, command.workspaceId ?? null, command.temporary === true);
       case "respond_approval":
         return this.resolveApproval(command.requestId, command.approved, command.remember);
       case "respond_question":
@@ -1108,6 +1108,7 @@ export class AgentHost {
       workspace: this.services ? summarizeWorkspace(this.currentWorkspace()) : null,
       workspaceDir: this.session?.sessionManager.getCwd() ?? null,
       sessionPath: this.session?.sessionFile ?? null,
+      temporary: this.session ? !this.session.sessionManager.isPersisted() : false,
       context: this.contextUsage(),
       activity: this.activity(),
       yolo: this.yoloState(open),
@@ -1362,11 +1363,16 @@ export class AgentHost {
   }
 
   /**
-   * Switch to a saved conversation, or to a new one (in `workspaceId`, else the open workspace).
-   * An answer in progress carries on in the background, and comes back when its conversation is
-   * opened again.
+   * Switch to a saved conversation, or to a new one (in `workspaceId`, else the open workspace;
+   * `temporary` keeps it out of history). An answer in progress carries on in the background, and
+   * comes back when its conversation is opened again; a temporary conversation has no file to
+   * come back to, so leaving it ends it.
    */
-  private async openSession(path: string | null, workspaceId: string | null = null): Promise<void> {
+  private async openSession(
+    path: string | null,
+    workspaceId: string | null = null,
+    temporary = false,
+  ): Promise<void> {
     const resumed = path ? this.background.get(path) : undefined;
     if (resumed && resumed === this.open) return;
     await this.leaveOpen();
@@ -1378,7 +1384,7 @@ export class AgentHost {
       this.refreshStatus();
     } else {
       await this.startSession(
-        path ? this.savedSessionManager(path) : this.newSessionManager(workspaceId),
+        path ? this.savedSessionManager(path) : this.newSessionManager(workspaceId, temporary),
       );
       this.requireOpen().transcript.load(branchEntries(this.requireSession().sessionManager));
     }
@@ -1425,9 +1431,9 @@ export class AgentHost {
 
   /**
    * A new conversation in a workspace, with the workspace's agent (else the agent picked last).
-   * Kept in memory until the first reply.
+   * Kept in memory until the first reply; a temporary one is never written at all.
    */
-  private newSessionManager(workspaceId: string | null = null): SessionManager {
+  private newSessionManager(workspaceId: string | null = null, temporary = false): SessionManager {
     const { paths, settings } = this.requireServices();
     const { agents, workspaces, activeAgentId } = settings.get();
     const workspace = findWorkspace(workspaces, workspaceId ?? this.workspaceId);
@@ -1435,7 +1441,9 @@ export class AgentHost {
     const cwd = this.workspaceFor(workspace);
     // The folder may have fallen back to the default one, so name the workspace it belongs to.
     this.workspaceId = workspaceForCwd(workspaces, cwd, paths.workspaceDir).id;
-    const manager = SessionManager.create(cwd, paths.sessionDir);
+    const manager = temporary
+      ? SessionManager.inMemory(cwd)
+      : SessionManager.create(cwd, paths.sessionDir);
     manager.appendCustomEntry(AGENT_ENTRY_TYPE, { agentId: this.agentId });
     return manager;
   }
@@ -2798,18 +2806,23 @@ export class AgentHost {
 
   /**
    * Reopens the conversation in its agent's workspace, keeping the transcript and model. A
-   * conversation that has not been saved yet (no reply so far) starts over in the new folder.
+   * conversation that has not been saved yet (no reply so far) starts over in the new folder; a
+   * temporary one carries its entries over, since it has no file to reopen.
    */
   private async moveToWorkspace(session: AgentSession): Promise<AgentSession> {
     const { paths } = this.requireServices();
     const cwd = this.workspaceFor(this.currentWorkspace());
     const file = session.sessionFile;
+    const temporary = !session.sessionManager.isPersisted();
+    const entries = temporary ? session.sessionManager.getEntries() : [];
     const model = session.model
       ? { provider: session.model.provider, modelId: session.model.id }
       : null;
     this.disposeSession();
     let manager: SessionManager;
-    if (file && existsSync(file)) {
+    if (temporary) {
+      manager = SessionManager.inMemory(cwd, undefined, entries);
+    } else if (file && existsSync(file)) {
       manager = SessionManager.open(file, paths.sessionDir, cwd);
     } else {
       manager = SessionManager.create(cwd, paths.sessionDir);
