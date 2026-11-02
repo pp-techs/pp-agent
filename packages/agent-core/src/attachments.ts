@@ -4,7 +4,7 @@ import { resizeImage } from "@earendil-works/pi-coding-agent";
 import { ATTACHMENTS_DIR, type Attachment } from "@workspace/shared";
 import { t } from "./i18n.ts";
 
-interface ImageContent {
+export interface ImageContent {
   type: "image";
   data: string;
   mimeType: string;
@@ -32,6 +32,14 @@ function timestamp(date: Date): string {
   );
 }
 
+/** What `buildPrompt` turns a message into: text ready for the model, its images, and the absolute
+ *  paths of any files it copied into the workspace (to clean up later, for a temporary chat). */
+export interface BuiltPrompt {
+  text: string;
+  images: ImageContent[];
+  copied: string[];
+}
+
 /**
  * Turns the composer's attachments into what the model receives: images inline, other files copied
  * into the workspace and listed in a block appended to the message so the agent can open them.
@@ -40,9 +48,11 @@ export async function buildPrompt(
   text: string,
   attachments: Attachment[],
   workspaceDir: string,
-): Promise<{ text: string; images: ImageContent[] }> {
+): Promise<BuiltPrompt> {
   const images: ImageContent[] = [];
   const files: string[] = [];
+  /** Absolute paths of the files copied into the workspace. */
+  const copied: string[] = [];
   const stamp = timestamp(new Date());
 
   for (const attachment of attachments) {
@@ -63,11 +73,13 @@ export async function buildPrompt(
       throw new Error(t("conversations.attachmentNoFile", { name: attachment.name }));
     const relative = `${ATTACHMENTS_DIR}/${stamp}-${basename(attachment.name)}`;
     await mkdir(join(workspaceDir, ATTACHMENTS_DIR), { recursive: true });
-    await copyFile(attachment.path, join(workspaceDir, relative));
+    const target = join(workspaceDir, relative);
+    await copyFile(attachment.path, target);
     files.push(relative);
+    copied.push(target);
   }
 
-  return { text: withAttachedFiles(text, files), images };
+  return { text: withAttachedFiles(text, files), images, copied };
 }
 
 /** `text` followed by the block that lists workspace-relative `files`; unchanged without files. */

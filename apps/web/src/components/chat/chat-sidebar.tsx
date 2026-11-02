@@ -73,6 +73,7 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useExportSession } from "@/hooks/use-export-session";
 import { IS_MAC } from "@/hooks/use-panel-shortcut";
 import { useDeleteWorkspace } from "@/lib/extension-queries";
+import { confirmLeaveTemporary } from "@/lib/confirm-leave-temporary";
 import { i18n } from "@/lib/i18n";
 import {
   MIN_SEARCH_LENGTH,
@@ -320,9 +321,11 @@ export function ChatSidebar({
     if (confirmed) deleteSession.mutate(session.path, { onError });
   }
 
-  function openFound(hit: SessionSearchHit) {
+  async function openFound(hit: SessionSearchHit): Promise<boolean> {
+    if (hit.path !== sessionPath && !(await confirmLeaveTemporary())) return false;
     navigate("chat");
     if (hit.path !== sessionPath) openSession.mutate(hit.path, { onError });
+    return true;
   }
 
   function exportAs(session: SessionSummary, format: ExportFormat) {
@@ -336,9 +339,11 @@ export function ChatSidebar({
           isActive={page === "chat" && session.path === sessionPath}
           disabled={!ready}
           title={session.title}
-          onClick={() => {
+          onClick={async () => {
+            if (session.path === sessionPath) return navigate("chat");
+            if (!(await confirmLeaveTemporary())) return;
             navigate("chat");
-            if (session.path !== sessionPath) openSession.mutate(session.path, { onError });
+            openSession.mutate(session.path, { onError });
           }}
         >
           <span className="min-w-0 flex-1 truncate">{session.title}</span>
@@ -440,9 +445,10 @@ export function ChatSidebar({
               title={t("sidebar.workspace.newChat", { name: workspace.name })}
               aria-label={t("sidebar.workspace.newChat", { name: workspace.name })}
               disabled={!canStart}
-              onClick={() =>
-                newChat.mutate(workspace.id, { onError, onSuccess: () => navigate("chat") })
-              }
+              onClick={async () => {
+                if (await confirmLeaveTemporary())
+                  newChat.mutate(workspace.id, { onError, onSuccess: () => navigate("chat") });
+              }}
             >
               <SquarePenIcon />
             </SidebarMenuAction>
@@ -599,8 +605,7 @@ export function ChatSidebar({
         onOpenChange={setSearchOpen}
         ready={ready}
         onOpenHit={(hit) => {
-          openFound(hit);
-          setSearchOpen(false);
+          void openFound(hit).then((opened) => opened && setSearchOpen(false));
         }}
       />
       <SidebarFooter className="shrink-0">

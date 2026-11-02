@@ -3,7 +3,7 @@
  * the process around it; `HostEnvironment` supplies the event sink, the vault, and service control.
  */
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
@@ -142,7 +142,12 @@ import type {
   TurnHooks,
   TurnResult,
 } from "./channels/types.ts";
-import { buildPrompt, splitAttachedFiles, withAttachedFiles } from "./attachments.ts";
+import {
+  buildPrompt,
+  type BuiltPrompt,
+  splitAttachedFiles,
+  withAttachedFiles,
+} from "./attachments.ts";
 import { createBrowserTool } from "./browser-tool.ts";
 import {
   COMPUTER_TOOL,
@@ -274,8 +279,8 @@ import { WebSearchService } from "./web/search.ts";
 /** Sent to the model when a message has attachments but no text. The model reads English. */
 const ATTACHMENTS_ONLY_PROMPT = "Please take a look at the attached files.";
 
-/** What a prompt sends to the model: text (with the attached-files block) and inline images. */
-type PromptMessage = Awaited<ReturnType<typeof buildPrompt>>;
+/** What `resend` and `startRun` need of a built message: `buildPrompt`'s `copied` is not theirs to track. */
+type PromptMessage = Pick<BuiltPrompt, "text" | "images">;
 
 /** Changes to apply to the open conversation once no run is active. */
 interface PendingChanges {
@@ -516,6 +521,8 @@ export class AgentHost {
   private open: Conversation | null = null;
   /** Conversations moved out of the window while they answer, by session file. */
   private readonly background = new Map<string, Conversation>();
+  /** Absolute paths of the attached files copied into the workspace for temporary conversations. */
+  private readonly attachedCopies = new WeakMap<Conversation, string[]>();
   /** Changes of recent background memory passes, by pass id, for `undo_memory_pass`. */
   private readonly memoryPasses = new Map<string, MemoryChange[]>();
   /** Memory and title passes still running (`memory:<file>`, `title:<file>`): one at a time each. */
@@ -1165,9 +1172,19 @@ export class AgentHost {
       attachments,
       session.sessionManager.getCwd(),
     );
+    this.keepTemporaryCopies(session, message.copied);
     // Writing to the agent again picks up a goal that was waiting on the person.
     if (this.open?.goal) this.open.goal.stalled = false;
     this.startRun(session, message, onRunError);
+  }
+
+  /**
+   * Files copied into the workspace for a temporary conversation are removed when it ends; a saved
+   * conversation keeps its attachments, which its messages list.
+   */
+  private keepTemporaryCopies(session: AgentSession, copied: string[]): void {
+    if (copied.length === 0 || session.sessionManager.isPersisted() || !this.open) return;
+    this.attachedCopies.set(this.open, [...(this.attachedCopies.get(this.open) ?? []), ...copied]);
   }
 
   /** Sends a message to the model without waiting for the run; progress arrives as events. */
@@ -1838,6 +1855,7 @@ export class AgentHost {
       : typed || ATTACHMENTS_ONLY_PROMPT;
     // Files and images are prepared before anything is dropped, so a bad attachment fails the edit.
     const added = await buildPrompt(base, params.attachments, session.sessionManager.getCwd());
+    this.keepTemporaryCopies(session, added.copied);
     const addedFiles = splitAttachedFiles(added.text).files.map((file) => file.path);
     await this.resend(session, params.entryId, {
       text: withAttachedFiles(base, [...keptFiles, ...addedFiles]),
@@ -2104,15 +2122,18 @@ export class AgentHost {
     this.watchMcp(conversation);
   }
 
-  /** Closes the open conversation. */
-  private disposeSession(): void {
+  /**
+   * Closes the open conversation. A conversation that continues elsewhere (`keepFiles`) keeps its
+   * attached files.
+   */
+  private disposeSession(keepFiles = false): void {
     const conversation = this.open;
     this.open = null;
-    if (conversation) this.release(conversation);
+    if (conversation) this.release(conversation, keepFiles);
   }
 
   /** Lets go of a conversation's session. */
-  private release(conversation: Conversation): void {
+  private release(conversation: Conversation, keepFiles = false): void {
     // Cancels a goal turn that was about to start.
     conversation.goal = null;
     clearTimeout(conversation.memoryTimer ?? undefined);
@@ -2120,6 +2141,11 @@ export class AgentHost {
     conversation.unsubscribe();
     conversation.mcpServers.detach();
     conversation.session.dispose();
+    // A temporary conversation leaves nothing behind, the files it was given included.
+    if (!keepFiles) {
+      for (const file of this.attachedCopies.get(conversation) ?? []) rmSync(file, { force: true });
+      this.attachedCopies.delete(conversation);
+    }
   }
 
   private onSessionEvent(conversation: Conversation, event: AgentSessionEvent): void {
@@ -2815,10 +2841,11 @@ export class AgentHost {
     const file = session.sessionFile;
     const temporary = !session.sessionManager.isPersisted();
     const entries = temporary ? session.sessionManager.getEntries() : [];
+    const carriedFiles = this.open ? (this.attachedCopies.get(this.open) ?? []) : [];
     const model = session.model
       ? { provider: session.model.provider, modelId: session.model.id }
       : null;
-    this.disposeSession();
+    this.disposeSession(true);
     let manager: SessionManager;
     if (temporary) {
       manager = SessionManager.inMemory(cwd, undefined, entries);
@@ -2829,6 +2856,7 @@ export class AgentHost {
       manager.appendCustomEntry(AGENT_ENTRY_TYPE, { agentId: this.agentId });
     }
     await this.startSession(manager, model);
+    if (this.open) this.attachedCopies.set(this.open, carriedFiles);
     const next = this.requireSession();
     this.requireOpen().transcript.load(branchEntries(next.sessionManager));
     return next;

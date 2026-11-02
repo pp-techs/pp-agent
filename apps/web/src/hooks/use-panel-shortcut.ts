@@ -46,6 +46,21 @@ export function useCloseTabShortcut(bridge: DesktopBridge) {
   React.useEffect(
     () =>
       bridge.shell.onCloseTab(() => {
+        // Ctrl+W is "delete the last word" in a shell: the terminal gets the key back.
+        const focused = document.activeElement;
+        if (!IS_MAC && focused instanceof HTMLElement && focused.closest(".xterm")) {
+          focused.dispatchEvent(
+            new KeyboardEvent("keydown", {
+              key: "w",
+              code: "KeyW",
+              keyCode: 87,
+              ctrlKey: true,
+              bubbles: true,
+              cancelable: true,
+            }),
+          );
+          return;
+        }
         const panel = usePanelStore.getState();
         const root = useChatStore.getState().workspaceDir;
         const tabs = useFileTabsStore.getState();

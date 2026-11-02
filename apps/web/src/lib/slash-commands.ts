@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { skillsQuery, workspaceSkillsQuery } from "@/lib/extension-queries";
+import { confirmLeaveTemporary } from "@/lib/confirm-leave-temporary";
 import { agentsQuery, useAgentCommands } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
 import { goalStatusKey } from "@/lib/goal";
@@ -48,14 +49,18 @@ export function useSlashItems(bridge: DesktopBridge): {
         name: "new",
         label: t("slash.commands.new.label"),
         description: t("slash.commands.new.description"),
-        run: () => newChat.mutate(undefined, { onError }),
+        run: () =>
+          void confirmLeaveTemporary().then((ok) => ok && newChat.mutate(undefined, { onError })),
       },
       {
         kind: "command",
         name: "temp",
         label: t("slash.commands.temp.label"),
         description: t("slash.commands.temp.description"),
-        run: () => newTemporaryChat.mutate(undefined, { onError }),
+        run: () =>
+          void confirmLeaveTemporary().then(
+            (ok) => ok && newTemporaryChat.mutate(undefined, { onError }),
+          ),
       },
       {
         kind: "command",

@@ -10,7 +10,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { basename, extname, join, relative, sep } from "node:path";
+import { basename, dirname, extname, join, relative, sep } from "node:path";
 import type { Attachment, FilePreview, WorkspaceEntry } from "@workspace/shared";
 import { shell } from "electron";
 import { isInside, mimeTypeOf } from "../files.ts";
@@ -166,6 +166,8 @@ async function resolveEntry(
   if (!name || name === "." || name === "..") throw new Error(t("panel.files.outsideWorkspace"));
   const parent = await resolveInside(root, parts.join("/"));
   const target = join(parent, name);
+  // A name that did not split on "/" (a backslash on Windows) must not lead out of the folder.
+  if (dirname(target) !== parent) throw new Error(t("panel.files.outsideWorkspace"));
   if (!(await exists(target))) throw new Error(t("panel.files.notFound"));
   return { parent, target };
 }
@@ -201,9 +203,13 @@ export async function renameEntry(root: string, path: string, name: unknown): Pr
   const { parent, target } = await resolveEntry(root, path);
   const renamed = join(parent, entryName);
   if (renamed === target) return workspacePath(await realpath(root), target);
-  // A case-only change on a case-insensitive disk is the same entry, not a clash.
-  if ((await exists(renamed)) && renamed.toLowerCase() !== target.toLowerCase())
-    throw new Error(translator()("panel.files.exists", { name: entryName }));
+  if (await exists(renamed)) {
+    // The same entry under another case (a case-insensitive disk) is a rename, anything else a clash.
+    const [source, destination] = await Promise.all([lstat(target), lstat(renamed)]);
+    const sameEntry =
+      source.ino !== 0 && source.dev === destination.dev && source.ino === destination.ino;
+    if (!sameEntry) throw new Error(translator()("panel.files.exists", { name: entryName }));
+  }
   await rename(target, renamed);
   return workspacePath(await realpath(root), renamed);
 }

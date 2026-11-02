@@ -24,6 +24,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { ConfirmModal } from "@/components/modals/confirm-modal";
+import { confirmLeaveTemporary } from "@/lib/confirm-leave-temporary";
 import { useExportSession } from "@/hooks/use-export-session";
 import { useAgentCommands, usageQuery } from "@/lib/queries";
 import { IS_MAC } from "@/hooks/use-panel-shortcut";
@@ -362,7 +363,6 @@ function YoloButton({ bridge }: { bridge: DesktopBridge }) {
 function TemporaryToggle({ bridge }: { bridge: DesktopBridge }) {
   const temporary = useChatStore((state) => state.temporary);
   const status = useChatStore((state) => state.status);
-  const hasMessages = useChatStore((state) => state.messages.length > 0);
   const { newChat, newTemporaryChat } = useAgentCommands(bridge);
   const { t } = useTranslation("chat");
   const label = temporary ? t("header.temporary.on") : t("header.temporary.off");
@@ -374,14 +374,7 @@ function TemporaryToggle({ bridge }: { bridge: DesktopBridge }) {
       });
       return;
     }
-    if (hasMessages) {
-      const confirmed = await ConfirmModal.show({
-        title: t("header.temporary.confirm.title"),
-        description: t("header.temporary.confirm.description"),
-        confirmLabel: t("header.temporary.confirm.action"),
-      });
-      if (!confirmed) return;
-    }
+    if (!(await confirmLeaveTemporary())) return;
     newChat.mutate(undefined, { onError: (error: Error) => toast.error(error.message) });
   }
 

@@ -227,6 +227,8 @@ export function createSidePanel(options: SidePanelOptions) {
         const modifier = process.platform === "darwin" ? input.meta : input.control;
         if (input.type !== "keyDown" || input.key.toLowerCase() !== "w") return;
         if (!modifier || input.alt || input.shift) return;
+        // Ctrl+Win/Super+W is another shortcut.
+        if (process.platform !== "darwin" && input.meta) return;
         event.preventDefault();
         send(IPC.shellCloseTab);
       });
