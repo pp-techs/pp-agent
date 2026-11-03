@@ -129,16 +129,14 @@ export function useSlashItems(bridge: DesktopBridge): {
 
   const available = React.useMemo<SlashItem[]>(() => {
     const allowed = agents.data?.find((agent) => agent.id === agentId)?.skills ?? null;
-    // The workspace's own skills are always on and win over an installed one of the same name, as
-    // in the agent; installed ones follow the agent's skill list.
+    // Installed and the workspace's own skills both follow the agent's skill list; the workspace's
+    // wins over an installed one of the same name, as in the agent.
     const own = workspaceSkills.data ?? [];
     const installed = (skills.data ?? []).filter(
-      (skill) =>
-        !own.some((other) => other.name === skill.name) &&
-        (allowed === null || allowed.includes(skill.name)),
+      (skill) => !own.some((other) => other.name === skill.name),
     );
     return [...own, ...installed]
-      .filter((skill) => skill.enabled)
+      .filter((skill) => skill.enabled && (allowed === null || allowed.includes(skill.name)))
       .map((skill) => ({
         kind: "skill",
         name: skill.name,

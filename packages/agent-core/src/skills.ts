@@ -1,6 +1,6 @@
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { cp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, extname, isAbsolute, join, posix, relative } from "node:path";
+import { basename, dirname, extname, join, posix } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import type { SaveSkillInput, SkillDetail, SkillSummary } from "@workspace/shared";
 import { unzipSync } from "fflate";
@@ -66,21 +66,9 @@ function serializeSkill(frontmatter: Record<string, unknown>, body: string): str
   return `---\n${stringify(frontmatter).trimEnd()}\n---\n\n${body.trim()}\n`;
 }
 
-/** Whether `path` is inside `root`, with symlinks resolved; pi reports skill folders by real path. */
-function isInside(root: string, path: string): boolean {
-  if (!existsSync(root)) return false;
-  const inside = relative(realpathSync(root), existsSync(path) ? realpathSync(path) : path);
-  return inside !== "" && !inside.startsWith("..") && !isAbsolute(inside);
-}
-
 /** Where pi looks for the skills that belong to a workspace folder. */
 export function workspaceSkillsDir(cwd: string): string {
   return join(cwd, ".agents", "skills");
-}
-
-/** Whether the skill at `baseDir` is one of the workspace folder's own (`.agents/skills`). */
-export function isWorkspaceSkill(cwd: string, baseDir: string): boolean {
-  return isInside(workspaceSkillsDir(cwd), baseDir);
 }
 
 /** Skills a workspace folder carries in `.agents/skills`; none when the folder has no such skills. */
@@ -108,11 +96,6 @@ export class SkillLibrary {
 
   /** `dir` must exist. */
   constructor(readonly dir: string) {}
-
-  /** Whether pi may load the skill at `baseDir`: only skills of this library are used. */
-  owns(baseDir: string): boolean {
-    return isInside(this.dir, baseDir);
-  }
 
   async list(disabled: readonly string[]): Promise<SkillSummary[]> {
     const skills = await this.scan();

@@ -223,6 +223,13 @@ export const workspaceSkillsQuery = (bridge: DesktopBridge, workspaceDir: string
     queryFn: () => bridge.agent.command({ type: "list_workspace_skills" }),
   });
 
+/** Skills in the `.agents/skills` of every workspace folder, for the agent editor's skill list. */
+export const workspaceSkillOptionsQuery = (bridge: DesktopBridge) =>
+  queryOptions({
+    queryKey: [...queryKeys.skills, "workspace-options"] as const,
+    queryFn: () => bridge.agent.command({ type: "list_workspace_skill_options" }),
+  });
+
 export const skillQuery = (bridge: DesktopBridge, name: string) =>
   queryOptions({
     queryKey: queryKeys.skill(name),

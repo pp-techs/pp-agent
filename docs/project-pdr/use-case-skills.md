@@ -12,4 +12,4 @@ A skill is an [Agent Skills](https://agentskills.io) folder with a `SKILL.md`, s
 
 - Type `/skill:<name> <args>` in the chat, or pick it from the **+** menu or `/` suggestions; the user bubble shows a "Skill: name" chip.
 - The agent also loads skills on its own unless a skill is set to run only when asked.
-- A conversation sees the skills that are enabled and in its agent's skills subset, plus its workspace's own skills (enabled, whatever the agent's subset).
+- A conversation sees the skills that are enabled and in its agent's skills subset, from both the installed ones and its workspace's own (`.agents/skills`).

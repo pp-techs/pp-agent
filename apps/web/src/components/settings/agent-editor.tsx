@@ -39,6 +39,7 @@ import {
   agentToolOptionsQuery,
   mcpQuery,
   skillsQuery,
+  workspaceSkillOptionsQuery,
   useSaveAgent,
 } from "@/lib/extension-queries";
 import { groupByProvider, modelKey, modelLabeler } from "@/lib/models";
@@ -337,7 +338,19 @@ function AgentForm({
   const save = useSaveAgent(bridge);
   const toolOptions = useQuery(agentToolOptionsQuery(bridge));
   const mcp = useQuery(mcpQuery(bridge));
-  const skillList = useQuery(skillsQuery(bridge));
+  const globalSkills = useQuery(skillsQuery(bridge));
+  const workspaceSkills = useQuery(workspaceSkillOptionsQuery(bridge));
+  const skillList = {
+    isPending: globalSkills.isPending || workspaceSkills.isPending,
+    error: globalSkills.error ?? workspaceSkills.error,
+    // A workspace's skill wins over an installed one of the same name.
+    data: [
+      ...(workspaceSkills.data ?? []),
+      ...(globalSkills.data ?? []).filter(
+        (skill) => !(workspaceSkills.data ?? []).some((other) => other.name === skill.name),
+      ),
+    ].sort((a, b) => a.name.localeCompare(b.name)),
+  };
 
   const trimmedName = name.trim();
   const nameTaken = agents.some(

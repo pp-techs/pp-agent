@@ -202,7 +202,7 @@ import { SettingsStore } from "./settings-store.ts";
 import { newTaskId, runTitle, validateTaskInput } from "./scheduled-tasks.ts";
 import { nextRun, Scheduler, schedulableOf } from "./scheduler.ts";
 import { VoiceService } from "./transcription.ts";
-import { isWorkspaceSkill, listWorkspaceSkills, SkillLibrary } from "./skills.ts";
+import { listWorkspaceSkills, SkillLibrary, workspaceSkillsDir } from "./skills.ts";
 import { seedBuiltInSkills } from "./skills-builtin.ts";
 import { createDelegateTool, DELEGATE_TOOL } from "./subagent.ts";
 import {
@@ -676,7 +676,7 @@ export class AgentHost {
         mkdirSync(dir, { recursive: true });
       // The library resolves its folder, so it is created after the folder exists.
       const skills = new SkillLibrary(skillsDir);
-      // Copy the skills that ship with the app (OfficeCLI's), leaving anything the person edited.
+      // Copy the skills that ship with the app (OfficeCLI's, skill-creator), leaving anything the person edited.
       const builtIn = await seedBuiltInSkills(
         resourcePath("skills"),
         skillsDir,
@@ -885,6 +885,8 @@ export class AgentHost {
               services.settings.get().disabledSkills,
             )
           : [];
+      case "list_workspace_skill_options":
+        return this.allWorkspaceSkills();
       case "get_skill":
         return services.skills.get(command.name, services.settings.get().disabledSkills);
       case "save_skill":
@@ -1989,12 +1991,15 @@ export class AgentHost {
       cwd,
       agentDir: paths.agentDir,
       settingsManager,
-      // Only our own extensions run; skills come from <agentDir>/skills (managed in Settings) and
-      // the workspace folder's .agents/skills, and MCP servers from <agentDir>/mcp.json
-      // (registered by the agent extension).
+      // Only our own extensions run, and MCP servers come from <agentDir>/mcp.json (registered by
+      // the agent extension). Skills come from two folders only: the workspace's .agents/skills
+      // and <agentDir>/skills (managed in Settings). Pi's own search (parent folders, the user's
+      // ~/.agents/skills) is off. The workspace folder is listed first, so it wins a name clash.
       noExtensions: true,
       noPromptTemplates: true,
       noThemes: true,
+      noSkills: true,
+      additionalSkillPaths: [workspaceSkillsDir(cwd), skills.dir],
       extensionFactories: [
         { name: "approval-gate", factory: scope.approvalGate },
         { name: "pp-agent", factory: this.agentExtensionFor(scope, sessionManager) },
@@ -2015,9 +2020,9 @@ export class AgentHost {
           skills: base.skills.filter(
             (skill) =>
               !disabled.includes(skill.name) &&
-              // A workspace's own skills are always on; installed ones follow the agent's list.
-              (isWorkspaceSkill(cwd, skill.baseDir) ||
-                (skills.owns(skill.baseDir) && (allowed === null || allowed.includes(skill.name)))),
+              // The agent's list is the last, closest filter over the workspace's and the
+              // installed skills.
+              (allowed === null || allowed.includes(skill.name)),
           ),
           diagnostics: base.diagnostics,
         };
@@ -3272,6 +3277,19 @@ export class AgentHost {
       draft.toolPolicies[name] = policy;
     });
     this.changed(["tools"], { tools: true });
+  }
+
+  /** Skills in the `.agents/skills` of every workspace folder (one entry per name), for the agent editor. */
+  private async allWorkspaceSkills(): Promise<SkillSummary[]> {
+    const { settings, paths } = this.requireServices();
+    const { workspaces, disabledSkills } = settings.get();
+    const folders = new Set(workspaces.map((ws) => workspaceFolder(ws, paths.workspaceDir)));
+    const lists = await Promise.all(
+      [...folders].map((folder) => listWorkspaceSkills(folder, disabledSkills)),
+    );
+    const byName = new Map<string, SkillSummary>();
+    for (const skill of lists.flat()) if (!byName.has(skill.name)) byName.set(skill.name, skill);
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
 
   private async saveSkill(input: SaveSkillInput): Promise<SkillSummary> {

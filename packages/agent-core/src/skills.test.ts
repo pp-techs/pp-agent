@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
-import { isWorkspaceSkill, listWorkspaceSkills, workspaceSkillsDir } from "./skills.ts";
+import { listWorkspaceSkills, workspaceSkillsDir } from "./skills.ts";
 
 let cwd: string;
 
@@ -44,15 +44,5 @@ describe("workspace skills", () => {
 
   test("finds none when the folder has no .agents/skills", async () => {
     expect(await listWorkspaceSkills(cwd, [])).toEqual([]);
-    expect(isWorkspaceSkill(cwd, join(cwd, "anything"))).toBe(false);
-  });
-
-  test("owns only skills inside the workspace's .agents/skills", async () => {
-    const dir = await skill("alpha", "First");
-
-    expect(isWorkspaceSkill(cwd, dir)).toBe(true);
-    expect(isWorkspaceSkill(cwd, workspaceSkillsDir(cwd))).toBe(false);
-    expect(isWorkspaceSkill(cwd, join(cwd, ".agents", "other", "alpha"))).toBe(false);
-    expect(isWorkspaceSkill(cwd, join(tmpdir(), "elsewhere"))).toBe(false);
   });
 });

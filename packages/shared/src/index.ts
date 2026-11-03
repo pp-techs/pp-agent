@@ -1125,6 +1125,8 @@ export interface AgentCommandMap {
   list_skills: { params: NoParams; result: SkillSummary[] };
   /** Skills in `.agents/skills` of the open conversation's workspace folder; read-only here. */
   list_workspace_skills: { params: NoParams; result: SkillSummary[] };
+  /** Skills in `.agents/skills` of every workspace folder (one per name); for the agent editor's skill list. */
+  list_workspace_skill_options: { params: NoParams; result: SkillSummary[] };
   get_skill: { params: { name: string }; result: SkillDetail };
   save_skill: { params: { skill: SaveSkillInput }; result: SkillSummary };
   delete_skill: { params: { name: string }; result: void };
