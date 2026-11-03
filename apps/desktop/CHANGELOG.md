@@ -1,5 +1,11 @@
 # @workspace/desktop
 
+## 0.22.1
+
+### Patch Changes
+
+- 6320e34: Chatting through a gateway with a reasoning model no longer fails with "unknown variant `developer`": gateway requests always send the system prompt with the `system` role, which every OpenAI-compatible server accepts.
+
 ## 0.22.0
 
 ### Minor Changes
