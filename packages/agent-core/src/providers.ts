@@ -100,6 +100,10 @@ function gatewayProvider(
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
         contextWindow: model.contextWindow ?? known?.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
         maxTokens: model.maxTokens ?? known?.maxTokens ?? DEFAULT_MAX_TOKENS,
+        // Pi sends the system prompt as a `developer` message for reasoning models on OpenAI-style
+        // APIs. A gateway is an arbitrary proxy, and many (LiteLLM, Rust gateways) reject that role;
+        // `system` works on every OpenAI-compatible server, so gateways always get `system`.
+        compat: { supportsDeveloperRole: false },
       };
     }),
   };
