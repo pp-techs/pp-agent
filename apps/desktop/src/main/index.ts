@@ -276,8 +276,8 @@ const sidePanel = createSidePanel({
 
 function createWindow(): void {
   window = new BrowserWindow({
-    width: 1100,
-    height: 780,
+    width: 1440,
+    height: 900,
     minWidth: 640,
     minHeight: 480,
     title: "PP Agent",
