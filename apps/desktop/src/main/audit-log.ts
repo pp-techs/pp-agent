@@ -155,8 +155,10 @@ export class AuditLog {
   event(event: AgentEvent, context: Record<string, unknown> = {}): void {
     const entry = auditEntryFor(event);
     if (!entry) return;
-    if (event.type === "message") {
-      const key = `${event.message.id}\n${event.message.errorDetail}`;
+    // Message ids restart in every conversation, so the same id in another one is a new failure.
+    // A temporary conversation has no session to tell it apart by and is never deduplicated.
+    if (event.type === "message" && typeof context.session === "string") {
+      const key = `${context.session}\n${event.message.id}\n${event.message.errorDetail}`;
       if (this.seenErrors.has(key)) return;
       if (this.seenErrors.size >= MAX_SEEN_ERRORS) this.seenErrors.clear();
       this.seenErrors.add(key);

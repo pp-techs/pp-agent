@@ -404,7 +404,7 @@ ipcMain.on(IPC.diagnosticsReport, (_event, report: unknown) => {
   const { kind, message, stack } = (report ?? {}) as Partial<RendererReport>;
   if ((kind !== "error" && kind !== "unhandledrejection") || typeof message !== "string") return;
   audit.record("renderer_error", {
-    kind,
+    reportKind: kind,
     message,
     ...(typeof stack === "string" ? { stack } : {}),
   });

@@ -110,6 +110,16 @@ describe("AuditLog", () => {
     expect(entries[0]?.session).toBe("s1");
   });
 
+  test("logs the same message id again when it comes from another conversation", () => {
+    const log = new AuditLog({ dir });
+    const event: AgentEvent = { type: "message", message: failedTurn };
+    log.event(event, { session: "s1" });
+    log.event(event, { session: "s2" });
+    log.event(event, { session: null });
+    log.event(event, { session: null });
+    expect(lines(log).map((entry) => entry.session)).toEqual(["s1", "s2", null, null]);
+  });
+
   test("rotates when full and keeps the older file", () => {
     const log = new AuditLog({ dir, maxBytes: 300 });
     for (let i = 0; i < 12; i += 1) log.record("tick", { i });
