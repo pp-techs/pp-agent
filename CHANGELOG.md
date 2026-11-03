@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.22.2] — 2026-11-03
+
+An agent's skill list now also filters the skills a workspace carries in `.agents/skills`, so skills layer as global → workspace → agent. The agent editor lists workspace skills next to installed ones.
+
+The app now ships the `skill-creator` skill (Anthropic's, Apache-2.0): it is installed as a built-in skill and helps create, edit and test skills.
+
 ## [0.22.1] — 2026-11-03
 
 Chatting through a gateway with a reasoning model no longer fails with "unknown variant `developer`": gateway requests always send the system prompt with the `system` role, which every OpenAI-compatible server accepts.

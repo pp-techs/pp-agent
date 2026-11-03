@@ -1,5 +1,12 @@
 # @workspace/desktop
 
+## 0.22.2
+
+### Patch Changes
+
+- d047082: An agent's skill list now also filters the skills a workspace carries in `.agents/skills`, so skills layer as global → workspace → agent. The agent editor lists workspace skills next to installed ones.
+- d047082: The app now ships the `skill-creator` skill (Anthropic's, Apache-2.0): it is installed as a built-in skill and helps create, edit and test skills.
+
 ## 0.22.1
 
 ### Patch Changes
