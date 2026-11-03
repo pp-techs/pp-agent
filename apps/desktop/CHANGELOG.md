@@ -1,5 +1,12 @@
 # @workspace/desktop
 
+## 0.22.3
+
+### Patch Changes
+
+- 2d38406: The app window now opens larger by default (1440×900 instead of 1100×780).
+- 1354aaa: Sub agents now show their status while they work: every helper in a `delegate_task` call is listed with its working/finished/failed state and latest step, under the call and in a panel above the message box.
+
 ## 0.22.2
 
 ### Patch Changes

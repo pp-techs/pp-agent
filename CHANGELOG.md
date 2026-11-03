@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.22.3] — 2026-11-03
+
+The app window now opens larger by default (1440×900 instead of 1100×780).
+
+Sub agents now show their status while they work: every helper in a `delegate_task` call is listed with its working/finished/failed state and latest step, under the call and in a panel above the message box.
+
 ## [0.22.2] — 2026-11-03
 
 An agent's skill list now also filters the skills a workspace carries in `.agents/skills`, so skills layer as global → workspace → agent. The agent editor lists workspace skills next to installed ones.
