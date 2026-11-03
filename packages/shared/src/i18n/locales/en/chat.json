@@ -499,9 +499,12 @@
       }
     },
     "helper": {
+      "title": "Helpers",
+      "progress": "{{done}} of {{total}} finished",
       "task": "Task",
       "working": "Working…",
-      "done": "Finished"
+      "done": "Finished",
+      "failed": "Failed"
     }
   },
   "panel": {

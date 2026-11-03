@@ -1,4 +1,11 @@
-import type { ApprovalRequest, ChatPart, ComputerApp, ComputerToolAction } from "@workspace/shared";
+import {
+  DELEGATE_TASK_TOOL,
+  type ApprovalRequest,
+  type ChatPart,
+  type ComputerApp,
+  type ComputerToolAction,
+  type HelperProgress,
+} from "@workspace/shared";
 import { Button } from "@workspace/ui/components/button";
 import { CodeBlock, CodeBlockContent } from "@workspace/ui/components/code-block";
 import {
@@ -24,7 +31,6 @@ import {
   BotIcon,
   BrainIcon,
   CalendarClockIcon,
-  CircleCheckIcon,
   ClockIcon,
   CodeIcon,
   FileTextIcon,
@@ -45,6 +51,7 @@ import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import { useChatThread } from "@/components/chat/chat-thread-context";
+import { HelperStatusIcon } from "@/components/chat/helper-status";
 import { appLabel } from "@/lib/app-label";
 
 type ToolPart = Extract<ChatPart, { type: "tool" }>;
@@ -314,42 +321,35 @@ function ApprovalCard({ approval }: { approval: ApprovalRequest }) {
   );
 }
 
-/**
- * Progress of the sub agents of `delegate_task`: `<helper>\t<tool name>\t<what it works on>` lines,
- * where the tool `done` marks a helper that has finished.
- */
-function HelperProgress({ output }: { output: string }) {
+/** Live status of the sub agents of a running `delegate_task` call, under its step. */
+function HelperProgress({ helpers }: { helpers: HelperProgress[] }) {
   const { t } = useTranslation("chat");
-  const helpers = new Map<string, { steps: string[][]; done: boolean }>();
-  for (const line of output.split("\n")) {
-    const [label = "", tool = "", target = ""] = line.split("\t");
-    const helper = helpers.get(label) ?? { steps: [], done: false };
-    if (tool === "done") helper.done = true;
-    else helper.steps.push([tool, target]);
-    helpers.set(label, helper);
-  }
   return (
     <ul
-      aria-label={t("toolStep.helper.working")}
+      aria-label={t("toolStep.helper.title")}
       className="flex flex-col gap-1 pl-6 text-xs text-muted-foreground"
     >
-      {[...helpers].map(([label, helper]) => (
-        <li key={label} className="min-w-0">
-          {helpers.size > 1 && (
-            <div className="flex items-center gap-1 truncate font-medium">
-              {helper.done && <CircleCheckIcon className="size-3 shrink-0" aria-hidden />}
-              <span className="truncate">{label}</span>
-              {helper.done && <span className="sr-only">{t("toolStep.helper.done")}</span>}
-            </div>
+      {helpers.map((helper) => (
+        <li key={helper.label} className="min-w-0">
+          <div className="flex items-center gap-1 truncate font-medium">
+            <HelperStatusIcon status={helper.status} />
+            {helpers.length > 1 && <span className="truncate">{helper.label}</span>}
+            <span className="font-normal text-muted-foreground/70">
+              {t(`toolStep.helper.${helper.status}`)}
+            </span>
+          </div>
+          {helper.status === "failed" ? (
+            helper.error && <p className="truncate pl-4 text-destructive">{helper.error}</p>
+          ) : (
+            <ul className="flex flex-col gap-0.5 pl-4">
+              {helper.steps.slice(-3).map((step, index) => (
+                <li key={index} className="truncate">
+                  <span className="font-mono">{step.tool}</span>
+                  {step.target ? ` · ${step.target}` : ""}
+                </li>
+              ))}
+            </ul>
           )}
-          <ul className="flex flex-col gap-0.5">
-            {helper.steps.slice(-3).map(([tool, target], index) => (
-              <li key={index} className="truncate">
-                <span className="font-mono">{tool}</span>
-                {target ? ` · ${target}` : ""}
-              </li>
-            ))}
-          </ul>
         </li>
       ))}
     </ul>
@@ -386,8 +386,8 @@ export function ToolStep({ part }: { part: ToolPart }) {
     </TraceLine>
   );
 
-  // While the helper works, its output is the list of its steps; the summary replaces it at the end.
-  const helperWorking = part.name === "delegate_task" && part.status === "running";
+  // While the helpers work, their status is shown under the step; the summaries replace it at the end.
+  const helperWorking = part.name === DELEGATE_TASK_TOOL && part.status === "running";
   const step =
     part.output && !helperWorking ? (
       <TraceCollapsible>
@@ -407,7 +407,7 @@ export function ToolStep({ part }: { part: ToolPart }) {
   return (
     <>
       {step}
-      {helperWorking && part.output && <HelperProgress output={part.output} />}
+      {helperWorking && part.helpers && <HelperProgress helpers={part.helpers} />}
       {cards}
     </>
   );

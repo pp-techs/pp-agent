@@ -2256,16 +2256,14 @@ export class AgentHost {
         transcript.setToolStatus(event.toolCallId, "running");
         break;
       case "tool_execution_update": {
-        // delegate_task reports the helper's steps while it works; the final summary replaces them.
+        // delegate_task reports the sub agents' status while they work; the final summaries replace it.
         if (event.toolName !== DELEGATE_TOOL) break;
-        const content: unknown = event.partialResult?.content;
-        const text = Array.isArray(content)
-          ? content
-              .filter((block) => block?.type === "text")
-              .map((block) => block.text)
-              .join("\n")
-          : "";
-        if (text) transcript.setToolStatus(event.toolCallId, "running", text);
+        const details: unknown = event.partialResult?.details;
+        const helpers =
+          typeof details === "object" && details !== null && "helpers" in details
+            ? details.helpers
+            : undefined;
+        if (Array.isArray(helpers)) transcript.setToolHelpers(event.toolCallId, helpers);
         break;
       }
       case "tool_execution_end": {

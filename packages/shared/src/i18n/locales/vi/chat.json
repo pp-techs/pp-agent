@@ -499,9 +499,12 @@
       }
     },
     "helper": {
+      "title": "Trợ lý",
+      "progress": "Xong {{done}}/{{total}}",
       "task": "Việc",
       "working": "Đang làm…",
-      "done": "Đã xong"
+      "done": "Đã xong",
+      "failed": "Lỗi"
     }
   },
   "panel": {

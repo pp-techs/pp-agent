@@ -8,7 +8,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentEvent, AgentPaths, StoredCredential } from "@workspace/shared";
+import type { AgentEvent, AgentPaths, ChatPart, StoredCredential } from "@workspace/shared";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { AgentHost } from "./index.ts";
 
@@ -114,6 +114,8 @@ function modelServer(): ModelServer {
 let dir: string;
 let model: ModelServer;
 let host: AgentHost;
+/** Chat messages the host emitted; the sub agents' live status is in their tool parts. */
+let emitted: AgentEvent[];
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "pp-agent-subagent-"));
@@ -123,8 +125,9 @@ beforeEach(async () => {
   parentSaw = Promise.withResolvers<string>();
   model = modelServer();
   const store = new Map<string, StoredCredential>();
+  emitted = [];
   host = new AgentHost({
-    output: { emit: (_event: AgentEvent) => undefined, openUrl: () => undefined },
+    output: { emit: (event) => void emitted.push(event), openUrl: () => undefined },
     vault: {
       read: async (id) => store.get(id) ?? null,
       list: async () => [...store.keys()],
@@ -208,6 +211,26 @@ test("one call runs several sub agents; a named Agent's rules and the shared con
   expect(result).toContain("## Finance\nFound: sum the invoices");
   expect(result).toContain("## Helper 2\nFound: list the folders");
   expect(result).toContain("## Helper 3\nFound: list the folders again");
+
+  // The chat saw every helper working together, then each one finished before the summaries arrived.
+  const delegateCalls = emitted.flatMap((event) =>
+    event.type === "message"
+      ? event.message.parts.filter(
+          (part): part is Extract<ChatPart, { type: "tool" }> =>
+            part.type === "tool" && part.name === "delegate_task",
+        )
+      : [],
+  );
+  expect(
+    delegateCalls.some(
+      (part) => part.status === "running" && part.helpers?.every((h) => h.status === "working"),
+    ),
+  ).toBe(true);
+  expect(
+    delegateCalls.some(
+      (part) => part.helpers?.length === 3 && part.helpers.every((h) => h.status === "done"),
+    ),
+  ).toBe(true);
 });
 
 test("an unknown Agent fails the call before any sub agent starts", async () => {

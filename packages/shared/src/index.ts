@@ -17,6 +17,20 @@ export type ToolStatus =
   | "error"
   | "denied";
 
+/** Tool that hands focused research tasks to sub agents. */
+export const DELEGATE_TASK_TOOL = "delegate_task";
+
+/** One sub agent of `delegate_task`, as it works, for the chat to show its status. */
+export interface HelperProgress {
+  /** Label the person sees; unique within the call. */
+  label: string;
+  status: "working" | "done" | "failed";
+  /** Tool calls it made, oldest first: the tool's name and what it works on. */
+  steps: { tool: string; target: string }[];
+  /** Why it failed; only with status `failed`. */
+  error?: string;
+}
+
 export type ChatPart =
   | { type: "text"; text: string }
   | { type: "thinking"; text: string }
@@ -33,6 +47,8 @@ export type ChatPart =
       args: Record<string, unknown>;
       status: ToolStatus;
       output?: string;
+      /** Progress of the sub agents of `delegate_task`, while it runs. */
+      helpers?: HelperProgress[];
     };
 
 export interface ChatMessage {

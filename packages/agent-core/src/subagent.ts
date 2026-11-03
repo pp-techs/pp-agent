@@ -19,8 +19,9 @@ import {
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { DELEGATE_TASK_TOOL, type HelperProgress } from "@workspace/shared";
 
-export const DELEGATE_TOOL = "delegate_task";
+export const DELEGATE_TOOL = DELEGATE_TASK_TOOL;
 
 /** Tool calls a sub agent may make before it is asked to wrap up. */
 export const MAX_TOOL_CALLS = 25;
@@ -40,8 +41,6 @@ const MAX_LABEL_CHARS = 40;
 const MAX_LISTED_AGENTS = 20;
 const MAX_LISTED_DESCRIPTION_CHARS = 160;
 const DEFAULT_LABEL = "Helper";
-/** Progress "tool" column value that marks a sub agent as finished. */
-export const PROGRESS_DONE = "done";
 
 const SUBAGENT_PROMPT = `You are a research helper working for another assistant. You receive one focused task and no other context: you cannot see the conversation it comes from.
 
@@ -53,14 +52,13 @@ const SUBAGENT_PROMPT = `You are a research helper working for another assistant
 const WRAP_UP_PROMPT =
   "You have reached your limit. Do not use any tools. Write your final summary now from what you have found so far, and say what is still missing.";
 
-/** One line of progress for the chat: `<helper>\t<tool name>\t<what it works on>`. */
-function progressLine(label: string, toolName: string, args: unknown): string {
+/** What a tool call works on, in one short line, for the chat's progress list. */
+function progressTarget(args: unknown): string {
   const input = typeof args === "object" && args !== null ? (args as Record<string, unknown>) : {};
   const target = ["path", "pattern", "query", "url"]
     .map((key) => input[key])
     .find((value): value is string => typeof value === "string" && value.length > 0);
-  const short = (target ?? "").replace(/\s+/g, " ").slice(0, MAX_TARGET_CHARS);
-  return `${label}\t${toolName}\t${short}`;
+  return (target ?? "").replace(/\s+/g, " ").slice(0, MAX_TARGET_CHARS);
 }
 
 /** The model named by `wanted` (`provider/id`, id, or display name), else `fallback`. */
@@ -149,7 +147,7 @@ async function runHelper(
   options: DelegateToolOptions,
   spec: HelperSpec,
   signal: AbortSignal | undefined,
-  onStep: (line: string) => void,
+  onStep: (tool: string, target: string) => void,
 ): Promise<string> {
   if (signal?.aborted) throw new Error("Stopped.");
   const allowed = new Set(spec.tools);
@@ -207,7 +205,7 @@ async function runHelper(
   const unsubscribe = session.subscribe((event) => {
     if (event.type === "tool_execution_start") {
       toolCalls += 1;
-      onStep(progressLine(spec.label, event.toolName, event.args));
+      onStep(event.toolName, progressTarget(event.args));
       if (toolCalls >= MAX_TOOL_CALLS) stop("calls");
     } else if (event.type === "turn_end" && event.toolResults.length > 0) {
       toolTurns += 1;
@@ -359,17 +357,33 @@ export function createDelegateTool(options: DelegateToolOptions) {
         };
       });
 
-      const steps: string[] = [];
-      const report = (line: string) => {
-        steps.push(line);
-        onUpdate?.({ content: [{ type: "text", text: steps.join("\n") }], details: undefined });
+      const runs: { spec: HelperSpec; helper: HelperProgress }[] = specs.map((spec) => ({
+        spec,
+        helper: { label: spec.label, status: "working", steps: [] },
+      }));
+      const report = () => {
+        const helpers = runs.map(({ helper }) => ({ ...helper, steps: [...helper.steps] }));
+        onUpdate?.({ content: [], details: { helpers } });
       };
+      report();
       const settled = await Promise.allSettled(
-        specs.map(async (spec) => {
+        runs.map(async ({ spec, helper }) => {
           try {
-            return await runHelper(options, spec, signal, report);
-          } finally {
-            report(`${spec.label}\t${PROGRESS_DONE}\t`);
+            const summary = await runHelper(options, spec, signal, (tool, target) => {
+              helper.steps.push({ tool, target });
+              report();
+            });
+            helper.status = "done";
+            report();
+            return summary;
+          } catch (error) {
+            helper.status = "failed";
+            helper.error = (error instanceof Error ? error.message : String(error))
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, MAX_TARGET_CHARS);
+            report();
+            throw error;
           }
         }),
       );

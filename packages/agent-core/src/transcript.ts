@@ -1,6 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { parseSkillBlock } from "@earendil-works/pi-coding-agent";
-import type { ChatMessage, ChatPart, ToolStatus } from "@workspace/shared";
+import type { ChatMessage, ChatPart, HelperProgress, ToolStatus } from "@workspace/shared";
 import { splitAttachedFiles } from "./attachments.ts";
 import { t } from "./i18n.ts";
 import { modelErrorDetail, modelErrorText } from "./model-error.ts";
@@ -13,6 +13,8 @@ interface ToolState {
   messageId: string;
   status: ToolStatus;
   output?: string;
+  /** Sub agent status of `delegate_task`, while it runs. */
+  helpers?: HelperProgress[];
 }
 
 export type TranscriptItem = AgentMessage | { role: "compaction" };
@@ -171,12 +173,23 @@ export class Transcript {
     this.refresh(state.messageId);
   }
 
+  /** Replaces the live sub agent status of a running `delegate_task` call. */
+  setToolHelpers(toolCallId: string, helpers: HelperProgress[]): void {
+    const state = this.tools.get(toolCallId);
+    if (!state) return;
+    state.helpers = helpers;
+    this.refresh(state.messageId);
+  }
+
   /** Called on tool_execution_end, which fires per tool as soon as it finishes (toolResult messages wait for the whole batch). */
   finishTool(toolCallId: string, content: ToolResultMessage["content"], isError: boolean): void {
     const output = content
       .filter((block) => block.type === "text")
       .map((block) => block.text)
       .join("\n");
+    // The summary replaces the progress; a running tool is the only place it is shown.
+    const state = this.tools.get(toolCallId);
+    if (state) state.helpers = undefined;
     this.setToolStatus(toolCallId, isError ? "error" : "done", output);
   }
 
@@ -213,6 +226,7 @@ export class Transcript {
           args: block.arguments,
           status: state.status,
           output: state.output,
+          helpers: state.helpers,
         });
       }
     }
@@ -226,7 +240,9 @@ export class Transcript {
     const parts = message.parts.map((part) => {
       if (part.type !== "tool") return part;
       const state = this.tools.get(part.toolCallId);
-      return state ? { ...part, status: state.status, output: state.output } : part;
+      return state
+        ? { ...part, status: state.status, output: state.output, helpers: state.helpers }
+        : part;
     });
     this.upsert({ ...message, parts }, true);
   }
