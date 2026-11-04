@@ -251,7 +251,7 @@ describe("commands", () => {
     api.push(textUpdate(1, "/id", "u99", "GROUP"));
     api.push(textUpdate(2, "/help"));
     await vi.waitFor(() => expect(api.texts).toContain("channels.zalo.help"));
-    expect(api.texts).not.toContain(expect.stringContaining("idReply"));
+    expect(api.texts.some((text) => text.includes("idReply"))).toBe(false);
   });
 
   test("/agent lists numbered choices, and /agent 2 or a name switches", async () => {
@@ -359,6 +359,30 @@ describe("approvals and questions by reply", () => {
     expect(decisions).toEqual([true, false]);
     // The replies answered the questions; they did not start turns of their own.
     expect(gateway.turns.length).toBe(1);
+  });
+
+  test("a permitted group member's reply cannot settle the owner's pending approval", async () => {
+    const { api, gateway, channel } = setup(OWNER, {
+      g1: { access: "members", allowedUsers: ["u8"] },
+    });
+    let decision: boolean | undefined;
+    gateway.handler = async (_input, hooks) => {
+      decision = await hooks.askApproval(approvalRequest());
+      return { text: "done", status: "done" };
+    };
+    await channel.start();
+    api.push(textUpdate(1, "@bot go", "u7", "GROUP"));
+    await vi.waitFor(() => expect(api.texts.at(-1)).toContain("channels.zalo.approvalHint"));
+    // "gibberish" answers neither yes nor no. If a member's reply reached the open prompt, it
+    // would be consumed there (an "answerRetry" reply, never a turn); the fix must instead queue
+    // it as a turn of its own, behind the one the approval belongs to. Only the owner's "1" may
+    // settle the approval, which is what lets the queue drain and that turn run.
+    api.push(textUpdate(2, "gibberish", "u8", "GROUP"));
+    api.push(textUpdate(3, "1", "u7", "GROUP"));
+    await vi.waitFor(() => expect(decision).toBe(true));
+    await vi.waitFor(() => expect(gateway.turns).toHaveLength(2));
+    expect(gateway.turns.map((turn) => turn.input.text)).toEqual(["@bot go", "gibberish"]);
+    expect(api.texts).not.toContain("channels.zalo.answerRetry");
   });
 
   test("questions take a number, several numbers, own words, or a skip", async () => {

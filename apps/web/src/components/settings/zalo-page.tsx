@@ -82,6 +82,7 @@ function ChatsStep({ bridge, status }: { bridge: DesktopBridge; status: ZaloStat
 
   function startEdit(id: string) {
     const chat = chats[id];
+    saveZalo.reset();
     setEditing(id);
     setTouched(false);
     setDraft({
@@ -240,7 +241,10 @@ function ChatsStep({ bridge, status }: { bridge: DesktopBridge; status: ZaloStat
               variant="outline"
               size="sm"
               disabled={saveZalo.isPending}
-              onClick={() => setEditing(null)}
+              onClick={() => {
+                saveZalo.reset();
+                setEditing(null);
+              }}
             >
               {t("common:actions.cancel")}
             </Button>

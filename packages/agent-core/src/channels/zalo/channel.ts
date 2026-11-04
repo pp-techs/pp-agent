@@ -323,8 +323,12 @@ export class ZaloChannel {
     }
 
     // The turn in progress waits for this reply (an approval or a question); queued, it would wait
-    // behind the very turn that waits for it.
-    if (update.event_name === "message.text.received" && this.prompts.handleText(chatId, text))
+    // behind the very turn that waits for it. Only the owner's reply may settle it.
+    if (
+      from.id === owner?.id &&
+      update.event_name === "message.text.received" &&
+      this.prompts.handleText(chatId, text)
+    )
       return;
 
     // Busy mode: steer joins the running turn, interrupt stops it, queue waits.
