@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.22.4] — 2026-11-04
+
+Added `/id` for Telegram and Zalo: the paired owner sends it in any chat to get that chat's id and type back, including a group not yet added in Settings. This makes it easy to find the id to configure per-chat access for a group, without needing to call the Bot API by hand. Telegram's `/id` works in an unconfigured group (unlike every other command there); Zalo's needs the owner to tag or reply to the bot first, since that is the only way Zalo forwards a group message to the bot.
+
+Zalo now answers group chats, not just private ones: Zalo only forwards a group message to the bot when someone @-mentions it or replies to one of its messages, so the owner's tag or reply works right away. Settings › Channels › Zalo gained per-chat settings (label, access, allowed users, busy mode) mirroring Telegram's, letting a chat be opened to specific members instead of the owner only.
+
 ## [0.22.3] — 2026-11-03
 
 The app window now opens larger by default (1440×900 instead of 1100×780).
