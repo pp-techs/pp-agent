@@ -1,4 +1,4 @@
-import type { Attachment, ChannelState } from "@workspace/shared";
+import type { Attachment, ChannelState, ZaloChatSettings } from "@workspace/shared";
 import type { ChannelGateway, ChannelInput, ChatOption, TurnResult } from "../types.ts";
 import { findOption } from "../shared/options.ts";
 import type { PairingGuard } from "../shared/pairing.ts";
@@ -31,6 +31,7 @@ const SEEN_LIMIT = 200;
 const COMMANDS = new Set([
   "start",
   "help",
+  "id",
   "new",
   "stop",
   "pair",
@@ -60,6 +61,10 @@ export interface ZaloChannelDeps {
   onPaired(owner: ZaloOwner): void;
   onState(state: ChannelState, error: string | null): void;
   t: ZaloTranslate;
+  /** Per-chat access, bindings and busy mode from Settings › Channels; read live, each message. */
+  settings?: {
+    get(): { channels: { zalo: { chats?: Record<string, ZaloChatSettings> } } };
+  };
 }
 
 interface ChatQueue {
@@ -85,9 +90,10 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
 };
 
 /**
- * The Zalo bot: long polls for private messages, answers only the paired owner, and runs accepted
- * messages through the gateway. Zalo cannot edit a message, so an answer is sent once the agent
- * has finished, while the typing indicator runs.
+ * The Zalo bot: long polls for messages (private chats, plus group messages that mention or
+ * reply to the bot), answers only the paired owner, and runs accepted messages through the
+ * gateway. Zalo cannot edit a message, so an answer is sent once the agent has finished, while
+ * the typing indicator runs.
  */
 export class ZaloChannel {
   private readonly api: ZaloApi;
@@ -219,8 +225,8 @@ export class ZaloChannel {
   private async handleUpdate(update: ZaloUpdate): Promise<void> {
     const message = update.message;
     if (!update.event_name.startsWith("message.") || !message?.from || message.from.is_bot) return;
-    // Groups are in beta on Zalo; the bot answers private chats only.
-    if (message.chat.chat_type !== "PRIVATE") return;
+    // Groups are beta on Zalo: it only forwards a group message here when someone mentions the
+    // bot or replies to one of its messages, so no further filtering is needed on our side.
     if (this.seen.has(message.message_id)) return;
     this.seen.add(message.message_id);
     if (this.seen.size > SEEN_LIMIT) this.seen.delete(this.seen.values().next().value!);
@@ -231,6 +237,22 @@ export class ZaloChannel {
   // Messages
   // -------------------------------------------------------------------------------------------
 
+  /** Per-chat settings from Settings › Channels; empty when none are configured. */
+  private chatSettings(chatId: string): ZaloChatSettings {
+    const chats = this.deps.settings?.get().channels.zalo.chats;
+    return chats?.[chatId] ?? {};
+  }
+
+  /** True when `from` may talk in this chat (owner, or in the chat's allowlist). */
+  private isAllowed(chatId: string, from: ZaloUser): boolean {
+    const owner = this.deps.owner();
+    if (owner && from.id === owner.id) return true;
+    const settings = this.chatSettings(chatId);
+    if (settings.access !== "members") return false;
+    if (!settings.allowedUsers || settings.allowedUsers.length === 0) return true;
+    return settings.allowedUsers.includes(from.id);
+  }
+
   private async handleMessage(
     update: ZaloUpdate,
     message: ZaloMessage,
@@ -240,8 +262,9 @@ export class ZaloChannel {
     const owner = this.deps.owner();
     const text = (message.text ?? "").trim();
     const command = parseCommand(text);
+    if (command?.name === "pair" && message.chat.chat_type !== "PRIVATE") return;
 
-    if (!owner || from.id !== owner.id) {
+    if (!this.isAllowed(chatId, from)) {
       // Strangers get no answer. A pairing the owner opened is the one exception: its code may
       // come from anyone, and (if the bot already has an owner) it replaces that owner.
       if (command?.name === "pair" && (!owner || this.deps.pairing.isOpen(Date.now())))
@@ -252,10 +275,16 @@ export class ZaloChannel {
 
     switch (command?.name) {
       case "start":
-        await this.reply(chatId, "startPaired", { name: owner.name });
+        await this.reply(chatId, "startPaired", { name: owner?.name ?? "" });
         return;
       case "help":
         await this.reply(chatId, "help");
+        return;
+      case "id":
+        await this.reply(chatId, "idReply", {
+          chatId,
+          chatType: message.chat.chat_type === "GROUP" ? "group" : "private",
+        });
         return;
       case "pair":
         await this.reply(chatId, "alreadyPaired");
@@ -268,9 +297,12 @@ export class ZaloChannel {
       case "workspace":
       case "model":
       case "thinking":
+        // Members may converse, but only the owner may inspect or change bindings.
+        if (from.id !== owner?.id) return;
         await this.choose(chatId, command.name, command.argument);
         return;
       case "effort":
+        if (from.id !== owner?.id) return;
         await this.choose(chatId, "thinking", command.argument);
         return;
       case "new":
@@ -295,7 +327,24 @@ export class ZaloChannel {
     if (update.event_name === "message.text.received" && this.prompts.handleText(chatId, text))
       return;
 
+    // Busy mode: steer joins the running turn, interrupt stops it, queue waits.
+    const busyMode = this.chatSettings(chatId).busyMode ?? "queue";
     const queue = this.queue(chatId);
+    const plain = update.event_name === "message.text.received";
+    if (queue.running && busyMode === "steer" && plain && text) {
+      try {
+        const accepted = await this.deps.gateway.steerTurn(`zalo:${chatId}`, {
+          text,
+          attachments: [],
+        });
+        if (accepted) return;
+      } catch (error) {
+        console.warn("[zalo] Could not steer the turn; queueing the message:", error);
+      }
+    }
+    if (queue.running && busyMode === "interrupt") {
+      await this.deps.gateway.abort(`zalo:${chatId}`).catch(() => {});
+    }
     if (queue.waiting.length >= MAX_QUEUED_MESSAGES) {
       await this.reply(chatId, "busy");
       return;

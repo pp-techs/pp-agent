@@ -11,6 +11,7 @@ import { BotService } from "../shared/bot-service.ts";
 import type { ChannelGateway, ChannelService, ChannelSummary } from "../types.ts";
 import { HttpZaloApi, ZaloApiError, type ZaloApi } from "./api.ts";
 import { ZaloChannel, type ZaloOwner } from "./channel.ts";
+import { readZaloSettings } from "./settings.ts";
 import type { ZaloTranslate } from "./text.ts";
 
 export interface ZaloServiceDeps {
@@ -65,6 +66,7 @@ export class ZaloService extends BotService<ZaloChannel> implements ChannelServi
       onPaired: (owner) => this.paired(owner),
       onState,
       t: this.deps.t,
+      settings: this.deps.settings,
     });
   }
 
@@ -93,17 +95,23 @@ export class ZaloService extends BotService<ZaloChannel> implements ChannelServi
     };
   }
 
-  /** Sends to the paired owner: `home`, or `zalo:<owner id>`. */
+  /** Sends to the paired owner (`home`) or an explicitly configured Zalo chat. */
   async deliver(peer: string, text: string): Promise<void> {
-    const { t } = this.deps;
+    const { t, settings } = this.deps;
     const owner = this.owner();
     if (!owner) throw new Error(t("channels.zalo.notifyNeedsOwner"));
-    if (peer !== "home" && peer !== `zalo:${owner.id}`)
+    const match = /^zalo:(.+)$/.exec(peer);
+    const chatId = peer === "home" ? owner.id : match ? match[1] : null;
+    if (
+      !chatId ||
+      (chatId !== owner.id && !Object.hasOwn(settings.get().channels.zalo.chats ?? {}, chatId))
+    ) {
       throw new Error(`Unknown delivery target: ${peer}`);
+    }
     const channel = this.onlineChannel;
     if (!channel) throw new Error(t("channels.zalo.notifyNeedsOnline"));
     try {
-      await channel.notify(owner.id, text);
+      await channel.notify(chatId, text);
     } catch (error) {
       throw new Error(t("channels.zalo.notifyFailed", { error: (error as Error).message }));
     }
@@ -134,6 +142,9 @@ export class ZaloService extends BotService<ZaloChannel> implements ChannelServi
           workspaceId: draft.workspaces.some((workspace) => workspace.id === input.workspaceId)
             ? input.workspaceId
             : DEFAULT_WORKSPACE_ID,
+          ...(input.chats !== undefined
+            ? { chats: readZaloSettings({ chats: input.chats }).chats ?? {} }
+            : {}),
         };
       });
       await this.reconcile();

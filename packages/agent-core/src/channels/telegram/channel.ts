@@ -29,6 +29,7 @@ const MAX_BACKOFF_MS = 30_000;
 const COMMANDS: Record<string, true> = {
   start: true,
   help: true,
+  id: true,
   new: true,
   stop: true,
   pair: true,
@@ -218,6 +219,7 @@ export class TelegramChannel {
           { command: "stop", description: t("channels.telegram.commandStop") },
           { command: "sessions", description: t("channels.telegram.commandSessions") },
           { command: "resume", description: t("channels.telegram.commandResume") },
+          { command: "id", description: t("channels.telegram.commandId") },
           { command: "help", description: t("channels.telegram.commandHelp") },
         ],
         signal,
@@ -325,7 +327,9 @@ export class TelegramChannel {
     }
     const message = update.message;
     if (!message?.from || message.from.is_bot) return;
-    if (message.chat.type !== "private") {
+    const isOwner = message.from.id === this.deps.owner()?.id;
+    const isIdCommand = parseCommand((message.text ?? "").trim())?.name === "id";
+    if (message.chat.type !== "private" && !(isOwner && isIdCommand)) {
       if (
         (message.chat.type !== "group" && message.chat.type !== "supergroup") ||
         !this.isConfiguredChat(message.chat.id)
@@ -386,6 +390,12 @@ export class TelegramChannel {
         return;
       case "help":
         await this.reply(chatId, "help");
+        return;
+      case "id":
+        await this.reply(chatId, "idReply", {
+          chatId: String(chatId),
+          chatType: message.chat.type,
+        });
         return;
       case "pair":
         await this.reply(chatId, "alreadyPaired");

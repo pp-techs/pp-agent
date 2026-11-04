@@ -32,7 +32,7 @@ export interface ZaloMessage {
   date?: number;
   message_type?: string;
   from?: ZaloUser;
-  /** `PRIVATE`, or `GROUP` (beta); the bot answers private chats only. */
+  /** `PRIVATE`, or `GROUP` (beta; Zalo only forwards messages that mention or reply to the bot). */
   chat: { id: string; chat_type: string };
   text?: string;
   photo_url?: string;
