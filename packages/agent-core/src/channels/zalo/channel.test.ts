@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
-import type { ChannelState } from "@workspace/shared";
+import type { ChannelState, ZaloChatSettings } from "@workspace/shared";
 import { PairingGuard } from "../shared/pairing.ts";
 import { FakeGateway, approvalRequest, questionRequest } from "../shared/testing.ts";
 import { ZaloApiError, type ZaloUpdate } from "./api.ts";
@@ -9,7 +9,7 @@ import { FakeZaloApi, fakeT, textUpdate } from "./testing.ts";
 const OWNER: ZaloOwner = { id: "u7", name: "Ann" };
 const channels: ZaloChannel[] = [];
 
-function setup(initialOwner: ZaloOwner | null = OWNER) {
+function setup(initialOwner: ZaloOwner | null = OWNER, chats?: Record<string, ZaloChatSettings>) {
   const api = new FakeZaloApi();
   const gateway = new FakeGateway();
   const pairing = new PairingGuard();
@@ -28,6 +28,7 @@ function setup(initialOwner: ZaloOwner | null = OWNER) {
     },
     onState: (value, error) => states.push([value, error]),
     t: fakeT,
+    settings: { get: () => ({ channels: { zalo: { chats } } }) },
   });
   channels.push(channel);
   return { api, gateway, pairing, state, paired, states, channel };
@@ -102,18 +103,71 @@ describe("who is answered", () => {
     expect(api.actions).toContain("u7");
   });
 
-  test("strangers, groups, bots and repeats are ignored", async () => {
+  test("strangers, bots and repeats are ignored", async () => {
     const { api, gateway, channel } = setup();
     await channel.start();
     api.push(textUpdate(1, "hello", "u99"));
-    api.push(textUpdate(2, "hello", "u7", "GROUP"));
-    const bot = textUpdate(3, "hello");
+    const bot = textUpdate(2, "hello");
     bot.message!.from!.is_bot = true;
     api.push(bot);
-    api.push(textUpdate(4, "once"));
-    api.push(textUpdate(4, "once"));
+    api.push(textUpdate(3, "once"));
+    api.push(textUpdate(3, "once"));
     await vi.waitFor(() => expect(api.texts).toEqual(["ok"]));
     expect(gateway.turns.map((turn) => turn.input.text)).toEqual(["once"]);
+  });
+
+  test("the owner's mention or reply in a group becomes a turn, answered to the group", async () => {
+    const { api, gateway, channel } = setup();
+    gateway.handler = async () => ({ text: "Hello group", status: "done" });
+    await channel.start();
+    api.push(textUpdate(1, "@bot hi", "u7", "GROUP"));
+    await vi.waitFor(() => expect(api.texts).toEqual(["Hello group"]));
+    expect(gateway.turns[0]?.chatKey).toBe("zalo:g1");
+    expect(api.sent[0]?.chatId).toBe("g1");
+  });
+
+  test("a non-owner's message in a group is ignored", async () => {
+    const { api, gateway, channel } = setup();
+    await channel.start();
+    api.push(textUpdate(1, "@bot hi", "u99", "GROUP"));
+    api.push(textUpdate(2, "once"));
+    await vi.waitFor(() => expect(api.texts).toEqual(["ok"]));
+    expect(gateway.turns.map((turn) => turn.input.text)).toEqual(["once"]);
+  });
+
+  test("a member allowed in a configured group's allowlist becomes a turn", async () => {
+    const { api, gateway, channel } = setup(OWNER, {
+      g1: { access: "members", allowedUsers: ["u8"] },
+    });
+    gateway.handler = async () => ({ text: "done", status: "done" });
+    await channel.start();
+    api.push(textUpdate(1, "@bot hi", "u8", "GROUP"));
+    await vi.waitFor(() => expect(gateway.turns).toHaveLength(1));
+    api.push(textUpdate(2, "@bot again", "u9", "GROUP"));
+    api.push(textUpdate(3, "once"));
+    await vi.waitFor(() => expect(api.texts).toEqual(["done", "done"]));
+    expect(gateway.turns).toHaveLength(2);
+    expect(gateway.turns[0]?.chatKey).toBe("zalo:g1");
+  });
+
+  test("an empty allowlist with members access lets anyone in the configured group talk", async () => {
+    const { api, gateway, channel } = setup(OWNER, { g1: { access: "members" } });
+    gateway.handler = async () => ({ text: "done", status: "done" });
+    await channel.start();
+    api.push(textUpdate(1, "@bot hi", "u8", "GROUP"));
+    await vi.waitFor(() => expect(api.texts).toContain("done"));
+    expect(gateway.turns).toHaveLength(1);
+  });
+
+  test("a configured members group cannot use or consume a pairing code", async () => {
+    const { api, channel, pairing, paired } = setup(null, { g1: { access: "members" } });
+    const { code } = pairing.open(Date.now());
+    await channel.start();
+    api.push(textUpdate(1, `/pair ${code}`, "u8", "GROUP"));
+    api.push(textUpdate(2, `/pair ${code}`, "u8"));
+    await vi.waitFor(() => expect(paired).toHaveLength(1));
+    expect(paired[0]?.id).toBe("u8");
+    expect(api.sent.map((sent) => sent.chatId)).toEqual(["u8"]);
   });
 
   test("a long answer is split below Zalo's limit", async () => {
@@ -176,6 +230,28 @@ describe("commands", () => {
     api.push(textUpdate(2, "/stop"));
     await vi.waitFor(() => expect(api.texts.at(-1)).toBe("channels.zalo.stopped"));
     expect(gateway.aborted).toContain("zalo:u7");
+  });
+
+  test("/id reports the private chat's id, and the owner's /id in an unconfigured group reports its id too", async () => {
+    const { api, channel } = setup();
+    await channel.start();
+    api.push(textUpdate(1, "/id"));
+    await vi.waitFor(() =>
+      expect(api.texts).toContain('channels.zalo.idReply {"chatId":"u7","chatType":"private"}'),
+    );
+    api.push(textUpdate(2, "/id", "u7", "GROUP"));
+    await vi.waitFor(() =>
+      expect(api.texts).toContain('channels.zalo.idReply {"chatId":"g1","chatType":"group"}'),
+    );
+  });
+
+  test("a non-owner's /id in a group is ignored", async () => {
+    const { api, channel } = setup();
+    await channel.start();
+    api.push(textUpdate(1, "/id", "u99", "GROUP"));
+    api.push(textUpdate(2, "/help"));
+    await vi.waitFor(() => expect(api.texts).toContain("channels.zalo.help"));
+    expect(api.texts.some((text) => text.includes("idReply"))).toBe(false);
   });
 
   test("/agent lists numbered choices, and /agent 2 or a name switches", async () => {
@@ -285,6 +361,30 @@ describe("approvals and questions by reply", () => {
     expect(gateway.turns.length).toBe(1);
   });
 
+  test("a permitted group member's reply cannot settle the owner's pending approval", async () => {
+    const { api, gateway, channel } = setup(OWNER, {
+      g1: { access: "members", allowedUsers: ["u8"] },
+    });
+    let decision: boolean | undefined;
+    gateway.handler = async (_input, hooks) => {
+      decision = await hooks.askApproval(approvalRequest());
+      return { text: "done", status: "done" };
+    };
+    await channel.start();
+    api.push(textUpdate(1, "@bot go", "u7", "GROUP"));
+    await vi.waitFor(() => expect(api.texts.at(-1)).toContain("channels.zalo.approvalHint"));
+    // "gibberish" answers neither yes nor no. If a member's reply reached the open prompt, it
+    // would be consumed there (an "answerRetry" reply, never a turn); the fix must instead queue
+    // it as a turn of its own, behind the one the approval belongs to. Only the owner's "1" may
+    // settle the approval, which is what lets the queue drain and that turn run.
+    api.push(textUpdate(2, "gibberish", "u8", "GROUP"));
+    api.push(textUpdate(3, "1", "u7", "GROUP"));
+    await vi.waitFor(() => expect(decision).toBe(true));
+    await vi.waitFor(() => expect(gateway.turns).toHaveLength(2));
+    expect(gateway.turns.map((turn) => turn.input.text)).toEqual(["@bot go", "gibberish"]);
+    expect(api.texts).not.toContain("channels.zalo.answerRetry");
+  });
+
   test("questions take a number, several numbers, own words, or a skip", async () => {
     const { api, gateway, channel } = setup();
     let answers: unknown;
@@ -367,5 +467,104 @@ describe("failures", () => {
     await channel.start();
     api.push(textUpdate(1, "x"));
     await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+  });
+});
+
+describe("binding command authorization", () => {
+  test("a permitted group member cannot change bindings", async () => {
+    const chats = { g1: { access: "members" as const, allowedUsers: ["u8"] } };
+    const { api, gateway, channel } = setup(OWNER, chats);
+    await channel.start();
+    api.push(textUpdate(1, "/agent", "u8", "GROUP"));
+    api.push(textUpdate(2, "/agent 2", "u8", "GROUP"));
+    api.push(textUpdate(3, "/help", "u8", "GROUP"));
+    await vi.waitFor(() => expect(api.texts).toContain("channels.zalo.help"));
+    expect(gateway.chosen).toEqual([]);
+    expect(gateway.turns).toEqual([]);
+  });
+
+  test("a permitted private-chat member cannot change bindings either", async () => {
+    const { api, gateway, channel } = setup(OWNER, { u8: { access: "members" } });
+    await channel.start();
+    for (const [index, name] of ["agent", "workspace", "model", "thinking", "effort"].entries()) {
+      api.push(textUpdate(index * 2 + 1, `/${name}`, "u8"));
+      api.push(textUpdate(index * 2 + 2, `/${name} 2`, "u8"));
+    }
+    api.push(textUpdate(11, "/help", "u8"));
+    await vi.waitFor(() => expect(api.texts).toContain("channels.zalo.help"));
+    expect(gateway.chosen).toEqual([]);
+    expect(gateway.picked).toEqual([]);
+    expect(gateway.turns).toEqual([]);
+  });
+});
+
+describe("busy mode", () => {
+  test("steers plain text only after the active turn accepts it", async () => {
+    const { api, channel, gateway } = setup(OWNER, { u7: { busyMode: "steer" } });
+    const gate = Promise.withResolvers<void>();
+    gateway.handler = async () => {
+      await gate.promise;
+      return { text: "done", status: "done" };
+    };
+    gateway.steerHandler = async () => true;
+    await channel.start();
+    api.push(textUpdate(1, "first"));
+    await vi.waitFor(() => expect(gateway.turns).toHaveLength(1));
+    api.push(textUpdate(2, "  correction  "));
+    await vi.waitFor(() => expect(gateway.steered).toHaveLength(1));
+    expect(gateway.steered[0]).toEqual({
+      chatKey: "zalo:u7",
+      input: { text: "correction", attachments: [] },
+    });
+    gate.resolve();
+    await vi.waitFor(() => expect(api.texts).toContain("done"));
+    expect(gateway.turns).toHaveLength(1);
+  });
+
+  test.each(["declined", "error"] as const)(
+    "queues plain text when steering is %s",
+    async (outcome) => {
+      const { api, channel, gateway } = setup(OWNER, { u7: { busyMode: "steer" } });
+      const gate = Promise.withResolvers<void>();
+      gateway.handler = async () => {
+        await gate.promise;
+        return { text: "done", status: "done" };
+      };
+      gateway.steerHandler = async () => {
+        if (outcome === "error") throw new Error("steering failed");
+        return false;
+      };
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+      await channel.start();
+      api.push(textUpdate(1, "first"));
+      await vi.waitFor(() => expect(gateway.turns).toHaveLength(1));
+      api.push(textUpdate(2, "correction"));
+      await vi.waitFor(() => expect(gateway.steered).toHaveLength(1));
+      gate.resolve();
+      await vi.waitFor(() => expect(gateway.turns).toHaveLength(2));
+      expect(gateway.turns[1]?.input).toEqual({ text: "correction", attachments: [] });
+      if (outcome === "error")
+        expect(warning).toHaveBeenCalledWith(
+          "[zalo] Could not steer the turn; queueing the message:",
+          expect.any(Error),
+        );
+      warning.mockRestore();
+    },
+  );
+
+  test("interrupt mode aborts the running turn before queueing the next message", async () => {
+    const { api, channel, gateway } = setup(OWNER, { u7: { busyMode: "interrupt" } });
+    const gate = Promise.withResolvers<void>();
+    gateway.handler = async () => {
+      await gate.promise;
+      return { text: "done", status: "done" };
+    };
+    await channel.start();
+    api.push(textUpdate(1, "first"));
+    await vi.waitFor(() => expect(gateway.turns).toHaveLength(1));
+    api.push(textUpdate(2, "second"));
+    await vi.waitFor(() => expect(gateway.aborted).toContain("zalo:u7"));
+    gate.resolve();
+    await vi.waitFor(() => expect(gateway.turns).toHaveLength(2));
   });
 });

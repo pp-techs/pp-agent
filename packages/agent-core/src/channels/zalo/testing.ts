@@ -77,6 +77,7 @@ export function textUpdate(
   text: string,
   from = "u7",
   chatType = "PRIVATE",
+  chatId = chatType === "PRIVATE" ? from : "g1",
 ): ZaloUpdate {
   return {
     event_name: "message.text.received",
@@ -85,7 +86,7 @@ export function textUpdate(
       date: 1750316131602,
       message_type: "CHAT_TEXT",
       from: { id: from, display_name: "Ann", is_bot: false },
-      chat: { id: from, chat_type: chatType },
+      chat: { id: chatId, chat_type: chatType },
       text,
     },
   };

@@ -483,11 +483,37 @@
         "replies": {
           "title": "3. Choose how it answers",
           "description": "Choose where it works and who answers."
+        },
+        "chats": {
+          "title": "Per-chat settings",
+          "description": "Configure access, busy mode and allowlist for each chat."
         }
       },
       "setUp": "Set up",
       "manage": "Manage",
-      "agentFollow": "The workspace's agent"
+      "agentFollow": "The workspace's agent",
+      "chats": {
+        "empty": "No chats configured. Add a group using its Zalo chat ID.",
+        "add": "Add chat",
+        "chatId": "Zalo chat ID",
+        "chatIdHelp": "Enter the chat ID shown by the Zalo Bot API, not a display name. The bot must be invited to the group to reply there.",
+        "label": "Label (optional)",
+        "labelHelp": "A name shown only in these settings. Leave empty to show the chat ID.",
+        "errors": {
+          "chatId": "Enter a Zalo chat ID.",
+          "duplicate": "This chat is already configured. Edit its existing settings instead.",
+          "allowedUsers": "Enter Zalo user IDs separated by commas, or leave empty."
+        },
+        "access": "Who can talk",
+        "accessOwner": "Only the paired owner",
+        "accessMembers": "Anyone in the chat",
+        "busyMode": "When the agent is busy",
+        "busyQueue": "Queue messages",
+        "busySteer": "Steer the running turn",
+        "busyInterrupt": "Interrupt and start new",
+        "allowedUsers": "Allowed user ids",
+        "allowedUsersHelp": "Applies when anyone in the chat can talk: comma-separated Zalo user IDs. Empty allows everyone in the chat; owner-only access still allows only the paired owner."
+      }
     }
   },
   "browserSection": {

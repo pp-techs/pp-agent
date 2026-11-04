@@ -88,6 +88,7 @@ describe("start and stop", () => {
       "stop",
       "sessions",
       "resume",
+      "id",
       "help",
     ]);
     expect(first.api.commands.every((entry) => entry.description.length > 0)).toBe(true);
@@ -826,6 +827,32 @@ describe("queue and commands", () => {
       'channels.telegram.startPaired {"name":"Ann Lee"}',
       "channels.telegram.help",
     ]);
+  });
+
+  test("/id reports the private chat's id, and the owner's /id in an unconfigured group reports its id too", async () => {
+    const { api, channel } = setup();
+    await channel.start();
+    api.push(textUpdate(1, "/id"));
+    await vi.waitFor(() =>
+      expect(api.plainTexts).toContain(
+        'channels.telegram.idReply {"chatId":"7","chatType":"private"}',
+      ),
+    );
+    api.push(message({ chat: { id: -100999, type: "group" }, text: "/id" }, 2));
+    await vi.waitFor(() =>
+      expect(api.plainTexts).toContain(
+        'channels.telegram.idReply {"chatId":"-100999","chatType":"group"}',
+      ),
+    );
+  });
+
+  test("a non-owner's /id in an unconfigured group is ignored", async () => {
+    const { api, channel } = setup();
+    await channel.start();
+    api.push(message({ chat: { id: -100999, type: "group" }, text: "/id" }, 1, 99));
+    api.push(textUpdate(2, "/help"));
+    await vi.waitFor(() => expect(api.plainTexts).toContain("channels.telegram.help"));
+    expect(api.plainTexts.some((text) => text.includes("idReply"))).toBe(false);
   });
 });
 

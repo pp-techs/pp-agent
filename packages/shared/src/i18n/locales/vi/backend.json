@@ -306,7 +306,7 @@
     "telegram": {
       "start": "Xin chào! Để dùng bot này, hãy mở PP Agent › Cài đặt › Kênh chat › Telegram, bắt đầu ghép nối, rồi gửi cho tôi /pair kèm mã.",
       "startPaired": "Xin chào {{name}}! Hãy nhắn cho tôi và tôi sẽ bắt tay vào việc. /help liệt kê các lệnh.",
-      "help": "Gửi văn bản, ảnh, tệp hoặc tin nhắn thoại.\n/new – bắt đầu cuộc trò chuyện mới\n/agent – chọn tác nhân trả lời\n/workspace – chọn không gian làm việc\n/model – chọn mô hình\n/thinking – chọn mức suy nghĩ\n/stop – dừng việc tôi đang làm\n/sessions – xem các cuộc trò chuyện đã lưu\n/resume <số> – chuyển sang cuộc trò chuyện đã lưu\n/help – hiện trợ giúp này",
+      "help": "Gửi văn bản, ảnh, tệp hoặc tin nhắn thoại.\n/new – bắt đầu cuộc trò chuyện mới\n/agent – chọn tác nhân trả lời\n/workspace – chọn không gian làm việc\n/model – chọn mô hình\n/thinking – chọn mức suy nghĩ\n/stop – dừng việc tôi đang làm\n/sessions – xem các cuộc trò chuyện đã lưu\n/resume <số> – chuyển sang cuộc trò chuyện đã lưu\n/id – hiện id cuộc trò chuyện này\n/help – hiện trợ giúp này",
       "pairUsage": "Gửi /pair kèm mã hiển thị trong PP Agent.",
       "pairInvalid": "Mã không hợp lệ hoặc đã hết hạn.",
       "pairLocked": "Nhập sai mã quá nhiều lần. Thử lại sau {{minutes}} phút.",
@@ -377,12 +377,14 @@
       "noChoices": "Không có gì để chọn ở đây. Mô hình hiện tại có thể không hỗ trợ mức suy nghĩ.",
       "moreChoices": "…và còn {{count}} mục nữa. Gõ một phần tên sau lệnh để tìm.",
       "commandModel": "Chọn mô hình cho cuộc trò chuyện này",
-      "commandThinking": "Chọn mức suy nghĩ của mô hình"
+      "commandThinking": "Chọn mức suy nghĩ của mô hình",
+      "idReply": "ID cuộc trò chuyện: {{chatId}} ({{chatType}})",
+      "commandId": "Hiện id cuộc trò chuyện này"
     },
     "zalo": {
       "start": "Xin chào! Để dùng bot này, hãy mở PP Agent › Cài đặt › Kênh chat › Zalo, bắt đầu ghép nối, rồi gửi cho tôi /pair kèm mã.",
       "startPaired": "Xin chào {{name}}! Hãy nhắn cho tôi và tôi sẽ bắt tay vào việc. /help liệt kê các lệnh.",
-      "help": "Gửi văn bản, ảnh hoặc tin nhắn thoại.\n/new – bắt đầu cuộc trò chuyện mới\n/agent – chọn tác nhân trả lời\n/workspace – chọn không gian làm việc\n/model – chọn mô hình\n/thinking – chọn mức suy nghĩ\n/stop – dừng việc tôi đang làm\n/sessions – xem các cuộc trò chuyện đã lưu\n/resume <số> – chuyển sang cuộc trò chuyện đã lưu\n/help – hiện trợ giúp này",
+      "help": "Gửi văn bản, ảnh hoặc tin nhắn thoại.\n/new – bắt đầu cuộc trò chuyện mới\n/agent – chọn tác nhân trả lời\n/workspace – chọn không gian làm việc\n/model – chọn mô hình\n/thinking – chọn mức suy nghĩ\n/stop – dừng việc tôi đang làm\n/sessions – xem các cuộc trò chuyện đã lưu\n/resume <số> – chuyển sang cuộc trò chuyện đã lưu\n/id – hiện id cuộc trò chuyện này\n/help – hiện trợ giúp này",
       "pairUsage": "Gửi /pair kèm mã hiển thị trong PP Agent.",
       "pairInvalid": "Mã không hợp lệ hoặc đã hết hạn.",
       "pairLocked": "Nhập sai mã quá nhiều lần. Thử lại sau {{minutes}} phút.",
@@ -433,7 +435,8 @@
       "thinkingChanged": "Mức suy nghĩ của cuộc trò chuyện này giờ là {{name}}.",
       "noChoices": "Không có gì để chọn ở đây. Mô hình hiện tại có thể không hỗ trợ các mức suy nghĩ.",
       "moreChoices": "…và {{count}} mục nữa. Gõ một phần của tên sau lệnh để tìm.",
-      "chooseHint": "Trả lời /{{command}} kèm một số hoặc một tên."
+      "chooseHint": "Trả lời /{{command}} kèm một số hoặc một tên.",
+      "idReply": "ID cuộc trò chuyện: {{chatId}} ({{chatType}})"
     }
   },
   "browserProfiles": {

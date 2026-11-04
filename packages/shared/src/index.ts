@@ -666,6 +666,22 @@ export interface TelegramSettings {
   chats?: Record<string, TelegramChatSettings>;
 }
 
+/** Per-chat settings for a Zalo chat. */
+export interface ZaloChatSettings {
+  /** Human label for the settings UI. */
+  label?: string;
+  /** Agent for this chat; falls back to the channel's agent. */
+  agentId?: string;
+  /** Workspace for this chat; falls back to the channel's workspace. */
+  workspaceId?: string;
+  /** Who can talk to the bot: `owner` (default) or `members` (anyone in the chat). */
+  access?: "owner" | "members";
+  /** User ids allowed when `access` is `members`; empty = everyone in the chat. */
+  allowedUsers?: string[];
+  /** What happens when a message arrives while the agent is busy. */
+  busyMode?: "queue" | "steer" | "interrupt";
+}
+
 /** Zalo Bot settings in settings.json. The bot token is in the vault, never here. */
 export interface ZaloSettings {
   enabled: boolean;
@@ -676,6 +692,8 @@ export interface ZaloSettings {
   /** Zalo user id that paired with the bot; only this person is answered. */
   ownerId: string | null;
   ownerName: string | null;
+  /** Per-chat settings keyed by chat id (as string); covers group chats. */
+  chats?: Record<string, ZaloChatSettings>;
 }
 
 export interface ChannelsSettings {
@@ -725,6 +743,8 @@ export interface SaveZaloInput {
   /** null = follow the workspace's agent. */
   agentId: string | null;
   workspaceId: string;
+  /** Per-chat settings; omitted keeps the stored ones. */
+  chats?: Record<string, ZaloChatSettings>;
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -82,6 +82,7 @@ function ChatsStep({ bridge, status }: { bridge: DesktopBridge; status: Telegram
 
   function startEdit(id: string) {
     const chat = chats[id];
+    saveTelegram.reset();
     setEditing(id);
     setTouched(false);
     setDraft({
@@ -252,7 +253,10 @@ function ChatsStep({ bridge, status }: { bridge: DesktopBridge; status: Telegram
               variant="outline"
               size="sm"
               disabled={saveTelegram.isPending}
-              onClick={() => setEditing(null)}
+              onClick={() => {
+                saveTelegram.reset();
+                setEditing(null);
+              }}
             >
               {t("common:actions.cancel")}
             </Button>
