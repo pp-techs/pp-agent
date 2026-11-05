@@ -558,7 +558,9 @@ export class RemoteServer implements RemoteAccessControl {
       if (command.gateway.apiKey !== undefined) return;
       ({ id, baseUrl } = command.gateway);
     } else if (command.type === "fetch_gateway_models") {
-      if (command.apiKey !== undefined) return;
+      // A blank key falls back to the stored one, so only a typed key skips the check. (For
+      // save_gateway a blank key deletes the stored one: nothing to send.)
+      if (typeof command.apiKey === "string" && command.apiKey.trim() !== "") return;
       ({ gatewayId: id, baseUrl } = command);
     } else {
       return;

@@ -454,6 +454,11 @@ describe("gateway keys from devices", () => {
         apiKey,
       });
     expect((await list("https://evil.example/v1")).status).toBe(403);
+    // A blank key falls back to the stored one in the host, so it does not count as typed.
+    expect((await list("https://evil.example/v1", "")).status).toBe(403);
+    expect((await list("https://evil.example/v1", "   ")).status).toBe(403);
+    expect(commands.some((c) => c.type === "fetch_gateway_models")).toBe(false);
+    expect((await list("https://evil.example/v1", "typed-again")).status).toBe(200);
     expect((await list("https://llm.example/v1")).status).toBe(200);
     // A new gateway has no stored key to protect.
     expect(
