@@ -655,8 +655,8 @@
       "unpairDescription": "You will need a new pairing code from the computer to use PP Agent here again."
     },
     "computerOnly": {
-      "title": "Changed only on the computer",
-      "description": "For safety, settings that let the agent start programs or skip approvals can only be changed in PP Agent on the computer."
+      "title": "Turned on only at the computer",
+      "description": "For safety, settings that let the agent start programs or skip approvals can be turned on only in PP Agent on the computer. You can still turn them off here."
     }
   }
 }

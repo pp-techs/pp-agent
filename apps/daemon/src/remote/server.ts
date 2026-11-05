@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { isIP } from "node:net";
 import { basename, join, resolve, sep } from "node:path";
 import { PairingGuard, translate as t, type RemoteAccessControl } from "@workspace/agent-core";
 import {
   type AgentCommand,
   type AgentEvent,
   type Attachment,
+  type McpOverview,
   type RemoteAccessState,
   type RemoteAccessStatus,
   type RemoteDevice,
@@ -36,6 +38,11 @@ const MAX_STREAM_BACKLOG = 32 * 1024 * 1024;
 /** Uploaded files are copied into the workspace when sent; leftovers go after a day. */
 const UPLOAD_MAX_AGE_MS = 24 * 60 * 60_000;
 const UPLOAD_SWEEP_MS = 60 * 60_000;
+/**
+ * The whole request (headers and body) must arrive within this; a 100 MB upload on slow Wi-Fi
+ * fits. It does not limit responses, so event streams stay open.
+ */
+const REQUEST_TIMEOUT_MS = 10 * 60_000;
 
 export interface RemoteServerOptions {
   /** `remote.json` (settings and paired devices). */
@@ -83,6 +90,55 @@ function parseJson(body: Buffer): unknown {
 }
 
 /**
+ * Addresses of the local network: private IPv4 ranges, carrier-grade NAT (Tailscale and similar),
+ * link-local, loopback, and the IPv6 equivalents (unique-local, link-local).
+ */
+export function isLocalNetworkAddress(address: string | undefined): boolean {
+  if (!address) return false;
+  const v4 = address.startsWith("::ffff:") ? address.slice(7) : address;
+  if (isIP(v4) === 4) {
+    const [a = 0, b = 0] = v4.split(".").map(Number);
+    return (
+      a === 10 ||
+      a === 127 ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 169 && b === 254) ||
+      (a === 100 && b >= 64 && b <= 127)
+    );
+  }
+  const v6 = address.toLowerCase();
+  return v6 === "::1" || /^f[cd]/.test(v6) || /^fe[89ab]/.test(v6);
+}
+
+/** Values of MCP `env` and `headers` (API keys, tokens) never leave the computer. */
+const HIDDEN_VALUE = "••••••";
+
+function hideValues(values: Record<string, string> | undefined) {
+  return values && Object.fromEntries(Object.keys(values).map((key) => [key, HIDDEN_VALUE]));
+}
+
+/**
+ * What a device receives for a command: the host's answer, without the secrets a phone has no use
+ * for (it cannot edit MCP servers) and a copied token should not expose.
+ */
+function remoteView(command: AgentCommand, data: unknown): unknown {
+  if (command.type !== "list_mcp_servers") return data;
+  const overview = data as McpOverview;
+  return {
+    ...overview,
+    servers: overview.servers.map((server) => ({
+      ...server,
+      settings: {
+        ...server.settings,
+        env: hideValues(server.settings.env),
+        headers: hideValues(server.settings.headers),
+      },
+    })),
+  };
+}
+
+/**
  * Serves the web app to phones and other computers on the local network (Settings › Phone
  * access). Off by default. A device pairs with the one-time code shown on the computer and then
  * signs every request with its own token (`Authorization: Bearer`); events stream to it over
@@ -116,6 +172,8 @@ export class RemoteServer implements RemoteAccessControl {
     this.sweepTimer = setInterval(() => void this.sweepUploads(), UPLOAD_SWEEP_MS);
     this.sweepTimer.unref();
     if (this.store.enabled) await this.serialize(() => this.listen(this.store.port));
+    // A window that asked before the file was read refreshes with the loaded settings and devices.
+    this.changed();
   }
 
   async close(): Promise<void> {
@@ -187,7 +245,7 @@ export class RemoteServer implements RemoteAccessControl {
 
   async forgetDevice(id: string): Promise<RemoteAccessStatus> {
     if (!(await this.store.removeDevice(id))) throw new Error(t("remote.deviceUnknown"));
-    this.closeStreams((stream) => stream.deviceId === id);
+    this.signedOut([id]);
     this.changed();
     return this.status();
   }
@@ -222,8 +280,7 @@ export class RemoteServer implements RemoteAccessControl {
       return;
     }
     const server = createServer((req, res) => void this.onRequest(req, res, webDir));
-    // Event streams stay open for as long as the page does.
-    server.requestTimeout = 0;
+    server.requestTimeout = REQUEST_TIMEOUT_MS;
     server.headersTimeout = 30_000;
     try {
       const listening = Promise.withResolvers<void>();
@@ -290,6 +347,10 @@ export class RemoteServer implements RemoteAccessControl {
   private async onRequest(req: IncomingMessage, res: ServerResponse, webDir: string) {
     applySecurityHeaders(res);
     try {
+      // Phones on the local network only: a computer with a public address must not answer the
+      // internet, even for the pairing endpoint.
+      if (!isLocalNetworkAddress(req.socket.remoteAddress))
+        throw new HttpError(403, t("remote.forbidden"));
       const url = new URL(req.url ?? "/", "http://device");
       if (url.pathname.startsWith("/api/")) {
         await this.api(req, res, url.pathname);
@@ -344,14 +405,14 @@ export class RemoteServer implements RemoteAccessControl {
         this.openStream(req, res, device);
         return;
       case "POST /api/command":
-        await this.command(req, res);
+        await this.command(req, res, device);
         return;
       case "POST /api/upload":
-        await this.upload(req, res);
+        await this.upload(req, res, device);
         return;
       case "POST /api/logout":
         await this.store.removeDevice(device.id);
-        this.closeStreams((stream) => stream.deviceId === device.id);
+        this.signedOut([device.id]);
         this.changed();
         sendJson(res, 200, { ok: true });
         return;
@@ -370,7 +431,8 @@ export class RemoteServer implements RemoteAccessControl {
     switch (result.status) {
       case "ok": {
         const name = typeof body.name === "string" ? body.name : "";
-        const { device, token } = await this.store.addDevice(name, this.now());
+        const { device, token, evicted } = await this.store.addDevice(name, this.now());
+        this.signedOut(evicted);
         this.options.log?.("Phone access: a device paired.");
         this.changed();
         sendJson(res, 200, { token, deviceName: device.name || t("remote.defaultDeviceName") });
@@ -412,16 +474,27 @@ export class RemoteServer implements RemoteAccessControl {
     });
   }
 
-  private async command(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  /** Whether the device is still paired: it may be signed out while its request was arriving. */
+  private stillPaired(device: StoredDevice): void {
+    if (!this.store.devices.some((candidate) => candidate.id === device.id))
+      throw new HttpError(401, t("remote.notPaired"));
+  }
+
+  private async command(
+    req: IncomingMessage,
+    res: ServerResponse,
+    device: StoredDevice,
+  ): Promise<void> {
     const command = parseJson(
       await readBody(req, MAX_COMMAND_BYTES, t("remote.requestTooLarge")),
     ) as AgentCommand | null;
+    this.stillPaired(device);
     if (!command || typeof command !== "object" || typeof command.type !== "string")
       throw new HttpError(400, t("remote.badRequest"));
     if (!remoteMayRun(command)) throw new HttpError(403, t("remote.localOnly"));
-    this.checkAttachments(command);
+    this.checkAttachments(command, device);
     try {
-      const data = await this.options.handle(command);
+      const data = remoteView(command, await this.options.handle(command));
       sendJson(res, 200, { ok: true, data: data ?? null });
     } catch (error) {
       sendJson(res, 200, { ok: false, error: errorMessage(error) });
@@ -432,11 +505,12 @@ export class RemoteServer implements RemoteAccessControl {
    * A device can attach only what it uploaded: a path anywhere else on the computer would let it
    * send any file to the model without the agent's read tools (and their approvals) seeing it.
    */
-  private checkAttachments(command: AgentCommand): void {
+  private checkAttachments(command: AgentCommand, device: StoredDevice): void {
     if (command.type !== "prompt" && command.type !== "edit_message") return;
     const attachments: unknown = command.attachments;
     if (!Array.isArray(attachments)) throw new HttpError(400, t("remote.badRequest"));
-    const uploads = resolve(this.options.uploadsDir) + sep;
+    // Each device's uploads live in a folder of its own; another device's are not its to send.
+    const uploads = resolve(this.uploadsOf(device.id)) + sep;
     for (const attachment of attachments as Partial<Attachment>[]) {
       if (!attachment || typeof attachment !== "object")
         throw new HttpError(400, t("remote.badRequest"));
@@ -449,7 +523,24 @@ export class RemoteServer implements RemoteAccessControl {
     }
   }
 
-  private async upload(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  private uploadsOf(deviceId: string): string {
+    return join(this.options.uploadsDir, deviceId);
+  }
+
+  /** Ends what signed-out devices still hold: their event streams and their uploads. */
+  private signedOut(deviceIds: readonly string[]): void {
+    if (deviceIds.length === 0) return;
+    const ids = new Set(deviceIds);
+    this.closeStreams((stream) => ids.has(stream.deviceId));
+    for (const id of ids)
+      void rm(this.uploadsOf(id), { recursive: true, force: true }).catch(() => undefined);
+  }
+
+  private async upload(
+    req: IncomingMessage,
+    res: ServerResponse,
+    device: StoredDevice,
+  ): Promise<void> {
     const header = req.headers["x-file-name"];
     let name = "file";
     if (typeof header === "string") {
@@ -466,7 +557,8 @@ export class RemoteServer implements RemoteAccessControl {
       MAX_UPLOAD_BYTES,
       t("remote.uploadTooLarge", { name, limit: MAX_UPLOAD_MB }),
     );
-    const dir = join(this.options.uploadsDir, randomUUID());
+    this.stillPaired(device);
+    const dir = join(this.uploadsOf(device.id), randomUUID());
     await mkdir(dir, { recursive: true, mode: 0o700 });
     const path = join(dir, name);
     await writeFile(path, bytes, { mode: 0o600 });
@@ -474,21 +566,27 @@ export class RemoteServer implements RemoteAccessControl {
     sendJson(res, 200, attachment);
   }
 
-  /** Removes uploads older than a day; whatever a message sent was copied into the workspace. */
+  /**
+   * Removes uploads older than a day (`<uploads>/<device>/<upload>/`); whatever a message sent was
+   * copied into the workspace. Folders of devices that are no longer paired go entirely.
+   */
   private async sweepUploads(): Promise<void> {
-    let entries: string[];
-    try {
-      entries = await readdir(this.options.uploadsDir);
-    } catch {
-      return;
-    }
     const cutoff = this.now() - UPLOAD_MAX_AGE_MS;
-    for (const entry of entries) {
-      const path = join(this.options.uploadsDir, entry);
-      try {
-        if ((await stat(path)).mtimeMs < cutoff) await rm(path, { recursive: true, force: true });
-      } catch {
-        // Gone already, or in use; the next sweep tries again.
+    const paired = new Set(this.store.devices.map((device) => device.id));
+    const list = (dir: string) => readdir(dir).catch(() => [] as string[]);
+    for (const deviceId of await list(this.options.uploadsDir)) {
+      const deviceDir = join(this.options.uploadsDir, deviceId);
+      if (!paired.has(deviceId)) {
+        await rm(deviceDir, { recursive: true, force: true }).catch(() => undefined);
+        continue;
+      }
+      for (const entry of await list(deviceDir)) {
+        const path = join(deviceDir, entry);
+        try {
+          if ((await stat(path)).mtimeMs < cutoff) await rm(path, { recursive: true, force: true });
+        } catch {
+          // Gone already, or in use; the next sweep tries again.
+        }
       }
     }
   }

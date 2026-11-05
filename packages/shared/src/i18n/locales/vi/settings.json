@@ -646,8 +646,8 @@
       "unpairDescription": "Bạn sẽ cần mã ghép nối mới từ máy tính để dùng lại PP Agent tại đây."
     },
     "computerOnly": {
-      "title": "Chỉ thay đổi được trên máy tính",
-      "description": "Để an toàn, các cài đặt cho phép Agent khởi chạy chương trình hoặc bỏ qua bước phê duyệt chỉ thay đổi được trong PP Agent trên máy tính."
+      "title": "Chỉ bật được trên máy tính",
+      "description": "Để an toàn, các cài đặt cho phép Agent khởi chạy chương trình hoặc bỏ qua bước phê duyệt chỉ bật được trong PP Agent trên máy tính. Bạn vẫn có thể tắt chúng tại đây."
     }
   }
 }

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentCommand, AgentEvent } from "@workspace/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
-import { RemoteServer } from "./server.ts";
+import { isLocalNetworkAddress, RemoteServer } from "./server.ts";
 
 /** A port nothing listens on right now. */
 async function freePort(): Promise<number> {
@@ -30,6 +30,30 @@ function makeServer(): RemoteServer {
     handle: async (command) => {
       commands.push(command);
       if (command.type === "abort") throw new Error("nothing to stop");
+      if (command.type === "list_mcp_servers")
+        return {
+          servers: [
+            {
+              settings: {
+                name: "crm",
+                url: "https://crm.example",
+                headers: { Authorization: "Bearer s3cret" },
+              },
+              state: "connected",
+              toolCount: 1,
+              usesOAuth: false,
+            },
+            {
+              settings: { name: "files", command: "npx", env: { API_KEY: "k3y" } },
+              state: "connected",
+              toolCount: 2,
+              usesOAuth: false,
+            },
+          ],
+          configErrors: [],
+          configPath: "/x/mcp.json",
+          authStorage: "encrypted",
+        };
       return { echoed: command.type };
     },
     emit: (event) => emitted.push(event),
@@ -337,5 +361,81 @@ describe("RemoteServer", () => {
     while (!(await reader.read()).done);
     expect((await command(base, token, { type: "get_snapshot" })).status).toBe(401);
     controller.abort();
+  });
+
+  it("binds uploads to the device that made them", async () => {
+    const server = makeServer();
+    const base = await enabled(server);
+    const first = await pair(server, base);
+    const second = await pair(server, base);
+    const upload = await fetch(`${base}/api/upload`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${first}`, "Content-Type": "text/plain" },
+      body: "mine",
+    });
+    const attachment = (await upload.json()) as { path: string };
+    const prompt = { type: "prompt", text: "hi", attachments: [attachment] };
+    expect((await command(base, second, prompt)).status).toBe(403);
+    expect((await command(base, first, prompt)).status).toBe(200);
+
+    // Unpairing a device removes what it uploaded.
+    await server.forgetDevice(first.split(".")[0]!);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await expect(stat(attachment.path)).rejects.toThrow();
+  });
+
+  it("hides MCP keys and refuses the raw mcp.json", async () => {
+    const server = makeServer();
+    const base = await enabled(server);
+    const token = await pair(server, base);
+    const response = await command(base, token, { type: "list_mcp_servers" });
+    const text = await response.text();
+    expect(text).not.toContain("s3cret");
+    expect(text).not.toContain("k3y");
+    expect(text).toContain("Authorization");
+    expect(text).toContain("API_KEY");
+    expect((await command(base, token, { type: "get_mcp_json" })).status).toBe(403);
+    expect(
+      (
+        await command(base, token, {
+          type: "set_computer_app_access",
+          app: { id: "com.apple.Mail", name: "Mail" },
+          access: "allowed",
+        })
+      ).status,
+    ).toBe(403);
+  });
+
+  it("tells the window once remote.json is loaded", async () => {
+    const server = makeServer();
+    await server.start();
+    expect(emitted).toContainEqual({ type: "settings_changed", scopes: ["remoteAccess"] });
+  });
+});
+
+describe("isLocalNetworkAddress", () => {
+  it("accepts private, link-local, loopback and CGNAT addresses only", () => {
+    for (const address of [
+      "192.168.1.20",
+      "10.0.0.5",
+      "172.20.1.1",
+      "100.96.85.90",
+      "169.254.3.4",
+      "127.0.0.1",
+      "::ffff:192.168.1.20",
+      "::1",
+      "fd12:3456::1",
+      "fe80::1",
+    ])
+      expect(isLocalNetworkAddress(address), address).toBe(true);
+    for (const address of [
+      undefined,
+      "8.8.8.8",
+      "172.32.0.1",
+      "100.128.0.1",
+      "2001:db8::1",
+      "::ffff:1.1.1.1",
+    ])
+      expect(isLocalNetworkAddress(address), String(address)).toBe(false);
   });
 });

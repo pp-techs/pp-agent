@@ -47,6 +47,7 @@ import { insertTranscript } from "@/lib/voice-input";
 import { QuestionCard } from "@/components/chat/question-card";
 import { useChatStore } from "@/stores/chat-store";
 import { toAttachments, useComposerStore } from "@/stores/composer-store";
+import { useWebSession } from "@/lib/web-bridge";
 
 const MICROPHONE_AVAILABLE = window.isSecureContext && Boolean(navigator.mediaDevices);
 
@@ -58,6 +59,8 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
   const running = useChatStore((state) => state.status === "running");
   /** The last send is not with the conversation yet; a second one would look like it never left. */
   const sending = useChatStore((state) => state.pending !== null);
+  /** The web app copies files to the computer first; a message sent now would leave them out. */
+  const uploading = useWebSession((state) => state.uploads > 0);
   const draft = useComposerStore((state) => state.draft);
   const attachments = useComposerStore((state) => state.attachments);
   const { setDraft, add, remove } = useComposerStore.getState();
@@ -89,7 +92,10 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
 
   const recorder = useVoiceRecorder(bridge, insertText);
   const canSend =
-    !disabled && recorder.state === "idle" && (draft.trim().length > 0 || attachments.length > 0);
+    !disabled &&
+    !uploading &&
+    recorder.state === "idle" &&
+    (draft.trim().length > 0 || attachments.length > 0);
 
   /** Starts recording; when voice input is not set up, explains and opens its setting instead. */
   async function onMicrophone() {

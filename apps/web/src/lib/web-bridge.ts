@@ -5,6 +5,7 @@ import type {
   Attachment,
   DesktopBridge,
   ExportFormat,
+  SettingsScope,
 } from "@workspace/shared";
 import { create } from "zustand";
 
@@ -33,6 +34,8 @@ interface WebSessionState {
   connection: WebConnection;
   deviceName: string | null;
   appVersion: string | null;
+  /** Files being copied to the computer; a message waits for them. */
+  uploads: number;
 }
 
 export const useWebSession = create<WebSessionState>()(() => ({
@@ -40,9 +43,17 @@ export const useWebSession = create<WebSessionState>()(() => ({
   connection: "connecting",
   deviceName: null,
   appVersion: null,
+  uploads: 0,
 }));
 
+/**
+ * The token when storage failed to take it (private browsing, storage full): `undefined` means
+ * storage is authoritative, `null` a sign-out storage could not record.
+ */
+let memoryToken: string | null | undefined;
+
 function readToken(): string | null {
+  if (memoryToken !== undefined) return memoryToken;
   try {
     return localStorage.getItem(TOKEN_KEY);
   } catch {
@@ -54,8 +65,10 @@ function writeToken(token: string | null): void {
   try {
     if (token === null) localStorage.removeItem(TOKEN_KEY);
     else localStorage.setItem(TOKEN_KEY, token);
+    memoryToken = undefined;
   } catch {
-    // Private browsing without storage: the device pairs again next time.
+    // Without storage the device stays paired for this page only and pairs again next time.
+    memoryToken = token;
   }
 }
 
@@ -64,9 +77,14 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-/** The device's token was refused: it was signed out on the computer. */
+/** The device's token was refused, or it unpaired itself: it was signed out on the computer. */
 function signedOut(): void {
   writeToken(null);
+  // A page that was in use starts over, so no dialog or cached data outlives the sign-out.
+  if (useWebSession.getState().phase === "paired") {
+    location.replace(location.pathname);
+    return;
+  }
   useWebSession.setState({ phase: "unpaired", deviceName: null });
 }
 
@@ -97,8 +115,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 /** Asks the computer whether this device is paired; sets the phase accordingly. */
 export async function checkSession(): Promise<void> {
+  const token = readToken();
   try {
     const response = await fetch("/api/session", { headers: authHeaders() });
+    // Paired (or unpaired) while this was on its way: the answer is about another token.
+    if (readToken() !== token) return;
     if (!response.ok) throw new Error(await errorText(response));
     const session = (await response.json()) as {
       paired: boolean;
@@ -112,7 +133,7 @@ export async function checkSession(): Promise<void> {
       appVersion: session.appVersion,
     });
   } catch {
-    useWebSession.setState({ phase: "unreachable" });
+    if (readToken() === token) useWebSession.setState({ phase: "unreachable" });
   }
 }
 
@@ -184,14 +205,21 @@ function pickFiles(options: { multiple: boolean; accept?: string }): Promise<Fil
 }
 
 async function upload(file: File): Promise<Attachment> {
-  return request<Attachment>("/api/upload", {
-    method: "POST",
-    headers: {
-      "Content-Type": file.type || "application/octet-stream",
-      "X-File-Name": encodeURIComponent(file.name || "file"),
-    },
-    body: file,
-  });
+  const count = (delta: number) =>
+    useWebSession.setState((state) => ({ uploads: state.uploads + delta }));
+  count(1);
+  try {
+    return await request<Attachment>("/api/upload", {
+      method: "POST",
+      headers: {
+        "Content-Type": file.type || "application/octet-stream",
+        "X-File-Name": encodeURIComponent(file.name || "file"),
+      },
+      body: file,
+    });
+  } finally {
+    count(-1);
+  }
 }
 
 /** Hands a file to the browser's downloads; on phones this opens the share or save sheet. */
@@ -216,6 +244,26 @@ function desktopOnly(): Promise<never> {
 }
 
 const noop = () => () => undefined;
+
+/** Every scope, so a reconnect refetches whatever changed while no events arrived. */
+const ALL_SCOPES = Object.keys({
+  settings: true,
+  providers: true,
+  models: true,
+  tools: true,
+  skills: true,
+  mcp: true,
+  agents: true,
+  workspaces: true,
+  sessions: true,
+  memory: true,
+  scheduledTasks: true,
+  voice: true,
+  background: true,
+  browserProfiles: true,
+  computerApps: true,
+  remoteAccess: true,
+} satisfies Record<SettingsScope, true>) as SettingsScope[];
 
 /** Reads `text/event-stream` blocks and hands each `data:` payload on. */
 function sseParser(onData: (data: string) => void) {
@@ -242,7 +290,6 @@ class EventFeed {
   private readonly listeners = new Set<(event: AgentEvent) => void>();
   private running = false;
   private wake: (() => void) | null = null;
-  private connectedBefore = false;
   private readonly command: DesktopBridge["agent"]["command"];
 
   constructor(command: DesktopBridge["agent"]["command"]) {
@@ -278,8 +325,12 @@ class EventFeed {
     });
   }
 
-  /** Events missed while offline are not replayed; a fresh snapshot brings the page up to date. */
+  /**
+   * Events are not replayed: whatever happened before this stream opened (offline, or between the
+   * page's first snapshot and the stream) comes from a fresh snapshot and refetched settings.
+   */
   private async resync(): Promise<void> {
+    this.dispatch({ type: "settings_changed", scopes: ALL_SCOPES });
     try {
       const snapshot: AgentSnapshot = await this.command({ type: "get_snapshot" });
       this.dispatch({ type: "snapshot", snapshot });
@@ -312,8 +363,7 @@ class EventFeed {
         if (!response.ok || !response.body) throw new Error(response.statusText);
         useWebSession.setState({ connection: "online" });
         delay = RETRY_MIN_MS;
-        if (this.connectedBefore) void this.resync();
-        this.connectedBefore = true;
+        void this.resync();
         const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
         const parse = sseParser((data) => {
           try {

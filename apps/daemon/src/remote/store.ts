@@ -117,8 +117,14 @@ export class RemoteStore {
     await this.save();
   }
 
-  /** Adds a device and returns the token it signs in with; the token is not stored. */
-  async addDevice(name: string, now: number): Promise<{ device: StoredDevice; token: string }> {
+  /**
+   * Adds a device and returns the token it signs in with (the token is not stored), and the ids of
+   * devices it pushed out of the list.
+   */
+  async addDevice(
+    name: string,
+    now: number,
+  ): Promise<{ device: StoredDevice; token: string; evicted: string[] }> {
     const secret = randomBytes(32).toString("hex");
     const device: StoredDevice = {
       id: randomUUID(),
@@ -131,9 +137,11 @@ export class RemoteStore {
     // The oldest sign-ins go first when there are too many.
     devices.sort((a, b) => b.lastSeenAt - a.lastSeenAt);
     this.data.devices = devices.slice(0, MAX_DEVICES);
+    const evicted = devices.slice(MAX_DEVICES).map((old) => old.id);
+    for (const id of evicted) this.savedSeen.delete(id);
     this.savedSeen.set(device.id, now);
     await this.save();
-    return { device, token: `${device.id}.${secret}` };
+    return { device, token: `${device.id}.${secret}`, evicted };
   }
 
   /** The device a token belongs to, or null; the comparison takes the same time either way. */

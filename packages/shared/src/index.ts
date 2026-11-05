@@ -800,16 +800,20 @@ export const REMOTE_LOCAL_ONLY_COMMANDS = [
   "save_mcp_server",
   "save_mcp_json",
   "set_tool_policy",
+  // mcp.json holds the servers' keys and tokens in plain text.
+  "get_mcp_json",
   "import_skill",
 ] as const satisfies readonly AgentCommandType[];
 
 /**
- * Whether the web app may send `command`. Turning the shell or yolo mode off is fine from a
- * phone; turning them on is not.
+ * Whether the web app may send `command`. Turning the shell, yolo mode or an always-allowed app
+ * off is fine from a phone; turning them on is not.
  */
 export function remoteMayRun(command: AgentCommand): boolean {
   if ((REMOTE_LOCAL_ONLY_COMMANDS as readonly string[]).includes(command.type)) return false;
   if (command.type === "set_conversation_yolo") return command.active !== true;
+  // "Always allowed" lets the agent use an app on the computer without asking.
+  if (command.type === "set_computer_app_access") return command.access !== "allowed";
   if (command.type === "update_settings") {
     const patch: SettingsPatch = command.patch ?? {};
     return patch.shellEnabled !== true && patch.yoloMode !== true;
