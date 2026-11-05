@@ -512,6 +512,7 @@
     "forbidden": "Yêu cầu này không được phép.",
     "notFound": "Không tìm thấy.",
     "defaultDeviceName": "Trình duyệt",
-    "attachmentExpired": "{{name}} không còn trên máy tính. Hãy đính kèm lại."
+    "attachmentExpired": "{{name}} không còn trên máy tính. Hãy đính kèm lại.",
+    "gatewayKeyAgain": "Để đổi địa chỉ của cổng kết nối này từ điện thoại, hãy nhập lại khóa API. Khóa đã lưu chỉ được gửi đến địa chỉ nó được lưu cho."
   }
 }

@@ -30,6 +30,18 @@ function makeServer(): RemoteServer {
     handle: async (command) => {
       commands.push(command);
       if (command.type === "abort") throw new Error("nothing to stop");
+      if (command.type === "list_gateways")
+        return [
+          {
+            id: "gw-team",
+            name: "Team",
+            api: "openai-completions",
+            baseUrl: "https://llm.example/v1",
+            models: [],
+            requiresApiKey: true,
+            hasApiKey: true,
+          },
+        ];
       if (command.type === "list_mcp_servers")
         return {
           servers: [
@@ -413,6 +425,45 @@ describe("RemoteServer", () => {
     const server = makeServer();
     await server.start();
     expect(emitted).toContainEqual({ type: "settings_changed", scopes: ["remoteAccess"] });
+  });
+});
+
+describe("gateway keys from devices", () => {
+  it("are sent only to the address they were saved for", async () => {
+    const server = makeServer();
+    const base = await enabled(server);
+    const token = await pair(server, base);
+    const gateway = {
+      id: "gw-team",
+      name: "Team",
+      api: "openai-completions",
+      models: [],
+      requiresApiKey: true,
+    };
+    const save = (baseUrl: string, apiKey?: string) =>
+      command(base, token, { type: "save_gateway", gateway: { ...gateway, baseUrl, apiKey } });
+    expect((await save("https://evil.example/v1")).status).toBe(403);
+    expect((await save("https://LLM.example/v1/")).status).toBe(200);
+    expect((await save("https://evil.example/v1", "typed-again")).status).toBe(200);
+    const list = (baseUrl: string, apiKey?: string) =>
+      command(base, token, {
+        type: "fetch_gateway_models",
+        api: "openai-completions",
+        baseUrl,
+        gatewayId: "gw-team",
+        apiKey,
+      });
+    expect((await list("https://evil.example/v1")).status).toBe(403);
+    expect((await list("https://llm.example/v1")).status).toBe(200);
+    // A new gateway has no stored key to protect.
+    expect(
+      (
+        await command(base, token, {
+          type: "save_gateway",
+          gateway: { ...gateway, id: undefined, baseUrl: "https://new.example" },
+        })
+      ).status,
+    ).toBe(200);
   });
 });
 

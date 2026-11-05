@@ -9,6 +9,7 @@ import {
   type AgentCommand,
   type AgentEvent,
   type Attachment,
+  type GatewayView,
   type McpOverview,
   type RemoteAccessState,
   type RemoteAccessStatus,
@@ -110,6 +111,17 @@ export function isLocalNetworkAddress(address: string | undefined): boolean {
   }
   const v6 = address.toLowerCase();
   return v6 === "::1" || /^f[cd]/.test(v6) || /^fe[89ab]/.test(v6);
+}
+
+/** A base URL compared without case in the host or trailing slashes. */
+function normalizeUrl(value: unknown): string {
+  if (typeof value !== "string") return "";
+  try {
+    const url = new URL(value.trim());
+    return `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, "")}${url.search}`;
+  } catch {
+    return value.trim();
+  }
 }
 
 /** Values of MCP `env` and `headers` (API keys, tokens) never leave the computer. */
@@ -494,6 +506,7 @@ export class RemoteServer implements RemoteAccessControl {
       throw new HttpError(400, t("remote.badRequest"));
     if (!remoteMayRun(command)) throw new HttpError(403, t("remote.localOnly"));
     this.checkAttachments(command, device);
+    await this.checkGatewayKey(command);
     try {
       const data = remoteView(command, await this.options.handle(command));
       sendJson(res, 200, { ok: true, data: data ?? null });
@@ -528,6 +541,33 @@ export class RemoteServer implements RemoteAccessControl {
           t("remote.attachmentExpired", { name: String(attachment.name ?? "") }),
         );
     }
+  }
+
+  /**
+   * A stored gateway key goes only to the address it was saved for. From a device, sending it
+   * elsewhere (a changed base URL, or a model listing against another URL) needs the key typed
+   * again; otherwise a copied device token could send the key to any server. The window may still
+   * fix a gateway's address without retyping its key.
+   */
+  private async checkGatewayKey(command: AgentCommand): Promise<void> {
+    let id: string | undefined;
+    let baseUrl: unknown;
+    if (command.type === "save_gateway") {
+      if (!command.gateway || typeof command.gateway !== "object")
+        throw new HttpError(400, t("remote.badRequest"));
+      if (command.gateway.apiKey !== undefined) return;
+      ({ id, baseUrl } = command.gateway);
+    } else if (command.type === "fetch_gateway_models") {
+      if (command.apiKey !== undefined) return;
+      ({ gatewayId: id, baseUrl } = command);
+    } else {
+      return;
+    }
+    if (id === undefined) return;
+    const gateways = (await this.options.handle({ type: "list_gateways" })) as GatewayView[];
+    const stored = gateways.find((gateway) => gateway.id === id);
+    if (stored?.hasApiKey && normalizeUrl(stored.baseUrl) !== normalizeUrl(baseUrl))
+      throw new HttpError(403, t("remote.gatewayKeyAgain"));
   }
 
   private uploadsOf(deviceId: string): string {
