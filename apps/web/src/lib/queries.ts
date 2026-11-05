@@ -55,6 +55,7 @@ export const queryKeys = {
   browserProfiles: ["browser-profiles"] as const,
   computerApps: ["computer-apps"] as const,
   computerStatus: ["computer-status"] as const,
+  remoteAccess: ["remote-access"] as const,
   cookieSources: ["cookie-sources"] as const,
   cookieSourceRunning: (browser: string) => ["cookie-source-running", browser] as const,
   /** Prefix of every folder listing of one workspace. */

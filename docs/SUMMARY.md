@@ -23,6 +23,7 @@ System design, component interactions, data flows, deployment, and external inte
 | [build-and-packaging.md](architecture/build-and-packaging.md)                   | `vp pack` bundles, renderer build and CSP, electron-builder, dev flow on port 47821                                     |
 | [side-panel.md](architecture/side-panel.md)                                     | Right side panel: terminal (node-pty), workspace files, browser tabs with profiles, cookie import, `BrowserDriver` seam |
 | [computer-use.md](architecture/computer-use.md)                                 | The agent's `computer` tool: cua-driver as a child of main, macOS grants, per-app approvals, protected apps             |
+| [phone-access.md](architecture/phone-access.md)                                 | Web app on the local network served by the daemon: pairing, device tokens, API, refused commands, mobile behaviour      |
 
 ## Codebase
 

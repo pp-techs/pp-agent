@@ -35,7 +35,7 @@ export function HelperPanel() {
   const current = working?.steps.at(-1);
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-6 pb-2">
+    <div className="mx-auto w-full max-w-3xl px-3 pb-2 md:px-6">
       <Collapsible
         defaultOpen
         className="rounded-2xl border bg-muted/40 text-sm"

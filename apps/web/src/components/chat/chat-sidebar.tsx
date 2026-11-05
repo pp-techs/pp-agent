@@ -338,6 +338,8 @@ export function ChatSidebar({
         <SidebarMenuButton
           isActive={page === "chat" && session.path === sessionPath}
           disabled={!ready}
+          // Below md the actions button always shows, so the age sits left of it, past the title.
+          className="max-md:pr-16"
           title={session.title}
           onClick={async () => {
             if (session.path === sessionPath) return navigate("chat");
@@ -348,7 +350,7 @@ export function ChatSidebar({
         >
           <span className="min-w-0 flex-1 truncate">{session.title}</span>
         </SidebarMenuButton>
-        <span className="pointer-events-none absolute inset-y-0 right-1 flex min-w-5 items-center justify-center text-xs text-muted-foreground tabular-nums group-hover/menu-item:invisible group-focus-within/menu-item:invisible">
+        <span className="pointer-events-none absolute inset-y-0 right-1 flex min-w-5 items-center justify-center text-xs text-muted-foreground tabular-nums group-hover/menu-item:invisible group-focus-within/menu-item:invisible max-md:right-8 max-md:visible!">
           {activity.waiting.includes(session.path) ? (
             <span
               role="status"

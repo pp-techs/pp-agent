@@ -19,8 +19,10 @@
       "channels": "Channels",
       "background": "Background",
       "browser": "Browser",
-      "computer": "Computer use"
-    }
+      "computer": "Computer use",
+      "remote": "Phone access"
+    },
+    "back": "Back"
   },
   "general": {
     "title": "General",
@@ -594,5 +596,67 @@
       "allowLabel": "Allow"
     },
     "loadError": "Could not load the app lists"
+  },
+  "remote": {
+    "title": "Phone access",
+    "description": "Use PP Agent from your phone, or another computer on the same network, in its web browser.",
+    "loadError": "Couldn't load this page",
+    "enable": {
+      "title": "Open PP Agent on the local network",
+      "description": "Devices you pair can chat, answer approvals, and change most settings, as if they sat at this computer. Settings that let the agent run programs without asking (MCP servers, tool permissions, the shell, yolo mode) can only be turned on here.",
+      "switchLabel": "Open PP Agent on the local network"
+    },
+    "state": {
+      "off": "Off",
+      "listening": "On",
+      "error": "Not running"
+    },
+    "warning": {
+      "title": "Use it only on networks you trust",
+      "description": "The connection is not encrypted. Someone who can watch traffic on this network could read your chats and act as a paired device. Use it at home or on your office network, not on public Wi-Fi, and turn it off when you don't need it."
+    },
+    "port": {
+      "label": "Port",
+      "description": "Change it if another program already uses this port.",
+      "apply": "Apply"
+    },
+    "address": {
+      "title": "Open on your phone",
+      "description": "Scan the code with your phone's camera, or type the address into its browser. The phone must be on the same Wi-Fi as this computer.",
+      "withCode": "The code includes a one-time pairing code, so the phone opens PP Agent and pairs in one step.",
+      "none": "This computer has no local network address right now. Connect it to Wi-Fi or a network cable.",
+      "copy": "Copy address",
+      "copied": "Copied",
+      "qrLabel": "QR code for {{url}}"
+    },
+    "pairing": {
+      "title": "Pair a device",
+      "description": "A device needs a one-time code the first time it connects. The code works once and expires after 10 minutes.",
+      "start": "Pair a device",
+      "again": "New code",
+      "code": "Pairing code",
+      "expiresIn": "Expires in {{time}}",
+      "expired": "The code expired. Make a new one to pair a device."
+    },
+    "devices": {
+      "title": "Paired devices",
+      "empty": "No devices are paired yet.",
+      "connected": "Connected",
+      "lastSeen": "Last used {{time}}",
+      "forget": "Unpair",
+      "forgetTitle": "Unpair {{name}}?",
+      "forgetDescription": "It is signed out at once and needs a new pairing code to connect again."
+    },
+    "thisDevice": {
+      "title": "This device",
+      "description": "Paired as {{name}}. Turn phone access on or off, pair and unpair devices in PP Agent on the computer.",
+      "unpair": "Unpair this device",
+      "unpairTitle": "Unpair this device?",
+      "unpairDescription": "You will need a new pairing code from the computer to use PP Agent here again."
+    },
+    "computerOnly": {
+      "title": "Turned on only at the computer",
+      "description": "For safety, settings that let the agent start programs or skip approvals can be turned on only in PP Agent on the computer. You can still turn them off here."
+    }
   }
 }

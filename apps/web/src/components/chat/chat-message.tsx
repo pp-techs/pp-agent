@@ -39,6 +39,7 @@ import { MessageEditor } from "@/components/chat/message-editor";
 import { useChatThread } from "@/components/chat/chat-thread-context";
 import { ToolStep } from "@/components/chat/tool-step";
 import { useChatStore } from "@/stores/chat-store";
+import { copyText } from "@workspace/ui/lib/clipboard";
 
 type StepPart = Extract<ChatPart, { type: "thinking" | "tool" }>;
 type Block = { kind: "text"; text: string } | { kind: "steps"; parts: StepPart[] };
@@ -113,7 +114,7 @@ function ErrorNotice({ message }: { message: ChatMessage }) {
   const { error, errorDetail } = message;
   function copy() {
     if (!errorDetail) return;
-    navigator.clipboard.writeText(`${error}\n${errorDetail}`).then(
+    copyText(`${error}\n${errorDetail}`).then(
       () => setCopied(true),
       (failure: unknown) =>
         toast.error(failure instanceof Error ? failure.message : String(failure)),
@@ -164,14 +165,15 @@ function MessageActions({
   }, [copied]);
 
   function copy() {
-    navigator.clipboard.writeText(messageText(message.parts)).then(
+    copyText(messageText(message.parts)).then(
       () => setCopied(true),
       (error: unknown) => toast.error(error instanceof Error ? error.message : String(error)),
     );
   }
 
+  // Touch screens have no hover, so the actions stay in view there.
   return (
-    <MessageFooter className="gap-0.5 px-0 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100">
+    <MessageFooter className="gap-0.5 px-0 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100 pointer-coarse:opacity-100">
       <ActionButton
         label={copied ? t("message.actions.copied") : t("message.actions.copy")}
         onClick={copy}

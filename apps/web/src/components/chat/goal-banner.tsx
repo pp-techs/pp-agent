@@ -22,7 +22,7 @@ export function GoalBanner({ bridge }: { bridge: DesktopBridge }) {
   const onError = (error: Error) => toast.error(error.message);
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-6 pb-2">
+    <div className="mx-auto w-full max-w-3xl px-3 pb-2 md:px-6">
       <div
         role="status"
         className="flex items-center gap-2 rounded-2xl border bg-muted/40 py-1.5 pr-1.5 pl-3 text-sm"

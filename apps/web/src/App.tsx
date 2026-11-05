@@ -28,10 +28,11 @@ import { EmptyChat } from "@/components/chat/empty-chat";
 import { PromptComposer } from "@/components/chat/prompt-composer";
 import { SidePanel } from "@/components/panel/side-panel";
 import { SettingsModal } from "@/components/modals/settings-modal";
+import { ConnectionBanner, RemoteGate } from "@/components/remote/remote-gate";
 import { ScheduledTasksSection } from "@/components/settings/scheduled-tasks-section";
 import { useAgentConnection } from "@/hooks/use-agent-connection";
 import { useCloseTabShortcut, usePanelShortcut } from "@/hooks/use-panel-shortcut";
-import { bridge } from "@/lib/bridge";
+import { bridge, isWebApp } from "@/lib/bridge";
 import { useChatStore } from "@/stores/chat-store";
 import { usePanelStore } from "@/stores/panel-store";
 import { toAttachments, useComposerStore } from "@/stores/composer-store";
@@ -96,12 +97,17 @@ function ChatBody({ bridge }: { bridge: DesktopBridge }) {
   return <ChatThread bridge={bridge} />;
 }
 
-function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
-  const { t } = useTranslation("modals");
-  useAgentConnection(bridge);
+/** Keyboard shortcuts of the app window: the side panel and closing tabs. */
+function DesktopShortcuts({ bridge }: { bridge: DesktopBridge }) {
   usePanelShortcut(bridge);
   useCloseTabShortcut(bridge);
   React.useEffect(() => connectUpdates(bridge), [bridge]);
+  return null;
+}
+
+function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
+  const { t } = useTranslation("modals");
+  useAgentConnection(bridge);
   const status = useChatStore((state) => state.status);
   const ready = status === "idle" || status === "running";
   const [page, setPage] = React.useState<"chat" | "schedules">("chat");
@@ -125,10 +131,12 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
 
   return (
     <SidebarProvider>
+      {!isWebApp && <DesktopShortcuts bridge={bridge} />}
       <ChatSidebar bridge={bridge} page={page} onNavigate={setPage} />
       <SidebarInset
         // Inset leaves an 0.5rem gutter around the chat panel on desktop; keep it within the window.
-        className={`relative h-svh overflow-hidden md:h-[calc(100svh-(--spacing(4)))] md:ring-1 md:ring-foreground/5 dark:md:ring-foreground/10 ${panelCovers ? "md:hidden" : ""}`}
+        // dvh follows a phone's browser bars and on-screen keyboard; svh would leave a gap.
+        className={`relative h-dvh overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] md:h-[calc(100svh-(--spacing(4)))] md:pt-0 md:ring-1 md:ring-foreground/5 dark:md:ring-foreground/10 ${panelCovers ? "md:hidden" : ""}`}
         onDragEnter={(event) => {
           if (page === "chat" && event.dataTransfer.types.includes("Files")) {
             setDragDepth((depth) => depth + 1);
@@ -138,6 +146,7 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => void onDrop(event)}
       >
+        {isWebApp && <ConnectionBanner />}
         {page === "schedules" ? (
           <>
             <header className="flex h-12 shrink-0 items-center gap-1 px-3">
@@ -170,7 +179,7 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
         )}
       </SidebarInset>
       {/* On every page, so the agent's browser shows without leaving (and losing) a schedule draft. */}
-      <SidePanel bridge={bridge} />
+      {!isWebApp && <SidePanel bridge={bridge} />}
     </SidebarProvider>
   );
 }
@@ -185,6 +194,13 @@ export function App() {
           <EmptyDescription>{t("app.desktopOnly.description")}</EmptyDescription>
         </EmptyHeader>
       </Empty>
+    );
+  }
+  if (bridge.kind === "web") {
+    return (
+      <RemoteGate>
+        <ChatScreen bridge={bridge} />
+      </RemoteGate>
     );
   }
   return <ChatScreen bridge={bridge} />;

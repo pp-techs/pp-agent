@@ -43,6 +43,8 @@ import { ChevronRightIcon, SearchIcon, TriangleAlertIcon, WrenchIcon } from "luc
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { SwitchRow } from "@/components/settings/option-group";
 import { SectionHeading } from "@/components/settings/section-heading";
+import { ComputerOnlyNotice } from "@/components/settings/computer-only-notice";
+import { isWebApp } from "@/lib/bridge";
 import { WebSearchPage } from "@/components/settings/web-search-page";
 import {
   toolsQuery,
@@ -291,7 +293,8 @@ function YoloModeSettings({ bridge }: { bridge: DesktopBridge }) {
         label={t("tools.yolo.enable.label")}
         description={t("tools.yolo.enable.description")}
         checked={checked}
-        disabled={settings.isPending || setYolo.isPending}
+        // A phone may turn it off, never on.
+        disabled={settings.isPending || setYolo.isPending || (isWebApp && !checked)}
         onCheckedChange={(value) => void onCheckedChange(value)}
       />
       {checked && (
@@ -323,7 +326,7 @@ function ShellSettings({ bridge }: { bridge: DesktopBridge }) {
         label={t("tools.shell.enable.label")}
         description={t("tools.shell.enable.description")}
         checked={checked}
-        disabled={settings.isPending || setShell.isPending}
+        disabled={settings.isPending || setShell.isPending || (isWebApp && !checked)}
         onCheckedChange={(value) => setShell.mutate(value)}
       />
       {warning && (
@@ -429,6 +432,7 @@ function PolicyControl({ bridge, tool }: { bridge: DesktopBridge; tool: ToolSumm
     <Select
       items={items}
       value={tool.policy}
+      disabled={isWebApp}
       onValueChange={(policy) => policy && void onChange(policy)}
     >
       <SelectTrigger size="sm" className="w-40" aria-label={label}>
@@ -523,6 +527,8 @@ export function ToolsSection({ bridge }: { bridge: DesktopBridge }) {
           components={{ strong: <strong className="font-medium text-foreground" /> }}
         />
       </p>
+
+      {isWebApp && <ComputerOnlyNotice />}
 
       <YoloModeSettings bridge={bridge} />
 

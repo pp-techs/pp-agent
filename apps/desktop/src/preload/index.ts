@@ -31,6 +31,7 @@ function subscribe<A extends unknown[]>(channel: string, listener: (...args: A) 
 }
 
 const bridge: DesktopBridge = {
+  kind: "desktop",
   agent: {
     command: (command) => invoke(IPC.agentCommand, command),
     onEvent(listener) {

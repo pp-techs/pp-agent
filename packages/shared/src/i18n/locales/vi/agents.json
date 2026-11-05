@@ -247,7 +247,9 @@
       "descriptionNew": "Nơi các cuộc trò chuyện trong không gian làm việc này làm việc và lưu tệp. Chỉ chọn một lần; không thể thay đổi sau này.",
       "none": "Chưa chọn thư mục",
       "choose": "Chọn…",
-      "required": "Hãy chọn một thư mục cho không gian làm việc."
+      "required": "Hãy chọn một thư mục cho không gian làm việc.",
+      "pathPlaceholder": "Thư mục trên máy tính, ví dụ /Users/me/Documents/Sales",
+      "pathLabel": "Đường dẫn thư mục trên máy tính"
     },
     "instructions": {
       "placeholder": "Các tệp ở đây là báo cáo hàng tháng. Đặt tên tệp mới theo dạng YYYY-MM-<chủ đề>.\nTrả lời bằng tiếng Việt.",

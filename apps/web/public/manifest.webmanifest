@@ -1,0 +1,11 @@
+{
+  "name": "PP Agent",
+  "short_name": "PP Agent",
+  "description": "Your PP Agent, from your phone.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [{ "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }]
+}

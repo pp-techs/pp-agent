@@ -43,5 +43,20 @@
     "copied": "Đã sao chép",
     "scrollToEnd": "Cuộn xuống cuối",
     "scrollToStart": "Cuộn lên đầu"
+  },
+  "remote": {
+    "pairTitle": "Ghép nối thiết bị này",
+    "pairDescription": "Trên máy tính, mở PP Agent › Cài đặt › Truy cập từ điện thoại và bấm Ghép nối thiết bị. Sau đó nhập mã hiển thị ở đó, hoặc quét mã QR bằng camera của thiết bị này.",
+    "codeLabel": "Mã ghép nối",
+    "codePlaceholder": "ABCD2345",
+    "pair": "Ghép nối",
+    "paired": "Đã ghép nối. Chào mừng bạn!",
+    "unreachableTitle": "Không kết nối được PP Agent",
+    "unreachableDescription": "Hãy kiểm tra máy tính đang bật, PP Agent đang chạy và đã bật truy cập từ điện thoại, và thiết bị này dùng cùng mạng Wi-Fi.",
+    "retry": "Thử lại",
+    "offline": "Không kết nối được máy tính. Hãy kiểm tra máy đang bật và dùng cùng mạng.",
+    "reconnecting": "Đang kết nối lại với máy tính…",
+    "desktopOnlyAction": "Chỉ có thể làm việc này trong PP Agent trên máy tính.",
+    "onlyWebLinks": "Chỉ mở được liên kết web (http hoặc https)."
   }
 }

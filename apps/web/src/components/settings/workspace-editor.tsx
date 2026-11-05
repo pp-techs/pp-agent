@@ -32,6 +32,7 @@ import {
   useSaveWorkspaceInstructions,
   workspaceInstructionsQuery,
 } from "@/lib/extension-queries";
+import { isWebApp } from "@/lib/bridge";
 import { agentsQuery, workspacesQuery } from "@/lib/queries";
 
 const NAME_MAX = 60;
@@ -76,21 +77,37 @@ function FolderField({
           : t("workspaceEditor.folder.descriptionNew")
       }
     >
-      <div className="flex items-center gap-3 rounded-xl bg-muted/50 py-1.5 pr-1.5 pl-3">
-        <FolderOpenIcon className="size-4 shrink-0 text-muted-foreground" />
-        <span
-          className={`min-w-0 flex-1 truncate ${value ? "font-mono text-xs" : "text-sm text-muted-foreground"}`}
-          title={value ?? undefined}
-        >
-          {value ??
-            (fixed ? t("workspacesSection.defaultFolder") : t("workspaceEditor.folder.none"))}
-        </span>
-        {!fixed && (
-          <Button type="button" variant="outline" size="sm" onClick={() => void onChoose()}>
-            {t("workspaceEditor.folder.choose")}
-          </Button>
-        )}
-      </div>
+      {isWebApp && !fixed ? (
+        // No folder picker reaches the computer from a phone: the path is typed instead.
+        <Input
+          value={value ?? ""}
+          inputMode="url"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          className="font-mono text-xs"
+          aria-label={t("workspaceEditor.folder.pathLabel")}
+          aria-invalid={invalid}
+          placeholder={t("workspaceEditor.folder.pathPlaceholder")}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      ) : (
+        <div className="flex items-center gap-3 rounded-xl bg-muted/50 py-1.5 pr-1.5 pl-3">
+          <FolderOpenIcon className="size-4 shrink-0 text-muted-foreground" />
+          <span
+            className={`min-w-0 flex-1 truncate ${value ? "font-mono text-xs" : "text-sm text-muted-foreground"}`}
+            title={value ?? undefined}
+          >
+            {value ??
+              (fixed ? t("workspacesSection.defaultFolder") : t("workspaceEditor.folder.none"))}
+          </span>
+          {!fixed && (
+            <Button type="button" variant="outline" size="sm" onClick={() => void onChoose()}>
+              {t("workspaceEditor.folder.choose")}
+            </Button>
+          )}
+        </div>
+      )}
       {invalid && <FieldError>{t("workspaceEditor.folder.required")}</FieldError>}
     </OptionGroup>
   );

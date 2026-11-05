@@ -36,6 +36,7 @@ Coding agents are powerful but built for developers. PP Agent puts the same engi
 - **Scheduled tasks.** Run a prompt daily, weekly, or at an interval; each run is saved as a chat. Actions that need approval are skipped, since nobody is there to approve them.
 - **Voice input.** Dictate into the message box: a whisper model on your own computer, or a speech-to-text service you choose.
 - **Background and Telegram.** **Settings › Background** keeps the agent running after you close or quit the app (it starts when you sign in), and **Settings › Channels** lets you chat with it from Telegram or Zalo: pair your account with a one-time code, and approvals are asked in the chat. Scheduled tasks keep running too.
+- **Phone access.** **Settings › Phone access** opens PP Agent in the web browser of your phone or another computer on the same Wi-Fi: scan the QR code to pair, then chat, attach photos and files, and answer approvals from a layout built for small screens. Off by default; it is not encrypted, so use it on networks you trust. Settings that let the agent run programs without asking stay on the computer.
 - **Desktop.** Notifications when an answer is ready, an optional tray icon, and a global shortcut.
 - **Languages.** English and Tiếng Việt, chosen in **Settings › General** or following your system language. Errors, approvals, and dialogs are translated too.
 - **Skills.** Import [Agent Skills](https://agentskills.io), write your own in the app, and invoke them with `/skill:<name>`. Slash commands `/new` and `/compact` keep long chats manageable.

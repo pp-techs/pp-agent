@@ -70,7 +70,7 @@ export function TodoPanel() {
   const current = items.find((item) => item.status === "in_progress");
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-6 pb-2">
+    <div className="mx-auto w-full max-w-3xl px-3 pb-2 md:px-6">
       <Collapsible
         defaultOpen
         className="rounded-2xl border bg-muted/40 text-sm"

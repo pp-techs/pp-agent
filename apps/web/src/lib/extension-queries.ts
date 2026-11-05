@@ -1,6 +1,7 @@
 import type {
   DesktopBridge,
   McpServerSettings,
+  RemoteAccessStatus,
   SaveAgentInput,
   SaveScheduledTaskInput,
   SaveSkillInput,
@@ -545,4 +546,34 @@ export function useDeleteWorkspace(bridge: DesktopBridge) {
     onSuccess: invalidate,
     onError: showError,
   });
+}
+
+/** Settings › Phone access: whether the web app is served, its addresses, the pairing, devices. */
+export const remoteAccessQuery = (bridge: DesktopBridge) =>
+  queryOptions({
+    queryKey: queryKeys.remoteAccess,
+    queryFn: () => bridge.agent.command({ type: "get_remote_access" }),
+  });
+
+export function useRemoteAccessCommands(bridge: DesktopBridge) {
+  const queryClient = useQueryClient();
+  const done = (status: RemoteAccessStatus) =>
+    queryClient.setQueryData(queryKeys.remoteAccess, status);
+  const configure = useMutation({
+    mutationFn: (input: { enabled: boolean; port?: number }) =>
+      bridge.agent.command({ type: "set_remote_access", ...input }),
+    onSuccess: done,
+    onError: showError,
+  });
+  const startPairing = useMutation({
+    mutationFn: () => bridge.agent.command({ type: "start_remote_pairing" }),
+    onSuccess: done,
+    onError: showError,
+  });
+  const forgetDevice = useMutation({
+    mutationFn: (id: string) => bridge.agent.command({ type: "forget_remote_device", id }),
+    onSuccess: done,
+    onError: showError,
+  });
+  return { configure, startPairing, forgetDevice };
 }

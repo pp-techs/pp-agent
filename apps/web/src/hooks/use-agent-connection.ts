@@ -28,6 +28,7 @@ const SCOPE_KEYS: Record<SettingsScope, QueryKey[]> = {
   background: [queryKeys.serviceStatus, queryKeys.telegramStatus, queryKeys.zaloStatus],
   browserProfiles: [queryKeys.browserProfiles],
   computerApps: [queryKeys.computerApps],
+  remoteAccess: [queryKeys.remoteAccess],
 };
 
 /** Lines of the "Remembered" toast shown at most; the rest are counted. */
