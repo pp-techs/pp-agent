@@ -377,6 +377,9 @@ describe("RemoteServer", () => {
     const prompt = { type: "prompt", text: "hi", attachments: [attachment] };
     expect((await command(base, second, prompt)).status).toBe(403);
     expect((await command(base, first, prompt)).status).toBe(200);
+    // Gone (swept after a day): a clear answer instead of a failed copy.
+    await rm(attachment.path);
+    expect((await command(base, first, prompt)).status).toBe(410);
 
     // Unpairing a device removes what it uploaded.
     await server.forgetDevice(first.split(".")[0]!);

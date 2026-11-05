@@ -511,6 +511,7 @@
     "badRequest": "Không đọc được yêu cầu.",
     "forbidden": "Yêu cầu này không được phép.",
     "notFound": "Không tìm thấy.",
-    "defaultDeviceName": "Trình duyệt"
+    "defaultDeviceName": "Trình duyệt",
+    "attachmentExpired": "{{name}} không còn trên máy tính. Hãy đính kèm lại."
   }
 }

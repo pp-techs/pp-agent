@@ -511,6 +511,7 @@
     "badRequest": "The request could not be read.",
     "forbidden": "This request is not allowed.",
     "notFound": "Not found.",
-    "defaultDeviceName": "Browser"
+    "defaultDeviceName": "Browser",
+    "attachmentExpired": "{{name}} is no longer on the computer. Attach it again."
   }
 }

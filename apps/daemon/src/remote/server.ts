@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { isIP } from "node:net";
@@ -519,6 +520,12 @@ export class RemoteServer implements RemoteAccessControl {
         throw new HttpError(
           403,
           t("remote.attachmentNotUploaded", { name: String(attachment.name ?? "") }),
+        );
+      // Uploads older than a day are swept; a draft kept that long must attach the file again.
+      if (!existsSync(attachment.path))
+        throw new HttpError(
+          410,
+          t("remote.attachmentExpired", { name: String(attachment.name ?? "") }),
         );
     }
   }
