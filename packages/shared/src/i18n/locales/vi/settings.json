@@ -19,8 +19,10 @@
       "channels": "Kênh chat",
       "background": "Chạy nền",
       "browser": "Trình duyệt",
-      "computer": "Điều khiển máy tính"
-    }
+      "computer": "Điều khiển máy tính",
+      "remote": "Truy cập từ điện thoại"
+    },
+    "back": "Quay lại"
   },
   "general": {
     "title": "Chung",
@@ -585,5 +587,67 @@
       "allowLabel": "Cho phép"
     },
     "loadError": "Không tải được danh sách ứng dụng"
+  },
+  "remote": {
+    "title": "Truy cập từ điện thoại",
+    "description": "Dùng PP Agent từ điện thoại, hoặc máy tính khác trong cùng mạng, ngay trên trình duyệt.",
+    "loadError": "Không tải được trang này",
+    "enable": {
+      "title": "Mở PP Agent trong mạng nội bộ",
+      "description": "Thiết bị đã ghép nối có thể trò chuyện, trả lời yêu cầu phê duyệt và thay đổi hầu hết cài đặt như khi ngồi tại máy tính này. Các cài đặt cho phép Agent chạy chương trình mà không hỏi (máy chủ MCP, quyền công cụ, shell, chế độ yolo) chỉ bật được tại đây.",
+      "switchLabel": "Mở PP Agent trong mạng nội bộ"
+    },
+    "state": {
+      "off": "Tắt",
+      "listening": "Bật",
+      "error": "Không chạy"
+    },
+    "warning": {
+      "title": "Chỉ dùng trên mạng bạn tin cậy",
+      "description": "Kết nối không được mã hóa. Người theo dõi được lưu lượng trong mạng này có thể đọc cuộc trò chuyện và hành động như một thiết bị đã ghép nối. Hãy dùng ở nhà hoặc mạng văn phòng, không dùng Wi-Fi công cộng, và tắt khi không cần."
+    },
+    "port": {
+      "label": "Cổng",
+      "description": "Đổi cổng nếu chương trình khác đã dùng cổng này.",
+      "apply": "Áp dụng"
+    },
+    "address": {
+      "title": "Mở trên điện thoại",
+      "description": "Quét mã bằng camera điện thoại, hoặc gõ địa chỉ vào trình duyệt của điện thoại. Điện thoại phải dùng cùng mạng Wi-Fi với máy tính này.",
+      "withCode": "Mã QR có kèm mã ghép nối dùng một lần, nên điện thoại mở PP Agent và ghép nối luôn trong một bước.",
+      "none": "Máy tính này chưa có địa chỉ mạng nội bộ. Hãy kết nối Wi-Fi hoặc cáp mạng.",
+      "copy": "Sao chép địa chỉ",
+      "copied": "Đã sao chép",
+      "qrLabel": "Mã QR cho {{url}}"
+    },
+    "pairing": {
+      "title": "Ghép nối thiết bị",
+      "description": "Lần đầu kết nối, thiết bị cần một mã dùng một lần. Mã chỉ dùng được một lần và hết hạn sau 10 phút.",
+      "start": "Ghép nối thiết bị",
+      "again": "Mã mới",
+      "code": "Mã ghép nối",
+      "expiresIn": "Hết hạn sau {{time}}",
+      "expired": "Mã đã hết hạn. Hãy tạo mã mới để ghép nối thiết bị."
+    },
+    "devices": {
+      "title": "Thiết bị đã ghép nối",
+      "empty": "Chưa có thiết bị nào được ghép nối.",
+      "connected": "Đang kết nối",
+      "lastSeen": "Dùng lần cuối {{time}}",
+      "forget": "Hủy ghép nối",
+      "forgetTitle": "Hủy ghép nối {{name}}?",
+      "forgetDescription": "Thiết bị bị đăng xuất ngay và cần mã ghép nối mới để kết nối lại."
+    },
+    "thisDevice": {
+      "title": "Thiết bị này",
+      "description": "Đã ghép nối với tên {{name}}. Bật hoặc tắt truy cập từ điện thoại, ghép nối và hủy ghép nối thiết bị trong PP Agent trên máy tính.",
+      "unpair": "Hủy ghép nối thiết bị này",
+      "unpairTitle": "Hủy ghép nối thiết bị này?",
+      "unpairDescription": "Bạn sẽ cần mã ghép nối mới từ máy tính để dùng lại PP Agent tại đây."
+    },
+    "computerOnly": {
+      "title": "Chỉ thay đổi được trên máy tính",
+      "description": "Để an toàn, các cài đặt cho phép Agent khởi chạy chương trình hoặc bỏ qua bước phê duyệt chỉ thay đổi được trong PP Agent trên máy tính."
+    }
   }
 }

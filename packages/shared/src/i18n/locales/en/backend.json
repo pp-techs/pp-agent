@@ -491,5 +491,26 @@
     "blocked": "{{name}} is blocked for the agent in Settings › Computer use.",
     "windowOnly": "Computer use works only in conversations of the PP Agent window.",
     "saveFailed": "{{name}} stays allowed for this chat only: it could not be saved as always allowed ({{error}})."
+  },
+  "remote": {
+    "unavailable": "Phone access is not available here.",
+    "invalidPort": "Choose a port between 1024 and 65535.",
+    "portInUse": "Port {{port}} is already used by another program. Choose another port.",
+    "listenFailed": "Phone access could not start: {{error}}",
+    "webMissing": "The web app files were not found, so there is nothing to show on a phone. Build them with `vp run @workspace/web#build` and turn phone access on again.",
+    "notOn": "Turn on phone access first.",
+    "localOnly": "This can only be changed in PP Agent on the computer.",
+    "notPaired": "This device is not paired. Pair it again in PP Agent on the computer.",
+    "deviceUnknown": "That device is not paired.",
+    "pairInvalid": "That code is wrong or has expired.",
+    "pairClosed": "No pairing is open. In PP Agent on the computer, open Settings › Phone access and press Pair a device.",
+    "pairLocked": "Too many wrong codes. Pairing is locked for 15 minutes, or until a new pairing is started on the computer.",
+    "attachmentNotUploaded": "{{name}} was not uploaded from this device.",
+    "uploadTooLarge": "{{name}} is larger than {{limit}} MB.",
+    "requestTooLarge": "The request is too large.",
+    "badRequest": "The request could not be read.",
+    "forbidden": "This request is not allowed.",
+    "notFound": "Not found.",
+    "defaultDeviceName": "Browser"
   }
 }

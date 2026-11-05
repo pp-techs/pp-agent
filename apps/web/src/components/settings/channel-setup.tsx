@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import { formatCountdown, STATE_VARIANT, useNow } from "@/components/settings/channel-ui";
 import { SwitchRow } from "@/components/settings/option-group";
 import { agentsQuery, workspacesQuery } from "@/lib/queries";
+import { copyText } from "@workspace/ui/lib/clipboard";
 
 /** The setup steps every chat app shares: connect the bot, pair the owner, choose who answers. */
 export type ChannelId = "telegram" | "zalo";
@@ -244,7 +245,7 @@ export function PairStep({ channel, view, actions }: StepProps) {
   const ready = view.enabled && view.hasToken && view.state !== "off" && view.state !== "error";
 
   function copy() {
-    navigator.clipboard.writeText(command).then(
+    copyText(command).then(
       () => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);

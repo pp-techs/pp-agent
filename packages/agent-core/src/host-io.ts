@@ -4,6 +4,7 @@ import type {
   BrowserResult,
   ComputerRequest,
   ComputerResult,
+  RemoteAccessStatus,
   ServiceStatus,
   StoredCredential,
 } from "@workspace/shared";
@@ -58,10 +59,24 @@ export interface ComputerBridge {
 }
 
 /** Everything the host needs from the process that runs it. */
+/**
+ * The web app the daemon serves on the local network (Settings › Phone access). The daemon owns
+ * the listener, the pairing code and the paired devices; the host only relays the commands.
+ */
+export interface RemoteAccessControl {
+  status(): Promise<RemoteAccessStatus>;
+  /** `port` omitted keeps the current one. */
+  set(enabled: boolean, port?: number): Promise<RemoteAccessStatus>;
+  startPairing(): Promise<RemoteAccessStatus>;
+  forgetDevice(id: string): Promise<RemoteAccessStatus>;
+}
+
 export interface HostEnvironment {
   output: HostOutput;
   vault: VaultBackend;
   service: ServiceControl;
+  /** Absent where nothing serves the web app (tests, an embedded host). */
+  remote?: RemoteAccessControl;
   /** Absent where nothing can show a browser (tests, a host without clients). */
   browser?: BrowserBridge;
   /** Absent where no window can drive apps (tests, a host without clients). */

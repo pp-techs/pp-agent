@@ -317,6 +317,8 @@ function YoloButton({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("chat");
   const locked = yolo.source === "settings";
   const label = yolo.active ? t("header.yolo.on") : t("header.yolo.off");
+  // Yolo mode is turned on only at the computer; a phone may still turn it off.
+  if (bridge.kind === "web" && !yolo.active) return null;
 
   async function onClick() {
     if (locked) return;
@@ -408,8 +410,13 @@ export function ChatHeaderActions({ bridge }: { bridge: DesktopBridge }) {
       <YoloButton bridge={bridge} />
       <ContextButton bridge={bridge} />
       <ExportButton bridge={bridge} />
-      <OpenFolderButton bridge={bridge} />
-      <SidePanelButton />
+      {/* The folder and the side panel live on the computer, not in the web app. */}
+      {bridge.kind === "desktop" && (
+        <>
+          <OpenFolderButton bridge={bridge} />
+          <SidePanelButton />
+        </>
+      )}
     </div>
   );
 }

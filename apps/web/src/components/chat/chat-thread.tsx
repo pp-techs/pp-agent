@@ -85,7 +85,7 @@ export function ChatThread({ bridge }: { bridge: DesktopBridge }) {
           <MessageScrollerViewport>
             <MessageScrollerContent
               aria-busy={running}
-              className="mx-auto w-full max-w-3xl gap-6 px-6 py-6"
+              className="mx-auto w-full max-w-3xl gap-6 px-4 py-4 md:px-6 md:py-6"
             >
               {rows.map((row) => (
                 <MessageScrollerItem

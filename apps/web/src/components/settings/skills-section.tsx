@@ -46,6 +46,7 @@ import { toast } from "sonner";
 
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { SectionHeading } from "@/components/settings/section-heading";
+import { isWebApp } from "@/lib/bridge";
 import { SkillEditor } from "@/components/settings/skill-editor";
 import {
   skillsQuery,
@@ -121,14 +122,18 @@ function SkillRow({
               <PencilIcon />
               {t("common:actions.edit")}
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() =>
-                bridge.files.reveal(skill.path).catch((error: Error) => toast.error(error.message))
-              }
-            >
-              <FolderOpenIcon />
-              {t("showInFolder")}
-            </DropdownMenuItem>
+            {!isWebApp && (
+              <DropdownMenuItem
+                onClick={() =>
+                  bridge.files
+                    .reveal(skill.path)
+                    .catch((error: Error) => toast.error(error.message))
+                }
+              >
+                <FolderOpenIcon />
+                {t("showInFolder")}
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={() => void onDelete()}>
               <Trash2Icon />
@@ -175,10 +180,13 @@ export function SkillsSection({ bridge }: { bridge: DesktopBridge }) {
 
   const actions = (
     <>
-      <Button variant="outline" disabled={importSkill.isPending} onClick={() => void onImport()}>
-        {importSkill.isPending ? <Spinner /> : <DownloadIcon />}
-        {t("common:actions.import")}
-      </Button>
+      {/* Importing takes a folder or archive on the computer. */}
+      {!isWebApp && (
+        <Button variant="outline" disabled={importSkill.isPending} onClick={() => void onImport()}>
+          {importSkill.isPending ? <Spinner /> : <DownloadIcon />}
+          {t("common:actions.import")}
+        </Button>
+      )}
       <Button onClick={() => setView({ kind: "edit" })}>
         <PlusIcon />
         {t("skills.newSkill")}

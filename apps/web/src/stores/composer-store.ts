@@ -2,6 +2,7 @@ import type { Attachment, DesktopBridge } from "@workspace/shared";
 import { create } from "zustand";
 
 import { i18n } from "@/lib/i18n";
+import { newId } from "@/lib/id";
 
 export interface DraftAttachment extends Attachment {
   id: string;
@@ -30,7 +31,7 @@ export const useComposerStore = create<ComposerState>()((set) => ({
     set((state) => ({
       attachments: [
         ...state.attachments,
-        ...attachments.map((attachment) => ({ ...attachment, id: crypto.randomUUID() })),
+        ...attachments.map((attachment) => ({ ...attachment, id: newId() })),
       ],
     })),
   remove: (id) =>
@@ -53,6 +54,9 @@ async function toBase64(file: File): Promise<string> {
  * Throws for a non-image without a path, which the agent could not open.
  */
 export async function toAttachments(bridge: DesktopBridge, files: File[]): Promise<Attachment[]> {
+  // The web app has no paths to give: every file is copied to the computer first.
+  const upload = bridge.files.upload?.bind(bridge.files);
+  if (upload) return Promise.all(files.map((file) => upload(file)));
   return Promise.all(
     files.map(async (file) => {
       const path = bridge.files.pathFor(file);

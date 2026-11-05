@@ -32,6 +32,7 @@ import { toast } from "sonner";
 
 import { useTheme } from "@/components/theme-provider";
 import { SectionHeading } from "@/components/settings/section-heading";
+import { isWebApp } from "@/lib/bridge";
 import { DesktopGroup } from "@/components/settings/desktop-group";
 import { DiagnosticsGroup } from "@/components/settings/diagnostics-group";
 import { groupByProvider, modelKey, modelLabeler } from "@/lib/models";
@@ -209,19 +210,21 @@ export function GeneralSection({ bridge }: { bridge: DesktopBridge }) {
               {workspaceDir ?? t("general.workspaceFolder.unavailable")}
             </FieldDescription>
           </FieldContent>
-          <Button
-            variant="outline"
-            disabled={!workspaceDir}
-            onClick={() => {
-              if (!workspaceDir) return;
-              bridge.files
-                .openWorkspace(workspaceDir)
-                .catch((error: Error) => toast.error(error.message));
-            }}
-          >
-            <FolderOpenIcon data-icon="inline-start" />
-            {t("general.workspaceFolder.open")}
-          </Button>
+          {!isWebApp && (
+            <Button
+              variant="outline"
+              disabled={!workspaceDir}
+              onClick={() => {
+                if (!workspaceDir) return;
+                bridge.files
+                  .openWorkspace(workspaceDir)
+                  .catch((error: Error) => toast.error(error.message));
+              }}
+            >
+              <FolderOpenIcon data-icon="inline-start" />
+              {t("general.workspaceFolder.open")}
+            </Button>
+          )}
         </Field>
         <Field orientation="horizontal">
           <FieldContent>
@@ -249,9 +252,14 @@ export function GeneralSection({ bridge }: { bridge: DesktopBridge }) {
           </ToggleGroup>
         </Field>
         <DefaultModelField bridge={bridge} />
-        <DesktopGroup bridge={bridge} />
-        <UpdatesField bridge={bridge} />
-        <DiagnosticsGroup bridge={bridge} />
+        {/* The window, its updates and its logs belong to the computer. */}
+        {!isWebApp && (
+          <>
+            <DesktopGroup bridge={bridge} />
+            <UpdatesField bridge={bridge} />
+            <DiagnosticsGroup bridge={bridge} />
+          </>
+        )}
       </FieldGroup>
     </div>
   );

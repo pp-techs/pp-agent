@@ -4,6 +4,7 @@ import { cn } from "cn";
 
 import { Button } from "@workspace/ui/components/button";
 import { useUiLabels } from "@workspace/ui/components/ui-labels";
+import { copyText } from "@workspace/ui/lib/clipboard";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
 const codeBlockVariants = cva(
@@ -120,8 +121,7 @@ function CodeBlockCopyButton({
         className={cn("hover:bg-foreground/5 dark:hover:bg-foreground/10", className)}
         onClick={(event) => {
           onClick?.(event);
-          navigator.clipboard
-            .writeText(value)
+          copyText(value)
             .then(() => setCopied(true))
             .catch(() => {});
         }}

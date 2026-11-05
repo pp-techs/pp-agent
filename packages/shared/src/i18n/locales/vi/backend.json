@@ -491,5 +491,26 @@
     "blocked": "{{name}} đã bị chặn với agent trong Cài đặt › Điều khiển máy tính.",
     "windowOnly": "Điều khiển máy tính chỉ hoạt động trong các cuộc trò chuyện của cửa sổ PP Agent.",
     "saveFailed": "{{name}} chỉ được cho phép trong cuộc trò chuyện này: không lưu được thành luôn cho phép ({{error}})."
+  },
+  "remote": {
+    "unavailable": "Truy cập từ điện thoại không khả dụng ở đây.",
+    "invalidPort": "Hãy chọn cổng từ 1024 đến 65535.",
+    "portInUse": "Cổng {{port}} đang được chương trình khác dùng. Hãy chọn cổng khác.",
+    "listenFailed": "Không thể bật truy cập từ điện thoại: {{error}}",
+    "webMissing": "Không tìm thấy tệp của ứng dụng web nên không có gì để hiển thị trên điện thoại. Hãy dựng chúng bằng `vp run @workspace/web#build` rồi bật lại truy cập từ điện thoại.",
+    "notOn": "Hãy bật truy cập từ điện thoại trước.",
+    "localOnly": "Chỉ có thể thay đổi mục này trong PP Agent trên máy tính.",
+    "notPaired": "Thiết bị này chưa được ghép nối. Hãy ghép nối lại trong PP Agent trên máy tính.",
+    "deviceUnknown": "Thiết bị đó chưa được ghép nối.",
+    "pairInvalid": "Mã không đúng hoặc đã hết hạn.",
+    "pairClosed": "Chưa mở ghép nối. Trong PP Agent trên máy tính, mở Cài đặt › Truy cập từ điện thoại và bấm Ghép nối thiết bị.",
+    "pairLocked": "Nhập sai mã quá nhiều lần. Ghép nối bị khóa 15 phút, hoặc đến khi bắt đầu ghép nối mới trên máy tính.",
+    "attachmentNotUploaded": "{{name}} chưa được tải lên từ thiết bị này.",
+    "uploadTooLarge": "{{name}} lớn hơn {{limit}} MB.",
+    "requestTooLarge": "Yêu cầu quá lớn.",
+    "badRequest": "Không đọc được yêu cầu.",
+    "forbidden": "Yêu cầu này không được phép.",
+    "notFound": "Không tìm thấy.",
+    "defaultDeviceName": "Trình duyệt"
   }
 }

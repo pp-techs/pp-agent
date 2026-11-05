@@ -198,7 +198,9 @@ export type SettingsScope =
   | "voice"
   | "background"
   | "browserProfiles"
-  | "computerApps";
+  | "computerApps"
+  /** Phone and LAN access: on/off, address, pairing, paired devices. */
+  | "remoteAccess";
 
 export type AgentEvent =
   | { type: "status"; status: AgentStatus }
@@ -745,6 +747,74 @@ export interface SaveZaloInput {
   workspaceId: string;
   /** Per-chat settings; omitted keeps the stored ones. */
   chats?: Record<string, ZaloChatSettings>;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Phone and LAN access (the web app served by the daemon)
+// ---------------------------------------------------------------------------------------------
+
+/** Port the daemon serves the web app on when nothing else is chosen. */
+export const REMOTE_DEFAULT_PORT = 47830;
+
+/** A phone or another computer that paired with the web app. Its secret never leaves the daemon. */
+export interface RemoteDevice {
+  id: string;
+  /** What the device called itself when it paired (a browser and system, e.g. "Safari on iPhone"). */
+  name: string;
+  /** Epoch milliseconds. */
+  pairedAt: number;
+  /** Last request it made, epoch milliseconds. */
+  lastSeenAt: number;
+  /** Whether it is receiving live updates right now. */
+  connected: boolean;
+}
+
+export type RemoteAccessState = "off" | "listening" | "error";
+
+/** Settings › Phone access: whether the web app is served on the local network, and to whom. */
+export interface RemoteAccessStatus {
+  enabled: boolean;
+  port: number;
+  state: RemoteAccessState;
+  /** Why it is not listening (port taken, web app not built), for the person to read. */
+  error: string | null;
+  /** `http://<address>:<port>` for every local network address of this computer. */
+  urls: string[];
+  /** One-time code a device enters to pair, while a pairing is open. */
+  pairingCode: string | null;
+  pairingExpiresAt: number | null;
+  devices: RemoteDevice[];
+}
+
+/**
+ * Commands only the computer itself may send; the web app is refused them. Besides phone access
+ * itself, these are the settings that let the computer run programs without anyone approving each
+ * one (MCP servers start commands, tool policies can skip approvals), and a path on the computer
+ * that only its own file picker can supply.
+ */
+export const REMOTE_LOCAL_ONLY_COMMANDS = [
+  "get_remote_access",
+  "set_remote_access",
+  "start_remote_pairing",
+  "forget_remote_device",
+  "save_mcp_server",
+  "save_mcp_json",
+  "set_tool_policy",
+  "import_skill",
+] as const satisfies readonly AgentCommandType[];
+
+/**
+ * Whether the web app may send `command`. Turning the shell or yolo mode off is fine from a
+ * phone; turning them on is not.
+ */
+export function remoteMayRun(command: AgentCommand): boolean {
+  if ((REMOTE_LOCAL_ONLY_COMMANDS as readonly string[]).includes(command.type)) return false;
+  if (command.type === "set_conversation_yolo") return command.active !== true;
+  if (command.type === "update_settings") {
+    const patch: SettingsPatch = command.patch ?? {};
+    return patch.shellEnabled !== true && patch.yoloMode !== true;
+  }
+  return true;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1299,6 +1369,14 @@ export interface AgentCommandMap {
     params: { app: ComputerApp; access: "allowed" | "blocked" | null };
     result: ComputerAppAccess;
   };
+
+  get_remote_access: { params: NoParams; result: RemoteAccessStatus };
+  /** Turns the web app on the local network on or off; `port` omitted keeps the current one. */
+  set_remote_access: { params: { enabled: boolean; port?: number }; result: RemoteAccessStatus };
+  /** Opens a pairing window and returns the status with the one-time code. */
+  start_remote_pairing: { params: NoParams; result: RemoteAccessStatus };
+  /** Signs a paired device out; it must pair again. */
+  forget_remote_device: { params: { id: string }; result: RemoteAccessStatus };
 }
 
 export type AgentCommandType = keyof AgentCommandMap;
@@ -1713,6 +1791,11 @@ export type UpdateState = { currentVersion: string } &
 
 /** API exposed on `window.ppAgent` by the preload script. */
 export interface DesktopBridge {
+  /**
+   * `desktop`: the app window, through the preload. `web`: a browser on the local network (a phone),
+   * talking to the daemon over HTTP; it has no side panel, native dialogs, updates or computer use.
+   */
+  kind: "desktop" | "web";
   agent: {
     command<C extends AgentCommand>(command: C): Promise<AgentCommandResult<C["type"]>>;
     onEvent(listener: (event: AgentEvent) => void): () => void;
@@ -1724,6 +1807,8 @@ export interface DesktopBridge {
     pickSkill(): Promise<string | null>;
     /** Path of a dropped `File`, or "" when it has none (for example, pasted data). */
     pathFor(file: File): string;
+    /** Web only: copies a file from the device to the computer and returns it as an attachment. */
+    upload?(file: File): Promise<Attachment>;
     /** Opens a workspace folder (the open conversation's, from the snapshot) in Finder / Explorer. */
     openWorkspace(dir: string): Promise<void>;
     /** Shows a file or folder (a skill, mcp.json) in Finder / Explorer. */

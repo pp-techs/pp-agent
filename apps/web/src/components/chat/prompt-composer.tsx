@@ -48,6 +48,8 @@ import { QuestionCard } from "@/components/chat/question-card";
 import { useChatStore } from "@/stores/chat-store";
 import { toAttachments, useComposerStore } from "@/stores/composer-store";
 
+const MICROPHONE_AVAILABLE = window.isSecureContext && Boolean(navigator.mediaDevices);
+
 export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; disabled: boolean }) {
   // Like ChatGPT: one row while the text fits a line, then the text on top and the controls below.
   // Collapses again only once the draft is empty, so the wider layout can't flip back and forth.
@@ -207,7 +209,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
   return (
     <>
       {question && (
-        <div className="mx-auto w-full max-w-3xl px-6 pb-6">
+        <div className="mx-auto w-full max-w-3xl px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] md:px-6 md:pb-6">
           <QuestionCard
             key={question.requestId}
             request={question}
@@ -228,7 +230,8 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
         ref={formRef}
         onSubmit={onSubmit}
         hidden={asking}
-        className="relative mx-auto w-full max-w-3xl px-6 pb-6"
+        // A phone keeps the box clear of the home indicator, with narrower gutters.
+        className="relative mx-auto w-full max-w-3xl px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] md:px-6 md:pb-6"
       >
         {showSuggestions && (
           <SlashSuggestions
@@ -303,14 +306,18 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
             <div className={cn("hidden flex-1 @max-2xl:block", isExpanded && "block")} />
             <ModelPicker bridge={bridge} />
             <ThinkingPicker bridge={bridge} disabled={disabled} />
-            <VoiceControls
-              state={recorder.state}
-              startedAt={recorder.startedAt}
-              disabled={disabled}
-              onStart={() => void onMicrophone()}
-              onStop={recorder.stop}
-              onCancel={recorder.cancel}
-            />
+            {/* Browsers allow the microphone only on secure pages; the web app on the local
+                network is plain HTTP, so it has no voice input. */}
+            {MICROPHONE_AVAILABLE && (
+              <VoiceControls
+                state={recorder.state}
+                startedAt={recorder.startedAt}
+                disabled={disabled}
+                onStart={() => void onMicrophone()}
+                onStop={recorder.stop}
+                onCancel={recorder.cancel}
+              />
+            )}
             {running ? (
               <InputGroupButton
                 type="button"

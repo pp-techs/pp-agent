@@ -1,6 +1,7 @@
 import * as React from "react";
 import { createModal } from "@buiducnhat/better-modal";
 import type { DesktopBridge } from "@workspace/shared";
+import { Button } from "@workspace/ui/components/button";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +18,9 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "@workspace/ui/components/sidebar";
+import { useIsMobile } from "@workspace/ui/hooks/use-mobile";
 import {
+  ArrowLeftIcon,
   BlocksIcon,
   BookOpenIcon,
   BotIcon,
@@ -30,7 +33,9 @@ import {
   MonitorIcon,
   MoonStarIcon,
   SlidersHorizontalIcon,
+  SmartphoneIcon,
   SparklesIcon,
+  XIcon,
   WrenchIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -45,11 +50,13 @@ import { GeneralSection } from "@/components/settings/general-section";
 import { McpSection } from "@/components/settings/mcp-section";
 import { MemorySection } from "@/components/settings/memory-section";
 import { ModelsSection } from "@/components/settings/models-section";
+import { RemoteAccessSection } from "@/components/settings/remote-access-section";
 import { SkillsSection } from "@/components/settings/skills-section";
 import { SettingsSubPageProvider } from "@/components/settings/settings-subpage";
 import { VoiceSection } from "@/components/settings/voice-section";
 import { ToolsSection } from "@/components/settings/tools-section";
 import { WorkspacesSection } from "@/components/settings/workspaces-section";
+import { isWebApp } from "@/lib/bridge";
 
 export type SettingsSection =
   | "general"
@@ -64,12 +71,15 @@ export type SettingsSection =
   | "channels"
   | "browser"
   | "computer"
-  | "background";
+  | "background"
+  | "remote";
 
-const SECTIONS: {
+const ALL_SECTIONS: {
   id: SettingsSection;
   icon: LucideIcon;
   Component: React.ComponentType<{ bridge: DesktopBridge }>;
+  /** Set where only the app window can show it (its browser, its access to this computer). */
+  desktopOnly?: true;
 }[] = [
   { id: "general", icon: SlidersHorizontalIcon, Component: GeneralSection },
   { id: "voice", icon: MicIcon, Component: VoiceSection },
@@ -81,10 +91,13 @@ const SECTIONS: {
   { id: "skills", icon: BookOpenIcon, Component: SkillsSection },
   { id: "memory", icon: BrainIcon, Component: MemorySection },
   { id: "channels", icon: MessagesSquareIcon, Component: ChannelsSection },
-  { id: "browser", icon: GlobeIcon, Component: BrowserSection },
-  { id: "computer", icon: MonitorIcon, Component: ComputerSection },
+  { id: "browser", icon: GlobeIcon, Component: BrowserSection, desktopOnly: true },
+  { id: "computer", icon: MonitorIcon, Component: ComputerSection, desktopOnly: true },
   { id: "background", icon: MoonStarIcon, Component: BackgroundSection },
+  { id: "remote", icon: SmartphoneIcon, Component: RemoteAccessSection },
 ];
+
+const SECTIONS = isWebApp ? ALL_SECTIONS.filter((section) => !section.desktopOnly) : ALL_SECTIONS;
 
 type SettingsModalProps = {
   bridge: DesktopBridge;
@@ -150,17 +163,92 @@ function SettingsBreadcrumb({
 function SettingsPanes({
   bridge,
   initialSection,
+  onClose,
 }: {
   bridge: DesktopBridge;
-  initialSection: SettingsSection;
+  /** null on a phone: start at the list of sections. */
+  initialSection: SettingsSection | null;
+  onClose: () => void;
 }) {
-  const { t } = useTranslation("settings");
-  const [active, setActive] = React.useState(initialSection);
+  const { t } = useTranslation(["settings", "common"]);
+  const isMobile = useIsMobile();
+  const [active, setActive] = React.useState<SettingsSection | null>(
+    initialSection ?? (isMobile ? null : "general"),
+  );
   const [subPage, setSubPage] = React.useState<string | null>(null);
   // Bumped by the breadcrumb to remount the section, which returns it to its list.
   const [resetCount, setResetCount] = React.useState(0);
-  const current = SECTIONS.find((section) => section.id === active) ?? SECTIONS[0];
-  const Component = current.Component;
+  const current = SECTIONS.find((section) => section.id === active) ?? null;
+
+  // A phone shows one level at a time: the list of sections, or one section with a way back.
+  if (isMobile) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col bg-background">
+        <header className="flex h-14 shrink-0 items-center gap-1 border-b px-2">
+          {current ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("modal.back")}
+              onClick={() => {
+                // A sub page (an editor, a channel) goes back to its section first.
+                if (subPage !== null) setResetCount((count) => count + 1);
+                else setActive(null);
+              }}
+            >
+              <ArrowLeftIcon />
+            </Button>
+          ) : (
+            <span className="w-2" />
+          )}
+          <h2 className="min-w-0 flex-1 truncate font-heading text-base font-medium">
+            {current ? (subPage ?? t(`modal.sections.${current.id}`)) : t("modal.breadcrumbRoot")}
+          </h2>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t("common:actions.close")}
+            onClick={onClose}
+          >
+            <XIcon />
+          </Button>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(env(safe-area-inset-bottom),1rem)]">
+          {current ? (
+            <div className="px-4 pt-4">
+              <SettingsSubPageProvider value={setSubPage}>
+                <current.Component key={`${current.id}-${resetCount}`} bridge={bridge} />
+              </SettingsSubPageProvider>
+            </div>
+          ) : (
+            <nav aria-label={t("modal.sidebarLabel")} className="p-2">
+              <ul className="flex flex-col">
+                {SECTIONS.map(({ id, icon: Icon }) => (
+                  <li key={id}>
+                    <button
+                      type="button"
+                      className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-[0.9375rem] transition-colors outline-none active:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+                      onClick={() => {
+                        setSubPage(null);
+                        setActive(id);
+                      }}
+                    >
+                      <Icon className="size-5 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate">{t(`modal.sections.${id}`)}</span>
+                      <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const shown = current ?? SECTIONS[0];
+  const Component = shown.Component;
   return (
     <SidebarProvider
       open
@@ -177,8 +265,8 @@ function SettingsPanes({
                 {SECTIONS.map(({ id, icon: Icon }) => (
                   <SidebarMenuItem key={id}>
                     <SidebarMenuButton
-                      isActive={active === id}
-                      aria-current={active === id ? "page" : undefined}
+                      isActive={shown.id === id}
+                      aria-current={shown.id === id ? "page" : undefined}
                       onClick={() => setActive(id)}
                     >
                       <Icon />
@@ -195,14 +283,14 @@ function SettingsPanes({
         {/* Right padding keeps the breadcrumb clear of the dialog's close button. */}
         <header className="flex h-16 shrink-0 items-center gap-2 pr-16 pl-6">
           <SettingsBreadcrumb
-            section={t(`modal.sections.${current.id}`)}
+            section={t(`modal.sections.${shown.id}`)}
             subPage={subPage}
             onSectionClick={() => setResetCount((count) => count + 1)}
           />
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-1 pb-6">
           <SettingsSubPageProvider value={setSubPage}>
-            <Component key={`${active}-${resetCount}`} bridge={bridge} />
+            <Component key={`${shown.id}-${resetCount}`} bridge={bridge} />
           </SettingsSubPageProvider>
         </div>
       </main>
@@ -223,15 +311,19 @@ function SettingsHeader() {
 /** `SettingsModal.show({ bridge, section })` opens Settings at the given section. */
 export const SettingsModal = createModal<SettingsModalProps, void>(
   "settings",
-  ({ modal, bridge, section = "general" }) => (
+  ({ modal, bridge, section }) => (
     <Dialog open={modal.visible} onOpenChange={(open) => !open && modal.resolve(undefined)}>
-      <DialogContent className="flex h-[80vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
+      <DialogContent
+        // A phone gets the whole screen, with its own back and close buttons in the header.
+        className="flex h-[80vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl max-md:top-0 max-md:left-0 max-md:h-dvh max-md:max-w-none! max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-none max-md:pt-[env(safe-area-inset-top)] max-md:ring-0 max-md:[&>[data-slot=dialog-close]]:hidden"
+      >
         <SettingsHeader />
         {/* Remount on every open so it starts at the requested section. */}
         <SettingsPanes
-          key={`${modal.visible}-${section}`}
+          key={`${modal.visible}-${section ?? ""}`}
           bridge={bridge}
-          initialSection={section}
+          initialSection={section ?? null}
+          onClose={() => modal.resolve(undefined)}
         />
       </DialogContent>
     </Dialog>

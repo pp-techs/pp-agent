@@ -1,8 +1,11 @@
 import { setDefaultResultOrder } from "node:dns";
 import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { AgentHost } from "@workspace/agent-core";
+import { join } from "node:path";
+import { AgentHost, type HostOutput } from "@workspace/agent-core";
 import { resolveDaemonPaths } from "./paths.ts";
+import { RemoteServer } from "./remote/server.ts";
+import { findWebDir } from "./remote/web-dir.ts";
 import { DaemonServer, ensureToken } from "./server.ts";
 import { serviceControlFor } from "./service-control.ts";
 import { resolveShellPath } from "./shell-path.ts";
@@ -72,20 +75,45 @@ export async function runDaemon(): Promise<number> {
   process.once("SIGTERM", () => stop("SIGTERM"));
   process.once("SIGINT", () => stop("SIGINT"));
   let host: AgentHost | null = null;
+  let remote: RemoteServer | null = null;
   try {
     // An app started from the Dock or a service manager has the minimal PATH; MCP commands
     // such as `npx` need the login shell's.
     const shellPath = await resolveShellPath();
     if (shellPath) process.env.PATH = shellPath;
 
+    // What the host emits reaches the socket clients (the window) and the web app's devices.
+    const output: HostOutput = {
+      emit: (event) => {
+        server.output.emit(event);
+        remote?.broadcast(event);
+      },
+      // Sign-in pages open on the computer, where the window is.
+      openUrl: (url) => server.output.openUrl(url),
+    };
+    remote = new RemoteServer({
+      file: join(paths.home, "remote.json"),
+      uploadsDir: join(paths.home, "remote-uploads"),
+      webDir: () => findWebDir(),
+      handle: (command) => {
+        if (!host) throw new Error("The agent is still starting.");
+        return host.handle(command);
+      },
+      emit: (event) => output.emit(event),
+      appVersion: version,
+      log,
+    });
     host = new AgentHost({
-      output: server.output,
+      output,
       vault: await createVaultBackend(paths.home),
       service: serviceControlFor(paths),
       browser: server.browser,
       computer: server.computer,
+      remote,
     });
     server.attach(host);
+    // A port another program took must not keep the agent from starting.
+    remote.start().catch((error: unknown) => log(`Phone access: ${describe(error)}`));
     // A client that connects while the host is starting waits on it, as the window always did.
     host.init(paths.agent, Intl.DateTimeFormat().resolvedOptions().locale).then(
       () => log("Agent ready."),
@@ -108,6 +136,7 @@ export async function runDaemon(): Promise<number> {
       grace.promise,
     ]);
     clearTimeout(timer);
+    await remote?.close().catch((error: unknown) => log(describe(error)));
     await server.close();
   }
   return 0;

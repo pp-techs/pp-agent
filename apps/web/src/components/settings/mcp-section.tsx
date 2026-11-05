@@ -50,6 +50,8 @@ import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { McpJsonEditor } from "@/components/settings/mcp-json-editor";
 import { McpServerForm } from "@/components/settings/mcp-server-form";
 import { SectionHeading } from "@/components/settings/section-heading";
+import { ComputerOnlyNotice } from "@/components/settings/computer-only-notice";
+import { isWebApp } from "@/lib/bridge";
 import {
   mcpQuery,
   useDeleteMcpServer,
@@ -180,7 +182,7 @@ function ServerRow({
           <TooltipTrigger render={<span className="inline-flex" />}>
             <Switch
               checked={enabled}
-              disabled={busy}
+              disabled={busy || isWebApp}
               onCheckedChange={onToggle}
               aria-label={
                 enabled
@@ -224,10 +226,12 @@ function ServerRow({
                 </DropdownMenuItem>
               </>
             )}
-            <DropdownMenuItem onClick={onEdit}>
-              <PencilIcon />
-              {t("common:actions.edit")}
-            </DropdownMenuItem>
+            {!isWebApp && (
+              <DropdownMenuItem onClick={onEdit}>
+                <PencilIcon />
+                {t("common:actions.edit")}
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={() => void onDelete()}>
               <Trash2Icon />
@@ -297,15 +301,21 @@ export function McpSection({ bridge }: { bridge: DesktopBridge }) {
           </TooltipTrigger>
           <TooltipContent>{t("mcp.checkAgain")}</TooltipContent>
         </Tooltip>
-        <Button variant="outline" onClick={() => setView({ kind: "json" })}>
-          <BracesIcon />
-          {t("mcp.editJson")}
-        </Button>
-        <Button onClick={() => setView({ kind: "form" })}>
-          <PlusIcon />
-          {t("mcp.addServer")}
-        </Button>
+        {!isWebApp && (
+          <>
+            <Button variant="outline" onClick={() => setView({ kind: "json" })}>
+              <BracesIcon />
+              {t("mcp.editJson")}
+            </Button>
+            <Button onClick={() => setView({ kind: "form" })}>
+              <PlusIcon />
+              {t("mcp.addServer")}
+            </Button>
+          </>
+        )}
       </SectionHeading>
+
+      {isWebApp && <ComputerOnlyNotice />}
 
       {overview.data && overview.data.configErrors.length > 0 && (
         <Alert variant="destructive">
@@ -338,7 +348,7 @@ export function McpSection({ bridge }: { bridge: DesktopBridge }) {
             <EmptyTitle>{t("mcp.empty.title")}</EmptyTitle>
             <EmptyDescription>{t("mcp.empty.description")}</EmptyDescription>
           </EmptyHeader>
-          <EmptyContent className="flex-row justify-center">
+          <EmptyContent className={`flex-row justify-center ${isWebApp ? "hidden" : ""}`}>
             <Button variant="outline" onClick={() => setView({ kind: "json" })}>
               <BracesIcon />
               {t("mcp.empty.paste")}
@@ -362,7 +372,7 @@ export function McpSection({ bridge }: { bridge: DesktopBridge }) {
         </ItemGroup>
       )}
 
-      {configPath && (
+      {configPath && !isWebApp && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span>{t("mcp.savedIn")}</span>
           <code className="truncate font-mono">{configPath}</code>

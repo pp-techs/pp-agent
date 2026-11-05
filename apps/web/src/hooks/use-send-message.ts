@@ -2,6 +2,7 @@ import type { Attachment, ChatMessage, ChatPart, DesktopBridge } from "@workspac
 import { toast } from "sonner";
 
 import { useAgentCommands } from "@/lib/queries";
+import { newId } from "@/lib/id";
 import { useChatStore } from "@/stores/chat-store";
 import { useComposerStore } from "@/stores/composer-store";
 
@@ -18,7 +19,7 @@ function pendingMessage(text: string, attachments: Attachment[]): ChatMessage {
     else if (attachment.path)
       parts.push({ type: "file", name: attachment.name, path: attachment.path });
   }
-  return { id: crypto.randomUUID(), role: "user", parts };
+  return { id: newId(), role: "user", parts };
 }
 
 /**

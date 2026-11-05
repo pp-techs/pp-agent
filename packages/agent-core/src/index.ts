@@ -181,7 +181,13 @@ import {
   userContent,
 } from "./history.ts";
 import { configureLanguage, currentLanguage, t } from "./i18n.ts";
-import type { BrowserBridge, ComputerBridge, HostEnvironment, ServiceControl } from "./host-io.ts";
+import type {
+  BrowserBridge,
+  ComputerBridge,
+  HostEnvironment,
+  RemoteAccessControl,
+  ServiceControl,
+} from "./host-io.ts";
 import { configureOutput, emit, errorMessage, openUrl } from "./ipc.ts";
 import { buildOverview, McpCommands, McpConfigFile, McpRegistrations } from "./mcp.ts";
 import { VaultMcpAuthStore } from "./mcp-auth.ts";
@@ -636,6 +642,8 @@ export class AgentHost {
   private readonly browser: BrowserBridge | undefined;
   /** The window's cua-driver, for the agent's computer tool. */
   private readonly computer: ComputerBridge | undefined;
+  /** The web app on the local network; the phone access commands call it. */
+  private readonly remote: RemoteAccessControl | undefined;
   /** App names the computer tool has seen, so its approvals name the app. */
   private readonly computerAppNames: ComputerAppNames = new Map();
 
@@ -645,6 +653,7 @@ export class AgentHost {
     this.service = environment.service;
     this.browser = environment.browser;
     this.computer = environment.computer;
+    this.remote = environment.remote;
     // Commands wait for `ready`; a failed init must not also surface as an unhandled rejection.
     this.ready.promise.catch(() => undefined);
   }
@@ -1021,6 +1030,15 @@ export class AgentHost {
         return this.requireChatApps().zalo.startPairing();
       case "forget_zalo":
         return this.requireChatApps().zalo.forget();
+
+      case "get_remote_access":
+        return this.requireRemote().status();
+      case "set_remote_access":
+        return this.requireRemote().set(command.enabled, command.port);
+      case "start_remote_pairing":
+        return this.requireRemote().startPairing();
+      case "forget_remote_device":
+        return this.requireRemote().forgetDevice(command.id);
 
       case "list_browser_profiles":
         return sortBrowserProfiles(services.settings.get().browserProfiles);
@@ -4014,6 +4032,11 @@ export class AgentHost {
   // Background service and chat channels
   // -------------------------------------------------------------------------------------------
 
+  private requireRemote(): RemoteAccessControl {
+    if (!this.remote) throw new Error(t("remote.unavailable"));
+    return this.remote;
+  }
+
   private async setServiceInstalled(installed: boolean): Promise<ServiceStatus> {
     if (installed) await this.service.install();
     else await this.service.uninstall();
@@ -4773,7 +4796,11 @@ export type {
   ComputerBridge,
   HostEnvironment,
   HostOutput,
+  RemoteAccessControl,
   ServiceControl,
   VaultBackend,
 } from "./host-io.ts";
+export { PairingGuard, type PairingResult } from "./channels/shared/pairing.ts";
+/** Backend texts in the app's language, for the daemon's own messages. */
+export { t as translate } from "./i18n.ts";
 export type * from "./channels/types.ts";

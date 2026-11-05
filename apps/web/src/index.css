@@ -13,3 +13,17 @@
   list-style-position: outside;
   padding-left: 1.5rem;
 }
+
+/* A notice that only matters when it lasts: hidden for its first moments, then fades in. */
+@keyframes pp-delayed-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.delayed-reveal {
+  animation: pp-delayed-reveal 200ms ease-out 1.5s both;
+}

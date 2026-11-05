@@ -247,7 +247,9 @@
       "descriptionNew": "Where chats in this workspace work and save files. Chosen once; it cannot be changed later.",
       "none": "No folder chosen",
       "choose": "Choose…",
-      "required": "Choose a folder for the workspace."
+      "required": "Choose a folder for the workspace.",
+      "pathPlaceholder": "Folder on the computer, e.g. /Users/me/Documents/Sales",
+      "pathLabel": "Folder path on the computer"
     },
     "instructions": {
       "placeholder": "Files here are monthly reports. Name new files YYYY-MM-<topic>.\nAnswer in Vietnamese.",
