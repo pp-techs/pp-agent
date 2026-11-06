@@ -21,7 +21,6 @@ import {
   type ExtensionFactory,
   type ExtensionUIContext,
   ModelRuntime,
-  parseSkillBlock,
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
@@ -209,6 +208,7 @@ import { newTaskId, runTitle, validateTaskInput } from "./scheduled-tasks.ts";
 import { nextRun, Scheduler, schedulableOf } from "./scheduler.ts";
 import { VoiceService } from "./transcription.ts";
 import { listWorkspaceSkills, SkillLibrary, workspaceSkillsDir } from "./skills.ts";
+import { parseSkillBlocks, skillChainExtension } from "./skill-chain.ts";
 import { seedBuiltInSkills } from "./skills-builtin.ts";
 import { createDelegateTool, DELEGATE_TOOL } from "./subagent.ts";
 import {
@@ -1875,8 +1875,8 @@ export class AgentHost {
   }): Promise<void> {
     const session = this.idleSession();
     const original = userContent(this.userEntry(session, params.entryId));
-    const skill = parseSkillBlock(original.text);
-    const oldFiles = splitAttachedFiles(skill ? (skill.userMessage ?? "") : original.text).files;
+    const skills = parseSkillBlocks(original.text);
+    const oldFiles = splitAttachedFiles(skills ? (skills.userMessage ?? "") : original.text).files;
     const keptFiles = oldFiles
       .map((file) => file.path)
       .filter((path) => params.keep.files.includes(path));
@@ -1884,10 +1884,10 @@ export class AgentHost {
 
     const typed = params.text.trim();
     const hasAttachments = keptFiles.length + keptImages.length + params.attachments.length > 0;
-    if (!typed && !skill && !hasAttachments) return;
-    // A skill stays invoked: pi expands the command again.
-    const base = skill
-      ? `/skill:${skill.name}${typed ? ` ${typed}` : ""}`
+    if (!typed && !skills && !hasAttachments) return;
+    // The skills stay invoked: they are expanded again as commands.
+    const base = skills
+      ? [...skills.names.map((name) => `/skill:${name}`), ...(typed ? [typed] : [])].join(" ")
       : typed || ATTACHMENTS_ONLY_PROMPT;
     // Files and images are prepared before anything is dropped, so a bad attachment fails the edit.
     const addedTo = this.open;
@@ -2020,6 +2020,11 @@ export class AgentHost {
       additionalSkillPaths: [workspaceSkillsDir(cwd), skills.dir],
       extensionFactories: [
         { name: "approval-gate", factory: scope.approvalGate },
+        // Two or more skills in one message: pi expands only one leading command.
+        {
+          name: "skill-chain",
+          factory: skillChainExtension(() => resourceLoader.getSkills().skills),
+        },
         { name: "pp-agent", factory: this.agentExtensionFor(scope, sessionManager) },
         createCodemodeExtension(),
         createToolSearchExtension(),

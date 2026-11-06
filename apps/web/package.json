@@ -16,6 +16,8 @@
     "@capacitor/filesystem": "catalog:",
     "@capacitor/keyboard": "catalog:",
     "@capacitor/share": "catalog:",
+    "@iconify-json/vscode-icons": "catalog:",
+    "@iconify/utils": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@workspace/ui": "workspace:*",
     "@xterm/addon-fit": "catalog:",

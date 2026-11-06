@@ -1,7 +1,7 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import { parseSkillBlock } from "@earendil-works/pi-coding-agent";
 import type { ChatMessage, ChatPart, HelperProgress, ToolStatus } from "@workspace/shared";
 import { splitAttachedFiles } from "./attachments.ts";
+import { parseSkillBlocks } from "./skill-chain.ts";
 import { t } from "./i18n.ts";
 import { modelErrorDetail, modelErrorText } from "./model-error.ts";
 
@@ -70,11 +70,11 @@ export class Transcript {
       .filter((block) => block.type === "text")
       .map((block) => block.text)
       .join("\n");
-    // `/skill:<name> args` reaches the model expanded; show it as the skill plus the person's text.
-    const skill = parseSkillBlock(raw);
-    const { text, files } = splitAttachedFiles(skill ? (skill.userMessage ?? "") : raw);
+    // `/skill:<name> args` reaches the model expanded; show it as the skills plus the person's text.
+    const skills = parseSkillBlocks(raw);
+    const { text, files } = splitAttachedFiles(skills ? (skills.userMessage ?? "") : raw);
     const parts: ChatPart[] = [];
-    if (skill) parts.push({ type: "skill", name: skill.name });
+    for (const name of skills?.names ?? []) parts.push({ type: "skill", name });
     if (text) parts.push({ type: "text", text });
     for (const file of files) parts.push({ type: "file", ...file });
     for (const block of blocks) {

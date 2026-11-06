@@ -2,10 +2,11 @@ import { createReadStream } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { createInterface } from "node:readline";
-import { parseSkillBlock, type SessionManager } from "@earendil-works/pi-coding-agent";
+import type { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { SessionSearchHit, SessionUsage } from "@workspace/shared";
 import { splitAttachedFiles } from "./attachments.ts";
+import { parseSkillBlocks } from "./skill-chain.ts";
 import type { TranscriptEntry } from "./transcript.ts";
 
 /** Search hits returned at most; the person narrows the query rather than paging. */
@@ -107,11 +108,14 @@ export function snippetAround(
 
 const TITLE_LENGTH = 80;
 
-/** What the person typed in a stored user message: no skill instructions, no attached-files block. */
+/**
+ * What the person typed in a stored user message: no skill instructions, no attached-files block.
+ * `skill` names the skills it invoked, comma-separated.
+ */
 export function typedText(raw: string): { text: string; files: string[]; skill: string | null } {
-  const skill = parseSkillBlock(raw);
-  const { text, files } = splitAttachedFiles(skill ? (skill.userMessage ?? "") : raw);
-  return { text, files: files.map((file) => file.name), skill: skill?.name ?? null };
+  const skills = parseSkillBlocks(raw);
+  const { text, files } = splitAttachedFiles(skills ? (skills.userMessage ?? "") : raw);
+  return { text, files: files.map((file) => file.name), skill: skills?.names.join(", ") ?? null };
 }
 
 /**

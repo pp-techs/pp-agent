@@ -22,6 +22,45 @@ export function slashText(item: SlashItem): string {
   return item.kind === "skill" ? `/skill:${item.name} ` : `/${item.name}`;
 }
 
+/** Commands that stay in the message box and take text after them (`/goal <objective>`). */
+const COMMANDS_WITH_TEXT = ["goal"];
+
+export type LeadingToken = { kind: SlashItem["kind"]; name: string };
+
+/**
+ * The skills (or the one command) a message starts with, which the message box shows as chips
+ * instead of raw `/skill:abc `. `prefix` is the exact start of the draft they stand for; the text
+ * after it is what the person types. Only picked or fully typed ones count: a skill must exist, and
+ * the space after it is typed. Several skills may follow each other; a command stands alone.
+ */
+export function leadingTokens(
+  draft: string,
+  skills: SlashItem[],
+): { tokens: LeadingToken[]; prefix: string } {
+  const tokens: LeadingToken[] = [];
+  let prefix = "";
+  let rest = draft;
+  for (let match = /^\/skill:(\S+) +/.exec(rest); match; match = /^\/skill:(\S+) +/.exec(rest)) {
+    const name = match[1] ?? "";
+    if (!skills.some((item) => item.name === name)) break;
+    tokens.push({ kind: "skill", name });
+    prefix += match[0];
+    rest = rest.slice(match[0].length);
+  }
+  if (tokens.length > 0) return { tokens, prefix };
+  const command = COMMANDS_WITH_TEXT.find((name) => draft.startsWith(`/${name} `));
+  return command
+    ? { tokens: [{ kind: "command", name: command }], prefix: `/${command} ` }
+    : { tokens, prefix };
+}
+
+/** The draft's start for `tokens`, as `leadingTokens` reads it back. */
+export function tokensPrefix(tokens: LeadingToken[]): string {
+  return tokens
+    .map((token) => (token.kind === "skill" ? `/skill:${token.name} ` : `/${token.name} `))
+    .join("");
+}
+
 /**
  * App commands and the skills the open conversation's agent may use (enabled in Settings › Skills
  * or found in the workspace's .agents/skills, and allowed by the agent). Commands run in the app; skills are expanded by the agent when sent.

@@ -134,6 +134,7 @@
     "placeholderDisconnected": "Hãy kết nối một mô hình trong Cài đặt để bắt đầu",
     "ariaLabel": "Tin nhắn",
     "removeAttachment": "Xóa {{name}}",
+    "removeToken": "Bỏ {{name}}",
     "cantAttach": "Không thể đính kèm {{name}}.",
     "voice": {
       "start": "Nhập bằng giọng nói",
@@ -225,6 +226,8 @@
   },
   "thinking": {
     "title": "Mức suy luận",
+    "faster": "Nhanh hơn",
+    "smarter": "Thông minh hơn",
     "off": "Tắt suy luận",
     "description": "Mức độ mô hình suy nghĩ trước khi trả lời",
     "levels": {

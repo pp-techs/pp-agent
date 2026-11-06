@@ -19,6 +19,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { SettingsModal } from "@/components/modals/settings-modal";
+import { ThinkingLevels } from "@/components/chat/thinking-levels";
 import { groupByProvider, modelKey, modelLabeler } from "@/lib/models";
 import { modelsQuery, useAgentCommands } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
@@ -26,6 +27,7 @@ import { useChatStore } from "@/stores/chat-store";
 /** Model of the open conversation (in the composer); changing it only affects this chat. */
 export function ModelPicker({ bridge }: { bridge: DesktopBridge }) {
   const current = useChatStore((state) => state.model);
+  const thinking = useChatStore((state) => state.thinking);
   const status = useChatStore((state) => state.status);
   const models = useQuery(modelsQuery(bridge));
   const label = modelLabeler(models.data ?? []);
@@ -57,7 +59,7 @@ export function ModelPicker({ bridge }: { bridge: DesktopBridge }) {
             type="button"
             variant="ghost"
             size="sm"
-            className="h-9 max-w-full min-w-0 rounded-full px-3 font-normal @2xl:max-w-56 text-muted-foreground outline-none focus-visible:ring-0"
+            className="h-9 max-w-full min-w-0 rounded-full px-3 font-normal text-muted-foreground outline-none focus-visible:ring-0"
             disabled={status === "running"}
             title={
               status === "running"
@@ -68,13 +70,21 @@ export function ModelPicker({ bridge }: { bridge: DesktopBridge }) {
         }
       >
         <span className="truncate">{label(current)}</span>
+        {/* The thinking level, muted beside the model; "off" says nothing. */}
+        {thinking.available.length > 0 && thinking.level !== "off" && (
+          <span className="shrink-0 text-muted-foreground/70">
+            {t(`thinking.levels.${thinking.level}.label`)}
+          </span>
+        )}
         {setModel.isPending ? (
           <Spinner data-icon="inline-end" />
         ) : (
           <ChevronDownIcon data-icon="inline-end" className="text-muted-foreground" />
         )}
       </PopoverTrigger>
-      <PopoverContent align="start" side="top" className="w-80 gap-0 p-0">
+      {/* End-aligned: the trigger is right-aligned and its width follows the model and thinking
+          level, so its right edge is the one that stays put while the level changes. */}
+      <PopoverContent align="end" side="top" className="w-80 gap-0 p-0">
         <Command>
           <CommandInput placeholder={t("modelPicker.search")} />
           <CommandList>
@@ -141,6 +151,7 @@ export function ModelPicker({ bridge }: { bridge: DesktopBridge }) {
             ))}
           </CommandList>
         </Command>
+        <ThinkingLevels bridge={bridge} />
         <div className="border-t p-1">
           <Button variant="ghost" size="sm" className="w-full justify-start" onClick={openSettings}>
             <SettingsIcon data-icon="inline-start" />
