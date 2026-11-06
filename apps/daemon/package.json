@@ -1,6 +1,6 @@
 {
   "name": "@workspace/daemon",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "description": "PP Agent background daemon (pp-agentd)",
   "license": "Apache-2.0",
