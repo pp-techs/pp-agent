@@ -5,6 +5,8 @@ import { checkSession, connectToServer, forgetServer, useWebSession } from "./we
 // The phone app's flow: requests go to the computer the person connected to.
 vi.mock("@/lib/native", () => ({ isNativeApp: true, shareTextFile: vi.fn() }));
 vi.mock("@/lib/i18n", () => ({ i18n: { t: (key: string) => key } }));
+// The test runner does not resolve the `@/` alias; point it at the real module.
+vi.mock("@/lib/server-address", () => import("./server-address"));
 
 interface PendingFetch {
   url: string;
@@ -31,7 +33,18 @@ async function nextCall(index: number): Promise<PendingFetch> {
 const COMPUTER = "http://10.0.0.5:47830";
 const UNPAIRED = { paired: false, deviceName: null, appVersion: "1.0.0" };
 
+/** The WebView's storage, which the bridge keeps the computer and the device token in. */
+function memoryStorage() {
+  const items = new Map<string, string>();
+  return {
+    getItem: (key: string) => items.get(key) ?? null,
+    setItem: (key: string, value: string) => void items.set(key, value),
+    removeItem: (key: string) => void items.delete(key),
+  };
+}
+
 beforeEach(() => {
+  vi.stubGlobal("localStorage", memoryStorage());
   calls = [];
   vi.stubGlobal(
     "fetch",
@@ -80,5 +93,17 @@ describe("session checks in the phone app", () => {
     await stale;
 
     expect(useWebSession.getState()).toMatchObject({ phase: "unpaired", server: COMPUTER });
+  });
+
+  it("forget a saved public HTTP address instead of sending the token there", async () => {
+    // Saved by an older version, with its token.
+    localStorage.setItem("pp-agent.server", "http://agent.example.com:47830");
+    localStorage.setItem("pp-agent.device-token", "device.secret");
+    await checkSession();
+
+    expect(calls).toHaveLength(0);
+    expect(useWebSession.getState()).toMatchObject({ phase: "noComputer", server: null });
+    expect(localStorage.getItem("pp-agent.server")).toBeNull();
+    expect(localStorage.getItem("pp-agent.device-token")).toBeNull();
   });
 });

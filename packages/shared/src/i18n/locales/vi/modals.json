@@ -73,6 +73,7 @@
     "serverUnreachable": "Không kết nối được PP Agent tại {{server}}. Hãy kiểm tra đã bật truy cập từ điện thoại và điện thoại này dùng cùng mạng Wi-Fi hoặc Tailscale.",
     "pairDescriptionApp": "Trên máy tính, mở PP Agent › Cài đặt › Truy cập từ điện thoại và bấm Ghép nối thiết bị. Sau đó quét mã QR, hoặc nhập mã hiển thị ở đó.",
     "unreachableDescriptionApp": "Hãy kiểm tra máy tính tại {{server}} đang bật, PP Agent đang chạy và đã bật truy cập từ điện thoại, và điện thoại này dùng cùng mạng Wi-Fi hoặc Tailscale.",
-    "otherComputer": "Dùng máy tính khác"
+    "otherComputer": "Dùng máy tính khác",
+    "httpsRequired": "Hãy dùng https:// cho {{server}}: địa chỉ này nằm ngoài mạng của bạn, và HTTP thường sẽ gửi thông tin đăng nhập của điện thoại này không mã hoá. Qua Wi-Fi hoặc Tailscale, hãy dùng địa chỉ nội bộ hoặc địa chỉ Tailscale của máy tính."
   }
 }

@@ -11,6 +11,7 @@ import { create } from "zustand";
 
 import { i18n } from "@/lib/i18n";
 import { isNativeApp, shareTextFile } from "@/lib/native";
+import { allowsPlainHttp } from "@/lib/server-address";
 
 /**
  * The bridge of the web app the daemon serves on the local network (Settings › Phone access).
@@ -157,6 +158,11 @@ let sessionGeneration = 0;
 export async function checkSession(): Promise<void> {
   const generation = ++sessionGeneration;
   const server = apiBase();
+  // An address saved before the app refused public plain HTTP: never send the token there.
+  if (server && !allowsPlainHttp(server)) {
+    forgetServer();
+    return;
+  }
   if (server === null) {
     useWebSession.setState({ phase: "noComputer", server: null });
     return;
@@ -192,6 +198,7 @@ export async function checkSession(): Promise<void> {
  * once when the scanned link carried a code. Throws a message for the person when it cannot.
  */
 export async function connectToServer(server: string, code: string | null): Promise<void> {
+  if (!allowsPlainHttp(server)) throw new Error(i18n.t("modals:remote.httpsRequired", { server }));
   const previous = readStored(SERVER_KEY);
   try {
     const response = await fetch(`${server}/api/session`, {

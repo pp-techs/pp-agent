@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { parseServerAddress } from "./server-address";
+import { allowsPlainHttp, parseServerAddress } from "./server-address";
 
 describe("parseServerAddress", () => {
   it("reads the pairing link from the computer's QR code", () => {
@@ -47,5 +47,38 @@ describe("parseServerAddress", () => {
     expect(parseServerAddress("ftp://10.0.0.5", 47830)).toBeNull();
     expect(parseServerAddress("javascript://alert(1)", 47830)).toBeNull();
     expect(parseServerAddress("WIFI:S:home;T:WPA;P:secret;;", 47830)).toBeNull();
+  });
+});
+
+describe("allowsPlainHttp", () => {
+  it("allows HTTP on the person's own network and over Tailscale", () => {
+    for (const server of [
+      "http://192.168.1.20:47830",
+      "http://10.4.63.227:47830",
+      "http://172.20.0.5:47830",
+      "http://100.96.85.90:47830",
+      "http://127.0.0.1:47830",
+      "http://169.254.10.2:47830",
+      "http://[fd7a:115c:a1e0::1]:47830",
+      "http://my-mac:47830",
+      "http://my-mac.local:47830",
+      "http://nas.lan:47830",
+      "http://mbp.tail3e8499.ts.net:47830",
+    ]) {
+      expect(allowsPlainHttp(server), server).toBe(true);
+    }
+  });
+
+  it("requires HTTPS anywhere else", () => {
+    for (const server of [
+      "http://8.8.8.8:47830",
+      "http://100.200.1.1:47830",
+      "http://172.32.0.1:47830",
+      "http://agent.example.com:47830",
+      "http://[2001:db8::1]:47830",
+    ]) {
+      expect(allowsPlainHttp(server), server).toBe(false);
+    }
+    expect(allowsPlainHttp("https://agent.example.com")).toBe(true);
   });
 });
