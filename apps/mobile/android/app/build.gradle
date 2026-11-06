@@ -7,7 +7,7 @@ android {
         applicationId "com.pptechs.agent"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2300
+        versionCode 23000
         versionName "0.23.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

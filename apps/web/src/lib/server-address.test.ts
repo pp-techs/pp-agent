@@ -21,6 +21,14 @@ describe("parseServerAddress", () => {
     expect(parseServerAddress("my-mac.local", 47830)?.server).toBe("http://my-mac.local:47830");
   });
 
+  it("keeps a port given on purpose, even HTTP's default", () => {
+    expect(parseServerAddress("http://10.0.0.5:80", 47830)?.server).toBe("http://10.0.0.5");
+    expect(parseServerAddress("10.0.0.5:80/#pair=AB12CD34", 47830)).toEqual({
+      server: "http://10.0.0.5",
+      code: "AB12CD34",
+    });
+  });
+
   it("keeps HTTPS addresses as given, such as tailscale serve", () => {
     expect(parseServerAddress("https://my-mac.tail1234.ts.net", 47830)?.server).toBe(
       "https://my-mac.tail1234.ts.net",

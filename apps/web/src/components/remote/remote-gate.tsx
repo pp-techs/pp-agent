@@ -220,7 +220,14 @@ function PairScreen({ initialCode }: { initialCode: string | null }) {
   const { t } = useTranslation("modals");
   const [code, setCode] = React.useState(initialCode ?? "");
   const [pending, setPending] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const [ownError, setOwnError] = React.useState<string | null>(null);
+  // A scanned code that failed to pair while the connect screen was still up.
+  const pairError = useWebSession((state) => state.pairError);
+  const error = ownError ?? pairError;
+  const setError = React.useCallback((message: string | null) => {
+    setOwnError(message);
+    if (message === null) useWebSession.setState({ pairError: null });
+  }, []);
   const tried = React.useRef(false);
 
   const submit = React.useCallback(
@@ -237,7 +244,7 @@ function PairScreen({ initialCode }: { initialCode: string | null }) {
         setPending(false);
       }
     },
-    [t],
+    [setError, t],
   );
 
   // A code from the QR code pairs at once; the person only types one by hand.

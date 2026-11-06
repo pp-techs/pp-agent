@@ -16,7 +16,10 @@ export function parseServerAddress(
     return null;
   }
   if ((url.protocol !== "http:" && url.protocol !== "https:") || url.hostname === "") return null;
-  if (url.port === "" && url.protocol === "http:") url.port = String(defaultPort);
+  // `URL` drops a default port, so `:80` typed on purpose would look like no port at all.
+  const authority = value.replace(/^[a-z][a-z\d+.-]*:\/\//i, "").split(/[/?#]/)[0] ?? "";
+  const portGiven = /:\d+$/.test(authority);
+  if (!portGiven && url.protocol === "http:") url.port = String(defaultPort);
   const code = /(?:^#|&)pair=([A-Za-z0-9-]+)/.exec(url.hash)?.[1] ?? null;
   return { server: url.origin, code };
 }

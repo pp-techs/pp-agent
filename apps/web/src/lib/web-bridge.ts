@@ -31,6 +31,8 @@ const SERVER_KEY = "pp-agent.server";
 const STALE_MS = 45_000;
 const RETRY_MIN_MS = 1_000;
 const RETRY_MAX_MS = 10_000;
+/** How long the phone app waits for a computer it is told to connect to. */
+const CONNECT_TIMEOUT_MS = 10_000;
 
 /** `noComputer`: the phone app before the person picked a computer to connect to. */
 export type WebPhase = "checking" | "noComputer" | "unpaired" | "paired" | "unreachable";
@@ -44,6 +46,11 @@ interface WebSessionState {
   appVersion: string | null;
   /** The computer the phone app talks to; null in the browser, which talks to its own origin. */
   server: string | null;
+  /**
+   * Why pairing with the code from a scanned QR code failed, for the pairing screen that replaces
+   * the connect screen meanwhile; cleared when the person tries again.
+   */
+  pairError: string | null;
   /** Files being copied to the computer; a message waits for them. */
   uploads: number;
 }
@@ -54,6 +61,7 @@ export const useWebSession = create<WebSessionState>()(() => ({
   deviceName: null,
   appVersion: null,
   server: null,
+  pairError: null,
   uploads: 0,
 }));
 
@@ -150,10 +158,12 @@ export async function checkSession(): Promise<void> {
     return;
   }
   const token = readToken();
+  // Paired, unpaired or switched computers while this was on its way: the answer is about another
+  // token or computer, and a newer check speaks for the current one.
+  const stale = () => readToken() !== token || apiBase() !== server;
   try {
     const response = await fetch(apiUrl("/api/session"), { headers: authHeaders() });
-    // Paired (or unpaired) while this was on its way: the answer is about another token.
-    if (readToken() !== token) return;
+    if (stale()) return;
     if (!response.ok) throw new Error(await errorText(response));
     const session = (await response.json()) as SessionInfo;
     if (!session.paired) writeToken(null);
@@ -164,8 +174,7 @@ export async function checkSession(): Promise<void> {
       server: server || null,
     });
   } catch {
-    if (readToken() === token)
-      useWebSession.setState({ phase: "unreachable", server: server || null });
+    if (!stale()) useWebSession.setState({ phase: "unreachable", server: server || null });
   }
 }
 
@@ -178,27 +187,45 @@ export async function connectToServer(server: string, code: string | null): Prom
   try {
     const response = await fetch(`${server}/api/session`, {
       headers: previous === server ? authHeaders() : {},
+      // A typed address that swallows packets would otherwise keep Connect busy for minutes.
+      signal: AbortSignal.timeout(CONNECT_TIMEOUT_MS),
     });
     if (!response.ok) throw new Error(await errorText(response));
     const session = (await response.json()) as Partial<SessionInfo>;
     // Something else answers on that address.
     if (typeof session.paired !== "boolean") throw new TypeError("not PP Agent");
   } catch (error) {
-    const reason = error instanceof Error && !(error instanceof TypeError) ? error.message : null;
-    throw new Error(reason ?? i18n.t("modals:remote.serverUnreachable", { server }));
+    // Network failures (TypeError) and the timeout say nothing useful; the computer's own answer does.
+    const unreachable =
+      !(error instanceof Error) ||
+      error instanceof TypeError ||
+      error.name === "TimeoutError" ||
+      error.name === "AbortError";
+    throw new Error(
+      unreachable ? i18n.t("modals:remote.serverUnreachable", { server }) : error.message,
+    );
   }
   // Another computer's token means nothing here.
   if (previous !== server) writeToken(null);
   writeStored(SERVER_KEY, server);
+  useWebSession.setState({ pairError: null });
   await checkSession();
-  if (code && useWebSession.getState().phase === "unpaired") await pairDevice(code);
+  if (!code || useWebSession.getState().phase !== "unpaired") return;
+  try {
+    await pairDevice(code);
+  } catch (error) {
+    // The pairing screen shows by now; it reads this, the caller's screen is gone.
+    useWebSession.setState({
+      pairError: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 /** Forgets the phone app's computer (and this device's token for it), to connect to another. */
 export function forgetServer(): void {
   writeToken(null);
   writeStored(SERVER_KEY, null);
-  useWebSession.setState({ phase: "noComputer", server: null, deviceName: null });
+  useWebSession.setState({ phase: "noComputer", server: null, deviceName: null, pairError: null });
 }
 
 /** "Safari on iPhone", "Chrome on Android": what the computer lists this device as. */

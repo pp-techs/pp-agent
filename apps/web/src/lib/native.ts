@@ -59,8 +59,10 @@ export async function shareTextFile(name: string, content: string): Promise<bool
     import("@capacitor/filesystem"),
     import("@capacitor/share"),
   ]);
+  // The name comes from the computer: keep it one plain file inside exports/.
+  const file = name.replace(/[/\\]/g, "-").replace(/^\.+$/, "export");
   const { uri } = await Filesystem.writeFile({
-    path: `exports/${name}`,
+    path: `exports/${file}`,
     data: content,
     directory: Directory.Cache,
     encoding: Encoding.UTF8,
