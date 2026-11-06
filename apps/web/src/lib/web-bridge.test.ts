@@ -5,6 +5,8 @@ import { checkSession, connectToServer, forgetServer, useWebSession } from "./we
 // The phone app's flow: requests go to the computer the person connected to.
 vi.mock("@/lib/native", () => ({ isNativeApp: true, shareTextFile: vi.fn() }));
 vi.mock("@/lib/i18n", () => ({ i18n: { t: (key: string) => key } }));
+// The test runner does not resolve the `@/` alias; point it at the real module.
+vi.mock("@/lib/server-address", () => import("./server-address"));
 
 interface PendingFetch {
   url: string;

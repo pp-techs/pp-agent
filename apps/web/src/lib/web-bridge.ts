@@ -11,6 +11,7 @@ import { create } from "zustand";
 
 import { i18n } from "@/lib/i18n";
 import { isNativeApp, shareTextFile } from "@/lib/native";
+import { allowsPlainHttp } from "@/lib/server-address";
 
 /**
  * The bridge of the web app the daemon serves on the local network (Settings › Phone access).
@@ -192,6 +193,7 @@ export async function checkSession(): Promise<void> {
  * once when the scanned link carried a code. Throws a message for the person when it cannot.
  */
 export async function connectToServer(server: string, code: string | null): Promise<void> {
+  if (!allowsPlainHttp(server)) throw new Error(i18n.t("modals:remote.httpsRequired", { server }));
   const previous = readStored(SERVER_KEY);
   try {
     const response = await fetch(`${server}/api/session`, {

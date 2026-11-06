@@ -73,6 +73,7 @@
     "serverUnreachable": "Can't reach PP Agent at {{server}}. Check that phone access is turned on and this phone is on the same Wi-Fi or Tailscale network.",
     "pairDescriptionApp": "On your computer, open PP Agent › Settings › Phone access and press Pair a device. Then scan its QR code, or enter the code shown there.",
     "unreachableDescriptionApp": "Check that the computer at {{server}} is on, PP Agent is running with phone access turned on, and this phone is on the same Wi-Fi or Tailscale network.",
-    "otherComputer": "Use another computer"
+    "otherComputer": "Use another computer",
+    "httpsRequired": "Use https:// for {{server}}: it is outside your own network, and plain HTTP would send this phone's sign-in in the clear. Over Wi-Fi or Tailscale, use the computer's local or Tailscale address."
   }
 }
