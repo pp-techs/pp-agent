@@ -218,21 +218,26 @@ export const FOLDER_NAMES: Record<string, string> = {
   themes: "theme",
 };
 
+/** A table's own entry: a file called `constructor` or `__proto__` must not find Object's. */
+function own(table: Record<string, string>, key: string): string | undefined {
+  return Object.hasOwn(table, key) ? table[key] : undefined;
+}
+
 /** The icon for a file called `name` (`default-file` when it has no better one). */
 export function fileIconName(name: string): string {
   const lower = name.toLowerCase();
-  const byName = FILE_NAMES[lower];
+  const byName = own(FILE_NAMES, lower);
   if (byName) return `file-type-${byName}`;
-  // `.test.ts` and `.d.ts` read as TypeScript; `.env.local` as an env file.
-  if (lower.startsWith(".env")) return "file-type-dotenv";
+  // `.env.local` and `.env.production` are env files; `.environment.ts` is not.
+  if (lower.startsWith(".env.")) return "file-type-dotenv";
   const dot = lower.lastIndexOf(".");
-  const byExtension = dot === -1 ? undefined : FILE_EXTENSIONS[lower.slice(dot + 1)];
+  const byExtension = dot === -1 ? undefined : own(FILE_EXTENSIONS, lower.slice(dot + 1));
   return byExtension ? `file-type-${byExtension}` : "default-file";
 }
 
 /** The icon for a folder called `name`, shut or open. */
 export function folderIconName(name: string, open: boolean): string {
-  const known = FOLDER_NAMES[name.toLowerCase()];
+  const known = own(FOLDER_NAMES, name.toLowerCase());
   const suffix = open ? "-opened" : "";
   return known ? `folder-type-${known}${suffix}` : `default-folder${suffix}`;
 }

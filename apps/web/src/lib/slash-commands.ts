@@ -40,7 +40,7 @@ export function leadingTokens(
   const tokens: LeadingToken[] = [];
   let prefix = "";
   let rest = draft;
-  for (let match = /^\/skill:(\S+) /.exec(rest); match; match = /^\/skill:(\S+) /.exec(rest)) {
+  for (let match = /^\/skill:(\S+) +/.exec(rest); match; match = /^\/skill:(\S+) +/.exec(rest)) {
     const name = match[1] ?? "";
     if (!skills.some((item) => item.name === name)) break;
     tokens.push({ kind: "skill", name });

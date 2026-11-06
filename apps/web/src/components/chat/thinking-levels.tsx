@@ -61,7 +61,9 @@ export function ThinkingLevels({ bridge }: { bridge: DesktopBridge }) {
           onValueChange={(value) => setDragged(value)}
           onValueCommitted={(value) => {
             const next = levels[value];
-            if (!next || next === thinking.level) return setDragged(null);
+            // While an earlier pick is still being saved, the level shown is not final: send this one.
+            if (!next || (next === thinking.level && !setThinkingLevel.isPending))
+              return setDragged(null);
             setThinkingLevel.mutate(next as ThinkingLevel, {
               onError: (error) => {
                 setDragged(null);

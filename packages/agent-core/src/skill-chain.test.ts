@@ -39,6 +39,15 @@ describe("expandSkillChain", () => {
     expect(expandSkillChain("/skill:pdf /skill:nope go", find)).toBe("/skill:pdf /skill:nope go");
   });
 
+  test("skills separated by several spaces or a line break are all expanded", () => {
+    for (const separator of ["  ", "\n"]) {
+      const text = expandSkillChain(`/skill:pdf${separator}/skill:brainstorm${separator}go`, find);
+      expect(text).toContain("Merge PDFs.");
+      expect(text).toContain("Shape ideas.");
+      expect(text.endsWith("</skill>\n\ngo")).toBe(true);
+    }
+  });
+
   test("skills alone, without text", () => {
     const text = expandSkillChain("/skill:pdf /skill:brainstorm", find);
     expect(text.endsWith("</skill>")).toBe(true);

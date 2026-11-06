@@ -188,7 +188,7 @@ function Sidebar({
           data-slot="sidebar"
           data-mobile="true"
           // A phone gets the whole screen, like Settings; the header's trigger closes it.
-          className="bg-sidebar p-0 pt-[env(safe-area-inset-top)] text-sidebar-foreground data-[side=left]:w-full data-[side=left]:sm:max-w-none data-[side=right]:w-full data-[side=right]:sm:max-w-none [&>button]:hidden"
+          className="bg-sidebar p-0 pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] text-sidebar-foreground data-[side=left]:w-full data-[side=left]:sm:max-w-none data-[side=right]:w-full data-[side=right]:sm:max-w-none [&>button]:hidden"
           side={side}
         >
           <SheetHeader className="sr-only">

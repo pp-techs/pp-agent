@@ -18,6 +18,11 @@ describe("file icons", () => {
     expect(fileIconName(".env.local")).toBe("file-type-dotenv");
     expect(fileIconName("notes.unknownext")).toBe("default-file");
     expect(fileIconName("noextension")).toBe("default-file");
+    // Names the tables inherit from Object are not entries.
+    expect(fileIconName("constructor")).toBe("default-file");
+    expect(fileIconName("x.toString")).toBe("default-file");
+    expect(fileIconName(".environment.ts")).toBe("file-type-typescript");
+    expect(folderIconName("__proto__", false)).toBe("default-folder");
   });
 
   test("folders by name, shut or open, else the default", () => {

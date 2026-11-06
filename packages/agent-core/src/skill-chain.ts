@@ -15,7 +15,7 @@ export interface LoadedSkill {
   baseDir: string;
 }
 
-const LEADING_COMMAND = /^\/skill:(\S+)(?: +|$)/;
+const LEADING_COMMAND = /^\/skill:(\S+)(?:\s+|$)/;
 
 /** The same block as pi's own expansion, so a saved message reads back the same way. */
 function skillBlock(skill: LoadedSkill): string {

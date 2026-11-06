@@ -10,7 +10,14 @@ type IconSet = Parameters<typeof getIconData>[0];
 // folder is shown. It is bundled, not fetched from Iconify's servers: the app works offline.
 let loaded: Promise<IconSet> | undefined;
 const loadIcons = () =>
-  (loaded ??= import("@iconify-json/vscode-icons/icons.json").then((module) => module.default));
+  (loaded ??= import("@iconify-json/vscode-icons/icons.json")
+    .then((module) => module.default)
+    .catch(() => {
+      // A failed fetch must not take the panel down or stick: show no icons, and try again on
+      // the next render of a row that mounts later.
+      loaded = undefined;
+      return { prefix: "vscode-icons", icons: {} } satisfies IconSet;
+    }));
 
 const rendered = new Map<string, { viewBox: string; body: string } | null>();
 
