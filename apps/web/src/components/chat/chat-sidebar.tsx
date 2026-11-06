@@ -526,9 +526,8 @@ export function ChatSidebar({
     <Sidebar variant="inset" collapsible="icon">
       <SidebarHeader className="shrink-0">
         <div className="flex items-center gap-2 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-1">
-          {/* The logo's own theme swap (`hidden dark:block`) outbids hide variants on its images. */}
           <span className="shrink-0 group-data-[collapsible=icon]:hidden">
-            <Logo className="size-6" />
+            <Logo small className="size-6" />
           </span>
           {/* Minimized rail: the logo stands in for the toggle button until hovered. */}
           <button
@@ -539,7 +538,7 @@ export function ChatSidebar({
             onClick={toggleSidebar}
           >
             <span className="group-hover/toggle:hidden">
-              <Logo className="size-6" />
+              <Logo small className="size-6" />
             </span>
             <PanelLeftIcon className="hidden size-5 group-hover/toggle:block" />
           </button>

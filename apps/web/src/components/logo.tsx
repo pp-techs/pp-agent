@@ -1,13 +1,10 @@
 import blue from "@/assets/logo-mark-blue.png";
-import white from "@/assets/logo-mark-white.png";
-import { cn } from "@workspace/ui/lib/utils";
+import smallBlue from "@/assets/logo-mark-small-blue.png";
 
-/** The PP Agent mark: blue on light themes, white on dark ones. */
-export function Logo({ className }: { className?: string }) {
-  return (
-    <>
-      <img src={blue} alt="" aria-hidden className={cn("dark:hidden", className)} />
-      <img src={white} alt="" aria-hidden className={cn("hidden dark:block", className)} />
-    </>
-  );
+/**
+ * The PP Agent mark in its brand blue, which reads on light and dark themes alike.
+ * `small` is the bolder cut for sizes under about 32 px, where the fine leaves would blur.
+ */
+export function Logo({ className, small }: { className?: string; small?: boolean }) {
+  return <img src={small ? smallBlue : blue} alt="" aria-hidden className={className} />;
 }
