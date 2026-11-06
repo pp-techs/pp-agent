@@ -3,7 +3,8 @@
  * workflow runs it to build the "Version Packages" PR; run it locally only to preview that PR.
  *
  * `changeset version` bumps the lockstep packages (`fixed` in .changeset/config.json: the desktop
- * app and its renderer) and writes their CHANGELOGs. On top of that this gives the private root
+ * app, its renderer and the phone app) and writes their CHANGELOGs; the phone app's Xcode and Gradle
+ * projects then get the same version. On top of that this gives the private root
  * package the same version (it is the release version: the installers' version and the git tag)
  * and adds the root CHANGELOG section, which becomes the GitHub Release notes.
  */
@@ -11,7 +12,7 @@ import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 
 const CHANGESET_DIR = ".changeset";
-const PACKAGES = ["apps/desktop", "apps/web"];
+const PACKAGES = ["apps/desktop", "apps/web", "apps/mobile"];
 const ROOT_CHANGELOG = "CHANGELOG.md";
 const CHANGELOG_MARKER =
   "<!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->";
@@ -40,6 +41,7 @@ const notes = changesetFiles.map((file) =>
 );
 
 run("vp", ["exec", "changeset", "version"]);
+run("node", ["apps/mobile/scripts/sync-version.ts"]);
 
 const [version, ...otherVersions] = PACKAGES.map((dir) => readVersion(`${dir}/package.json`));
 if (!version || otherVersions.some((other) => other !== version)) {

@@ -1,5 +1,6 @@
 import type { DesktopBridge } from "@workspace/shared";
 
+import { isNativeApp } from "@/lib/native";
 import { createWebBridge } from "@/lib/web-bridge";
 
 declare global {
@@ -11,12 +12,16 @@ declare global {
 
 /**
  * The desktop window's preload bridge; in a plain browser (a phone on the local network, served by
- * the daemon) the web bridge; null when the page was opened from a file, where neither exists.
+ * the daemon) and in the phone app the web bridge; null when the page was opened from a file, where
+ * neither exists.
  */
 export const bridge: DesktopBridge | null =
-  window.ppAgent ?? (/^https?:$/.test(location.protocol) ? createWebBridge() : null);
+  window.ppAgent ?? (isNativeApp || /^https?:$/.test(location.protocol) ? createWebBridge() : null);
 
-/** True in the web app on the local network, which lacks the window's side panel and dialogs. */
+/**
+ * True in the web app on the local network and in the phone app, which lack the window's side
+ * panel and dialogs.
+ */
 export const isWebApp = bridge?.kind === "web";
 
 /** Hands errors nobody handled to the audit log, so a bug report can show them. */

@@ -10,6 +10,7 @@ import type {
 import { create } from "zustand";
 
 import { i18n } from "@/lib/i18n";
+import { isNativeApp, shareTextFile } from "@/lib/native";
 
 /**
  * The bridge of the web app the daemon serves on the local network (Settings › Phone access).
@@ -17,15 +18,22 @@ import { i18n } from "@/lib/i18n";
  * (read with `fetch`, so the device token travels in a header and never in a URL or a cookie),
  * and attachments are uploaded to the computer first. What only the desktop window can do (the
  * side panel, native dialogs, updates, computer use) is refused or quietly skipped.
+ *
+ * The phone app (apps/mobile) runs this bridge too. Its page is bundled in the app rather than
+ * served by the computer, so requests go to the computer the person connected to (by scanning the
+ * pairing QR code or typing its address), which answers the app's origin with CORS.
  */
 
 const TOKEN_KEY = "pp-agent.device-token";
+/** The phone app's computer: an origin such as `http://192.168.1.20:47830`. */
+const SERVER_KEY = "pp-agent.server";
 /** No event and no heartbeat (sent every 20 s) for this long: the stream is dead, reconnect. */
 const STALE_MS = 45_000;
 const RETRY_MIN_MS = 1_000;
 const RETRY_MAX_MS = 10_000;
 
-export type WebPhase = "checking" | "unpaired" | "paired" | "unreachable";
+/** `noComputer`: the phone app before the person picked a computer to connect to. */
+export type WebPhase = "checking" | "noComputer" | "unpaired" | "paired" | "unreachable";
 export type WebConnection = "connecting" | "online" | "offline";
 
 interface WebSessionState {
@@ -34,6 +42,8 @@ interface WebSessionState {
   connection: WebConnection;
   deviceName: string | null;
   appVersion: string | null;
+  /** The computer the phone app talks to; null in the browser, which talks to its own origin. */
+  server: string | null;
   /** Files being copied to the computer; a message waits for them. */
   uploads: number;
 }
@@ -43,33 +53,46 @@ export const useWebSession = create<WebSessionState>()(() => ({
   connection: "connecting",
   deviceName: null,
   appVersion: null,
+  server: null,
   uploads: 0,
 }));
 
 /**
- * The token when storage failed to take it (private browsing, storage full): `undefined` means
- * storage is authoritative, `null` a sign-out storage could not record.
+ * Values storage failed to take (private browsing, storage full); a key that is absent here is
+ * read from storage, and `null` is a removal storage could not record.
  */
-let memoryToken: string | null | undefined;
+const memory = new Map<string, string | null>();
 
-function readToken(): string | null {
-  if (memoryToken !== undefined) return memoryToken;
+function readStored(key: string): string | null {
+  if (memory.has(key)) return memory.get(key) ?? null;
   try {
-    return localStorage.getItem(TOKEN_KEY);
+    return localStorage.getItem(key);
   } catch {
     return null;
   }
 }
 
-function writeToken(token: string | null): void {
+function writeStored(key: string, value: string | null): void {
   try {
-    if (token === null) localStorage.removeItem(TOKEN_KEY);
-    else localStorage.setItem(TOKEN_KEY, token);
-    memoryToken = undefined;
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+    memory.delete(key);
   } catch {
     // Without storage the device stays paired for this page only and pairs again next time.
-    memoryToken = token;
+    memory.set(key, value);
   }
+}
+
+const readToken = () => readStored(TOKEN_KEY);
+const writeToken = (token: string | null) => writeStored(TOKEN_KEY, token);
+
+/** The phone app's computer, or "" in the browser, where the API is on the page's own origin. */
+function apiBase(): string | null {
+  return isNativeApp ? readStored(SERVER_KEY) : "";
+}
+
+function apiUrl(path: string): string {
+  return `${apiBase() ?? ""}${path}`;
 }
 
 function authHeaders(): Record<string, string> {
@@ -101,7 +124,7 @@ async function errorText(response: Response): Promise<string> {
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(path, {
+    response = await fetch(apiUrl(path), {
       ...init,
       headers: { ...authHeaders(), ...(init.headers as Record<string, string> | undefined) },
     });
@@ -113,42 +136,86 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
+interface SessionInfo {
+  paired: boolean;
+  deviceName: string | null;
+  appVersion: string;
+}
+
 /** Asks the computer whether this device is paired; sets the phase accordingly. */
 export async function checkSession(): Promise<void> {
+  const server = apiBase();
+  if (server === null) {
+    useWebSession.setState({ phase: "noComputer", server: null });
+    return;
+  }
   const token = readToken();
   try {
-    const response = await fetch("/api/session", { headers: authHeaders() });
+    const response = await fetch(apiUrl("/api/session"), { headers: authHeaders() });
     // Paired (or unpaired) while this was on its way: the answer is about another token.
     if (readToken() !== token) return;
     if (!response.ok) throw new Error(await errorText(response));
-    const session = (await response.json()) as {
-      paired: boolean;
-      deviceName: string | null;
-      appVersion: string;
-    };
+    const session = (await response.json()) as SessionInfo;
     if (!session.paired) writeToken(null);
     useWebSession.setState({
       phase: session.paired ? "paired" : "unpaired",
       deviceName: session.deviceName,
       appVersion: session.appVersion,
+      server: server || null,
     });
   } catch {
-    if (readToken() === token) useWebSession.setState({ phase: "unreachable" });
+    if (readToken() === token)
+      useWebSession.setState({ phase: "unreachable", server: server || null });
   }
+}
+
+/**
+ * Points the phone app at a computer, after checking that its Phone access answers; then pairs at
+ * once when the scanned link carried a code. Throws a message for the person when it cannot.
+ */
+export async function connectToServer(server: string, code: string | null): Promise<void> {
+  const previous = readStored(SERVER_KEY);
+  try {
+    const response = await fetch(`${server}/api/session`, {
+      headers: previous === server ? authHeaders() : {},
+    });
+    if (!response.ok) throw new Error(await errorText(response));
+    const session = (await response.json()) as Partial<SessionInfo>;
+    // Something else answers on that address.
+    if (typeof session.paired !== "boolean") throw new TypeError("not PP Agent");
+  } catch (error) {
+    const reason = error instanceof Error && !(error instanceof TypeError) ? error.message : null;
+    throw new Error(reason ?? i18n.t("modals:remote.serverUnreachable", { server }));
+  }
+  // Another computer's token means nothing here.
+  if (previous !== server) writeToken(null);
+  writeStored(SERVER_KEY, server);
+  await checkSession();
+  if (code && useWebSession.getState().phase === "unpaired") await pairDevice(code);
+}
+
+/** Forgets the phone app's computer (and this device's token for it), to connect to another. */
+export function forgetServer(): void {
+  writeToken(null);
+  writeStored(SERVER_KEY, null);
+  useWebSession.setState({ phase: "noComputer", server: null, deviceName: null });
 }
 
 /** "Safari on iPhone", "Chrome on Android": what the computer lists this device as. */
 function describeDevice(): string {
   const agent = navigator.userAgent;
-  const browser = /Edg\//.test(agent)
-    ? "Edge"
-    : /Firefox\/|FxiOS/.test(agent)
-      ? "Firefox"
-      : /Chrome\/|CriOS/.test(agent)
-        ? "Chrome"
-        : /Safari\//.test(agent)
-          ? "Safari"
-          : "Browser";
+  // The app's WebView reports no browser of its own.
+  const browser = isNativeApp
+    ? "PP Agent"
+    : /Edg\//.test(agent)
+      ? "Edge"
+      : /Firefox\/|FxiOS/.test(agent)
+        ? "Firefox"
+        : /Chrome\/|CriOS/.test(agent)
+          ? "Chrome"
+          : /Safari\//.test(agent)
+            ? "Safari"
+            : "Browser";
   const system = /iPhone/.test(agent)
     ? "iPhone"
     : /iPad|Macintosh.*Mobile/.test(agent)
@@ -222,8 +289,12 @@ async function upload(file: File): Promise<Attachment> {
   }
 }
 
-/** Hands a file to the browser's downloads; on phones this opens the share or save sheet. */
-function download(name: string, content: string, type: string): void {
+/**
+ * Hands a file to the person: the phone app opens the system share sheet; a browser downloads it,
+ * which on phones opens its own save or share sheet. False when the share sheet was closed.
+ */
+async function download(name: string, content: string, type: string): Promise<boolean> {
+  if (isNativeApp) return shareTextFile(name, content);
   const url = URL.createObjectURL(new Blob([content], { type }));
   const link = document.createElement("a");
   link.href = url;
@@ -232,6 +303,7 @@ function download(name: string, content: string, type: string): void {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return true;
 }
 
 const EXPORT_TYPES: Record<ExportFormat, string> = {
@@ -351,7 +423,7 @@ class EventFeed {
       };
       try {
         useWebSession.setState({ connection: "connecting" });
-        const response = await fetch("/api/events", {
+        const response = await fetch(apiUrl("/api/events"), {
           headers: authHeaders(),
           signal: controller.signal,
           cache: "no-store",
@@ -425,14 +497,9 @@ export function createWebBridge(): DesktopBridge {
         const [file] = await pickFiles({ multiple: false, accept: ".json,application/json" });
         return file ? file.text() : null;
       },
-      saveAgentFile: async (suggestedName, json) => {
-        download(suggestedName, json, "application/json");
-        return true;
-      },
-      saveExport: async (suggestedName, format, content) => {
-        download(suggestedName, content, EXPORT_TYPES[format]);
-        return true;
-      },
+      saveAgentFile: (suggestedName, json) => download(suggestedName, json, "application/json"),
+      saveExport: (suggestedName, format, content) =>
+        download(suggestedName, content, EXPORT_TYPES[format]),
     },
     updates: {
       state: async () => ({

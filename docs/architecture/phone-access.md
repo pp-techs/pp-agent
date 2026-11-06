@@ -29,7 +29,7 @@ flowchart LR
 
 ## API
 
-All JSON. Requests from outside the local network (`isLocalNetworkAddress`) and requests with an `Origin` whose host differs from `Host` get 403. A request (headers and body) must arrive within 10 minutes; responses, such as the event stream, are not limited.
+All JSON. Requests from outside the local network (`isLocalNetworkAddress`) and requests with an `Origin` whose host differs from `Host` get 403, except the [phone app](mobile-app.md)'s origins (`capacitor://localhost`, `http://localhost`), which get CORS headers instead. A request (headers and body) must arrive within 10 minutes; responses, such as the event stream, are not limited.
 
 | Route               | Auth  | Does                                                                                                                                                                                                                                          |
 | ------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -51,6 +51,7 @@ All JSON. Requests from outside the local network (`isLocalNetworkAddress`) and 
 - **Refused from a device** (`remoteMayRun` in `packages/shared`): phone access itself, `save_mcp_server`, `save_mcp_json`, `set_tool_policy`, `get_mcp_json`, `import_skill`, always allowing an app for computer use (`set_computer_app_access` with `allowed`), turning on yolo mode (`set_conversation_yolo` with `active: true`, `update_settings` with `yoloMode: true`) and the shell (`shellEnabled: true`). These are the settings that let the computer run programs without someone approving each one. Turning them off is allowed. Everything else, including answering approvals, works as in the window.
 - **Attachments**: `prompt` and `edit_message` attachments with a `path` must be inside the sending device's own `remote-uploads/<device id>/`, so a device cannot have the agent read an arbitrary file on the computer without the read tools and their approvals.
 - **Headers**: `X-Frame-Options: DENY`, `frame-ancestors 'none'`, `nosniff`, `Referrer-Policy: no-referrer`; the page keeps its build-time CSP (`connect-src 'self'`).
+- **The phone app's origins** are fixed strings no website can have, so allowing them with CORS lets no web page read answers; the app still needs a device token like a browser.
 - **Not encrypted**: plain HTTP. Anyone who can watch the network's traffic can read conversations and copy a device token. Settings shows a standing warning to use it only on trusted networks. HTTPS with a self-signed certificate was left out: phones show a full-page warning and some refuse to remember the exception.
 - **Gateway keys stay with their address**: from a device, `save_gateway` that changes a stored gateway's base URL, or `fetch_gateway_models` against another URL with a gateway's stored key, needs the key typed again (403 otherwise), so a copied device token cannot send a saved key to another server. The window may still fix an address without retyping.
 - **MCP secrets**: `list_mcp_servers` answers devices with the values of `env` and `headers` hidden; `get_mcp_json` is refused.

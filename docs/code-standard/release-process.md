@@ -4,7 +4,7 @@
 
 ## Versioned packages
 
-- `@workspace/desktop` and `@workspace/web` are versioned in lockstep (`fixed` in `.changeset/config.json`). The desktop version is the app version electron-builder stamps on the installers.
+- `@workspace/desktop`, `@workspace/web` and `@workspace/mobile` are versioned in lockstep (`fixed` in `.changeset/config.json`); `vp run sync` in `apps/mobile` copies the version into the Xcode and Gradle projects. The release workflow does not build the phone app yet. The desktop version is the app version electron-builder stamps on the installers.
 - `scripts/version-packages.ts` copies that version to the private root `package.json` and adds a `## [x.y.z] — date` section to the root `CHANGELOG.md`. That section becomes the GitHub Release notes.
 - `packages/shared` and `packages/ui` are internal and not released.
 

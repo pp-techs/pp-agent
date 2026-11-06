@@ -1,0 +1,28 @@
+{
+  "name": "@workspace/mobile",
+  "version": "0.23.0",
+  "private": true,
+  "description": "PP Agent for iOS and Android: the web app in a Capacitor shell, connected to the computer over Phone access",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "sync": "vp run @workspace/web#build:mobile && node scripts/sync-version.ts && cap sync",
+    "ios": "vp run sync && cap open ios",
+    "android": "vp run sync && cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "catalog:",
+    "@capacitor/barcode-scanner": "catalog:",
+    "@capacitor/core": "catalog:",
+    "@capacitor/filesystem": "catalog:",
+    "@capacitor/ios": "catalog:",
+    "@capacitor/keyboard": "catalog:",
+    "@capacitor/share": "catalog:"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

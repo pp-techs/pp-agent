@@ -296,6 +296,50 @@ describe("RemoteServer", () => {
     expect(commands).toHaveLength(0);
   });
 
+  it("answers the phone app's origins with CORS, and no other site", async () => {
+    const server = makeServer();
+    const base = await enabled(server);
+    const token = await pair(server, base);
+
+    for (const origin of ["capacitor://localhost", "http://localhost"]) {
+      const preflight = await fetch(`${base}/api/command`, {
+        method: "OPTIONS",
+        headers: {
+          Origin: origin,
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "authorization, content-type",
+          "Access-Control-Request-Private-Network": "true",
+        },
+      });
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers.get("access-control-allow-origin")).toBe(origin);
+      expect(preflight.headers.get("access-control-allow-headers")).toContain("Authorization");
+      expect(preflight.headers.get("access-control-allow-private-network")).toBe("true");
+
+      const response = await command(base, token, { type: "get_snapshot" }, { Origin: origin });
+      expect(response.status).toBe(200);
+      expect(response.headers.get("access-control-allow-origin")).toBe(origin);
+    }
+    // The app still needs a token like any device.
+    const unpaired = await command(
+      base,
+      null,
+      { type: "get_snapshot" },
+      { Origin: "http://localhost" },
+    );
+    expect(unpaired.status).toBe(401);
+
+    for (const origin of ["http://localhost:5173", "https://localhost", "http://evil.example"]) {
+      const preflight = await fetch(`${base}/api/command`, {
+        method: "OPTIONS",
+        headers: { Origin: origin, "Access-Control-Request-Method": "POST" },
+      });
+      expect(preflight.status).toBe(403);
+      expect(preflight.headers.get("access-control-allow-origin")).toBeNull();
+    }
+    expect(commands).toEqual([{ type: "get_snapshot" }, { type: "get_snapshot" }]);
+  });
+
   it("accepts only attachments the device uploaded", async () => {
     const server = makeServer();
     const base = await enabled(server);
