@@ -1,3 +1,4 @@
+import * as React from "react";
 import { cn } from "@workspace/ui/lib/utils";
 import { SparklesIcon, TerminalIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -21,8 +22,16 @@ export function SlashSuggestions({
   onPick: (item: SlashItem) => void;
 }) {
   const { t } = useTranslation("chat");
+  const listRef = React.useRef<HTMLDivElement>(null);
+  // Arrow keys move the highlight in the textarea; keep it in view. A hovered row is already
+  // under the pointer, and scrolling it would drag the next row under the pointer too.
+  React.useEffect(() => {
+    const option = listRef.current?.querySelector<HTMLElement>(`#slash-option-${activeIndex}`);
+    if (option && !option.matches(":hover")) option.scrollIntoView({ block: "nearest" });
+  }, [activeIndex]);
   return (
     <div
+      ref={listRef}
       id="slash-suggestions"
       role="listbox"
       aria-label={t("slash.ariaLabel")}
@@ -37,7 +46,7 @@ export function SlashSuggestions({
             role="option"
             aria-selected={index === activeIndex}
             className={cn(
-              "flex cursor-default items-start gap-2.5 rounded-xl px-2.5 py-2 text-sm",
+              "flex cursor-default scroll-my-1 items-start gap-2.5 rounded-xl px-2.5 py-2 text-sm",
               index === activeIndex && "bg-accent text-accent-foreground",
             )}
             onMouseEnter={() => onHover(index)}

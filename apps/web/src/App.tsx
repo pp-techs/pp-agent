@@ -136,7 +136,7 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
       <SidebarInset
         // Inset leaves an 0.5rem gutter around the chat panel on desktop; keep it within the window.
         // dvh follows a phone's browser bars and on-screen keyboard; svh would leave a gap.
-        className={`relative h-dvh overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] md:h-[calc(100svh-(--spacing(4)))] md:pt-0 md:ring-1 md:ring-foreground/5 dark:md:ring-foreground/10 ${panelCovers ? "md:hidden" : ""}`}
+        className={`relative h-dvh overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] md:h-[calc(100svh-(--spacing(4)))] md:pt-0 ${panelCovers ? "md:hidden" : ""}`}
         onDragEnter={(event) => {
           if (page === "chat" && event.dataTransfer.types.includes("Files")) {
             setDragDepth((depth) => depth + 1);

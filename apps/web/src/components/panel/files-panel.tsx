@@ -33,7 +33,6 @@ import {
   FileCodeIcon,
   FileIcon,
   FilePlusIcon,
-  FolderIcon,
   FolderOpenIcon,
   FolderPlusIcon,
   FolderTreeIcon,
@@ -48,6 +47,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { Markdown } from "@/components/markdown";
+import { FileTypeIcon } from "@/components/panel/file-icon";
 import { PanelTab, PanelTabs } from "@/components/panel/panel-tabs";
 import { useHighlightedCode } from "@/hooks/use-highlighted-code";
 import {
@@ -461,7 +461,7 @@ function FolderRows({
       {creating && (
         <NameInput
           initial=""
-          icon={creating.entry === "file" ? <FileIcon /> : <FolderIcon />}
+          icon={<FileTypeIcon kind={creating.entry} name="" />}
           indent={indent}
           onSubmit={tree.onSubmitName}
           onCancel={tree.onCancelEdit}
@@ -474,13 +474,13 @@ function FolderRows({
       )}
       {entries.data.map((entry) => {
         const isOpen = entry.kind === "folder" && tree.expanded.has(entry.path);
-        const Icon = entry.kind === "file" ? FileIcon : isOpen ? FolderOpenIcon : FolderIcon;
+        const icon = <FileTypeIcon kind={entry.kind} name={entry.name} open={isOpen} />;
         if (editing?.kind === "rename" && editing.path === entry.path)
           return (
             <NameInput
               key={entry.path}
               initial={entry.name}
-              icon={<Icon />}
+              icon={icon}
               indent={indent}
               onSubmit={tree.onSubmitName}
               onCancel={tree.onCancelEdit}
@@ -488,13 +488,7 @@ function FolderRows({
           );
         return (
           <React.Fragment key={entry.path}>
-            <EntryRow
-              entry={entry}
-              tree={tree}
-              indent={indent}
-              isOpen={isOpen}
-              icon={<Icon className="size-4 shrink-0 text-muted-foreground" />}
-            />
+            <EntryRow entry={entry} tree={tree} indent={indent} isOpen={isOpen} icon={icon} />
             {isOpen && (
               <FolderRows
                 bridge={bridge}
@@ -667,7 +661,7 @@ function WorkspaceFiles({ bridge, root }: { bridge: DesktopBridge; root: string 
           <PanelTab
             key={path}
             active={tabs.active === path}
-            icon={<FileIcon />}
+            icon={<FileTypeIcon kind="file" name={fileName(path)} />}
             label={fileName(path)}
             title={path}
             closeLabel={t("panel.files.closeTab", { name: fileName(path) })}

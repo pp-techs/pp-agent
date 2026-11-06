@@ -134,6 +134,7 @@
     "placeholderDisconnected": "Connect a model in Settings to start",
     "ariaLabel": "Message",
     "removeAttachment": "Remove {{name}}",
+    "removeToken": "Remove {{name}}",
     "cantAttach": "Can't attach {{name}}.",
     "voice": {
       "start": "Voice input",
@@ -225,6 +226,8 @@
   },
   "thinking": {
     "title": "Thinking",
+    "faster": "Faster",
+    "smarter": "Smarter",
     "off": "Thinking off",
     "description": "How much the model thinks first",
     "levels": {

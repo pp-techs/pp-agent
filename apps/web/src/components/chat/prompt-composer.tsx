@@ -21,12 +21,12 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { ComposerMenu } from "@/components/chat/composer-menu";
+import { ComposerToken } from "@/components/chat/composer-token";
 import { GoalBanner } from "@/components/chat/goal-banner";
 import { HelperPanel } from "@/components/chat/helper-panel";
 import { TodoPanel } from "@/components/chat/todo-panel";
 import { ModelPicker } from "@/components/chat/model-picker";
 import { SlashSuggestions } from "@/components/chat/slash-suggestions";
-import { ThinkingPicker } from "@/components/chat/thinking-picker";
 import { VoiceControls } from "@/components/chat/voice-controls";
 import { SettingsModal } from "@/components/modals/settings-modal";
 import { useSendMessage } from "@/hooks/use-send-message";
@@ -38,9 +38,11 @@ import {
   filterSlashItems,
   findTypedCommand,
   focusComposer,
+  leadingTokens,
   type SlashItem,
   slashQuery,
   slashText,
+  tokensPrefix,
   useSlashItems,
 } from "@/lib/slash-commands";
 import { insertTranscript } from "@/lib/voice-input";
@@ -52,9 +54,7 @@ import { useWebSession } from "@/lib/web-bridge";
 const MICROPHONE_AVAILABLE = window.isSecureContext && Boolean(navigator.mediaDevices);
 
 export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; disabled: boolean }) {
-  // Like ChatGPT: one row while the text fits a line, then the text on top and the controls below.
-  // Collapses again only once the draft is empty, so the wider layout can't flip back and forth.
-  const [expanded, setExpanded] = React.useState(false);
+  // Always two rows: the text on top, the controls below.
   const formRef = React.useRef<HTMLFormElement>(null);
   const running = useChatStore((state) => state.status === "running");
   /** The last send is not with the conversation yet; a second one would look like it never left. */
@@ -76,17 +76,19 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
   const voice = useQuery(voiceQuery(bridge));
 
   /** Writes the transcript into the draft at the cursor; the person sends it when ready. */
-  function insertText(text: string) {
-    if (!text) return;
+  function insertText(transcript: string) {
+    if (!transcript) return;
     const textarea = textareaRef.current;
     const current = useComposerStore.getState().draft;
-    const start = textarea?.selectionStart ?? current.length;
-    const result = insertTranscript(current, text, start, textarea?.selectionEnd ?? start);
+    // The textarea holds the draft without the chip's prefix; the transcript goes in the draft.
+    const offset = textarea ? current.length - textarea.value.length : 0;
+    const start = textarea ? textarea.selectionStart + offset : current.length;
+    const end = textarea ? textarea.selectionEnd + offset : start;
+    const result = insertTranscript(current, transcript, start, end);
     setDraft(result.draft);
-    setExpanded((was) => was || result.draft.length > 60 || result.draft.includes("\n"));
     requestAnimationFrame(() => {
       textareaRef.current?.focus();
-      textareaRef.current?.setSelectionRange(result.caret, result.caret);
+      textareaRef.current?.setSelectionRange(result.caret - offset, result.caret - offset);
     });
   }
 
@@ -111,15 +113,22 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
   // Suggestions follow the `/` token being typed; Escape hides them until the text changes.
   const [activeIndex, setActiveIndex] = React.useState(0);
   const [dismissedFor, setDismissedFor] = React.useState<string | null>(null);
-  const query = slashQuery(draft);
-  const suggestions = React.useMemo(
-    () => (query === null ? [] : filterSlashItems([...commands, ...skills], query)),
-    [query, commands, skills],
-  );
+  // The skills (or `/goal`) the message starts with are shown as chips; the textarea holds the rest.
+  const { tokens, prefix } = leadingTokens(draft, skills);
+  const text = draft.slice(prefix.length);
+  const query = slashQuery(text);
+  // Once a skill is picked, more skills can follow; a command would drop them.
+  const suggestions = React.useMemo(() => {
+    if (query === null) return [];
+    const picked = new Set(tokens.map((token) => token.name));
+    const items =
+      tokens.length > 0
+        ? skills.filter((item) => !picked.has(item.name))
+        : [...commands, ...skills];
+    return filterSlashItems(items, query);
+  }, [query, tokens, commands, skills]);
   const showSuggestions = !disabled && suggestions.length > 0 && dismissedFor !== draft;
   const active = Math.min(activeIndex, Math.max(suggestions.length - 1, 0));
-
-  const isExpanded = expanded && draft.length > 0;
 
   function pickItem(item: SlashItem) {
     setActiveIndex(0);
@@ -127,7 +136,13 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
       setDraft("");
       item.run();
     } else {
-      setDraft(slashText(item));
+      // The `/word` being typed becomes the chip; other text stays. A skill already picked is
+      // not added twice.
+      const kept = query === null ? text : "";
+      const added = tokens.some((token) => token.kind === "skill" && token.name === item.name)
+        ? ""
+        : slashText(item);
+      setDraft(prefix + added + kept);
     }
     focusComposer();
   }
@@ -143,6 +158,12 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
         toast.error(error.message);
       },
     });
+  }
+
+  /** Drops one chip; the others and the text after them stay. */
+  function removeToken(index: number) {
+    setDraft(tokensPrefix(tokens.filter((_, at) => at !== index)) + text);
+    textareaRef.current?.focus();
   }
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -177,6 +198,17 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
 
   function onKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (event.nativeEvent.isComposing) return;
+    const { selectionStart, selectionEnd } = event.currentTarget;
+    if (
+      tokens.length > 0 &&
+      event.key === "Backspace" &&
+      selectionStart === 0 &&
+      selectionEnd === 0
+    ) {
+      event.preventDefault();
+      removeToken(tokens.length - 1);
+      return;
+    }
     if (showSuggestions) {
       const count = suggestions.length;
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -274,7 +306,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
               ))}
             </InputGroupAddon>
           )}
-          <div className="@container flex w-full flex-wrap items-end gap-1 p-2">
+          <div className="flex w-full flex-wrap items-end gap-1 p-2">
             <ComposerMenu
               bridge={bridge}
               disabled={disabled}
@@ -283,43 +315,44 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
               onAttach={() => void pick()}
               onPick={pickItem}
             />
-            <InputGroupTextarea
-              ref={textareaRef}
-              value={draft}
-              onChange={(event) => {
-                const { value, scrollHeight } = event.target;
-                setDraft(value);
-                setActiveIndex(0);
-                setExpanded(
-                  (was) => value.length > 0 && (was || value.includes("\n") || scrollHeight > 44),
-                );
-              }}
-              onPaste={(event) => void onPaste(event)}
-              placeholder={
-                disabled ? t("composer.placeholderDisconnected") : t("composer.placeholder")
-              }
-              aria-label={t("composer.ariaLabel")}
-              data-composer-input
-              aria-controls={showSuggestions ? "slash-suggestions" : undefined}
-              aria-activedescendant={showSuggestions ? `slash-option-${active}` : undefined}
-              className={cn(
-                "max-h-52 min-h-9 px-2 py-2 @max-2xl:order-first @max-2xl:basis-full @max-2xl:px-3",
-                isExpanded && "order-first basis-full px-3",
-              )}
-              disabled={disabled}
-              onKeyDown={onKeyDown}
-            />
-            {/* Below the textarea (narrow, or a long draft) the model takes the room left on the
-                row and truncates, so the buttons never wrap onto a third line. */}
-            <div
-              className={cn(
-                "flex min-w-0 justify-end @max-2xl:flex-1 @max-2xl:basis-0",
-                isExpanded && "flex-1 basis-0",
-              )}
-            >
+            {/* The first row: the skills (or `/goal`) the message starts with as chips, then the text. */}
+            <div className="order-first flex basis-full flex-wrap items-start">
+              {tokens.map((token, index) => (
+                <ComposerToken
+                  key={`${token.kind}:${token.name}`}
+                  kind={token.kind}
+                  name={token.name}
+                  disabled={disabled}
+                  onRemove={() => removeToken(index)}
+                />
+              ))}
+              <InputGroupTextarea
+                ref={textareaRef}
+                value={text}
+                onChange={(event) => {
+                  setDraft(prefix + event.target.value);
+                  setActiveIndex(0);
+                }}
+                onPaste={(event) => void onPaste(event)}
+                placeholder={
+                  disabled ? t("composer.placeholderDisconnected") : t("composer.placeholder")
+                }
+                aria-label={t("composer.ariaLabel")}
+                data-composer-input
+                aria-controls={showSuggestions ? "slash-suggestions" : undefined}
+                aria-activedescendant={showSuggestions ? `slash-option-${active}` : undefined}
+                className={cn(
+                  "max-h-52 min-h-9 py-2",
+                  tokens.length > 0 ? "min-w-40 flex-1 px-2" : "min-w-0 px-3",
+                )}
+                disabled={disabled}
+                onKeyDown={onKeyDown}
+              />
+            </div>
+            {/* The model (with its thinking level) takes the room left on the controls row. */}
+            <div className="flex min-w-0 flex-1 justify-end">
               <ModelPicker bridge={bridge} />
             </div>
-            <ThinkingPicker bridge={bridge} disabled={disabled} />
             {/* Browsers allow the microphone only on secure pages; the web app on the local
                 network is plain HTTP, so it has no voice input. */}
             {MICROPHONE_AVAILABLE && (

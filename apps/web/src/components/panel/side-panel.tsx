@@ -99,7 +99,7 @@ export function SidePanel({ bridge }: { bridge: DesktopBridge }) {
       aria-label={t("panel.label")}
       // A width saved on a larger screen must not squeeze the chat out of a smaller window.
       style={expanded ? undefined : { width, maxWidth: `calc(100vw - ${MIN_CHAT_WIDTH}px)` }}
-      className={`@container/panel relative hidden min-w-0 flex-col bg-background md:my-2 md:mr-2 md:flex md:h-[calc(100svh-(--spacing(4)))] md:rounded-2xl md:shadow-sm md:ring-1 md:ring-foreground/5 dark:md:ring-foreground/10 ${expanded ? "flex-1" : "shrink-0"}`}
+      className={`@container/panel relative hidden min-w-0 flex-col bg-background md:my-2 md:mr-2 md:flex md:h-[calc(100svh-(--spacing(4)))] md:rounded-2xl md:shadow-sm ${expanded ? "flex-1" : "shrink-0"}`}
     >
       {!expanded && <ResizeHandle onResizing={setResizing} />}
       <header className="flex h-12 shrink-0 items-center gap-2 px-2">

@@ -339,7 +339,8 @@ export function ChatSidebar({
           isActive={page === "chat" && session.path === sessionPath}
           disabled={!ready}
           // Below md the actions button always shows, so the age sits left of it, past the title.
-          className="max-md:pr-16"
+          // `!` outbids the base `group-has-data-[sidebar=menu-action]:pr-8`.
+          className="max-md:pr-16!"
           title={session.title}
           onClick={async () => {
             if (session.path === sessionPath) return navigate("chat");
