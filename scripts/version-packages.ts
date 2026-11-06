@@ -9,7 +9,7 @@
  * and adds the root CHANGELOG section, which becomes the GitHub Release notes.
  */
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 
 const CHANGESET_DIR = ".changeset";
 const PACKAGES = ["apps/desktop", "apps/web", "apps/mobile"];
@@ -67,11 +67,19 @@ writeFileSync(
   changelog.replace(CHANGELOG_MARKER, `${CHANGELOG_MARKER}\n\n${section}`),
 );
 
+// Every package changesets may have versioned, not only the lockstep ones: a changeset with several
+// paragraphs leaves whitespace-only lines in each CHANGELOG it touches, which `vp check` refuses.
+const changelogs = ["apps", "packages"].flatMap((group) =>
+  readdirSync(group)
+    .map((name) => `${group}/${name}/CHANGELOG.md`)
+    .filter((file) => existsSync(file)),
+);
 run("vp", [
   "fmt",
   "package.json",
   ROOT_CHANGELOG,
-  ...PACKAGES.flatMap((dir) => [`${dir}/package.json`, `${dir}/CHANGELOG.md`]),
+  ...PACKAGES.map((dir) => `${dir}/package.json`),
+  ...changelogs,
 ]);
 
 console.log(`Versioned ${PACKAGES.join(", ")} and the root package to ${version}.`);
