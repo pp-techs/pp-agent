@@ -1,5 +1,11 @@
 # @workspace/mobile
 
+## 0.24.1
+
+### Patch Changes
+
+- 7ec24b5: The iPhone app connects to a computer's Tailscale address (100.x.y.z) too; before, iOS blocked plain HTTP to it and the app said it could not reach the computer.
+
 ## 0.24.0
 
 ### Minor Changes
