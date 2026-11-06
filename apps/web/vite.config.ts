@@ -7,34 +7,41 @@ import { defineConfig, type Plugin } from "vite-plus";
 /**
  * Locks the packaged renderer down: no remote scripts and no network access; everything goes through
  * the preload bridge. Dev builds skip it because the dev server injects inline scripts for HMR.
+ *
+ * The phone app's build (`--mode mobile`, bundled into apps/mobile) talks to the computer the person
+ * connects to, at an address only known at run time, so it may connect anywhere over HTTP(S).
  */
-const CONTENT_SECURITY_POLICY = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: https:",
-  "font-src 'self' data:",
-  "connect-src 'self'",
-  "object-src 'none'",
-  "base-uri 'none'",
-].join("; ");
+function contentSecurityPolicy(mode: string) {
+  return [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: https:",
+    "font-src 'self' data:",
+    mode === "mobile" ? "connect-src 'self' http: https:" : "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+  ].join("; ");
+}
 
-const contentSecurityPolicy: Plugin = {
-  name: "pp-agent:csp",
-  apply: "build",
-  transformIndexHtml: () => [
-    {
-      tag: "meta",
-      attrs: { "http-equiv": "Content-Security-Policy", content: CONTENT_SECURITY_POLICY },
-      injectTo: "head-prepend",
-    },
-  ],
-};
+function contentSecurityPolicyTag(mode: string): Plugin {
+  return {
+    name: "pp-agent:csp",
+    apply: "build",
+    transformIndexHtml: () => [
+      {
+        tag: "meta",
+        attrs: { "http-equiv": "Content-Security-Policy", content: contentSecurityPolicy(mode) },
+        injectTo: "head-prepend",
+      },
+    ],
+  };
+}
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   // Relative asset URLs so the packaged desktop app can load dist/index.html over file://.
   base: "./",
-  plugins: [react(), tailwindcss(), contentSecurityPolicy],
+  plugins: [react(), tailwindcss(), contentSecurityPolicyTag(mode)],
   resolve: {
     alias: {
       "@": resolve(import.meta.dirname, "./src"),
@@ -53,4 +60,4 @@ export default defineConfig({
     // Loaded from disk inside the desktop app, so bundle size matters far less than on the web.
     chunkSizeWarningLimit: 2_000,
   },
-});
+}));

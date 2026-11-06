@@ -6,10 +6,16 @@
   "scripts": {
     "dev": "vp dev",
     "build": "vp build",
+    "build:mobile": "vp build --mode mobile --outDir ../mobile/www --emptyOutDir",
     "preview": "vp preview"
   },
   "dependencies": {
     "@buiducnhat/better-modal": "catalog:",
+    "@capacitor/barcode-scanner": "catalog:",
+    "@capacitor/core": "catalog:",
+    "@capacitor/filesystem": "catalog:",
+    "@capacitor/keyboard": "catalog:",
+    "@capacitor/share": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@workspace/ui": "workspace:*",
     "@xterm/addon-fit": "catalog:",

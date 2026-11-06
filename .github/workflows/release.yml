@@ -3,7 +3,7 @@ name: Release
 # Release flow (docs/code-standard/release-process.md). Every push to main runs `plan`:
 #
 # - changesets pending → `version` opens or updates the "Version Packages" PR
-#   (`vp run version-packages`: lockstep bump of desktop + web, CHANGELOGs, root version);
+#   (`vp run version-packages`: lockstep bump of desktop + web + mobile, CHANGELOGs, root version);
 # - no changesets, the root CHANGELOG has a section for the committed version, and that version has
 #   no GitHub Release yet → `verify` checks the commit, `package` builds the installers on macOS,
 #   Windows, and Linux, and `publish` (environment `release`) tags vX.Y.Z and creates the GitHub
@@ -122,7 +122,7 @@ jobs:
 
       - name: Check lockstep versions
         run: |
-          for manifest in package.json apps/desktop/package.json apps/web/package.json; do
+          for manifest in package.json apps/desktop/package.json apps/web/package.json apps/mobile/package.json; do
             actual=$(jq -r .version "$manifest")
             if [ "$actual" != "$VERSION" ]; then
               echo "::error file=$manifest::version $actual, expected $VERSION"

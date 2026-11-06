@@ -17,6 +17,8 @@ import {
   remoteMayRun,
 } from "@workspace/shared";
 import {
+  appOrigin,
+  applyCorsHeaders,
   applySecurityHeaders,
   bearerToken,
   HttpError,
@@ -393,7 +395,13 @@ export class RemoteServer implements RemoteAccessControl {
   }
 
   private async api(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
-    if (!sameOrigin(req)) throw new HttpError(403, t("remote.forbidden"));
+    const app = appOrigin(req);
+    if (app) applyCorsHeaders(req, res, app);
+    else if (!sameOrigin(req)) throw new HttpError(403, t("remote.forbidden"));
+    if (app && req.method === "OPTIONS") {
+      res.writeHead(204).end();
+      return;
+    }
     const route = `${req.method} ${path}`;
 
     if (route === "GET /api/session") {

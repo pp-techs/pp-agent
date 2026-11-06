@@ -215,7 +215,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
   return (
     <>
       {question && (
-        <div className="mx-auto w-full max-w-3xl px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] md:px-6 md:pb-6">
+        <div className="mx-auto w-full max-w-3xl px-3 pb-[max(var(--safe-bottom),0.75rem)] md:px-6 md:pb-6">
           <QuestionCard
             key={question.requestId}
             request={question}
@@ -237,7 +237,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
         onSubmit={onSubmit}
         hidden={asking}
         // A phone keeps the box clear of the home indicator, with narrower gutters.
-        className="relative mx-auto w-full max-w-3xl px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] md:px-6 md:pb-6"
+        className="relative mx-auto w-full max-w-3xl px-3 pb-[max(var(--safe-bottom),0.75rem)] md:px-6 md:pb-6"
       >
         {showSuggestions && (
           <SlashSuggestions
@@ -309,8 +309,16 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
               disabled={disabled}
               onKeyDown={onKeyDown}
             />
-            <div className={cn("hidden flex-1 @max-2xl:block", isExpanded && "block")} />
-            <ModelPicker bridge={bridge} />
+            {/* Below the textarea (narrow, or a long draft) the model takes the room left on the
+                row and truncates, so the buttons never wrap onto a third line. */}
+            <div
+              className={cn(
+                "flex min-w-0 justify-end @max-2xl:flex-1 @max-2xl:basis-0",
+                isExpanded && "flex-1 basis-0",
+              )}
+            >
+              <ModelPicker bridge={bridge} />
+            </div>
             <ThinkingPicker bridge={bridge} disabled={disabled} />
             {/* Browsers allow the microphone only on secure pages; the web app on the local
                 network is plain HTTP, so it has no voice input. */}

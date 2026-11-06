@@ -13,6 +13,9 @@ import { AppUiLabels } from "@/components/ui-labels-provider.tsx";
 import { LanguageSync } from "@/components/language-sync.tsx";
 import { ThemeProvider, useTheme } from "@/components/theme-provider.tsx";
 import { i18n } from "@/lib/i18n.ts";
+import { isNativeApp, setUpNativeKeyboard } from "@/lib/native.ts";
+
+if (isNativeApp) setUpNativeKeyboard();
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false } },

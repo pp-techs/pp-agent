@@ -35,19 +35,20 @@ export function ThinkingPicker({ bridge, disabled }: { bridge: DesktopBridge; di
             type="button"
             variant="ghost"
             size="sm"
-            className="h-9 rounded-full px-3 font-normal text-muted-foreground outline-none focus-visible:ring-0"
+            className="h-9 shrink-0 rounded-full px-3 font-normal text-muted-foreground outline-none focus-visible:ring-0 @max-md:px-2.5"
             disabled={disabled || running}
             title={running ? t("waitForAnswer") : t("thinking.description")}
           />
         }
       >
         <BrainIcon data-icon="inline-start" className="text-muted-foreground" />
-        <span>
+        {/* On a phone the brain icon alone stands for the level; the title and menu name it. */}
+        <span className="@max-md:sr-only">
           {thinking.level === "off"
             ? t("thinking.off")
             : t(`thinking.levels.${thinking.level}.label`)}
         </span>
-        <ChevronDownIcon data-icon="inline-end" className="text-muted-foreground" />
+        <ChevronDownIcon data-icon="inline-end" className="text-muted-foreground @max-md:hidden" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" side="top" className="w-60">
         <DropdownMenuGroup>

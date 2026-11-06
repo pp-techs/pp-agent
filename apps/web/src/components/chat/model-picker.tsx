@@ -57,7 +57,7 @@ export function ModelPicker({ bridge }: { bridge: DesktopBridge }) {
             type="button"
             variant="ghost"
             size="sm"
-            className="h-9 max-w-56 min-w-0 rounded-full px-3 font-normal text-muted-foreground outline-none focus-visible:ring-0"
+            className="h-9 max-w-full min-w-0 rounded-full px-3 font-normal @2xl:max-w-56 text-muted-foreground outline-none focus-visible:ring-0"
             disabled={status === "running"}
             title={
               status === "running"

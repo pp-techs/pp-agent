@@ -27,3 +27,15 @@
 .delayed-reveal {
   animation: pp-delayed-reveal 200ms ease-out 1.5s both;
 }
+
+/*
+ * The bottom safe area (the home indicator), which the composer pads above. The phone app sets
+ * `data-keyboard="open"` while the keyboard shows: the composer then sits right on the keyboard.
+ */
+:root {
+  --safe-bottom: env(safe-area-inset-bottom);
+}
+
+:root[data-keyboard="open"] {
+  --safe-bottom: 0px;
+}

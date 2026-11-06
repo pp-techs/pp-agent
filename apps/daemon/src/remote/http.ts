@@ -74,6 +74,32 @@ export function sameOrigin(req: IncomingMessage): boolean {
   }
 }
 
+/**
+ * Origins of the phone app (apps/mobile): its pages are `capacitor://localhost` on iOS and
+ * `http://localhost` on Android, so its requests are cross-origin and need CORS. Only these exact
+ * origins pass: a website can never have one, and the device token still guards every API call.
+ */
+const APP_ORIGINS = new Set(["capacitor://localhost", "http://localhost"]);
+
+/** The phone app's origin when the request comes from it, else null. */
+export function appOrigin(req: IncomingMessage): string | null {
+  const origin = req.headers.origin;
+  return typeof origin === "string" && APP_ORIGINS.has(origin) ? origin : null;
+}
+
+/** Lets the phone app at `origin` read answers and send the headers the API uses. */
+export function applyCorsHeaders(req: IncomingMessage, res: ServerResponse, origin: string): void {
+  res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Vary", "Origin");
+  if (req.method !== "OPTIONS") return;
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-File-Name");
+  res.setHeader("Access-Control-Max-Age", "600");
+  // Private Network Access: a WebView may ask before reaching a local-network address.
+  if (req.headers["access-control-request-private-network"] === "true")
+    res.setHeader("Access-Control-Allow-Private-Network", "true");
+}
+
 const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",

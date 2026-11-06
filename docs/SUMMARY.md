@@ -1,7 +1,7 @@
 # Documentation Summary
 
 PP Agent — a desktop chat agent for non-technical business teams: chat with documents, use business systems through MCP with approvals, and switch between purpose-built agents.
-Electron 45 app (main, preload, React 19 renderer) plus a headless Node daemon, `pp-agentd`, that hosts the Pi SDK agent and the Telegram channel, in a Vite+ (`vp`) pnpm monorepo: `apps/desktop`, `apps/daemon`, `apps/web`, `packages/agent-core` (the agent host), `packages/shared` (cross-process contract), `packages/ui` (shadcn components).
+Electron 45 app (main, preload, React 19 renderer) plus a headless Node daemon, `pp-agentd`, that hosts the Pi SDK agent and the Telegram channel, in a Vite+ (`vp`) pnpm monorepo: `apps/desktop`, `apps/daemon`, `apps/web`, `apps/mobile` (the web app in a Capacitor shell for iOS and Android), `packages/agent-core` (the agent host), `packages/shared` (cross-process contract), `packages/ui` (shadcn components).
 
 ## Agent Context Guide
 
@@ -24,6 +24,7 @@ System design, component interactions, data flows, deployment, and external inte
 | [side-panel.md](architecture/side-panel.md)                                     | Right side panel: terminal (node-pty), workspace files, browser tabs with profiles, cookie import, `BrowserDriver` seam |
 | [computer-use.md](architecture/computer-use.md)                                 | The agent's `computer` tool: cua-driver as a child of main, macOS grants, per-app approvals, protected apps             |
 | [phone-access.md](architecture/phone-access.md)                                 | Web app on the local network served by the daemon: pairing, device tokens, API, refused commands, mobile behaviour      |
+| [mobile-app.md](architecture/mobile-app.md)                                     | iOS and Android app (Capacitor around apps/web): connecting to a computer, CORS, QR scanning, share sheet, building     |
 
 ## Codebase
 
