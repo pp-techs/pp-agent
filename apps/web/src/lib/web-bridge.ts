@@ -31,8 +31,8 @@ const SERVER_KEY = "pp-agent.server";
 const STALE_MS = 45_000;
 const RETRY_MIN_MS = 1_000;
 const RETRY_MAX_MS = 10_000;
-/** How long the phone app waits for a computer it is told to connect to. */
-const CONNECT_TIMEOUT_MS = 10_000;
+/** How long a session check waits for the computer before calling it unreachable. */
+const SESSION_TIMEOUT_MS = 10_000;
 
 /** `noComputer`: the phone app before the person picked a computer to connect to. */
 export type WebPhase = "checking" | "noComputer" | "unpaired" | "paired" | "unreachable";
@@ -150,22 +150,31 @@ interface SessionInfo {
   appVersion: string;
 }
 
+/** Bumped by every session check and by forgetting the computer; older checks then stand down. */
+let sessionGeneration = 0;
+
 /** Asks the computer whether this device is paired; sets the phase accordingly. */
 export async function checkSession(): Promise<void> {
+  const generation = ++sessionGeneration;
   const server = apiBase();
   if (server === null) {
     useWebSession.setState({ phase: "noComputer", server: null });
     return;
   }
   const token = readToken();
-  // Paired, unpaired or switched computers while this was on its way: the answer is about another
-  // token or computer, and a newer check speaks for the current one.
-  const stale = () => readToken() !== token || apiBase() !== server;
+  // Paired, unpaired, switched computers or checked again while this was on its way: the answer is
+  // about another token or computer, and the newer check speaks for the current one.
+  const stale = () =>
+    generation !== sessionGeneration || readToken() !== token || apiBase() !== server;
   try {
-    const response = await fetch(apiUrl("/api/session"), { headers: authHeaders() });
+    const response = await fetch(apiUrl("/api/session"), {
+      headers: authHeaders(),
+      signal: AbortSignal.timeout(SESSION_TIMEOUT_MS),
+    });
     if (stale()) return;
     if (!response.ok) throw new Error(await errorText(response));
     const session = (await response.json()) as SessionInfo;
+    if (stale()) return;
     if (!session.paired) writeToken(null);
     useWebSession.setState({
       phase: session.paired ? "paired" : "unpaired",
@@ -188,7 +197,7 @@ export async function connectToServer(server: string, code: string | null): Prom
     const response = await fetch(`${server}/api/session`, {
       headers: previous === server ? authHeaders() : {},
       // A typed address that swallows packets would otherwise keep Connect busy for minutes.
-      signal: AbortSignal.timeout(CONNECT_TIMEOUT_MS),
+      signal: AbortSignal.timeout(SESSION_TIMEOUT_MS),
     });
     if (!response.ok) throw new Error(await errorText(response));
     const session = (await response.json()) as Partial<SessionInfo>;
@@ -223,6 +232,7 @@ export async function connectToServer(server: string, code: string | null): Prom
 
 /** Forgets the phone app's computer (and this device's token for it), to connect to another. */
 export function forgetServer(): void {
+  sessionGeneration += 1;
   writeToken(null);
   writeStored(SERVER_KEY, null);
   useWebSession.setState({ phase: "noComputer", server: null, deviceName: null, pairError: null });
