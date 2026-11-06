@@ -158,6 +158,11 @@ let sessionGeneration = 0;
 export async function checkSession(): Promise<void> {
   const generation = ++sessionGeneration;
   const server = apiBase();
+  // An address saved before the app refused public plain HTTP: never send the token there.
+  if (server && !allowsPlainHttp(server)) {
+    forgetServer();
+    return;
+  }
   if (server === null) {
     useWebSession.setState({ phase: "noComputer", server: null });
     return;
