@@ -46,4 +46,22 @@ vp run android   # sync, then open Android Studio
 
 Run from Xcode or Android Studio on a simulator or a device. The simulator shares the Mac's network, so it can connect to `http://<the Mac's address>:47830` with phone access turned on.
 
-Not yet automated: store signing and uploads, push notifications (they need a relay service the app does not have), and a CI build of the native projects.
+### TestFlight and APK builds (manual)
+
+The App Store Connect app is **PP Agent** (`com.pptechs.agent`, team NEXIS TECHNOLOGIES, `LWB84PK83H`), with an internal TestFlight group **Internal** that receives every build. `Info.plist` declares `ITSAppUsesNonExemptEncryption = false` (only standard HTTP/HTTPS), so uploads skip the encryption questions.
+
+```bash
+cd apps/mobile && vp run sync
+cd ios/App
+xcodebuild -project App.xcodeproj -scheme App -configuration Release \
+  -destination 'generic/platform=iOS' -archivePath build/PPAgent.xcarchive \
+  -allowProvisioningUpdates archive
+# ExportOptions.plist: method app-store-connect, destination upload, teamID LWB84PK83H, signingStyle automatic
+xcodebuild -exportArchive -archivePath build/PPAgent.xcarchive \
+  -exportOptionsPlist ExportOptions.plist -exportPath build/export -allowProvisioningUpdates \
+  -authenticationKeyPath <AuthKey_XXXX.p8> -authenticationKeyID <key id> -authenticationKeyIssuerID <issuer id>
+```
+
+Each upload needs a new build number, which comes from the version (`sync-version.ts`), so upload once per release. An Android debug APK needs JDK 21 and the Android SDK (`ANDROID_HOME`): `cd android && ./gradlew assembleDebug` writes `app/build/outputs/apk/debug/app-debug.apk`.
+
+Not yet automated: store signing and uploads in CI, a release-signed Android build (needs a keystore), push notifications (they need a relay service the app does not have), and a CI build of the native projects.
