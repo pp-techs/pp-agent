@@ -1,0 +1,38 @@
+{
+  "brand": "PP Agent",
+  "tagline": "A desktop AI agent for business teams",
+  "brief": "PP Agent is a desktop AI agent for people in finance, sales, operations and HR. It should feel approachable and trustworthy, a calm tool for non-developers that asks before it acts.",
+  "adjectives": ["approachable", "trustworthy", "calm", "organic"],
+  "criteria": "Success: recognisable at 32 px, distinct from the usual AI sparkle, works in one colour, and carries over from the current blue identity.",
+  "industry": "software",
+  "nav": ["Docs", "Download", "GitHub"],
+  "brand_color": "#2E86BE",
+  "greyscale": false,
+  "final": true,
+  "designer": "PP Techs",
+  "concepts": [
+    {
+      "name": "Growing Leaves",
+      "symbol": "../svg/pp-agent-symbol-black.svg",
+      "symbol_on_tile": "../svg/pp-agent-symbol-reversed.svg",
+      "symbol_on_dark": "../svg/pp-agent-symbol-reversed.svg",
+      "lockup": "../svg/pp-agent-horizontal.svg",
+      "lockup_on_dark": "../svg/pp-agent-horizontal-on-dark.svg",
+      "stacked": "../svg/pp-agent-stacked.svg",
+      "stacked_on_dark": "../svg/pp-agent-stacked-on-dark.svg",
+      "avatar": "../svg/pp-agent-icon-small.svg",
+      "idea": "Two layers of leaves grow around one core, getting larger toward the end of the turn: many inputs, one agent.",
+      "rationale": [
+        "Leaves in two overlapping layers keep the radial feel of the current mark, with a clear direction of growth.",
+        "The translucent layers echo the product's layered panels, and the single bright core stands for the one agent.",
+        "A flat one-colour version and a bolder small-size cut keep it readable from 16 px to signage."
+      ]
+    }
+  ],
+  "recommendation": "Use the app-icon tile as the primary mark, the horizontal lockup in product and docs, and the flat one-colour or small-size cut wherever gradients or fine detail would break.",
+  "next_steps": [
+    "Apply the icon set in the desktop, web and mobile apps",
+    "Run a trademark and reverse-image search",
+    "Confirm print colour values with a printer"
+  ]
+}
