@@ -190,6 +190,8 @@
     "editOffice": "Change {{file}}",
     "askUser": "Asking you a question",
     "scheduleTask": "Schedule the task “{{name}}”",
+    "readOutside": "Read {{path}}, outside the workspace",
+    "browser": "Use the browser: {{action}}",
     "computer": {
       "anApp": "an app",
       "use": "Use {{app}}",
@@ -327,6 +329,7 @@
       "fileTooLarge": "That file is too large. The limit is {{max}} MB.",
       "unsupported": "I cannot read this kind of message. Send text, a photo, a file or a voice message.",
       "approvalTitle": "Approval needed",
+      "detailHidden": "… {{count}} characters hidden …",
       "approve": "Approve",
       "deny": "Deny",
       "approved": "Approved",
@@ -405,6 +408,7 @@
       "fileTooLarge": "That file is too large. The limit is {{max}} MB.",
       "unsupported": "I cannot read this kind of message. Send text, a photo or a voice message.",
       "approvalTitle": "Approval needed",
+      "detailHidden": "… {{count}} characters hidden …",
       "approvalHint": "Reply 1 to approve or 2 to deny.",
       "answerRetry": "I did not understand that. Please reply with one of the options shown above.",
       "questionTitle": "The agent has a question",
@@ -483,7 +487,8 @@
       "copyBlocked": "The cookies of {{browser}} could not be copied although it is not running ({{error}}). Security software or file permissions may be blocking access.",
       "quitFailed": "{{browser}} could not be quit ({{error}}). Quit it yourself from the system tray or Task Manager, then try again.",
       "keyDenied": "macOS did not allow reading the key that protects the cookies of {{browser}}. Try again and choose “Allow” when macOS asks.",
-      "keyUnavailable": "The key that protects the cookies of {{browser}} could not be read ({{error}})."
+      "keyUnavailable": "The key that protects the cookies of {{browser}} could not be read ({{error}}).",
+      "noSites": "Choose at least one site whose cookies to import."
     }
   },
   "computerApps": {
@@ -513,6 +518,8 @@
     "notFound": "Not found.",
     "defaultDeviceName": "Browser",
     "attachmentExpired": "{{name}} is no longer on the computer. Attach it again.",
-    "gatewayKeyAgain": "To change this gateway's address from a phone, enter its API key again. The saved key is only sent to the address it was saved for."
+    "gatewayKeyAgain": "To change this gateway's address from a phone, enter its API key again. The saved key is only sent to the address it was saved for.",
+    "tooManyUploads": "Too many files are uploading from this device. Wait for them to finish and try again.",
+    "wrongHost": "Open phone access with this computer's address shown in PP Agent › Settings › Phone access."
   }
 }

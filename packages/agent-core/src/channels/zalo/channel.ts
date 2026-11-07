@@ -331,8 +331,10 @@ export class ZaloChannel {
     )
       return;
 
-    // Busy mode: steer joins the running turn, interrupt stops it, queue waits.
-    const busyMode = this.chatSettings(chatId).busyMode ?? "queue";
+    // Busy mode: steer joins the running turn, interrupt stops it, queue waits. Only the owner may
+    // steer or stop a running turn; anyone else's message waits for its own turn.
+    const isOwner = from.id === owner?.id;
+    const busyMode = isOwner ? (this.chatSettings(chatId).busyMode ?? "queue") : "queue";
     const queue = this.queue(chatId);
     const plain = update.event_name === "message.text.received";
     if (queue.running && busyMode === "steer" && plain && text) {
@@ -340,6 +342,7 @@ export class ZaloChannel {
         const accepted = await this.deps.gateway.steerTurn(`zalo:${chatId}`, {
           text,
           attachments: [],
+          sender: { id: from.id, name: displayName(from), owner: isOwner },
         });
         if (accepted) return;
       } catch (error) {
@@ -460,7 +463,7 @@ export class ZaloChannel {
       return;
     }
     const now = Date.now();
-    const result = this.deps.pairing.attempt(code, now);
+    const result = this.deps.pairing.attempt(code, now, from.id);
     if (result.status === "ok") {
       const name = displayName(from);
       this.deps.onPaired({ id: from.id, name });
@@ -563,7 +566,20 @@ export class ZaloChannel {
       await this.reply(chatId, "unsupported");
       return null;
     }
-    return { text, attachments };
+    const from = message.from;
+    return {
+      text,
+      attachments,
+      ...(from
+        ? {
+            sender: {
+              id: from.id,
+              name: displayName(from),
+              owner: from.id === this.deps.owner()?.id,
+            },
+          }
+        : {}),
+    };
   }
 
   private async replyDownloadFailure(chatId: string, error: unknown): Promise<void> {

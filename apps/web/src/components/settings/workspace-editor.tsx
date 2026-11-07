@@ -24,13 +24,15 @@ import { ArrowLeftIcon, FolderOpenIcon, TriangleAlertIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import { OptionGroup } from "@/components/settings/option-group";
+import { OptionGroup, SwitchRow } from "@/components/settings/option-group";
 import { WorkspaceMemoryGroup } from "@/components/settings/memory-section";
 import { useSettingsSubPage } from "@/components/settings/settings-subpage";
 import {
   useSaveWorkspace,
   useSaveWorkspaceInstructions,
+  useSetWorkspaceSkillsTrust,
   workspaceInstructionsQuery,
+  workspaceSkillsTrustQuery,
 } from "@/lib/extension-queries";
 import { isWebApp } from "@/lib/bridge";
 import { agentsQuery, workspacesQuery } from "@/lib/queries";
@@ -314,6 +316,35 @@ function WorkspaceForm({
   );
 }
 
+/**
+ * Whether the skills the folder carries in `.agents/skills` load. Off until the person trusts the
+ * folder: a downloaded folder could ship skills written to steer the agent. Saved at once, and
+ * only on the computer.
+ */
+function WorkspaceSkillsTrust({
+  bridge,
+  workspaceId,
+}: {
+  bridge: DesktopBridge;
+  workspaceId: string;
+}) {
+  const { t } = useTranslation("agents");
+  const trust = useQuery(workspaceSkillsTrustQuery(bridge, workspaceId));
+  const setTrust = useSetWorkspaceSkillsTrust(bridge);
+  return (
+    <OptionGroup legend={t("workspaceEditor.skills.legend")}>
+      <SwitchRow
+        id="workspace-skills-trusted"
+        label={t("workspaceEditor.skills.label")}
+        description={t("workspaceEditor.skills.description")}
+        checked={trust.data ?? false}
+        disabled={isWebApp || trust.isPending || setTrust.isPending}
+        onCheckedChange={(trusted) => setTrust.mutate({ id: workspaceId, trusted })}
+      />
+    </OptionGroup>
+  );
+}
+
 /** In-pane editor for a new workspace (`id` omitted) or an existing one. */
 export function WorkspaceEditor({
   bridge,
@@ -384,6 +415,7 @@ export function WorkspaceEditor({
       )}
       {/* A note form is a form of its own, so it sits outside the workspace's form. */}
       {workspace && <WorkspaceMemoryGroup bridge={bridge} workspaceId={workspace.id} />}
+      {workspace && <WorkspaceSkillsTrust bridge={bridge} workspaceId={workspace.id} />}
     </div>
   );
 }

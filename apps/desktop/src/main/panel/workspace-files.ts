@@ -32,6 +32,14 @@ const IMAGE_TYPES: Record<string, string> = {
   ".ico": "image/x-icon",
 };
 const WATCH_DEBOUNCE_MS = 300;
+/** Writes that never pause (a build, a long download) still refresh the panel this often. */
+const WATCH_MAX_WAIT_MS = 1_000;
+/**
+ * Changes under these folders do not refresh the panel: version control internals, installed
+ * dependencies and build output change by the thousand during an install or a build.
+ */
+const WATCH_IGNORED =
+  /(?:^|[\\/])(?:\.git|node_modules|\.venv|__pycache__|\.next|\.turbo|\.cache|dist|build)(?:[\\/]|$)/;
 
 /**
  * The absolute path of `path` (relative, `/`-separated) inside the workspace `root`. Symbolic links
@@ -223,11 +231,16 @@ export async function removeEntry(root: string, path: string): Promise<void> {
   await shell.trashItem((await resolveEntry(root, path)).target);
 }
 
-/** Tells the panel when anything in the watched workspace changes, a moment after it settles. */
+/**
+ * Tells the panel when anything in the watched workspace changes, a moment after it settles, and
+ * at least every `WATCH_MAX_WAIT_MS` while changes keep coming.
+ */
 export class WorkspaceWatcher {
   private watcher: FSWatcher | null = null;
   private root: string | null = null;
   private timer: NodeJS.Timeout | null = null;
+  /** When the first change not yet reported arrived. */
+  private firstChangeAt = 0;
 
   constructor(private readonly onChanged: (root: string) => void) {}
 
@@ -238,9 +251,18 @@ export class WorkspaceWatcher {
     this.root = root;
     try {
       this.watcher = watch(root, { recursive: true }, (_event, name) => {
-        if (name && String(name).split(/[\\/]/).includes(".git")) return;
-        if (this.timer) clearTimeout(this.timer);
-        this.timer = setTimeout(() => this.onChanged(root), WATCH_DEBOUNCE_MS);
+        if (name && WATCH_IGNORED.test(String(name))) return;
+        const now = Date.now();
+        if (this.timer === null) this.firstChangeAt = now;
+        clearTimeout(this.timer ?? undefined);
+        const wait = Math.min(WATCH_DEBOUNCE_MS, this.firstChangeAt + WATCH_MAX_WAIT_MS - now);
+        this.timer = setTimeout(
+          () => {
+            this.timer = null;
+            this.onChanged(root);
+          },
+          Math.max(0, wait),
+        );
       });
       this.watcher.on("error", () => this.stop());
     } catch (error) {
@@ -251,7 +273,7 @@ export class WorkspaceWatcher {
   }
 
   stop(): void {
-    if (this.timer) clearTimeout(this.timer);
+    clearTimeout(this.timer ?? undefined);
     this.timer = null;
     this.watcher?.close();
     this.watcher = null;

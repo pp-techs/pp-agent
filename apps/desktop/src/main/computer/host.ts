@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import type { ComputerRequest, ComputerResult, ComputerStatus } from "@workspace/shared";
-import { app, desktopCapturer, shell, systemPreferences } from "electron";
+import { app, desktopCapturer, nativeImage, shell, systemPreferences } from "electron";
+import { modelImage } from "../screenshot.ts";
 import { ComputerAutomation } from "./automation.ts";
 import { CuaDriver, findCuaDriver } from "./driver.ts";
 
@@ -82,13 +83,15 @@ export class ComputerHost {
     return this.status();
   }
 
-  run(request: ComputerRequest, signal?: AbortSignal): Promise<ComputerResult> {
-    if (!this.automation)
-      return Promise.reject(new Error("Computer use is not part of this build of PP Agent."));
+  async run(request: ComputerRequest, signal?: AbortSignal): Promise<ComputerResult> {
+    if (!this.automation) throw new Error("Computer use is not part of this build of PP Agent.");
     const status = this.status();
-    if (!status.accessibility || !status.screenRecording)
-      return Promise.reject(new Error(MISSING_PERMISSIONS));
-    return this.automation.run(request, signal);
+    if (!status.accessibility || !status.screenRecording) throw new Error(MISSING_PERMISSIONS);
+    const result = await this.automation.run(request, signal);
+    if (result.image === undefined || result.imageType === "image/jpeg") return result;
+    // The driver sends PNG: as JPEG the same window costs the model a fraction of the bytes.
+    const image = nativeImage.createFromBuffer(Buffer.from(result.image, "base64"));
+    return image.isEmpty() ? result : { ...result, ...modelImage(image) };
   }
 
   async dispose(): Promise<void> {

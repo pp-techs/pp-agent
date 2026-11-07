@@ -326,6 +326,10 @@
         "label": "Thời gian chờ tối đa cho mỗi yêu cầu (giây)",
         "placeholder": "Mặc định",
         "hint": "Để trống trừ khi máy chủ phản hồi chậm."
+      },
+      "trusted": {
+        "label": "Tin nhãn chỉ-đọc của máy chủ này",
+        "description": "Các công cụ mà máy chủ đánh dấu là chỉ đọc sẽ chạy mà không cần hỏi. Hãy tắt trừ khi bạn tin người vận hành máy chủ: khi tắt, mọi công cụ đều hỏi trước."
       }
     },
     "connect": {

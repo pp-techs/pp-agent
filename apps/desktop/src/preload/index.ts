@@ -86,6 +86,8 @@ const bridge: DesktopBridge = {
     list: () => invoke(IPC.terminalList),
     create: (cwd, size) => invoke(IPC.terminalCreate, cwd, size),
     backlog: (id) => invoke(IPC.terminalBacklog, id),
+    ack: (id, chars) => ipcRenderer.send(IPC.terminalAck, id, chars),
+    detach: (id) => ipcRenderer.send(IPC.terminalDetach, id),
     write: (id, data) => ipcRenderer.send(IPC.terminalWrite, id, data),
     resize: (id, size) => ipcRenderer.send(IPC.terminalResize, id, size),
     close: (id) => invoke(IPC.terminalClose, id),
@@ -115,8 +117,10 @@ const bridge: DesktopBridge = {
     onReveal: (listener) => subscribe(IPC.browserReveal, listener),
     cookieSources: () => invoke(IPC.browserCookieSources),
     cookieSourceRunning: (browser) => invoke(IPC.browserCookieSourceRunning, browser),
-    importCookies: (profileId, browser, sourceProfile, quitSource) =>
-      invoke(IPC.browserImportCookies, profileId, browser, sourceProfile, quitSource),
+    cookieSites: (browser, sourceProfile, quitSource) =>
+      invoke(IPC.browserCookieSites, browser, sourceProfile, quitSource),
+    importCookies: (profileId, browser, sourceProfile, sites) =>
+      invoke(IPC.browserImportCookies, profileId, browser, sourceProfile, sites),
   },
   computer: {
     status: () => invoke(IPC.computerStatus),

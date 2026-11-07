@@ -68,7 +68,7 @@ describe("renderSystemdUnit", () => {
     );
     expect(unit).toContain('Environment="ELECTRON_RUN_AS_NODE=1"');
     expect(unit).toContain('Environment="PP_AGENT_HOME=/home/me/PP Agent"');
-    expect(unit).toContain("Restart=always\nRestartSec=10");
+    expect(unit).toContain("Restart=on-failure\nRestartSec=10");
     expect(unit).toContain("StandardOutput=append:/home/me/PP Agent/logs/daemon.log");
     expect(unit).toContain("StandardError=append:/home/me/PP Agent/logs/daemon.log");
     expect(unit).toContain("[Install]\nWantedBy=default.target");
@@ -150,6 +150,53 @@ describe("systemd service", () => {
     const { runner, calls } = fakeRunner();
     await options(runner).uninstall();
     expect(calls.some((call) => call.includes("disable"))).toBe(false);
+  });
+
+  it("starts the installed unit, and skips when absent", async () => {
+    const { runner, calls } = fakeRunner();
+    const service = options(runner);
+    await service.startIfInstalled();
+    expect(calls).toEqual([]);
+    await service.install();
+    calls.length = 0;
+    await service.startIfInstalled();
+    expect(calls).toEqual([
+      "systemctl --user show-environment",
+      "systemctl --user start pp-agentd.service",
+    ]);
+  });
+
+  it("refreshes an outdated unit: rewrites and reloads without restart; same → no-op", async () => {
+    const { runner, calls } = fakeRunner();
+    const service = options(runner);
+    expect(await service.refreshIfOutdated()).toBe(false);
+    await service.install();
+    calls.length = 0;
+    expect(await service.refreshIfOutdated()).toBe(false);
+    expect(calls).toEqual([]);
+    await writeFile(
+      unitPath(),
+      renderSystemdUnit(real).replace("Restart=on-failure", "Restart=always"),
+    );
+    expect(await service.refreshIfOutdated()).toBe(true);
+    expect(await readFile(unitPath(), "utf8")).toBe(renderSystemdUnit(real));
+    expect(calls).toEqual(["systemctl --user show-environment", "systemctl --user daemon-reload"]);
+  });
+
+  it("leaves a unit of another program alone", async () => {
+    const { runner, calls } = fakeRunner();
+    await options(runner).install();
+    calls.length = 0;
+    const dev = createServiceControl({
+      ...real,
+      execPath: "/work/node_modules/electron/dist/electron",
+      platform: "linux",
+      runner,
+      homeDir: home,
+      username: "me",
+    });
+    expect(await dev.refreshIfOutdated()).toBe(false);
+    expect(calls).toEqual([]);
   });
 
   it("reports installed with a linger hint when linger is off", async () => {

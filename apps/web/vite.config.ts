@@ -16,7 +16,9 @@ function contentSecurityPolicy(mode: string) {
     "default-src 'self'",
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https:",
+    // No remote images: one in a reply would load as soon as it shows and could carry what the
+    // agent read to any server. Pasted images and file previews are `data:`/`blob:` URLs.
+    "img-src 'self' data: blob:",
     "font-src 'self' data:",
     mode === "mobile" ? "connect-src 'self' http: https:" : "connect-src 'self'",
     "object-src 'none'",
@@ -57,7 +59,16 @@ export default defineConfig(({ mode }) => ({
     },
   },
   build: {
-    // Loaded from disk inside the desktop app, so bundle size matters far less than on the web.
-    chunkSizeWarningLimit: 2_000,
+    rolldownOptions: {
+      output: {
+        // Libraries in their own files, so they stay cached when the app's code changes.
+        codeSplitting: {
+          groups: [
+            { name: "react", test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/ },
+            { name: "streamdown", test: /[\\/]node_modules[\\/]streamdown[\\/]/ },
+          ],
+        },
+      },
+    },
   },
 }));

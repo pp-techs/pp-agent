@@ -3,10 +3,10 @@ import { dirname, join } from "node:path";
 
 import type { ServiceStatus } from "@workspace/shared";
 
-import { firstLine } from "./types.ts";
+import { firstLine, readTextIfExists } from "./types.ts";
 import type { ServiceBackend, ServiceSpec } from "./types.ts";
 
-/** Seconds launchd waits before it restarts a daemon that exited. */
+/** Seconds launchd waits before it restarts a daemon that failed. */
 const THROTTLE_SECONDS = 10;
 
 function xmlEscape(value: string): string {
@@ -18,7 +18,10 @@ function xmlEscape(value: string): string {
     .replaceAll("'", "&apos;");
 }
 
-/** The LaunchAgent property list that starts the daemon at login and keeps it running. */
+/**
+ * The LaunchAgent property list that starts the daemon at login and restarts it when it fails.
+ * A clean exit (exit 0, e.g. another daemon already holds the socket) stays stopped.
+ */
 export function renderLaunchdPlist(spec: ServiceSpec): string {
   const programArguments = [spec.execPath, ...spec.args]
     .map((argument) => `    <string>${xmlEscape(argument)}</string>`)
@@ -46,7 +49,10 @@ ${environment}
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
-  <true/>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
   <key>ThrottleInterval</key>
   <integer>${THROTTLE_SECONDS}</integer>
   <key>StandardOutPath</key>
@@ -130,6 +136,35 @@ export const createLaunchdService: ServiceBackend = (spec, deps) => {
     async uninstall(): Promise<void> {
       await bootout();
       await rm(plistPath, { force: true });
+    },
+
+    async startIfInstalled(): Promise<void> {
+      if (!(await exists(plistPath))) return;
+      // No `-k`: a service daemon that is already running stays as it is.
+      const started = await deps.runner("launchctl", ["kickstart", `${domain()}/${spec.label}`]);
+      if (started.code !== 0) {
+        throw new Error(`launchd could not start the PP Agent service: ${firstLine(started)}`);
+      }
+    },
+
+    async refreshIfOutdated(): Promise<boolean> {
+      const current = await readTextIfExists(plistPath);
+      const wanted = renderLaunchdPlist(spec);
+      if (current === null || current === wanted) return false;
+      const program = [spec.execPath, spec.args[0] ?? ""];
+      if (!program.every((part) => current.includes(`<string>${xmlEscape(part)}</string>`))) {
+        return false;
+      }
+      const target = domain();
+      await writeFile(plistPath, wanted, { encoding: "utf8", mode: 0o644 });
+      // launchd reads the plist only when the job is loaded. No kickstart: the daemon calling
+      // this holds the socket, so the job started by `RunAtLoad` exits as "already running".
+      await bootout();
+      const bootstrap = await deps.runner("launchctl", ["bootstrap", target, plistPath]);
+      if (bootstrap.code !== 0) {
+        throw new Error(`launchd could not load the PP Agent service: ${firstLine(bootstrap)}`);
+      }
+      return true;
     },
   };
 };

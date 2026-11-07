@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -147,6 +147,42 @@ describe("windows task service", () => {
     );
     await make(runner).uninstall();
     expect(calls).toEqual(["schtasks /Query /TN PP Agent Daemon"]);
+  });
+
+  it("runs the task when it exists, and skips when absent", async () => {
+    let present = false;
+    const { runner, calls } = fakeRunner((_file, args) =>
+      args[0] === "/Query" && !present ? { code: 1 } : undefined,
+    );
+    const service = make(runner);
+    await service.startIfInstalled();
+    expect(calls).toEqual(["schtasks /Query /TN PP Agent Daemon"]);
+    present = true;
+    calls.length = 0;
+    await service.startIfInstalled();
+    expect(calls).toEqual([
+      "schtasks /Query /TN PP Agent Daemon",
+      "schtasks /Run /TN PP Agent Daemon",
+    ]);
+  });
+
+  it("refreshes an outdated launcher; same → no-op; another program → untouched", async () => {
+    const { runner, calls } = fakeRunner();
+    const service = make(runner);
+    expect(await service.refreshIfOutdated()).toBe(false);
+    await service.install();
+    const launcher = windowsLauncherPath(spec(join(dir, "daemon.log")));
+    calls.length = 0;
+    expect(await service.refreshIfOutdated()).toBe(false);
+    expect(calls).toEqual([]);
+    const wanted = renderWindowsLauncher(spec(join(dir, "daemon.log")));
+    await writeFile(launcher, `\uFEFF${wanted.replace("$env:ELECTRON_RUN_AS_NODE = '1'\r\n", "")}`);
+    expect(await service.refreshIfOutdated()).toBe(true);
+    expect(await readFile(launcher, "utf8")).toBe(`\uFEFF${wanted}`);
+    expect(calls).toEqual(["schtasks /Query /TN PP Agent Daemon"]);
+
+    await writeFile(launcher, "\uFEFF& 'C:\\dev\\electron.exe' @daemonArgs\r\n");
+    expect(await service.refreshIfOutdated()).toBe(false);
   });
 
   it("reports status from the query", async () => {

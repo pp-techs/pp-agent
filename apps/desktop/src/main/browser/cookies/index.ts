@@ -1,16 +1,17 @@
 import {
   COOKIE_SOURCE_NAMES,
+  type CookieSite,
   type CookieSource,
   type CookieSourceBrowser,
 } from "@workspace/shared";
 import { translator } from "../../i18n.ts";
 import {
   browserExecutable,
+  type ChromiumBrowser,
   CHROMIUM_BROWSERS,
   cookieFile,
   listChromiumProfiles,
   macKey,
-  readChromiumCookies,
   readMacPassword,
   readWindowsKey,
   quitBrowser,
@@ -19,8 +20,9 @@ import {
 } from "./chromium.ts";
 import { readCookiesThroughBrowser } from "./chromium-cdp.ts";
 import { LockedError } from "./database.ts";
-import { listFirefoxProfiles, readFirefoxCookies } from "./firefox.ts";
-import type { PortableCookie } from "./portable.ts";
+import { listFirefoxProfiles } from "./firefox.ts";
+import { cookieSite, groupSites, type PortableCookie } from "./portable.ts";
+import { readInBackground } from "./reader-process.ts";
 
 /** Chromium cookies can be decrypted on macOS and Windows; Firefox's are plain everywhere. */
 function chromiumSupported(): boolean {
@@ -53,28 +55,93 @@ export interface CookieRead {
   profileName: string;
 }
 
-/** Every cookie of one profile of an installed browser. Errors are worded for the person. */
+/**
+ * Runs a read of a source profile; a database the browser keeps locked becomes a message for the
+ * person.
+ */
+async function withLockedMessage<T>(browser: CookieSourceBrowser, read: () => Promise<T>) {
+  try {
+    return await read();
+  } catch (error) {
+    if (error instanceof LockedError)
+      throw await lockedMessage(browser, COOKIE_SOURCE_NAMES[browser], error);
+    throw error;
+  }
+}
+
+/** The sites with cookies in one profile of an installed browser; no value is read. */
+export async function listCookieSites(
+  browser: CookieSourceBrowser,
+  sourceProfile: string,
+): Promise<CookieSite[]> {
+  return withLockedMessage(browser, async () => {
+    if (browser === "firefox") {
+      const profile = await firefoxProfile(sourceProfile);
+      return groupSites(await readInBackground({ kind: "firefox-hosts", profileDir: profile.dir }));
+    }
+    const { file } = await chromiumProfile(browser, sourceProfile);
+    return groupSites(await readInBackground({ kind: "chromium-hosts", file }));
+  });
+}
+
+/**
+ * The cookies of the chosen sites (see `cookieSite`) of one profile of an installed browser.
+ * Errors are worded for the person.
+ */
 export async function readCookies(
   browser: CookieSourceBrowser,
   sourceProfile: string,
+  sites: readonly string[],
 ): Promise<CookieRead> {
-  const t = translator();
-  const name = COOKIE_SOURCE_NAMES[browser];
-  try {
+  return withLockedMessage(browser, async () => {
     if (browser === "firefox") {
-      const profile = (await listFirefoxProfiles()).find((entry) => entry.id === sourceProfile);
-      if (!profile) throw new Error(t("panel.cookies.sourceNotFound", { browser: name }));
+      const profile = await firefoxProfile(sourceProfile);
       return {
-        cookies: await readFirefoxCookies(profile.dir),
+        cookies: await readInBackground({
+          kind: "firefox",
+          profileDir: profile.dir,
+          sites: [...sites],
+        }),
         unreadable: 0,
         profileName: profile.name,
       };
     }
-    return await readChromium(browser, sourceProfile);
-  } catch (error) {
-    if (error instanceof LockedError) throw await lockedMessage(browser, name, error);
-    throw error;
-  }
+    return readChromium(browser, sourceProfile, sites);
+  });
+}
+
+async function firefoxProfile(sourceProfile: string) {
+  const profile = (await listFirefoxProfiles()).find((entry) => entry.id === sourceProfile);
+  if (!profile)
+    throw new Error(
+      translator()("panel.cookies.sourceNotFound", { browser: COOKIE_SOURCE_NAMES.firefox }),
+    );
+  return profile;
+}
+
+/** A Chromium profile looked up again by id (never a path from the renderer), with its database. */
+async function chromiumProfile(
+  browser: CookieSourceBrowser,
+  sourceProfile: string,
+): Promise<{
+  definition: ChromiumBrowser;
+  userData: string;
+  profile: { id: string; name: string };
+  file: string;
+}> {
+  const notFound = () =>
+    new Error(
+      translator()("panel.cookies.sourceNotFound", { browser: COOKIE_SOURCE_NAMES[browser] }),
+    );
+  const definition = CHROMIUM_BROWSERS.find((entry) => entry.browser === browser);
+  const userData = definition ? userDataDir(definition) : null;
+  if (!definition || !userData || !chromiumSupported()) throw notFound();
+  const profile = (await listChromiumProfiles(definition)).find(
+    (entry) => entry.id === sourceProfile,
+  );
+  const file = profile ? cookieFile(userData, profile.id) : null;
+  if (!profile || !file) throw notFound();
+  return { definition, userData, profile, file };
 }
 
 /** Whether a browser is running and so keeps its cookies locked; only told on Windows. */
@@ -124,18 +191,11 @@ async function lockedMessage(
 async function readChromium(
   browser: CookieSourceBrowser,
   sourceProfile: string,
+  sites: readonly string[],
 ): Promise<CookieRead> {
   const t = translator();
   const name = COOKIE_SOURCE_NAMES[browser];
-  const definition = CHROMIUM_BROWSERS.find((entry) => entry.browser === browser);
-  const userData = definition ? userDataDir(definition) : null;
-  if (!definition || !userData || !chromiumSupported())
-    throw new Error(t("panel.cookies.sourceNotFound", { browser: name }));
-  const profile = (await listChromiumProfiles(definition)).find(
-    (entry) => entry.id === sourceProfile,
-  );
-  const file = profile ? cookieFile(userData, profile.id) : null;
-  if (!profile || !file) throw new Error(t("panel.cookies.sourceNotFound", { browser: name }));
+  const { definition, userData, profile, file } = await chromiumProfile(browser, sourceProfile);
 
   const platform = process.platform === "darwin" ? "darwin" : "win32";
   let key: Buffer;
@@ -155,13 +215,23 @@ async function readChromium(
     );
   }
 
-  const read = await readChromiumCookies(file, key, platform);
+  const read = await readInBackground({
+    kind: "chromium",
+    file,
+    key: key.toString("base64"),
+    platform,
+    sites: [...sites],
+  });
   if (read.appBound === 0) return { ...read, profileName: profile.name };
-  // Newer Windows browsers encrypt with a key only they can unwrap: ask the browser itself.
+  // Newer Windows browsers encrypt with a key only they can unwrap: ask the browser itself, and
+  // keep the chosen sites of what it hands over.
   const executable = browserExecutable(definition);
   if (executable) {
     try {
-      const cookies = await readCookiesThroughBrowser(executable, userData, profile.id, file);
+      const chosen = new Set(sites);
+      const cookies = (
+        await readCookiesThroughBrowser(executable, userData, profile.id, file)
+      ).filter((cookie) => chosen.has(cookieSite(cookie.domain)));
       return { cookies, unreadable: 0, profileName: profile.name };
     } catch (error) {
       console.error(`Could not read ${name} cookies through the browser:`, error);

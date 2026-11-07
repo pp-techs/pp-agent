@@ -190,6 +190,8 @@
     "editOffice": "Thay đổi {{file}}",
     "askUser": "Đang hỏi bạn một câu",
     "scheduleTask": "Đặt lịch cho tác vụ “{{name}}”",
+    "readOutside": "Đọc {{path}}, nằm ngoài không gian làm việc",
+    "browser": "Dùng trình duyệt: {{action}}",
     "computer": {
       "anApp": "một ứng dụng",
       "use": "Dùng {{app}}",
@@ -327,6 +329,7 @@
       "fileTooLarge": "Tệp quá lớn. Giới hạn là {{max}} MB.",
       "unsupported": "Tôi không đọc được loại tin nhắn này. Hãy gửi văn bản, ảnh, tệp hoặc tin nhắn thoại.",
       "approvalTitle": "Cần phê duyệt",
+      "detailHidden": "… đã ẩn {{count}} ký tự …",
       "approve": "Cho phép",
       "deny": "Từ chối",
       "approved": "Đã cho phép",
@@ -405,6 +408,7 @@
       "fileTooLarge": "Tệp quá lớn. Giới hạn là {{max}} MB.",
       "unsupported": "Tôi không đọc được loại tin nhắn này. Hãy gửi văn bản, ảnh hoặc tin nhắn thoại.",
       "approvalTitle": "Cần phê duyệt",
+      "detailHidden": "… đã ẩn {{count}} ký tự …",
       "approvalHint": "Trả lời 1 để cho phép hoặc 2 để từ chối.",
       "answerRetry": "Tôi chưa hiểu. Hãy trả lời bằng một trong các lựa chọn ở trên.",
       "questionTitle": "Agent có một câu hỏi",
@@ -483,7 +487,8 @@
       "copyBlocked": "Không thể sao chép cookie của {{browser}} dù trình duyệt không chạy ({{error}}). Phần mềm bảo mật hoặc quyền truy cập tệp có thể đang chặn.",
       "quitFailed": "Không thể thoát {{browser}} ({{error}}). Hãy tự thoát từ khay hệ thống hoặc Task Manager rồi thử lại.",
       "keyDenied": "macOS không cho phép đọc khóa bảo vệ cookie của {{browser}}. Hãy thử lại và chọn “Cho phép” khi macOS hỏi.",
-      "keyUnavailable": "Không thể đọc khóa bảo vệ cookie của {{browser}} ({{error}})."
+      "keyUnavailable": "Không thể đọc khóa bảo vệ cookie của {{browser}} ({{error}}).",
+      "noSites": "Hãy chọn ít nhất một trang web để nhập cookie."
     }
   },
   "computerApps": {
@@ -513,6 +518,8 @@
     "notFound": "Không tìm thấy.",
     "defaultDeviceName": "Trình duyệt",
     "attachmentExpired": "{{name}} không còn trên máy tính. Hãy đính kèm lại.",
-    "gatewayKeyAgain": "Để đổi địa chỉ của cổng kết nối này từ điện thoại, hãy nhập lại khóa API. Khóa đã lưu chỉ được gửi đến địa chỉ nó được lưu cho."
+    "gatewayKeyAgain": "Để đổi địa chỉ của cổng kết nối này từ điện thoại, hãy nhập lại khóa API. Khóa đã lưu chỉ được gửi đến địa chỉ nó được lưu cho.",
+    "tooManyUploads": "Thiết bị này đang tải lên quá nhiều tệp. Hãy đợi chúng xong rồi thử lại.",
+    "wrongHost": "Hãy mở truy cập từ điện thoại bằng địa chỉ của máy tính này hiển thị trong PP Agent › Cài đặt › Truy cập từ điện thoại."
   }
 }

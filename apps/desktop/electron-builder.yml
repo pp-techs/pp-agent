@@ -57,6 +57,23 @@ asarUnpack:
   - node_modules/node-pty/**
 # Gives node-pty's spawn-helper the execute bit its package lost, before the app is signed.
 afterPack: scripts/after-pack.cjs
+# Electron fuses, flipped in the packaged binary before it is signed. Check a build with
+# `npx @electron/fuses read --app "release/mac-arm64/PP Agent.app"`.
+electronFuses:
+  # Stays on: main starts the daemon (and the OS service runs it) as `ELECTRON_RUN_AS_NODE=1 <app>
+  # daemon.mjs`. Turning it off needs a daemon start mode of its own first.
+  runAsNode: true
+  # The side panel's partitions hold cookies imported from the person's browsers; on disk they are
+  # encrypted with the OS key, as Chrome does. One way: plain cookies already on disk are encrypted
+  # when Chromium next writes them, and turning the fuse off again leaves the store unreadable.
+  enableCookieEncryption: true
+  # Nothing in the app reads NODE_OPTIONS (or NODE_EXTRA_CA_CERTS) or takes --inspect; left on, any
+  # program of the same user could run its own code inside the signed app and its macOS grants.
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  # Only the signed app.asar loads, and its contents must match the hash stored in the binary.
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
 # Space-free names for release assets, e.g. pp-agent-0.1.0-mac-arm64.dmg.
 artifactName: pp-agent-${version}-${os}-${arch}.${ext}
 # Installers are attached to GitHub Releases by .github/workflows/release.yml (always run with

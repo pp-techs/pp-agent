@@ -7,7 +7,13 @@ import { toast } from "sonner";
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { skillsQuery, workspaceSkillsQuery } from "@/lib/extension-queries";
 import { confirmLeaveTemporary } from "@/lib/confirm-leave-temporary";
-import { agentsQuery, useAgentCommands } from "@/lib/queries";
+import {
+  agentsQuery,
+  useCompact,
+  useNewChat,
+  useNewTemporaryChat,
+  useSetConversationYolo,
+} from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
 import { goalStatusKey } from "@/lib/goal";
 import { useComposerStore } from "@/stores/composer-store";
@@ -75,7 +81,12 @@ export function useSlashItems(bridge: DesktopBridge): {
   const skills = useQuery(skillsQuery(bridge));
   const workspaceSkills = useQuery(workspaceSkillsQuery(bridge, workspaceDir));
   const agents = useQuery(agentsQuery(bridge));
-  const { newChat, newTemporaryChat, compact, setConversationYolo } = useAgentCommands(bridge);
+  // `mutate` and `mutateAsync` keep their identity across renders, so the list is only rebuilt
+  // when what it shows changes.
+  const { mutate: newChat } = useNewChat(bridge);
+  const { mutate: newTemporaryChat } = useNewTemporaryChat(bridge);
+  const { mutateAsync: compact } = useCompact(bridge);
+  const { mutate: setConversationYolo } = useSetConversationYolo(bridge);
   const yolo = useChatStore((state) => state.yolo);
   const goal = useChatStore((state) => state.goal);
   const { t } = useTranslation("chat");
@@ -88,8 +99,7 @@ export function useSlashItems(bridge: DesktopBridge): {
         name: "new",
         label: t("slash.commands.new.label"),
         description: t("slash.commands.new.description"),
-        run: () =>
-          void confirmLeaveTemporary().then((ok) => ok && newChat.mutate(undefined, { onError })),
+        run: () => void confirmLeaveTemporary().then((ok) => ok && newChat(undefined, { onError })),
       },
       {
         kind: "command",
@@ -97,9 +107,7 @@ export function useSlashItems(bridge: DesktopBridge): {
         label: t("slash.commands.temp.label"),
         description: t("slash.commands.temp.description"),
         run: () =>
-          void confirmLeaveTemporary().then(
-            (ok) => ok && newTemporaryChat.mutate(undefined, { onError }),
-          ),
+          void confirmLeaveTemporary().then((ok) => ok && newTemporaryChat(undefined, { onError })),
       },
       {
         kind: "command",
@@ -111,7 +119,7 @@ export function useSlashItems(bridge: DesktopBridge): {
             toast.info(t("waitForAnswer"));
             return;
           }
-          toast.promise(compact.mutateAsync(), {
+          toast.promise(compact(), {
             loading: t("slash.commands.compact.loading"),
             success: t("slash.commands.compact.success"),
             error: (error: Error) => error.message,
@@ -140,7 +148,7 @@ export function useSlashItems(bridge: DesktopBridge): {
               });
               if (!confirmed) return;
             }
-            setConversationYolo.mutate(!yolo.active, { onError });
+            setConversationYolo(!yolo.active, { onError });
           })();
         },
       },
@@ -168,13 +176,9 @@ export function useSlashItems(bridge: DesktopBridge): {
 
   const available = React.useMemo<SlashItem[]>(() => {
     const allowed = agents.data?.find((agent) => agent.id === agentId)?.skills ?? null;
-    // Installed and the workspace's own skills both follow the agent's skill list; the workspace's
-    // wins over an installed one of the same name, as in the agent.
-    const own = workspaceSkills.data ?? [];
-    const installed = (skills.data ?? []).filter(
-      (skill) => !own.some((other) => other.name === skill.name),
-    );
-    return [...own, ...installed]
+    // Installed and the workspace's own skills both follow the agent's skill list. The agent
+    // reports only workspace skills that load, never one named like an installed skill.
+    return [...(workspaceSkills.data ?? []), ...(skills.data ?? [])]
       .filter((skill) => skill.enabled && (allowed === null || allowed.includes(skill.name)))
       .map((skill) => ({
         kind: "skill",

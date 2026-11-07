@@ -61,11 +61,14 @@ Every tool call passes through the `approval-gate` extension registered first in
 
 ### Deciding
 
-1. **Tier** (`toolTier`): built-in tools have a fixed tier (`read`, `ls`, `find`, `grep`, `read_document`, `current_datetime`, `web_search`, `web_fetch`, `ask_user` → read; `write`, `edit` → write; `bash`, `powershell` → exec; discovery tools `codemode`, `tool_search`, `list_mcp_resources`, `list_mcp_resource_templates`, `read_mcp_resource` → read). MCP tools (`mcp__<server>__<tool>`) are read only when the server annotates them `readOnlyHint`, otherwise write. Any unknown tool is exec.
-2. **Rule** (`toolRule`): the shell tool of this platform is `off` (locked) unless shell is enabled in Settings, then `ask`, or `allow` when its own policy is `allow` (the rule then carries a `warning`); the other platform's shell is always `off`; discovery tools are always `allow` (locked). Others use the tool policy from `settings.json`, defaulting to `auto` (`edit` defaults to `off`). `auto` means `allow` for the read tier and `ask` otherwise.
-3. `off` → blocked ("turned off in Settings"). Tools that are off stay registered because codemode can reach any registered tool, so the gate is the enforcement point.
-4. The current agent's tool list (`agentAllowsTool`) → blocked when the agent may not use an app tool. MCP tools follow the agent's MCP servers instead; discovery tools stay available.
-5. `allow` → runs. `ask` → approval request.
+1. **Tier** (`toolTier`): built-in tools have a fixed tier (`read`, `ls`, `find`, `grep`, `read_document`, `current_datetime`, `web_search`, `web_fetch`, `ask_user` → read; `write`, `edit` → write; `bash`, `powershell` → exec; discovery tools `codemode`, `tool_search`, `list_mcp_resources`, `list_mcp_resource_templates`, `read_mcp_resource` → read). The `browser` tool is tiered per action (`browserActionTier`): `tabs`, `select`, `snapshot`, `text`, `screenshot`, `scroll` and `wait` → read; every other action (loading a page, `back`, `forward`, `reload`, clicking, typing, pressing keys, `close`, running JavaScript) → write. MCP tools (`mcp__<server>__<tool>`) are read only when the server annotates them `readOnlyHint` **and** the person marked that server `trusted` in `mcp.json` (`McpConfigFile.trustedServers()`); otherwise write. Any unknown tool is exec.
+2. **Rule** (`toolRule`): the shell tool of this platform is `off` (locked) unless shell is enabled in Settings, then `ask`, or `allow` when its own policy is `allow` (the rule then carries a `warning`); the other platform's shell is always `off`; discovery tools are always `allow` (locked). Others use the tool policy from `settings.json`, defaulting to `auto` (`edit` defaults to `off`). `auto` means `allow` for the read tier and `ask` otherwise. Yolo mode turns every rule that is not `off` into `allow`.
+3. **Call** (`callRule`), on top of the rule, with where the call reaches and who the chat answers:
+   - **Paths** (`pathAccess`, `path-access.ts`) for `read`, `ls`, `find`, `grep` and `read_document`. The path is resolved the way Pi does (`~`, a leading `@`, `file://`, Git Bash/WSL paths on Windows) and symbolic links are followed. Inside the workspace or the installed skills folder → the rule applies. Outside → `ask` even under `auto` or `allow`; yolo mode allows it. The app's data folder (the folder holding `settings.json`) and `~/.ssh` are always refused, yolo included, and so is a recursive `find`/`grep` of a folder that contains one of them (with the home folder as workspace, `grep .` is refused and the model must search a narrower folder).
+   - **Chats other people talk in** (`ChatAccess`): any chat session that is not the paired owner's own private chat (`members`) ignores yolo mode and asks the owner before every tool, except locked discovery tools and `todo_write`, `ask_user`, `current_datetime`, which touch nothing outside the chat. While nobody is paired (`unpaired`) those tools are off. The rule is decided per chat, not per sender, so the owner's own messages in a group get the same restrictions.
+4. `off` → blocked ("turned off in Settings", or the refused folder). Tools that are off stay registered because codemode can reach any registered tool, so the gate is the enforcement point.
+5. The current agent's tool list (`agentAllowsTool`) → blocked when the agent may not use an app tool. MCP tools follow the agent's MCP servers instead; discovery tools stay available.
+6. `allow` → runs. `ask` → approval request. A read outside the workspace says so in the card's title.
 
 ### Asking
 
@@ -79,7 +82,7 @@ sequenceDiagram
   actor U as Person
   LLM-->>Pi: tool call (write / exec / MCP)
   Pi->>G: tool_call { toolCallId, parentToolCallId?, toolName, input }
-  G->>G: tier, rule, agent check
+  G->>G: tier, rule, path and chat check, agent check
   G->>A: requestApproval({ requestId, toolCallId, anchorToolCallId, tier, title, detail })
   A->>A: tool part status awaiting-approval
   A-->>R: approval_requested
@@ -95,7 +98,11 @@ sequenceDiagram
   end
 ```
 
-`describeToolCall` builds the title and detail the person sees: "Save `<path>`" with the content for `write`, "Edit `<path>`" with the edits, "Run a command" with the command for the shell, "Use “tool” in server" with the arguments for MCP tools; previews are cut at 600 characters.
+`describeToolCall` builds the title and detail the person sees: "Save `<path>`" with the content for `write`, "Edit `<path>`" with the edits, "Run a command" with the command for the shell, "Use “tool” in server" with the arguments for MCP tools. The detail is the full text, scheduled-task details included. Chat channels clip it for their cards (Telegram 1500, Zalo 1200 characters) with `clipMiddle` (`channels/shared/clip.ts`), which keeps the start and the end around a "… N characters hidden …" line, because the end of a long command is where it can hide what it does.
+
+### `delegate_task` helpers
+
+A helper has nobody to approve anything, so its own gate (`readOnlyGuard` in `subagent.ts`) blocks every tool not on its read-only list and every file read that `pathAccess` does not place inside the workspace. A helper started under a named agent gets `delegatedTools`: that agent's helper tools limited to the ones the calling agent may use, so delegating never adds a tool the caller lacks.
 
 ### Codemode and nested calls
 
@@ -172,7 +179,7 @@ The `sessions` tool (`sessions-tool.ts`, read tier, off with Settings › Tools 
 | `history` | The last messages of one session (user and assistant text only, long messages cut). |
 | `peers`   | The chats a message can be delivered to: `home` is the paired Telegram owner.       |
 
-A session id is its file name without `.jsonl`. Kind is derived, with no extra store: a file in `channels.json` is a `chat` (its chat key is the `peer`), a scheduled run's file (`lastRun.sessionPath`, or a name starting with `⏰`) is a `task`, anything else is a `window` conversation. `SessionScope.visibility` decides what the tool shows: `all` in the window and in chats, `self` in a scheduled run (only its own session can be listed or read). `history` only reads files the session list knows, so an id cannot point outside the session folder.
+A session id is its file name without `.jsonl`. Kind is derived, with no extra store: a file in `channels.json` is a `chat` (its chat key is the `peer`), a scheduled run's file (`lastRun.sessionPath`, or a name starting with `⏰`) is a `task`, anything else is a `window` conversation. `SessionScope.visibility` decides what the tool shows: `all` in the window and in the paired owner's own chat, `self` in a scheduled run and in any chat other people may talk in (only its own session can be listed or read; the `## Where you are` section then leaves out the owner's chat). `history` opens `<sessionDir>/<id>.jsonl` (`findSessionPath` keeps only the file name of the id), so an id cannot point outside the session folder. Listings go through `SessionInfoCache`, which re-reads a file only when its size or modification time changed.
 
 ## Chat channel turns (Telegram)
 
@@ -185,8 +192,8 @@ sequenceDiagram
   participant H as AgentHost.gateway
   participant Pi as Chat's Pi session
   U->>T: text, photo, document or voice
-  T->>T: owner check (others get no answer)
-  T->>H: runTurn("telegram:<id>", { text, attachments }, hooks)
+  T->>T: access check (owner or allowed member; others get no answer)
+  T->>H: runTurn("telegram:<id>", { text, attachments, sender }, hooks)
   H->>Pi: prompt (session from channels.json, or a new one)
   Pi-->>T: onText / onTool (reply edited live)
   Pi->>H: tool_call that needs approval
@@ -198,9 +205,10 @@ sequenceDiagram
   T->>U: reply (split to fit Telegram's limit)
 ```
 
-- **Who.** Only the paired owner is answered; strangers are ignored. A tap on Approve or Deny counts only from the owner. `/pair CODE` works while a pairing window (10 minutes, one use, 5 wrong tries lock it for 15 minutes) is open.
+- **Who.** The paired owner is answered, and in chats configured with members access also the allowed users; strangers are ignored. A tap on Approve or Deny counts only from the owner. `/pair CODE` works in a private chat while a pairing window is open (10 minutes, one use). Three wrong codes lock out that sender alone for 15 minutes; five wrong tries from anyone lock pairing for 15 minutes (`PairingGuard.attempt(guess, now, sender)`, `channels/shared/pairing.ts`).
 - **Same gate as the window.** The chat session uses the agent's tool list and the same `approval-gate`. Requests are asked in the chat instead of the window; an unanswered one is denied after 10 minutes, and `/stop` or `/new` denies all pending ones.
+- **Chats other people talk in.** Every chat except the owner's own private chat (groups, and private chats with members access) gets the `members` rules of the gate: no yolo mode, every tool beyond the chat asks the owner, all of them off while nobody is paired. Its system prompt carries only the workspace's own memory notes, never the global ones. Each message reaches the model prefixed with the sender's name and user id (`ChannelInput.sender`; "the owner" is marked). Only the owner's messages steer or interrupt a running turn; anyone else's message queues. The channels enforce this and `gateway.steerTurn` refuses a non-owner sender again.
 - **Questions.** `ask_user` works in chat turns too. `TelegramQuestions` (`channels/telegram/questions.ts`) sends each question as its own message, one after the other, with a button per option (a ☐/☑ mark and **Done** for multi-select, **Other** and **Skip** always). Buttons carry `q:<request id>:<question>:<option | o | d | s>` (at most 64 bytes). After **Other**, the owner's next plain text message is the answer: `TelegramChannel` hands it to the question before queueing, because a queued message would wait behind the very turn that waits for it (photos, files and voice are not taken as answers). Skip, 10 minutes without an answer, `/stop`, `/new` or stopping the channel settle the call as skipped.
-- **Input.** Text, photos (sent as images), documents (copied to the workspace's `attachments/`, up to 20 MiB), and voice or audio (transcribed with the voice input provider set up in Settings; without one the reply says why it failed). Other message kinds get an "unsupported" reply.
+- **Input.** Text, photos (sent as images), documents (downloaded into a fresh `mkdtemp` folder per message under the OS temp folder, removed recursively after the turn, then copied to the workspace's `attachments/`, up to 20 MiB), and voice or audio (transcribed with the voice input provider set up in Settings; without one the reply says why it failed). Other message kinds get an "unsupported" reply.
 - **Commands.** `/new` starts a fresh conversation for the chat (drops its entry in `channels.json`), `/stop` aborts the turn and clears the queue, `/help`, `/start`. `/model` and `/thinking` call `gateway.pickOptions` / `gateway.pick`, which open the chat's own session and call `session.setModel` / `setThinkingLevel` (Pi saves them with the conversation). `/agent` and `/workspace` call `gateway.options` / `gateway.choose`: the pick is stored per chat in `channels.json` (`choices`), the session is closed and reopened on the next turn; a workspace change also drops the chat's conversation, an agent change appends an agent entry to it.
 - **History.** Each chat conversation is a saved session titled `💬 Telegram – <date>`, so it also shows in the window's history. After a restart the daemon reopens the session named in `channels.json`; a chat session idle for 30 minutes is released from memory (not deleted).

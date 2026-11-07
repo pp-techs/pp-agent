@@ -18,8 +18,11 @@ type Install = Available["install"];
 
 const releaseUrl = (version: string) => `https://github.com/${REPO}/releases/tag/v${version}`;
 
-/** The release workflow stamps `ppDeveloperIdSigned` into package.json of Developer ID builds. */
-function isDeveloperIdSigned(): boolean {
+/**
+ * The release workflow stamps `ppCodeSigned` into package.json of builds signed with the project's
+ * certificate (Developer ID on macOS, WIN_CSC_LINK on Windows).
+ */
+function isCodeSigned(): boolean {
   try {
     const manifest: unknown = JSON.parse(
       readFileSync(join(app.getAppPath(), "package.json"), "utf8"),
@@ -27,8 +30,8 @@ function isDeveloperIdSigned(): boolean {
     return (
       typeof manifest === "object" &&
       manifest !== null &&
-      "ppDeveloperIdSigned" in manifest &&
-      manifest.ppDeveloperIdSigned === true
+      "ppCodeSigned" in manifest &&
+      manifest.ppCodeSigned === true
     );
   } catch {
     return false;
@@ -36,13 +39,14 @@ function isDeveloperIdSigned(): boolean {
 }
 
 /**
- * Windows installers, signed macOS builds, and Linux AppImages replace themselves. `.deb` installs
- * belong to the system package manager; for those the person downloads the new installer instead.
+ * Signed Windows and macOS builds replace themselves. Anything else (unsigned builds, Linux
+ * AppImages, which are never signed, and `.deb` installs, which belong to the package manager)
+ * sends the person to the release page: an update that installs itself is checked only against
+ * the hash in the feed of the same release, so a compromised release would reach every user.
  */
 function installMode(): Install {
-  if (process.platform === "win32") return "in-app";
-  if (process.platform === "darwin") return isDeveloperIdSigned() ? "in-app" : "download-page";
-  if (process.platform === "linux" && process.env.APPIMAGE) return "in-app";
+  if (process.platform === "win32" || process.platform === "darwin")
+    return isCodeSigned() ? "in-app" : "download-page";
   return "download-page";
 }
 

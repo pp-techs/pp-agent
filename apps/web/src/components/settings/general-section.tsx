@@ -4,7 +4,7 @@ import {
   type DesktopBridge,
   type LanguageSetting,
 } from "@workspace/shared";
-import { LANGUAGE_NAMES } from "@workspace/shared/i18n";
+import { LANGUAGE_NAMES } from "@workspace/shared/i18n/renderer";
 import { Button } from "@workspace/ui/components/button";
 import {
   Field,

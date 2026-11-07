@@ -35,6 +35,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { Markdown } from "@/components/markdown";
+import { InlineImage } from "@/components/chat/inline-image";
 import { MessageEditor } from "@/components/chat/message-editor";
 import { useChatThread } from "@/components/chat/chat-thread-context";
 import { ToolStep } from "@/components/chat/tool-step";
@@ -72,32 +73,48 @@ const COPIED_MS = 1500;
 function ActionButton({
   label,
   disabled,
+  tooltip = true,
   onClick,
   children,
 }: {
   label: string;
   disabled?: boolean;
+  /** Off until the message is hovered: a tooltip per button per message is costly to mount. */
+  tooltip?: boolean;
   onClick: () => void;
   children: React.ReactNode;
 }) {
+  const props = {
+    variant: "ghost",
+    size: "icon-xs",
+    "aria-label": label,
+    disabled,
+    onClick,
+  } as const;
+  if (!tooltip) return <Button {...props}>{children}</Button>;
+  const button = <Button {...props} />;
   return (
     <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label={label}
-            disabled={disabled}
-            onClick={onClick}
-          />
-        }
-      >
-        {children}
-      </TooltipTrigger>
+      <TooltipTrigger render={button}>{children}</TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>
   );
+}
+
+/**
+ * Whether the actions under a message show their tooltips: once the pointer has been over the
+ * message, and always for the last one. Until then they are plain labelled buttons.
+ */
+function useActionTooltips(last: boolean) {
+  const [hovered, setHovered] = React.useState(false);
+  const onPointerEnter = (event: React.PointerEvent<HTMLElement>) => {
+    // Swapping the buttons would drop the focus of one reached with the keyboard.
+    const focused = document.activeElement;
+    if (focused?.closest("[data-slot=message-footer]") && event.currentTarget.contains(focused))
+      return;
+    setHovered(true);
+  };
+  return { tooltips: last || hovered, onPointerEnter: hovered ? undefined : onPointerEnter };
 }
 
 /** Why a turn failed, in one sentence, with a button that copies what the provider said. */
@@ -141,22 +158,23 @@ function ErrorNotice({ message }: { message: ChatMessage }) {
 function MessageActions({
   message,
   canRegenerate,
+  tooltips,
   onEdit,
 }: {
   message: ChatMessage;
   canRegenerate: boolean;
+  tooltips: boolean;
   onEdit?: () => void;
 }) {
   const { t } = useTranslation("chat");
   const {
     // While an answer is being written, the commands that change the conversation wait.
-    state: { busy: disabled },
+    state: { busy: disabled, regenerating, branching },
     actions: { regenerate, branchSession },
   } = useChatThread();
   const temporary = useChatStore((state) => state.temporary);
   const [copied, setCopied] = React.useState(false);
   const { entryId } = message;
-  const onError = (error: Error) => toast.error(error.message);
 
   React.useEffect(() => {
     if (!copied) return;
@@ -176,6 +194,7 @@ function MessageActions({
     <MessageFooter className="gap-0.5 px-0 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100 pointer-coarse:opacity-100">
       <ActionButton
         label={copied ? t("message.actions.copied") : t("message.actions.copy")}
+        tooltip={tooltips}
         onClick={copy}
       >
         {copied ? <CheckIcon /> : <CopyIcon />}
@@ -184,6 +203,7 @@ function MessageActions({
         <ActionButton
           label={t("message.actions.edit")}
           disabled={disabled || !entryId}
+          tooltip={tooltips}
           onClick={onEdit}
         >
           <PencilIcon />
@@ -192,8 +212,9 @@ function MessageActions({
       {canRegenerate && (
         <ActionButton
           label={t("message.actions.regenerate")}
-          disabled={disabled || regenerate.isPending}
-          onClick={() => regenerate.mutate(undefined, { onError })}
+          disabled={disabled || regenerating}
+          tooltip={tooltips}
+          onClick={regenerate}
         >
           <RefreshCwIcon />
         </ActionButton>
@@ -201,8 +222,9 @@ function MessageActions({
       {!temporary && (
         <ActionButton
           label={t("message.actions.branch")}
-          disabled={disabled || !entryId || branchSession.isPending}
-          onClick={() => entryId && branchSession.mutate(entryId, { onError })}
+          disabled={disabled || !entryId || branching}
+          tooltip={tooltips}
+          onClick={() => entryId && branchSession(entryId)}
         >
           <GitBranchIcon />
         </ActionButton>
@@ -255,9 +277,10 @@ function UserMessageContent({ message }: { message: ChatMessage }) {
       {(images.length > 0 || files.length > 0) && (
         <div className="flex max-w-[80%] flex-wrap justify-end gap-2 self-end">
           {images.map((image, index) => (
-            <img
+            <InlineImage
               key={index}
-              src={`data:${image.mimeType};base64,${image.data}`}
+              data={image.data}
+              mimeType={image.mimeType}
               alt={t("message.attachedImage")}
               className="max-h-48 max-w-64 rounded-xl border object-cover"
             />
@@ -284,9 +307,11 @@ function UserMessageContent({ message }: { message: ChatMessage }) {
 }
 
 /** A message the person sent and the conversation confirmed: it can be edited, copied, branched. */
-function UserMessage({ message }: { message: ChatMessage }) {
+function UserMessage({ message, last }: { message: ChatMessage; last: boolean }) {
   const [editing, setEditing] = React.useState(false);
+  const { tooltips, onPointerEnter } = useActionTooltips(last);
   const {
+    state: { editing: saving },
     actions: { editMessage },
     meta: { bridge },
   } = useChatThread();
@@ -298,27 +323,24 @@ function UserMessage({ message }: { message: ChatMessage }) {
           <MessageEditor
             bridge={bridge}
             parts={message.parts}
-            pending={editMessage.isPending}
+            pending={saving}
             onCancel={() => setEditing(false)}
-            onSubmit={(edit) =>
-              editMessage.mutate(
-                { entryId, ...edit },
-                {
-                  onSuccess: () => setEditing(false),
-                  onError: (error) => toast.error(error.message),
-                },
-              )
-            }
+            onSubmit={(edit) => editMessage(entryId, edit, () => setEditing(false))}
           />
         </MessageContent>
       </Message>
     );
   }
   return (
-    <Message align="end">
+    <Message align="end" onPointerEnter={onPointerEnter}>
       <MessageContent>
         <UserMessageContent message={message} />
-        <MessageActions message={message} canRegenerate={false} onEdit={() => setEditing(true)} />
+        <MessageActions
+          message={message}
+          canRegenerate={false}
+          tooltips={tooltips}
+          onEdit={() => setEditing(true)}
+        />
       </MessageContent>
     </Message>
   );
@@ -347,23 +369,19 @@ function CompactionDivider() {
   );
 }
 
-/** A message of the conversation. Only what differs per message is a prop; the rest is the thread's. */
-export function ChatMessageView({
+function AssistantMessage({
   message,
   last,
   streaming,
 }: {
   message: ChatMessage;
-  /** The last message of the chat: the only answer that can be regenerated. */
   last: boolean;
   streaming: boolean;
 }) {
-  if (message.role === "compaction") return <CompactionDivider />;
-  if (message.role === "user") return <UserMessage message={message} />;
-
+  const { tooltips, onPointerEnter } = useActionTooltips(last);
   const blocks = toBlocks(message.parts);
   return (
-    <Message>
+    <Message onPointerEnter={onPointerEnter}>
       <MessageContent className="gap-3">
         {blocks.map((block, index) =>
           block.kind === "text" ? (
@@ -392,12 +410,31 @@ export function ChatMessageView({
         )}
         {message.error && <ErrorNotice message={message} />}
         {!streaming && (last || blocks.some((block) => block.kind === "text")) && (
-          <MessageActions message={message} canRegenerate={last} />
+          <MessageActions message={message} canRegenerate={last} tooltips={tooltips} />
         )}
       </MessageContent>
     </Message>
   );
 }
+
+/**
+ * A message of the conversation. Only what differs per message is a prop; the rest is the thread's.
+ * Messages are replaced, never changed in place, so while a reply streams only its row renders.
+ */
+export const ChatMessageView = React.memo(function ChatMessageView({
+  message,
+  last,
+  streaming,
+}: {
+  message: ChatMessage;
+  /** The last message of the chat: the only answer that can be regenerated. */
+  last: boolean;
+  streaming: boolean;
+}) {
+  if (message.role === "compaction") return <CompactionDivider />;
+  if (message.role === "user") return <UserMessage message={message} last={last} />;
+  return <AssistantMessage message={message} last={last} streaming={streaming} />;
+});
 
 /** The message just sent, shown until the conversation echoes it. */
 export function PendingMessageView({ message }: { message: ChatMessage }) {

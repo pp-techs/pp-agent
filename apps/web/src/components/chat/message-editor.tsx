@@ -15,6 +15,8 @@ import { FileTextIcon, PaperclipIcon, SparklesIcon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { InlineImage } from "@/components/chat/inline-image";
+
 export interface MessageEdit {
   text: string;
   /** Attachments added while editing. */
@@ -126,8 +128,9 @@ export function MessageEditor({
             return image ? (
               <Attachment key={`image-${index}`} size="sm">
                 <AttachmentMedia variant="image">
-                  <img
-                    src={`data:${image.mimeType};base64,${image.data}`}
+                  <InlineImage
+                    data={image.data}
+                    mimeType={image.mimeType}
                     alt={t("message.attachedImage")}
                   />
                 </AttachmentMedia>
@@ -157,7 +160,7 @@ export function MessageEditor({
             <Attachment key={`new-${index}`} size="sm">
               <AttachmentMedia variant={attachment.data ? "image" : "icon"}>
                 {attachment.data ? (
-                  <img src={`data:${attachment.mimeType};base64,${attachment.data}`} alt="" />
+                  <InlineImage data={attachment.data} mimeType={attachment.mimeType} alt="" />
                 ) : (
                   <FileTextIcon />
                 )}

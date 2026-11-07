@@ -107,13 +107,13 @@ export function useBrowserProfileCommands(bridge: DesktopBridge) {
       profileId: string;
       browser: CookieSourceBrowser;
       sourceProfile: string;
-      quitSource?: boolean;
+      sites: string[];
     }) =>
       bridge.browser.importCookies(
         input.profileId,
         input.browser,
         input.sourceProfile,
-        input.quitSource,
+        input.sites,
       ),
     onSuccess: invalidate,
   });

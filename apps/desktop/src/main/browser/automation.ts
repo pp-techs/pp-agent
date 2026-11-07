@@ -1,5 +1,7 @@
 import type { BrowserProfile, BrowserRequest, BrowserResult, BrowserTab } from "@workspace/shared";
 import type { WebContents } from "electron";
+import { modelImage } from "../screenshot.ts";
+import { isPrivateTarget, toAddress } from "./address.ts";
 import type { BrowserHost } from "./host.ts";
 import {
   AGENT_WORLD,
@@ -19,14 +21,29 @@ const EVAL_CHARS = 10_000;
 const LOAD_TIMEOUT_MS = 20_000;
 const WAIT_DEFAULT_MS = 1_000;
 const WAIT_MAX_MS = 30_000;
-const SCREENSHOT_MAX_WIDTH = 1280;
+const PRIVATE_REFUSED =
+  "That address is on this computer or the local network; the browser tool may not open it. Ask the user to open it in the side panel if they want to.";
 /** Pixels a scrollable element moves per `scroll` step, before the 0.8 share. */
 const ELEMENT_SCROLL = 600;
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export interface BrowserAutomationOptions {
-  host: BrowserHost;
+  host: Pick<
+    BrowserHost,
+    | "state"
+    | "open"
+    | "close"
+    | "activate"
+    | "navigate"
+    | "go"
+    | "evaluate"
+    | "contentsOf"
+    | "drive"
+    | "release"
+  >;
+  /** Whether an address leads to this computer or the local network (a test seam). */
+  isPrivate?: (url: string) => Promise<boolean>;
   profiles(): Promise<BrowserProfile[]>;
   /** Shows the side panel's browser, so the person sees what the agent does. */
   reveal(): void;
@@ -136,14 +153,33 @@ export function formatSnapshot(
 export class BrowserAutomation {
   constructor(private readonly options: BrowserAutomationOptions) {}
 
+  /** One tool call. The tabs it acts on run unthrottled until it ends. */
   async run(request: BrowserRequest): Promise<BrowserResult> {
+    const driven: string[] = [];
+    try {
+      return await this.act(request, driven);
+    } finally {
+      for (const tabId of driven) this.options.host.release(tabId);
+    }
+  }
+
+  private async act(request: BrowserRequest, driven: string[]): Promise<BrowserResult> {
     const { host } = this.options;
+    const useTab = async (id: string | undefined) => {
+      const tab = await this.useTab(id);
+      host.drive(tab.id);
+      driven.push(tab.id);
+      return tab;
+    };
     switch (request.action) {
       case "tabs":
         return { text: await this.describeTabs() };
       case "open": {
         const profile = await this.resolveProfile(request.profile);
-        const tab = await host.open(profile.id, request.url);
+        if (request.url) await this.refusePrivate(request.url);
+        const tab = await host.open(profile.id, request.url, "agent");
+        host.drive(tab.id);
+        driven.push(tab.id);
         this.options.reveal();
         return this.afterChange(tab.id, `Opened tab ${tab.id} in profile ${profile.name}.`);
       }
@@ -159,39 +195,40 @@ export class BrowserAutomation {
       }
       case "navigate": {
         if (!request.url) throw new Error("navigate needs url.");
-        const tab = await this.useTab(request.tab);
-        await host.navigate(tab.id, request.url);
+        await this.refusePrivate(request.url);
+        const tab = await useTab(request.tab);
+        await host.navigate(tab.id, request.url, "agent");
         return this.afterChange(tab.id, `Went to ${request.url}.`);
       }
       case "back":
       case "forward":
       case "reload": {
-        const tab = await this.useTab(request.tab);
+        const tab = await useTab(request.tab);
         await host.go(tab.id, request.action);
         return this.afterChange(tab.id, `Did ${request.action}.`);
       }
       case "snapshot": {
-        const tab = await this.useTab(request.tab);
+        const tab = await useTab(request.tab);
         return { text: await this.snapshot(tab) };
       }
       case "text":
-        return this.text(await this.useTab(request.tab), request.offset ?? 0);
+        return this.text(await useTab(request.tab), request.offset ?? 0);
       case "screenshot":
-        return this.screenshot(await this.useTab(request.tab));
+        return this.screenshot(await useTab(request.tab));
       case "click":
-        return this.click(await this.useTab(request.tab), this.requireRef(request));
+        return this.click(await useTab(request.tab), this.requireRef(request));
       case "type":
-        return this.type(await this.useTab(request.tab), request);
+        return this.type(await useTab(request.tab), request);
       case "press": {
         if (!request.key) throw new Error("press needs key.");
-        const tab = await this.useTab(request.tab);
+        const tab = await useTab(request.tab);
         const contents = host.contentsOf(tab.id);
         contents.focus();
         this.pressKey(contents, request.key);
         return this.afterChange(tab.id, `Pressed ${request.key}.`);
       }
       case "select_option": {
-        const tab = await this.useTab(request.tab);
+        const tab = await useTab(request.tab);
         if (!request.values?.length) throw new Error("select_option needs values.");
         const outcome = await this.element(tab, this.requireRef(request), {
           op: "select",
@@ -209,7 +246,7 @@ export class BrowserAutomation {
         return this.afterChange(tab.id, `Selected ${chosen}.`);
       }
       case "scroll": {
-        const tab = await this.useTab(request.tab);
+        const tab = await useTab(request.tab);
         const share = request.direction === "up" ? -0.8 : 0.8;
         if (request.ref) {
           await this.element(tab, request.ref, {
@@ -222,10 +259,10 @@ export class BrowserAutomation {
         return this.afterChange(tab.id, `Scrolled ${request.direction ?? "down"}.`, false);
       }
       case "wait":
-        return this.wait(await this.useTab(request.tab), request);
+        return this.wait(await useTab(request.tab), request);
       case "eval": {
         if (!request.expression) throw new Error("eval needs expression.");
-        const tab = await this.useTab(request.tab);
+        const tab = await useTab(request.tab);
         const value: unknown = await host.evaluate(tab.id, request.expression);
         let text =
           value === undefined
@@ -306,6 +343,12 @@ export class BrowserAutomation {
   private requireRef(request: BrowserRequest): string {
     if (!request.ref) throw new Error(`${request.action} needs ref (from snapshot).`);
     return request.ref;
+  }
+
+  /** The agent may not open this computer or the local network (redirects are caught by the host). */
+  private async refusePrivate(input: string): Promise<void> {
+    const isPrivate = this.options.isPrivate ?? isPrivateTarget;
+    if (await isPrivate(toAddress(input))) throw new Error(PRIVATE_REFUSED);
   }
 
   // -------------------------------------------------------------------------------------------
@@ -417,14 +460,12 @@ export class BrowserAutomation {
   }
 
   private async screenshot(tab: BrowserTab): Promise<BrowserResult> {
-    let image = await this.options.host.contentsOf(tab.id).capturePage();
+    const image = await this.options.host.contentsOf(tab.id).capturePage();
     if (image.isEmpty())
       throw new Error("The page could not be captured; the PP Agent window may be minimized.");
-    if (image.getSize().width > SCREENSHOT_MAX_WIDTH)
-      image = image.resize({ width: SCREENSHOT_MAX_WIDTH });
     return {
       text: `Screenshot of tab ${tab.id}: ${tab.title || "(untitled)"} ${tab.url}`,
-      image: image.toPNG().toString("base64"),
+      ...modelImage(image),
     };
   }
 

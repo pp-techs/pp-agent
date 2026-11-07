@@ -1,10 +1,14 @@
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { request } from "node:http";
 import { createServer } from "node:net";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentCommand, AgentEvent } from "@workspace/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { AddressLockout, PAIR_ATTEMPTS_PER_ADDRESS } from "./address-lockout.ts";
+import { isOwnHost } from "./http.ts";
 import { isLocalNetworkAddress, RemoteServer } from "./server.ts";
+import { DEVICE_IDLE_MS } from "./store.ts";
 
 /** A port nothing listens on right now. */
 async function freePort(): Promise<number> {
@@ -21,6 +25,9 @@ let webDir: string | null;
 let commands: AgentCommand[];
 let emitted: AgentEvent[];
 let servers: RemoteServer[];
+/** Read by the server's `now` when set, so tests can move time on. */
+let clock: number | null;
+const blockedApp = { id: "com.example.blocked", name: "Blocked" };
 
 function makeServer(): RemoteServer {
   const server = new RemoteServer({
@@ -42,6 +49,10 @@ function makeServer(): RemoteServer {
             hasApiKey: true,
           },
         ];
+      if (command.type === "list_computer_apps")
+        return { allowed: [{ id: "com.apple.Notes", name: "Notes" }], blocked: [blockedApp] };
+      if (command.type === "get_telegram_status" || command.type === "get_zalo_status")
+        return { enabled: true, pairingCode: "ABCDEFGH", pairingExpiresAt: 1, ownerId: null };
       if (command.type === "list_mcp_servers")
         return {
           servers: [
@@ -71,6 +82,7 @@ function makeServer(): RemoteServer {
     emit: (event) => emitted.push(event),
     appVersion: "1.2.3",
     host: "127.0.0.1",
+    now: () => clock ?? Date.now(),
   });
   servers.push(server);
   return server;
@@ -115,6 +127,7 @@ beforeEach(async () => {
   await writeFile(join(webDir, "assets", "app-1234.js"), "console.log(1)");
   await writeFile(join(dir, "secret.txt"), "do not serve");
   commands = [];
+  clock = null;
   emitted = [];
   servers = [];
 });
@@ -224,24 +237,43 @@ describe("RemoteServer", () => {
     expect(await readFile(join(dir, "remote.json"), "utf8")).not.toContain(token.split(".")[1]);
   });
 
-  it("locks pairing after five wrong codes", async () => {
+  it("locks one address after three wrong codes, until pairing starts again", async () => {
     const server = makeServer();
     const base = await enabled(server);
     const { pairingCode } = await server.startPairing();
-    let last = 0;
-    for (let i = 0; i < 5; i++) {
-      const response = await fetch(`${base}/api/pair`, {
-        method: "POST",
-        body: JSON.stringify({ code: "WRONGCOD" }),
-      });
-      last = response.status;
-    }
-    expect(last).toBe(429);
-    const right = await fetch(`${base}/api/pair`, {
-      method: "POST",
-      body: JSON.stringify({ code: pairingCode }),
-    });
-    expect(right.status).toBe(429);
+    const attempt = (code: string | null | undefined) =>
+      fetch(`${base}/api/pair`, { method: "POST", body: JSON.stringify({ code }) });
+    const statuses: number[] = [];
+    for (let i = 0; i < PAIR_ATTEMPTS_PER_ADDRESS; i++)
+      statuses.push((await attempt("WRONGCOD")).status);
+    expect(statuses).toEqual([400, 400, 429]);
+    expect((await attempt(pairingCode)).status).toBe(429);
+    // Only the computer can lift it, by starting a new pairing.
+    const again = await server.startPairing();
+    expect((await attempt(again.pairingCode)).status).toBe(200);
+  });
+
+  it("answers loopback only for a loopback Host", async () => {
+    const server = makeServer();
+    await enabled(server);
+    const status = (host: string) => {
+      const answered = Promise.withResolvers<number>();
+      const req = request(
+        { host: "127.0.0.1", port: server.listeningPort!, path: "/api/session", headers: { host } },
+        (res) => {
+          res.resume();
+          answered.resolve(res.statusCode ?? 0);
+        },
+      );
+      req.on("error", answered.reject);
+      req.end();
+      return answered.promise;
+    };
+    expect(await status(`127.0.0.1:${server.listeningPort}`)).toBe(200);
+    expect(await status(`localhost:${server.listeningPort}`)).toBe(200);
+    // A tunnel to the internet (funnel, cloudflared, ngrok) arrives on loopback with its own name.
+    expect(await status(`mac.tail1234.ts.net`)).toBe(403);
+    expect(await status(`abcd.ngrok.app`)).toBe(403);
   });
 
   it("runs commands for paired devices and refuses local-only ones", async () => {
@@ -265,6 +297,18 @@ describe("RemoteServer", () => {
       { type: "set_conversation_yolo", active: true },
       { type: "update_settings", patch: { yoloMode: true } },
       { type: "update_settings", patch: { shellEnabled: true } },
+      { type: "start_telegram_pairing" },
+      { type: "save_telegram", config: { enabled: true, agentId: null, workspaceId: "default" } },
+      { type: "forget_telegram" },
+      { type: "start_zalo_pairing" },
+      { type: "save_zalo", config: { enabled: true, agentId: null, workspaceId: "default" } },
+      { type: "forget_zalo" },
+      { type: "delete_workspace", id: "w" },
+      { type: "clear_sessions", workspaceId: "w" },
+      { type: "clear_memory" },
+      { type: "set_service_installed", installed: true },
+      { type: "save_workspace", workspace: { name: "Home", icon: "🏠", dir: "/", agentId: null } },
+      { type: "respond_approval", requestId: "r", approved: true, remember: "always" },
     ]) {
       expect((await command(base, token, refused)).status, refused.type).toBe(403);
     }
@@ -465,10 +509,85 @@ describe("RemoteServer", () => {
     ).toBe(403);
   });
 
+  it("lets a device block or clear apps but not unblock one", async () => {
+    const server = makeServer();
+    const base = await enabled(server);
+    const token = await pair(server, base);
+    const access = (app: { id: string; name: string }, value: "blocked" | null) =>
+      command(base, token, { type: "set_computer_app_access", app, access: value });
+    expect((await access(blockedApp, null)).status).toBe(403);
+    expect((await access({ ...blockedApp, id: ` ${blockedApp.id} ` }, null)).status).toBe(403);
+    expect((await access({ id: "com.apple.Notes", name: "Notes" }, null)).status).toBe(200);
+    expect((await access({ id: "com.apple.Notes", name: "Notes" }, "blocked")).status).toBe(200);
+    expect(
+      commands.flatMap((c) => (c.type === "set_computer_app_access" ? [c.access] : [])),
+    ).toEqual([null, "blocked"]);
+  });
+
+  it("never shows a device the Telegram or Zalo pairing code", async () => {
+    const server = makeServer();
+    const base = await enabled(server);
+    const token = await pair(server, base);
+    for (const type of ["get_telegram_status", "get_zalo_status"]) {
+      const { data } = (await (await command(base, token, { type })).json()) as {
+        data: Record<string, unknown>;
+      };
+      expect(data).toMatchObject({ enabled: true, pairingCode: null, pairingExpiresAt: null });
+    }
+  });
+
+  it("keeps three event streams per device, closing the oldest", async () => {
+    const server = makeServer();
+    const base = await enabled(server);
+    const token = await pair(server, base);
+    const controller = new AbortController();
+    const open = async () => {
+      const response = await fetch(`${base}/api/events`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
+      });
+      const reader = response.body!.getReader();
+      await reader.read();
+      return reader;
+    };
+    const first = await open();
+    await open();
+    await open();
+    await open();
+    // The first stream ends once a fourth one opens.
+    while (!(await first.read()).done);
+    controller.abort();
+  });
+
+  it("signs out a device unused for 30 days", async () => {
+    clock = Date.now();
+    const server = makeServer();
+    const base = await enabled(server);
+    const token = await pair(server, base);
+    clock += DEVICE_IDLE_MS - 1;
+    expect((await command(base, token, { type: "get_snapshot" })).status).toBe(200);
+    // That use counts: the 30 days start again.
+    clock += DEVICE_IDLE_MS;
+    expect((await command(base, token, { type: "get_snapshot" })).status).toBe(401);
+  });
+
   it("tells the window once remote.json is loaded", async () => {
     const server = makeServer();
     await server.start();
     expect(emitted).toContainEqual({ type: "settings_changed", scopes: ["remoteAccess"] });
+  });
+});
+
+describe("AddressLockout", () => {
+  it("locks only the address that sent the wrong codes", () => {
+    const lockout = new AddressLockout();
+    for (let i = 1; i < PAIR_ATTEMPTS_PER_ADDRESS; i++)
+      expect(lockout.failed("192.168.1.9", 0)).toBe(false);
+    expect(lockout.failed("192.168.1.9", 0)).toBe(true);
+    expect(lockout.locked("192.168.1.9", 1)).toBe(true);
+    expect(lockout.locked("192.168.1.20", 1)).toBe(false);
+    lockout.clear();
+    expect(lockout.locked("192.168.1.9", 1)).toBe(false);
   });
 });
 
@@ -517,28 +636,68 @@ describe("gateway keys from devices", () => {
 });
 
 describe("isLocalNetworkAddress", () => {
-  it("accepts private, link-local, loopback and CGNAT addresses only", () => {
+  const lan = ["127.0.0.1", "192.168.1.5"];
+  const tailnet = [...lan, "100.101.102.103"];
+
+  it("accepts private and link-local addresses, never loopback", () => {
     for (const address of [
       "192.168.1.20",
       "10.0.0.5",
       "172.20.1.1",
-      "100.96.85.90",
       "169.254.3.4",
-      "127.0.0.1",
       "::ffff:192.168.1.20",
-      "::1",
       "fd12:3456::1",
       "fe80::1",
     ])
-      expect(isLocalNetworkAddress(address), address).toBe(true);
+      expect(isLocalNetworkAddress(address, lan), address).toBe(true);
     for (const address of [
       undefined,
+      "127.0.0.1",
+      "::1",
+      "::ffff:127.0.0.1",
       "8.8.8.8",
       "172.32.0.1",
       "100.128.0.1",
       "2001:db8::1",
       "::ffff:1.1.1.1",
     ])
-      expect(isLocalNetworkAddress(address), String(address)).toBe(false);
+      expect(isLocalNetworkAddress(address, tailnet), String(address)).toBe(false);
+  });
+
+  it("trusts carrier-grade NAT only while this computer is on a tailnet", () => {
+    expect(isLocalNetworkAddress("100.96.85.90", lan)).toBe(false);
+    expect(isLocalNetworkAddress("100.96.85.90", tailnet)).toBe(true);
+  });
+});
+
+describe("isOwnHost", () => {
+  const lan = ["127.0.0.1", "::1", "192.168.1.5", "fe80::1"];
+  const name = hostname().toLowerCase();
+  const short = name.split(".")[0]!;
+
+  it("accepts this computer's addresses and names", () => {
+    for (const host of [
+      "192.168.1.5:47830",
+      "192.168.1.5",
+      "[fe80::1]:47830",
+      "localhost:47830",
+      `${name}:47830`,
+      `${short}.local:47830`,
+    ])
+      expect(isOwnHost(host, lan), host).toBe(true);
+  });
+
+  it("refuses other names, so a DNS-rebinding page gets 421", () => {
+    for (const host of [
+      undefined,
+      "",
+      "evil.example:47830",
+      "192-168-1-5.nip.io:47830",
+      "192.168.1.6:47830",
+      "mac.tail1234.ts.net",
+    ])
+      expect(isOwnHost(host, lan), String(host)).toBe(false);
+    // A Tailscale name counts only on a tailnet.
+    expect(isOwnHost("mac.tail1234.ts.net", [...lan, "100.101.102.103"])).toBe(true);
   });
 });

@@ -1,5 +1,6 @@
 import { homedir, release } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { resolveDaemonPaths } from "@workspace/daemon/paths";
 import {
   type AgentCommand,
@@ -9,7 +10,7 @@ import {
   IPC,
   type RendererReport,
 } from "@workspace/shared";
-import { app, BrowserWindow, ipcMain, session, shell } from "electron";
+import { app, BrowserWindow, session, shell } from "electron";
 import { AuditLog, buildReport } from "./audit-log.ts";
 import { DaemonClient } from "./daemon-client.ts";
 import {
@@ -29,12 +30,13 @@ import { chromeUserAgent } from "./browser/address.ts";
 import { ComputerHost } from "./computer/host.ts";
 import { createSidePanel } from "./panel/ipc.ts";
 import { restrictPermissions } from "./permissions.ts";
-import { readShellSettings } from "./settings.ts";
+import { DesktopSettings } from "./settings.ts";
 import { releaseShortcut, syncShortcut } from "./shortcut.ts";
 import { destroyTray, refreshTray, syncTray, trayActive } from "./tray.ts";
 import { migrateLegacyProvider } from "./legacy.ts";
 import { migrateLegacyVault } from "./legacy-vault.ts";
 import { createUpdater } from "./updates.ts";
+import { appPageMatcher, createTrustedIpc } from "./trusted-ipc.ts";
 
 const DIST_DIR = import.meta.dirname;
 /** Window icon for Windows and Linux (macOS takes the Dock icon from the app bundle). */
@@ -47,11 +49,21 @@ const WINDOW_ICON = join(
 const RENDERER_URL = app.isPackaged
   ? null
   : (process.env.ELECTRON_RENDERER_URL ?? "http://localhost:47821");
+/** Every IPC handler answers only the main frame of the app window showing the app's own page. */
+const ipc = createTrustedIpc(
+  () => window,
+  appPageMatcher(
+    RENDERER_URL,
+    pathToFileURL(join(process.resourcesPath, "renderer", "index.html")).href,
+  ),
+);
 /** Folder the agent reads and writes; attachments are copied here too. */
 const WORKSPACE_DIR = join(app.getPath("documents"), "PP Agent");
 const USER_DATA_DIR = app.getPath("userData");
 const SETTINGS_FILE = join(USER_DATA_DIR, "settings.json");
 initI18n(SETTINGS_FILE);
+/** settings.json as main uses it, re-read only when the daemon says it changed. */
+const settings = new DesktopSettings(SETTINGS_FILE, WORKSPACE_DIR);
 
 /** What the person sends to whoever debugs a problem; see "Diagnostics" in Settings › General. */
 const audit = new AuditLog({ dir: join(USER_DATA_DIR, "logs"), home: homedir() });
@@ -110,7 +122,7 @@ function showAndFocusComposer(): void {
 
 const notifier: Notifier = createNotifier({
   window: () => window,
-  enabled: () => readShellSettings(SETTINGS_FILE).notifications,
+  enabled: () => settings.shell.notifications,
   activate(sessionPath) {
     showWindow();
     // Another conversation may have been opened since; go back to the one the alert was about.
@@ -135,9 +147,9 @@ function sendWhenLoaded(event: AgentEvent): void {
 
 /** Makes the tray icon and the global shortcut match settings.json. */
 function applyShellSettings(): void {
-  const settings = readShellSettings(SETTINGS_FILE);
+  const shell = settings.shell;
   syncTray(
-    settings.tray,
+    shell.tray,
     {
       windowShown: () => !!window && window.isVisible() && !window.isMinimized(),
       toggleWindow() {
@@ -155,11 +167,11 @@ function applyShellSettings(): void {
     },
     DIST_DIR,
   );
-  const result = syncShortcut(settings.shortcutEnabled, settings.shortcut, showAndFocusComposer);
+  const result = syncShortcut(shell.shortcutEnabled, shell.shortcut, showAndFocusComposer);
   if (result === "failed") {
     sendWhenLoaded({
       type: "error",
-      message: translator()("shell.shortcut.failed", { shortcut: settings.shortcut }),
+      message: translator()("shell.shortcut.failed", { shortcut: shell.shortcut }),
     });
   }
 }
@@ -193,6 +205,11 @@ const daemon = new DaemonClient({
     audit.event(event, { session: notifier.currentSession() });
     sendToRenderer(event);
     notifier.handle(event);
+    if (
+      event.type === "settings_changed" &&
+      (event.scopes.includes("settings") || event.scopes.includes("workspaces"))
+    )
+      settings.refresh();
     if (event.type === "settings_changed" && event.scopes.includes("settings"))
       applyShellSettings();
     if (event.type === "settings_changed" && event.scopes.includes("browserProfiles"))
@@ -223,6 +240,8 @@ const daemon = new DaemonClient({
   },
   onConnected() {
     audit.record("daemon_connected");
+    // settings.json may have changed while no daemon was connected.
+    settings.refresh();
     void syncWithDaemon();
   },
 });
@@ -251,6 +270,7 @@ async function startDaemon(): Promise<void> {
   await migrateLegacyProvider(SETTINGS_FILE).catch((error: unknown) => {
     console.error("Settings migration failed:", error);
   });
+  settings.refresh();
   daemon.start();
 }
 
@@ -268,9 +288,9 @@ function commandAgent(command: AgentCommand): Promise<unknown> {
 
 const sidePanel = createSidePanel({
   window: () => window,
+  ipc,
   command: commandAgent,
-  settingsFile: SETTINGS_FILE,
-  workspaceDir: WORKSPACE_DIR,
+  settings,
   userDataDir: USER_DATA_DIR,
 });
 
@@ -332,23 +352,22 @@ function createWindow(): void {
   }
 }
 
-ipcMain.handle(IPC.agentCommand, (_event, command: AgentCommand) => commandAgent(command));
-ipcMain.handle(IPC.filesPick, () => pickFiles(window));
-ipcMain.handle(IPC.filesPickSkill, () => pickSkill(window));
-ipcMain.handle(IPC.filesOpenWorkspace, (_event, dir: unknown) => {
-  // Only folders can be opened this way, never files (opening a file could run it).
-  if (typeof dir !== "string" || !isAbsolute(dir))
-    throw new Error(translator()("app.folderCannotOpen"));
-  return openFolder(dir);
+ipc.handle(IPC.agentCommand, (_event, command: AgentCommand) => commandAgent(command));
+ipc.handle(IPC.filesPick, () => pickFiles(window));
+ipc.handle(IPC.filesPickSkill, () => pickSkill(window));
+ipc.handle(IPC.filesOpenWorkspace, (_event, dir: unknown) => {
+  // Only workspace folders can be opened this way, never files or bundles (opening could run them).
+  if (typeof dir !== "string") throw new Error(translator()("app.folderCannotOpen"));
+  return openFolder(dir, settings.workspaceFolders);
 });
-ipcMain.handle(IPC.filesPickFolder, () => pickFolder(window));
-ipcMain.handle(IPC.filesOpenAgent, () => openAgentFile(window));
-ipcMain.handle(IPC.filesSaveAgent, (_event, suggestedName: unknown, json: unknown) => {
+ipc.handle(IPC.filesPickFolder, () => pickFolder(window));
+ipc.handle(IPC.filesOpenAgent, () => openAgentFile(window));
+ipc.handle(IPC.filesSaveAgent, (_event, suggestedName: unknown, json: unknown) => {
   if (typeof suggestedName !== "string" || typeof json !== "string")
     throw new Error(translator()("app.agentCannotExport"));
   return saveAgentFile(window, suggestedName, json);
 });
-ipcMain.handle(
+ipc.handle(
   IPC.filesSaveExport,
   (_event, suggestedName: unknown, format: unknown, content: unknown) => {
     const known = EXPORT_FORMATS.find((candidate) => candidate === format);
@@ -357,32 +376,32 @@ ipcMain.handle(
     return saveExportFile(window, suggestedName, known, content);
   },
 );
-ipcMain.handle(IPC.filesReveal, (_event, path: unknown) => {
+ipc.handle(IPC.filesReveal, (_event, path: unknown) => {
   // Only the app's own files (skills, mcp.json) and the workspace can be shown.
   if (typeof path !== "string" || !(isInside(USER_DATA_DIR, path) || isInside(WORKSPACE_DIR, path)))
     throw new Error(translator()("app.locationCannotShow"));
   shell.showItemInFolder(path);
 });
-ipcMain.handle(IPC.openExternal, (_event, url: unknown) => {
+ipc.handle(IPC.openExternal, (_event, url: unknown) => {
   if (typeof url !== "string") throw new Error(translator()("app.onlyWebLinks"));
   return openExternal(url);
 });
 
-ipcMain.handle(IPC.shellTakePendingFocus, () => {
+ipc.handle(IPC.shellTakePendingFocus, () => {
   const wasPending = pendingFocus;
   pendingFocus = false;
   return wasPending;
 });
 
 // Cmd+W / Ctrl+W with no tab to close: close the window, as the default menu would have.
-ipcMain.handle(IPC.shellCloseWindow, () => window?.close());
+ipc.handle(IPC.shellCloseWindow, () => window?.close());
 
-ipcMain.handle(IPC.computerStatus, () => computer.status());
-ipcMain.handle(IPC.computerRequestPermissions, () => computer.requestPermissions());
+ipc.handle(IPC.computerStatus, () => computer.status());
+ipc.handle(IPC.computerRequestPermissions, () => computer.requestPermissions());
 
-ipcMain.handle(IPC.diagnosticsInfo, () => ({ file: audit.file, size: audit.bytes() }));
-ipcMain.handle(IPC.diagnosticsExport, () => {
-  const report = buildReport(audit, {
+ipc.handle(IPC.diagnosticsInfo, async () => ({ file: audit.file, size: await audit.bytes() }));
+ipc.handle(IPC.diagnosticsExport, async () => {
+  const report = await buildReport(audit, {
     facts: {
       Generated: new Date().toISOString(),
       "PP Agent": `${app.getVersion()}${app.isPackaged ? "" : " (development)"}`,
@@ -397,10 +416,10 @@ ipcMain.handle(IPC.diagnosticsExport, () => {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   return saveDiagnosticsFile(window, `pp-agent-diagnostics-${stamp}.log`, report);
 });
-ipcMain.handle(IPC.diagnosticsReveal, () => shell.showItemInFolder(audit.file));
-ipcMain.handle(IPC.diagnosticsClear, () => audit.clear());
+ipc.handle(IPC.diagnosticsReveal, () => shell.showItemInFolder(audit.file));
+ipc.handle(IPC.diagnosticsClear, () => audit.clear());
 // Fire and forget from the page: whatever arrives is checked, since the page is not trusted with the log.
-ipcMain.on(IPC.diagnosticsReport, (_event, report: unknown) => {
+ipc.on(IPC.diagnosticsReport, (_event, report: unknown) => {
   const { kind, message, stack } = (report ?? {}) as Partial<RendererReport>;
   if ((kind !== "error" && kind !== "unhandledrejection") || typeof message !== "string") return;
   audit.record("renderer_error", {
@@ -410,10 +429,10 @@ ipcMain.on(IPC.diagnosticsReport, (_event, report: unknown) => {
   });
 });
 
-ipcMain.handle(IPC.updatesState, () => updater.state());
-ipcMain.handle(IPC.updatesCheck, () => updater.check(true));
-ipcMain.handle(IPC.updatesDownload, () => updater.download(openExternal));
-ipcMain.handle(IPC.updatesInstall, () =>
+ipc.handle(IPC.updatesState, () => updater.state());
+ipc.handle(IPC.updatesCheck, () => updater.check(true));
+ipc.handle(IPC.updatesDownload, () => updater.download(openExternal));
+ipc.handle(IPC.updatesInstall, () =>
   // Mark the app as quitting before the updater closes the windows: with the tray on, a plain
   // close hides the window to the tray and the update would never install or restart.
   updater.install(() => {

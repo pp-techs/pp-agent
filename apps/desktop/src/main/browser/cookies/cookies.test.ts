@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import {
+  chromiumCookieHosts,
   decryptChromiumValue,
   macKey,
   profilesFromLocalState,
@@ -14,9 +15,11 @@ import {
 import { fromCdpCookie } from "./chromium-cdp.ts";
 import { parseProfilesIni, readFirefoxCookies } from "./firefox.ts";
 import {
+  cookieSite,
   fromChromiumSameSite,
   fromChromiumSeconds,
   fromFirefoxExpiry,
+  groupSites,
   type PortableCookie,
   toElectronCookie,
 } from "./portable.ts";
@@ -153,6 +156,40 @@ it("reads a Chromium cookie database", async () => {
       expires: null,
     },
   ]);
+});
+
+it("reads only the chosen sites, and lists hosts without reading values", async () => {
+  const dir = tempDir();
+  const file = join(dir, "Cookies");
+  const key = macKey("peanuts");
+  const db = new DatabaseSync(file);
+  db.exec(`CREATE TABLE meta (key TEXT, value TEXT);
+    INSERT INTO meta VALUES ('version', '20');
+    CREATE TABLE cookies (host_key TEXT, name TEXT, value TEXT, encrypted_value BLOB, path TEXT,
+      expires_utc INTEGER, is_secure INTEGER, is_httponly INTEGER, samesite INTEGER,
+      has_expires INTEGER);`);
+  const insert = db.prepare("INSERT INTO cookies VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+  insert.run(".mail.example.com", "a", "1", null, "/", 0, 1, 1, 0, 0);
+  insert.run("example.com", "b", "2", null, "/", 0, 1, 1, 0, 0);
+  insert.run(".bank.co.uk", "c", "3", null, "/", 0, 1, 1, 0, 0);
+  db.close();
+
+  const read = await readChromiumCookies(file, key, "darwin", new Set(["example.com"]));
+  expect(read.cookies.map((cookie) => cookie.name)).toEqual(["a", "b"]);
+  expect(groupSites(await chromiumCookieHosts(file))).toEqual([
+    { site: "example.com", count: 2 },
+    { site: "bank.co.uk", count: 1 },
+  ]);
+});
+
+it("groups hosts into the sites people pick", () => {
+  expect(cookieSite(".mail.google.com")).toBe("google.com");
+  expect(cookieSite("www.example.co.uk")).toBe("example.co.uk");
+  expect(cookieSite("shop.example.com.vn")).toBe("example.com.vn");
+  expect(cookieSite("sub.example.io")).toBe("example.io");
+  expect(cookieSite("192.168.1.10")).toBe("192.168.1.10");
+  expect(cookieSite("localhost")).toBe("localhost");
+  expect(cookieSite("a.constructor.uk")).toBe("constructor.uk");
 });
 
 describe("Firefox", () => {

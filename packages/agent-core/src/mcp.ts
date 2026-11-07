@@ -72,6 +72,19 @@ export class McpConfigFile {
     });
   }
 
+  /** Servers the person marked trusted, so their read-only labels count; none when mcp.json is unreadable. */
+  trustedServers(): Set<string> {
+    try {
+      return new Set(
+        this.servers()
+          .filter((entry) => entry.settings.trusted)
+          .map((entry) => entry.settings.name),
+      );
+    } catch {
+      return new Set();
+    }
+  }
+
   saveServer(originalName: string | undefined, server: McpServerSettings): void {
     const name = server.name.trim();
     const file = this.read();
@@ -171,6 +184,7 @@ function toSettings(name: string, entry: JsonObject): McpServerSettings {
   };
   if (typeof entry.description === "string") settings.description = entry.description;
   if (typeof entry.timeout === "number") settings.timeout = entry.timeout;
+  if (entry.trusted === true) settings.trusted = true;
   if (typeof entry.command === "string") settings.command = entry.command;
   if (Array.isArray(entry.args))
     settings.args = entry.args.filter((arg): arg is string => typeof arg === "string");
@@ -202,6 +216,7 @@ function applySettings(existing: JsonObject, server: McpServerSettings): JsonObj
   set("enabled", server.enabled ? undefined : false);
   set("exposure", server.exposure === "codemode" ? undefined : server.exposure);
   set("timeout", server.timeout && server.timeout > 0 ? server.timeout : undefined);
+  set("trusted", server.trusted === true ? true : undefined);
 
   if (server.transport === "stdio") {
     const command = text(server.command);

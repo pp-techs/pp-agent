@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { SectionHeading } from "@/components/settings/section-heading";
 import { WorkspaceEditor } from "@/components/settings/workspace-editor";
+import { isWebApp, maySend } from "@/lib/bridge";
 import { useDeleteWorkspace } from "@/lib/extension-queries";
 import { workspacesQuery } from "@/lib/queries";
 
@@ -72,7 +73,7 @@ function WorkspaceRow({
           <PencilIcon data-icon="inline-start" />
           {t("common:actions.edit")}
         </Button>
-        {!isDefault && (
+        {!isDefault && maySend("delete_workspace") && (
           <Button
             variant="destructive"
             size="icon-sm"
@@ -105,10 +106,13 @@ export function WorkspacesSection({ bridge }: { bridge: DesktopBridge }) {
         title={t("workspacesSection.title")}
         description={t("workspacesSection.description")}
       >
-        <Button onClick={() => setView({ kind: "edit" })}>
-          <PlusIcon />
-          {t("workspacesSection.newWorkspace")}
-        </Button>
+        {/* Only the computer creates workspaces (see `remoteMayRun`); a phone edits existing ones. */}
+        {!isWebApp && (
+          <Button onClick={() => setView({ kind: "edit" })}>
+            <PlusIcon />
+            {t("workspacesSection.newWorkspace")}
+          </Button>
+        )}
       </SectionHeading>
 
       {workspaces.isPending ? (

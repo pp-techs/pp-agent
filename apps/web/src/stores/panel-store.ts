@@ -19,6 +19,8 @@ interface PanelState {
   /** Shows a tool, opening the panel. */
   show: (tool: PanelTool) => void;
   setWidth: (width: number) => void;
+  /** Follows a drag of the panel's edge without saving; `setWidth` saves when the drag ends. */
+  dragWidth: (width: number) => void;
 }
 
 type Saved = Pick<PanelState, "open" | "tool" | "width" | "expanded">;
@@ -78,5 +80,7 @@ export const usePanelStore = create<PanelState>()((set, get) => {
     setOpen: (open) => update({ open }),
     show: (tool) => update({ open: true, tool }),
     setWidth: (width) => update({ width: clampWidth(width) }),
+    // Saving writes to storage synchronously, too slow for every pointer move.
+    dragWidth: (width) => set({ width: clampWidth(width) }),
   };
 });

@@ -10,6 +10,11 @@ export interface ChannelInput {
   text: string;
   /** Images may carry base64 `data`; other files must carry a `path` the host can copy from. */
   attachments: Attachment[];
+  /**
+   * Who wrote it. In a chat other people may talk in, the host puts the name and id in front of
+   * the text, and only the owner's messages may join a running turn.
+   */
+  sender?: { id: string; name: string; owner: boolean };
 }
 
 /** Callbacks of one turn; the channel turns them into chat messages. */

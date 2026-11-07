@@ -343,13 +343,10 @@ function AgentForm({
   const skillList = {
     isPending: globalSkills.isPending || workspaceSkills.isPending,
     error: globalSkills.error ?? workspaceSkills.error,
-    // A workspace's skill wins over an installed one of the same name.
-    data: [
-      ...(workspaceSkills.data ?? []),
-      ...(globalSkills.data ?? []).filter(
-        (skill) => !(workspaceSkills.data ?? []).some((other) => other.name === skill.name),
-      ),
-    ].sort((a, b) => a.name.localeCompare(b.name)),
+    // The agent reports only workspace skills that load: never one named like an installed skill.
+    data: [...(workspaceSkills.data ?? []), ...(globalSkills.data ?? [])].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    ),
   };
 
   const trimmedName = name.trim();

@@ -5,6 +5,7 @@ import {
   type ComputerResult,
   isProtectedComputerApp,
 } from "@workspace/shared";
+import { SCREENSHOT_MAX_EDGE } from "../screenshot.ts";
 import type { McpToolResult } from "./mcp-client.ts";
 
 /** One cua-driver tool call; rejects only when the driver cannot be reached. */
@@ -16,8 +17,8 @@ export type DriverCall = (
 
 /** Longest screen text one step returns; the model narrows a snapshot with `query`. */
 const MAX_TEXT = 25_000;
-/** Long edge of the screenshots the model gets, in pixels. */
-const MAX_IMAGE = 1280;
+/** How long one `list_apps` answer is reused: every step looks its app up, and listing is slow. */
+const APPS_TTL_MS = 3_000;
 const TOKEN = /^(s[0-9a-f]{8}):\d+$/;
 
 interface DriverApp {
@@ -71,6 +72,7 @@ function clip(text: string): string {
 export class ComputerAutomation {
   /** Snapshot id → the window it was taken of; tokens carry the snapshot id. */
   private readonly snapshots = new Map<string, { pid: number; window: number }>();
+  private appsCache: { at: number; apps: Promise<DriverApp[]> } | null = null;
 
   constructor(
     private readonly call: DriverCall,
@@ -120,10 +122,19 @@ export class ComputerAutomation {
     return { text, structured: result.structuredContent, image };
   }
 
-  private async listApps(signal?: AbortSignal): Promise<DriverApp[]> {
-    const { structured } = await this.tool("list_apps", {}, signal);
-    const apps = structured?.apps;
-    return Array.isArray(apps) ? (apps as DriverApp[]) : [];
+  /** The driver's app list, reused for a few seconds; a launch or a failed listing drops it. */
+  private listApps(signal?: AbortSignal): Promise<DriverApp[]> {
+    const now = Date.now();
+    if (this.appsCache && now - this.appsCache.at < APPS_TTL_MS) return this.appsCache.apps;
+    const apps = this.tool("list_apps", {}, signal).then(({ structured }) =>
+      Array.isArray(structured?.apps) ? (structured.apps as DriverApp[]) : [],
+    );
+    const entry = { at: now, apps };
+    this.appsCache = entry;
+    apps.catch(() => {
+      if (this.appsCache === entry) this.appsCache = null;
+    });
+    return apps;
   }
 
   /**
@@ -162,7 +173,7 @@ export class ComputerAutomation {
     const text = [
       `Running apps:\n${running.join("\n") || "- none"}`,
       `Installed, not running:\n${installed.join("\n") || "- none"}`,
-      "Apps PP Agent may not use (PP Agent, terminals, password and system settings apps) are left out.",
+      "Apps PP Agent may not use (PP Agent, terminals, code editors with a terminal, Task Manager, password and system settings apps) are left out.",
     ].join("\n\n");
     return { text: clip(text), apps: seen };
   }
@@ -180,6 +191,7 @@ export class ComputerAutomation {
 
   private async launch(target: Target, signal?: AbortSignal): Promise<ComputerResult> {
     const { text } = await this.tool("launch_app", target.launch, signal);
+    this.appsCache = null;
     return { text: clip(text || `Opened ${target.app.name}.`), apps: [target.app] };
   }
 
@@ -267,7 +279,8 @@ export class ComputerAutomation {
         pid: target.pid,
         window_id: window,
         include_screenshot: image,
-        ...(image ? { max_image_dimension: MAX_IMAGE } : {}),
+        // The same edge as ComputerHost's JPEG step, so x/y stay pixels of the image the model saw.
+        ...(image ? { max_image_dimension: SCREENSHOT_MAX_EDGE } : {}),
         ...(request.query ? { query: request.query } : {}),
       },
       signal,
@@ -290,7 +303,7 @@ export class ComputerAutomation {
         pid: target.pid,
         window_id: window,
         include_accessibility_tree: false,
-        max_image_dimension: MAX_IMAGE,
+        max_image_dimension: SCREENSHOT_MAX_EDGE,
       },
       signal,
     );

@@ -4,7 +4,12 @@ import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import type { CookieSourceProfile } from "@workspace/shared";
 import { readDatabaseCopy } from "./database.ts";
-import { fromFirefoxExpiry, fromFirefoxSameSite, type PortableCookie } from "./portable.ts";
+import {
+  cookieSite,
+  fromFirefoxExpiry,
+  fromFirefoxSameSite,
+  type PortableCookie,
+} from "./portable.ts";
 
 /** Folders that may hold Firefox's `profiles.ini` on this computer. */
 function firefoxRoots(): string[] {
@@ -97,7 +102,11 @@ interface FirefoxRow {
  * Firefox stores cookies unencrypted. Cookies of containers and private windows carry
  * `originAttributes`; only the ordinary ones are taken.
  */
-export async function readFirefoxCookies(profileDir: string): Promise<PortableCookie[]> {
+export async function readFirefoxCookies(
+  profileDir: string,
+  /** Sites (see `cookieSite`) whose cookies to read; null reads every cookie. */
+  sites: ReadonlySet<string> | null = null,
+): Promise<PortableCookie[]> {
   return readDatabaseCopy(join(profileDir, "cookies.sqlite"), (db) => {
     const rows = db
       .prepare(
@@ -105,7 +114,7 @@ export async function readFirefoxCookies(profileDir: string): Promise<PortableCo
       )
       .all() as unknown as FirefoxRow[];
     return rows
-      .filter((row) => !row.originAttributes)
+      .filter((row) => !row.originAttributes && (!sites || sites.has(cookieSite(row.host))))
       .map((row) => ({
         domain: row.host,
         hostOnly: !row.host.startsWith("."),
@@ -118,4 +127,19 @@ export async function readFirefoxCookies(profileDir: string): Promise<PortableCo
         expires: fromFirefoxExpiry(row.expiry),
       }));
   });
+}
+
+/** How many ordinary cookies each host has, without reading a value. */
+export async function firefoxCookieHosts(
+  profileDir: string,
+): Promise<{ host: string; count: number }[]> {
+  return readDatabaseCopy(
+    join(profileDir, "cookies.sqlite"),
+    (db) =>
+      db
+        .prepare(
+          "SELECT host, COUNT(*) AS count FROM moz_cookies WHERE originAttributes IS NULL OR originAttributes = '' GROUP BY host",
+        )
+        .all() as unknown as { host: string; count: number }[],
+  );
 }

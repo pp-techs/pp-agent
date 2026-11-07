@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { isIP } from "node:net";
 import { basename, join, resolve, sep } from "node:path";
@@ -9,6 +9,7 @@ import {
   type AgentCommand,
   type AgentEvent,
   type Attachment,
+  type ComputerAppAccess,
   type GatewayView,
   type McpOverview,
   type RemoteAccessState,
@@ -16,15 +17,21 @@ import {
   type RemoteDevice,
   remoteMayRun,
 } from "@workspace/shared";
+import { AddressLockout } from "./address-lockout.ts";
 import {
   appOrigin,
   applyCorsHeaders,
   applySecurityHeaders,
   bearerToken,
   HttpError,
+  isCgnatAddress,
+  isLoopbackHost,
+  isOwnHost,
   lanUrls,
+  ownAddresses,
   readBody,
   sameOrigin,
+  saveBody,
   sendJson,
   serveStatic,
 } from "./http.ts";
@@ -37,8 +44,15 @@ export const MAX_UPLOAD_MB = 100;
 const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 /** Keeps idle connections (and the proxies between) from closing a quiet event stream. */
 const HEARTBEAT_MS = 20_000;
-/** A device that leaves this much unread is gone or stuck; its stream is dropped. */
-const MAX_STREAM_BACKLOG = 32 * 1024 * 1024;
+/**
+ * A device that leaves this much unread is gone or stuck; its stream is dropped. It refetches a
+ * snapshot when it reconnects, so nothing is lost by dropping early.
+ */
+const MAX_STREAM_BACKLOG = 4 * 1024 * 1024;
+/** Event streams one device may hold (a few tabs); a new one closes the oldest. */
+const MAX_STREAMS_PER_DEVICE = 3;
+/** Uploads one device may run at the same time. */
+const MAX_UPLOADS_PER_DEVICE = 3;
 /** Uploaded files are copied into the workspace when sent; leftovers go after a day. */
 const UPLOAD_MAX_AGE_MS = 24 * 60 * 60_000;
 const UPLOAD_SWEEP_MS = 60 * 60_000;
@@ -94,25 +108,37 @@ function parseJson(body: Buffer): unknown {
 }
 
 /**
- * Addresses of the local network: private IPv4 ranges, carrier-grade NAT (Tailscale and similar),
- * link-local, loopback, and the IPv6 equivalents (unique-local, link-local).
+ * Addresses of the local network: private IPv4 ranges, link-local, and the IPv6 equivalents
+ * (unique-local, link-local). Carrier-grade NAT (`100.64.0.0/10`) counts only while this computer
+ * has such an address itself (it is on a tailnet): some ISPs and hotspots hand those addresses out
+ * to their other customers. Loopback is not the local network: a tunnel or reverse proxy on this
+ * computer (`tailscale funnel`, `cloudflared`, `ngrok`) shows up as loopback and would put the
+ * pairing endpoint on the internet.
  */
-export function isLocalNetworkAddress(address: string | undefined): boolean {
+export function isLocalNetworkAddress(
+  address: string | undefined,
+  addresses: readonly string[],
+): boolean {
   if (!address) return false;
   const v4 = address.startsWith("::ffff:") ? address.slice(7) : address;
   if (isIP(v4) === 4) {
+    if (isCgnatAddress(v4)) return addresses.some(isCgnatAddress);
     const [a = 0, b = 0] = v4.split(".").map(Number);
     return (
       a === 10 ||
-      a === 127 ||
       (a === 172 && b >= 16 && b <= 31) ||
       (a === 192 && b === 168) ||
-      (a === 169 && b === 254) ||
-      (a === 100 && b >= 64 && b <= 127)
+      (a === 169 && b === 254)
     );
   }
   const v6 = address.toLowerCase();
-  return v6 === "::1" || /^f[cd]/.test(v6) || /^fe[89ab]/.test(v6);
+  return /^f[cd]/.test(v6) || /^fe[89ab]/.test(v6);
+}
+
+function isLoopbackAddress(address: string | undefined): boolean {
+  if (!address) return false;
+  const v4 = address.startsWith("::ffff:") ? address.slice(7) : address;
+  return v4 === "::1" || (isIP(v4) === 4 && v4.startsWith("127."));
 }
 
 /** A base URL compared without case in the host or trailing slashes. */
@@ -135,9 +161,13 @@ function hideValues(values: Record<string, string> | undefined) {
 
 /**
  * What a device receives for a command: the host's answer, without the secrets a phone has no use
- * for (it cannot edit MCP servers) and a copied token should not expose.
+ * for (it cannot edit MCP servers or pair Telegram and Zalo) and a copied token should not expose.
  */
 function remoteView(command: AgentCommand, data: unknown): unknown {
+  if (command.type === "get_telegram_status" || command.type === "get_zalo_status")
+    return data && typeof data === "object"
+      ? { ...data, pairingCode: null, pairingExpiresAt: null }
+      : data;
   if (command.type !== "list_mcp_servers") return data;
   const overview = data as McpOverview;
   return {
@@ -162,7 +192,11 @@ function remoteView(command: AgentCommand, data: unknown): unknown {
 export class RemoteServer implements RemoteAccessControl {
   private readonly store: RemoteStore;
   private readonly guard = new PairingGuard();
+  /** Wrong pairing codes per source address, so one client cannot lock pairing for everyone. */
+  private readonly lockout = new AddressLockout();
   private readonly streams = new Set<EventStream>();
+  /** Uploads running per device. */
+  private readonly uploading = new Map<string, number>();
   private readonly options: RemoteServerOptions;
   private server: Server | null = null;
   private state: RemoteAccessState = "off";
@@ -183,8 +217,8 @@ export class RemoteServer implements RemoteAccessControl {
   /** Loads `remote.json` and starts listening when phone access was left on. */
   async start(): Promise<void> {
     await this.store.load();
-    await this.sweepUploads();
-    this.sweepTimer = setInterval(() => void this.sweepUploads(), UPLOAD_SWEEP_MS);
+    await this.sweep();
+    this.sweepTimer = setInterval(() => void this.sweep(), UPLOAD_SWEEP_MS);
     this.sweepTimer.unref();
     if (this.store.enabled) await this.serialize(() => this.listen(this.store.port));
     // A window that asked before the file was read refreshes with the loaded settings and devices.
@@ -254,6 +288,7 @@ export class RemoteServer implements RemoteAccessControl {
   async startPairing(): Promise<RemoteAccessStatus> {
     if (this.state !== "listening") throw new Error(t("remote.notOn"));
     this.guard.open(this.now());
+    this.lockout.clear();
     this.changed();
     return this.status();
   }
@@ -363,9 +398,15 @@ export class RemoteServer implements RemoteAccessControl {
     applySecurityHeaders(res);
     try {
       // Phones on the local network only: a computer with a public address must not answer the
-      // internet, even for the pairing endpoint.
-      if (!isLocalNetworkAddress(req.socket.remoteAddress))
+      // internet, even for the pairing endpoint. Loopback is answered only for a loopback `Host`
+      // (a browser or dev proxy on this computer); a tunnel to the internet sends its public name.
+      const addresses = ownAddresses();
+      const source = req.socket.remoteAddress;
+      const loopback = isLoopbackAddress(source) && isLoopbackHost(req.headers.host);
+      if (!loopback && !isLocalNetworkAddress(source, addresses))
         throw new HttpError(403, t("remote.forbidden"));
+      // A page that rebound its own name to this address (DNS rebinding) sends that name.
+      if (!isOwnHost(req.headers.host, addresses)) throw new HttpError(421, t("remote.wrongHost"));
       const url = new URL(req.url ?? "/", "http://device");
       if (url.pathname.startsWith("/api/")) {
         await this.api(req, res, url.pathname);
@@ -389,8 +430,9 @@ export class RemoteServer implements RemoteAccessControl {
   }
 
   private device(req: IncomingMessage): StoredDevice | null {
-    const device = this.store.authenticate(bearerToken(req));
-    if (device) this.store.touch(device, this.now());
+    const now = this.now();
+    const device = this.store.authenticate(bearerToken(req), now);
+    if (device) this.store.touch(device, now);
     return device;
   }
 
@@ -448,9 +490,13 @@ export class RemoteServer implements RemoteAccessControl {
       name?: unknown;
     } | null;
     if (!body || typeof body.code !== "string") throw new HttpError(400, t("remote.badRequest"));
-    const result = this.guard.attempt(body.code, this.now());
+    const address = req.socket.remoteAddress ?? "";
+    const now = this.now();
+    if (this.lockout.locked(address, now)) throw new HttpError(429, t("remote.pairLocked"));
+    const result = this.guard.attempt(body.code, now);
     switch (result.status) {
       case "ok": {
+        this.lockout.succeeded(address);
         const name = typeof body.name === "string" ? body.name : "";
         const { device, token, evicted } = await this.store.addDevice(name, this.now());
         this.signedOut(evicted);
@@ -460,6 +506,7 @@ export class RemoteServer implements RemoteAccessControl {
         return;
       }
       case "invalid":
+        if (this.lockout.failed(address, now)) throw new HttpError(429, t("remote.pairLocked"));
         throw new HttpError(400, t("remote.pairInvalid"));
       case "closed":
         throw new HttpError(400, t("remote.pairClosed"));
@@ -479,13 +526,17 @@ export class RemoteServer implements RemoteAccessControl {
       "X-Accel-Buffering": "no",
     });
     res.write(": connected\n\n");
+    // A device holds a few streams at most (a tab each); the oldest makes way for a new one.
+    const mine = [...this.streams].filter((s) => s.deviceId === device.id);
+    const oldest = new Set(mine.slice(0, Math.max(0, mine.length - MAX_STREAMS_PER_DEVICE + 1)));
+    if (oldest.size > 0) this.closeStreams((s) => oldest.has(s));
     const stream: EventStream = {
       res,
       deviceId: device.id,
       heartbeat: setInterval(() => this.write(stream, ": ping\n\n"), HEARTBEAT_MS),
     };
     this.streams.add(stream);
-    const wasConnected = [...this.streams].filter((s) => s.deviceId === device.id).length > 1;
+    const wasConnected = mine.length > 0;
     if (!wasConnected) this.changed();
     res.on("close", () => {
       clearInterval(stream.heartbeat);
@@ -515,6 +566,7 @@ export class RemoteServer implements RemoteAccessControl {
     if (!remoteMayRun(command)) throw new HttpError(403, t("remote.localOnly"));
     this.checkAttachments(command, device);
     await this.checkGatewayKey(command);
+    await this.checkAppUnblock(command);
     try {
       const data = remoteView(command, await this.options.handle(command));
       sendJson(res, 200, { ok: true, data: data ?? null });
@@ -580,6 +632,20 @@ export class RemoteServer implements RemoteAccessControl {
       throw new HttpError(403, t("remote.gatewayKeyAgain"));
   }
 
+  /**
+   * Taking an app off the blocked list loosens what the agent may do, which only the computer may
+   * do; taking one off the always-allowed list (or blocking it) is fine from a device.
+   */
+  private async checkAppUnblock(command: AgentCommand): Promise<void> {
+    if (command.type !== "set_computer_app_access" || command.access === "blocked") return;
+    const app: unknown = command.app;
+    const id = app && typeof app === "object" && "id" in app ? app.id : undefined;
+    if (typeof id !== "string") throw new HttpError(400, t("remote.badRequest"));
+    const lists = (await this.options.handle({ type: "list_computer_apps" })) as ComputerAppAccess;
+    if (lists.blocked.some((app) => app.id === id.trim()))
+      throw new HttpError(403, t("remote.localOnly"));
+  }
+
   private uploadsOf(deviceId: string): string {
     return join(this.options.uploadsDir, deviceId);
   }
@@ -609,18 +675,45 @@ export class RemoteServer implements RemoteAccessControl {
     }
     const type = req.headers["content-type"]?.split(";")[0]?.trim().toLowerCase() ?? "";
     const mimeType = /^[\w.+-]+\/[\w.+-]+$/.test(type) ? type : "application/octet-stream";
-    const bytes = await readBody(
-      req,
-      MAX_UPLOAD_BYTES,
-      t("remote.uploadTooLarge", { name, limit: MAX_UPLOAD_MB }),
-    );
-    this.stillPaired(device);
+    const running = this.uploading.get(device.id) ?? 0;
+    if (running >= MAX_UPLOADS_PER_DEVICE) throw new HttpError(429, t("remote.tooManyUploads"));
+    this.uploading.set(device.id, running + 1);
     const dir = join(this.uploadsOf(device.id), randomUUID());
-    await mkdir(dir, { recursive: true, mode: 0o700 });
-    const path = join(dir, name);
-    await writeFile(path, bytes, { mode: 0o600 });
-    const attachment: Attachment = { name, mimeType, path };
-    sendJson(res, 200, attachment);
+    try {
+      await mkdir(dir, { recursive: true, mode: 0o700 });
+      const path = join(dir, name);
+      await saveBody(
+        req,
+        path,
+        MAX_UPLOAD_BYTES,
+        t("remote.uploadTooLarge", { name, limit: MAX_UPLOAD_MB }),
+      );
+      this.stillPaired(device);
+      const attachment: Attachment = { name, mimeType, path };
+      sendJson(res, 200, attachment);
+    } catch (error) {
+      await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+      throw error;
+    } finally {
+      const left = (this.uploading.get(device.id) ?? 1) - 1;
+      if (left > 0) this.uploading.set(device.id, left);
+      else this.uploading.delete(device.id);
+    }
+  }
+
+  /** Hourly: signs out devices unused for too long, then removes old uploads. */
+  private async sweep(): Promise<void> {
+    try {
+      const idle = await this.store.removeIdle(this.now());
+      if (idle.length > 0) {
+        this.options.log?.("Phone access: signed out devices unused for 30 days.");
+        this.signedOut(idle);
+        this.changed();
+      }
+    } catch (error) {
+      this.options.log?.(`Phone access: ${errorMessage(error)}`);
+    }
+    await this.sweepUploads();
   }
 
   /**

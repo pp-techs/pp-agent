@@ -53,6 +53,7 @@ import { useTranslation } from "react-i18next";
 import { useChatThread } from "@/components/chat/chat-thread-context";
 import { HelperStatusIcon } from "@/components/chat/helper-status";
 import { appLabel } from "@/lib/app-label";
+import { mayRun } from "@/lib/bridge";
 
 type ToolPart = Extract<ChatPart, { type: "tool" }>;
 
@@ -219,6 +220,13 @@ function AppApprovalCard({ approval, app }: { approval: ApprovalRequest; app: Co
     state: { responding },
     actions: { respondApproval },
   } = useChatThread();
+  // A phone may not allow an app for good; only the computer can.
+  const canAlways = mayRun({
+    type: "respond_approval",
+    requestId: approval.requestId,
+    approved: true,
+    remember: "always",
+  });
   return (
     <Item variant="outline" size="sm" className="w-full">
       <ItemMedia variant="icon">
@@ -234,7 +242,7 @@ function AppApprovalCard({ approval, app }: { approval: ApprovalRequest; app: Co
         </ItemDescription>
         {approval.detail && (
           <CodeBlock size="sm" className="mt-2">
-            <CodeBlockContent wrap className="max-h-48">
+            <CodeBlockContent wrap className="max-h-48 overscroll-contain">
               {approval.detail}
             </CodeBlockContent>
           </CodeBlock>
@@ -263,14 +271,16 @@ function AppApprovalCard({ approval, app }: { approval: ApprovalRequest; app: Co
           >
             {t("toolStep.approval.app.conversation")}
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={responding}
-            onClick={() => respondApproval(approval.requestId, true, "always")}
-          >
-            {t("toolStep.approval.app.always")}
-          </Button>
+          {canAlways && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={responding}
+              onClick={() => respondApproval(approval.requestId, true, "always")}
+            >
+              {t("toolStep.approval.app.always")}
+            </Button>
+          )}
         </div>
       </ItemContent>
     </Item>
@@ -294,7 +304,7 @@ function ApprovalCard({ approval }: { approval: ApprovalRequest }) {
         <ItemDescription>{t("toolStep.approval.description")}</ItemDescription>
         {approval.detail && (
           <CodeBlock size="sm" className="mt-2">
-            <CodeBlockContent wrap className="max-h-48">
+            <CodeBlockContent wrap className="max-h-48 overscroll-contain">
               {approval.detail}
             </CodeBlockContent>
           </CodeBlock>

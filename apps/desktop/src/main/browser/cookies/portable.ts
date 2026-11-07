@@ -1,3 +1,5 @@
+import { isIP } from "node:net";
+import type { CookieSite } from "@workspace/shared";
 import type { CookiesSetDetails } from "electron";
 
 /**
@@ -48,6 +50,57 @@ export function fromFirefoxSameSite(value: number): PortableCookie["sameSite"] {
   if (value === 1) return "lax";
   if (value === 2) return "strict";
   return value === 0 ? "no_restriction" : "unspecified";
+}
+
+/** Labels under which country domains hand out names: `example.co.uk`, `example.com.vn`. */
+const SECOND_LEVEL: Record<string, true> = {
+  ac: true,
+  biz: true,
+  co: true,
+  com: true,
+  edu: true,
+  go: true,
+  gob: true,
+  gov: true,
+  info: true,
+  ltd: true,
+  mil: true,
+  ne: true,
+  net: true,
+  nom: true,
+  or: true,
+  org: true,
+  plc: true,
+  sch: true,
+};
+
+/**
+ * The site a cookie belongs to, as the person picks it: the registered name of its host
+ * (`google.com` for `.mail.google.com`, `example.co.uk` for `www.example.co.uk`). IP addresses and
+ * single-label hosts are their own site. A heuristic (no public suffix list): hosting domains such
+ * as `github.io` count as one site.
+ */
+export function cookieSite(domain: string): string {
+  const host = domain.replace(/^\./, "").replace(/\.$/, "").toLowerCase();
+  if (isIP(host.replace(/^\[|\]$/g, "")) !== 0 || !host.includes(".")) return host;
+  const labels = host.split(".");
+  const top = labels[labels.length - 1] ?? "";
+  const second = labels[labels.length - 2] ?? "";
+  const take =
+    labels.length >= 3 && top.length === 2 && Object.hasOwn(SECOND_LEVEL, second) ? 3 : 2;
+  return labels.slice(-take).join(".");
+}
+
+/** Counts cookies per site, most cookies first (then by name). */
+export function groupSites(hosts: readonly { host: string; count: number }[]): CookieSite[] {
+  const counts = new Map<string, number>();
+  for (const { host, count } of hosts) {
+    const site = cookieSite(host);
+    if (site) counts.set(site, (counts.get(site) ?? 0) + count);
+  }
+  return [...counts]
+    .map(([site, count]) => ({ site, count }))
+    .sort((a, b) => b.count - a.count || a.site.localeCompare(b.site));
 }
 
 /**

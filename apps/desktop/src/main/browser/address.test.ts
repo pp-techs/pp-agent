@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { chromeUserAgent, isWebUrl, toAddress } from "./address.ts";
+import { chromeUserAgent, isPrivateTarget, isWebUrl, toAddress } from "./address.ts";
 
 describe("toAddress", () => {
   it("keeps web addresses", () => {
@@ -29,6 +29,38 @@ it("allows only web schemes", () => {
   expect(isWebUrl("file:///etc/passwd")).toBe(false);
   expect(isWebUrl("javascript:alert(1)")).toBe(false);
   expect(isWebUrl("not a url")).toBe(false);
+});
+
+describe("isPrivateTarget", () => {
+  const resolve = async (host: string) =>
+    host === "router.example"
+      ? [{ address: "203.0.113.9" }, { address: "192.168.1.1" }]
+      : host === "public.example"
+        ? [{ address: "93.184.216.34" }]
+        : Promise.reject(new Error("ENOTFOUND"));
+
+  it.each([
+    "http://127.0.0.1:3000/",
+    "http://10.0.0.8/",
+    "http://169.254.169.254/latest/meta-data/",
+    "http://[::1]/",
+    "http://[fe80::1]/",
+    "http://0x7f.1/",
+    "http://localhost:47821/",
+    "http://app.localhost/",
+    "http://router.example/",
+  ])("refuses %s", async (url) => {
+    expect(await isPrivateTarget(url, resolve)).toBe(true);
+  });
+
+  it.each([
+    "https://public.example/",
+    "https://8.8.8.8/",
+    "https://missing.example/",
+    "about:blank",
+  ])("allows %s", async (url) => {
+    expect(await isPrivateTarget(url, resolve)).toBe(false);
+  });
 });
 
 it("reports a plain Chrome user agent", () => {

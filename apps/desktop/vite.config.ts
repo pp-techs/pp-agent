@@ -15,7 +15,12 @@ export default defineConfig({
   pack: [
     {
       ...shared,
-      entry: { main: "src/main/index.ts", daemon: "../daemon/src/index.ts" },
+      // The cookie reader runs as a utility process (src/main/browser/cookies/reader-process.ts).
+      entry: {
+        main: "src/main/index.ts",
+        daemon: "../daemon/src/index.ts",
+        cookieReader: "src/main/browser/cookies/reader.ts",
+      },
       format: "esm",
     },
     {

@@ -32,7 +32,7 @@
 ## Dependencies (`pnpm-workspace.yaml`)
 
 - Every third-party version lives in the `catalog:`; packages reference it as `"catalog:"` (`catalogMode: prefer`). Workspace packages use `workspace:*`.
-- Versions policy: always take the newest published version. `minimumReleaseAge: 0` deliberately disables pnpm's release-age delay; deleting that line restores it.
+- Versions policy: take the newest published version that has been public for a day (`minimumReleaseAge: 1440`, a supply-chain guard); the Vite+/oxc/vitest toolchain is excluded in `minimumReleaseAgeExclude`. Security fixes a dependent's range does not reach yet are forced with a ranged `overrides` entry that stays on the same major line (`undici@>=8.0.0 <8.12.2`, `body-parser@>=2.0.0 <2.4.0`).
 - `allowBuilds` lists packages whose install scripts are blocked (`@google/genai`, `electron-winstaller`, `protobufjs`, `tesseract.js` are `false`). Add an entry when a new dependency wants to run a build script.
 - `vite` is overridden to the Vite+ core (`npm:@voidzero-dev/vite-plus-core`); `peerDependencyRules` accepts any `vite` peer.
 

@@ -72,6 +72,7 @@ import { SettingsModal } from "@/components/modals/settings-modal";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useExportSession } from "@/hooks/use-export-session";
 import { IS_MAC } from "@/hooks/use-panel-shortcut";
+import { maySend } from "@/lib/bridge";
 import { useDeleteWorkspace } from "@/lib/extension-queries";
 import { confirmLeaveTemporary } from "@/lib/confirm-leave-temporary";
 import { i18n } from "@/lib/i18n";
@@ -79,7 +80,12 @@ import {
   MIN_SEARCH_LENGTH,
   searchSessionsQuery,
   sessionsQuery,
-  useAgentCommands,
+  useClearSessions,
+  useDeleteSession,
+  useNewChat,
+  useOpenSession,
+  usePinSession,
+  useRenameSession,
   workspacesQuery,
 } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
@@ -229,8 +235,12 @@ export function ChatSidebar({
   }, []);
   const currentWorkspaceId = useChatStore((state) => state.workspace?.id);
   const temporary = useChatStore((state) => state.temporary);
-  const { newChat, openSession, renameSession, deleteSession, clearSessions, pinSession } =
-    useAgentCommands(bridge);
+  const newChat = useNewChat(bridge);
+  const openSession = useOpenSession(bridge);
+  const renameSession = useRenameSession(bridge);
+  const deleteSession = useDeleteSession(bridge);
+  const clearSessions = useClearSessions(bridge);
+  const pinSession = usePinSession(bridge);
   const exportSession = useExportSession(bridge);
   const deleteWorkspace = useDeleteWorkspace(bridge);
   const [collapsed, setCollapsed] = React.useState<ReadonlySet<string>>(new Set());
@@ -473,7 +483,7 @@ export function ChatSidebar({
                   <PencilIcon />
                   {t("sidebar.workspace.editInSettings")}
                 </DropdownMenuItem>
-                {hasSessions && (
+                {hasSessions && maySend("clear_sessions") && (
                   <DropdownMenuItem
                     variant="destructive"
                     onClick={() => void clearWorkspaceSessions(workspace)}
@@ -482,7 +492,7 @@ export function ChatSidebar({
                     {t("sidebar.workspace.clearSessions")}
                   </DropdownMenuItem>
                 )}
-                {workspace.id !== DEFAULT_WORKSPACE_ID && (
+                {workspace.id !== DEFAULT_WORKSPACE_ID && maySend("delete_workspace") && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem

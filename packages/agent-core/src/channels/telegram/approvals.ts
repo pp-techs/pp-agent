@@ -1,4 +1,5 @@
 import type { ApprovalRequest } from "@workspace/shared";
+import { clipMiddle } from "../shared/clip.ts";
 import type { TelegramApi, TelegramCallbackQuery } from "./api.ts";
 import { escapeHtml } from "./format.ts";
 import type { TelegramTranslate } from "./text.ts";
@@ -27,7 +28,9 @@ export class TelegramApprovals {
 
   /** Sends the question and resolves with the decision (false on timeout or when cancelled). */
   async ask(chatId: number, request: ApprovalRequest): Promise<boolean> {
-    const detail = request.detail.trim().slice(0, MAX_DETAIL_LENGTH);
+    const detail = clipMiddle(request.detail.trim(), MAX_DETAIL_LENGTH, (count) =>
+      this.t("channels.telegram.detailHidden", { count }),
+    );
     const html =
       `<b>${escapeHtml(this.t("channels.telegram.approvalTitle"))}</b>\n${escapeHtml(request.title)}` +
       (detail ? `\n<pre>${escapeHtml(detail)}</pre>` : "");

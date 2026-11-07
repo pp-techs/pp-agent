@@ -45,11 +45,11 @@ git restore . && git clean -fd .changeset
 
 The installed app checks GitHub Releases ten seconds after start, every six hours, and when someone presses **Check for updates** (Settings → General). Implementation: `apps/desktop/src/main/updates.ts`.
 
-| Platform                | Behaviour                                                                                                                                                                                                                                       |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows, Linux AppImage | `electron-updater` downloads the installer and restarts into it. It reads `latest.yml` / `latest-linux.yml`, which electron-builder writes next to the installers and `publish` uploads with the release.                                       |
-| macOS                   | `electron-updater` downloads the `.zip` and restarts into it. It reads `latest-mac.yml`, which `publish` builds by merging the arm64 and x64 feeds. Only Developer ID signed builds can replace themselves; update the app signed, or it fails. |
-| Linux `.deb`            | The app only compares versions (GitHub Releases API) and opens the release page, because `.deb` belongs to the system package manager.                                                                                                          |
+| Platform               | Behaviour                                                                                                                                                                                                                                                                                              |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Windows                | Signed builds (`ppCodeSigned`): `electron-updater` downloads the installer and restarts into it, reading `latest.yml`, which electron-builder writes next to the installers and `publish` uploads with the release. Unsigned builds compare versions (GitHub Releases API) and open the release page.  |
+| macOS                  | Developer ID signed builds (`ppCodeSigned`): `electron-updater` downloads the `.zip` and restarts into it. It reads `latest-mac.yml`, which `publish` builds by merging the arm64 and x64 feeds. Ad-hoc signed builds open the release page.                                                           |
+| Linux AppImage, `.deb` | The app only compares versions (GitHub Releases API) and opens the release page: AppImages are unsigned, so an update that replaced itself would be checked only against the hash in the same release's feed, and `.deb` belongs to the system package manager. `latest-linux.yml` is still published. |
 
 The `publish` job fails when `latest.yml`, `latest-linux.yml`, or `latest-mac.yml` is missing. Each macOS `package` job renames its feed to `latest-mac-<arch>.yml`; `publish` merges them with `yq` into one `latest-mac.yml` listing both architectures.
 
@@ -85,13 +85,17 @@ Signing is optional and driven by repository secrets (Settings → Secrets and v
   - no `CSC_LINK`: ad-hoc signature, `-c.mac.hardenedRuntime=false -c.mac.notarize=false`, plus a warning;
   - `CSC_LINK` and all three `APPLE_*` secrets: Developer ID signature, hardened runtime, notarization;
   - `CSC_LINK` but a missing `APPLE_*` secret: signed, `-c.mac.notarize=false`, plus a warning. (electron-builder itself throws when only some of `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` are set, and silently skips when none is.)
-- Developer ID builds (with or without notarization) get `ppDeveloperIdSigned: true` stamped into the app's `package.json` (`-c.extraMetadata`). `apps/desktop/src/main/updates.ts` reads it: on macOS only such builds update in the app; ad-hoc signed builds open the release page instead.
+- Developer ID builds (with or without notarization) get `ppCodeSigned: true` stamped into the app's `package.json` (`-c.extraMetadata`). `apps/desktop/src/main/updates.ts` reads it: only such builds update in the app; ad-hoc signed builds open the release page instead.
 - With `CSC_LINK`, the workflow imports the certificate into its own keychain (`security import`, `set-key-partition-list`) and sets `CSC_KEYCHAIN`, instead of letting electron-builder do it: electron-builder passes the `.p12` password as its temporary keychain's password, and `set-key-partition-list` then fails with "SecKeychainUnlock: The user name or passphrase you entered is not correct" (seen on the 0.7.0 release run). A wrong `CSC_KEY_PASSWORD` shows up as a failed `security import` instead.
 - Notarization uploads the app to Apple and waits for the result, which can add several minutes to the macOS jobs.
 
 ### Windows
 
-`WIN_CSC_LINK` + `WIN_CSC_KEY_PASSWORD` sign the NSIS installer. Without `WIN_CSC_LINK` the workflow unsets the macOS `CSC_*` variables for the Windows job and disables identity discovery, so the installer stays unsigned. A new certificate without SmartScreen reputation (standard, non-EV) can still show a warning until it builds reputation.
+`WIN_CSC_LINK` + `WIN_CSC_KEY_PASSWORD` sign the NSIS installer, and the build gets `ppCodeSigned: true` stamped into its `package.json`, so installed copies update in the app (electron-updater then also checks the update's publisher). Without `WIN_CSC_LINK` the workflow unsets the macOS `CSC_*` variables for the Windows job, disables identity discovery and prints a warning: the installer stays unsigned, and installed copies offer new versions through the release page instead of installing them, since an unsigned update would be checked only against the hash in the same release's feed. A new certificate without SmartScreen reputation (standard, non-EV) can still show a warning until it builds reputation.
+
+### Linux
+
+AppImage and `.deb` builds are not signed and never get `ppCodeSigned`, so they always point to the release page for updates.
 
 ### CI
 

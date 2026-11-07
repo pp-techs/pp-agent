@@ -328,6 +328,10 @@
         "label": "Time limit per request (seconds)",
         "placeholder": "Default",
         "hint": "Leave empty unless the server is slow to answer."
+      },
+      "trusted": {
+        "label": "Trust this server's read-only labels",
+        "description": "Tools the server marks as read-only then run without asking. Leave off unless you trust who runs the server: otherwise every tool asks first."
       }
     },
     "connect": {

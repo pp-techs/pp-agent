@@ -148,7 +148,9 @@ import {
   splitAttachedFiles,
   withAttachedFiles,
 } from "./attachments.ts";
-import { createBrowserTool } from "./browser-tool.ts";
+import { BROWSER_TOOL, browserActionTier, createBrowserTool } from "./browser-tool.ts";
+import { isInside } from "./office/files.ts";
+import { deniedFolders, pathAccess, type PathRules } from "./path-access.ts";
 import {
   COMPUTER_TOOL,
   type ComputerAppNames,
@@ -163,7 +165,7 @@ import {
   validateProfileName,
 } from "./browser-profiles.ts";
 import { AuthPrompts } from "./auth-prompts.ts";
-import { pruneToolOutputs } from "./context.ts";
+import { createContextPruner } from "./context.ts";
 import { VaultCredentialStore } from "./credentials.ts";
 import { createReadDocumentTool } from "./documents.ts";
 import { createOfficeTools } from "./office/tools.ts";
@@ -233,6 +235,8 @@ import {
 import {
   activeToolsFor,
   agentAllowsTool,
+  callRule,
+  type ChatAccess,
   currentDateTimeTool,
   describeToolCall,
   helperTools,
@@ -278,6 +282,7 @@ import {
   type SessionRow,
   type SessionVisibility,
 } from "./session-index.ts";
+import { SessionInfoCache, type SavedSession } from "./session-info-cache.ts";
 import { ASK_TOOL, askSection, checkAnswers, createAskTool, type AskUser } from "./ask.ts";
 import { Transcript } from "./transcript.ts";
 import { createWebFetchTool, createWebSearchTool } from "./web/tools.ts";
@@ -382,13 +387,21 @@ interface SessionScope {
   surface: { kind: SessionKind; label: string };
   /** Which saved sessions the `sessions` tool shows: every one, or only the one running. */
   visibility: SessionVisibility;
+  /**
+   * Chats only: whether people other than the paired owner may talk in it. Such a chat ignores
+   * yolo mode, asks the owner before tools, and leaves the owner's memory out of the prompt.
+   */
+  chatAccess?: () => ChatAccess;
 }
 
 /** What a chat's turn is doing right now; the session events and the approval gate read it. */
 interface ChatTurn {
   hooks: TurnHooks;
-  /** Finished assistant messages' text, in order; the streamed text is these plus the live one. */
-  texts: string[];
+  /**
+   * Finished assistant messages' text, joined by blank lines; the streamed text is this plus the
+   * live one. Kept joined so a token does not rebuild it.
+   */
+  done: string;
   /** The last assistant message of the turn. */
   reply?: AssistantMessage;
 }
@@ -492,6 +505,8 @@ const DEFAULT_KEEP_TOKENS = 20_000;
 const MANUAL_KEEP_TOKENS = 2_000;
 /** A scheduled run that takes longer than this is stopped and recorded as failed. */
 const TASK_RUN_LIMIT_MS = 30 * 60_000;
+/** Longest a scheduled run or a chat's first turn waits for its MCP servers to connect. */
+const MCP_READY_WAIT_MS = 5_000;
 /** Why a tool call was blocked in a scheduled run; the model sees it as the tool result. */
 const SCHEDULED_DENIED_REASON =
   "Nobody is available to approve this action because this is a scheduled run, so it was not carried out. Continue without it and mention it in your answer.";
@@ -554,6 +569,8 @@ export class AgentHost {
   private scheduler: Scheduler | null = null;
   /** Session of the scheduled task being run, by task id, so deleting the task can stop it. */
   private readonly taskSessions = new Map<string, AgentSession>();
+  /** What each saved session file holds, read again only when the file changed. */
+  private sessionInfoCache: SessionInfoCache | null = null;
   /** The chat apps (Telegram bot, Zalo bot); null until the services are ready. */
   private chatApps: { telegram: TelegramService; zalo: ZaloService } | null = null;
   /** Open Pi sessions of chats by chat key (`telegram:<id>`); idle ones are released. */
@@ -588,11 +605,11 @@ export class AgentHost {
     transcribe: (data, mimeType) =>
       this.requireServices().voice.transcribe(Buffer.from(data).toString("base64"), mimeType, 0),
     listChatSessions: async (chatKey) => {
-      const { chatSessions, paths } = this.requireServices();
+      const { chatSessions } = this.requireServices();
       const currentFile = chatSessions.get(chatKey);
       const historyFiles = chatSessions.history(chatKey);
       const allFiles = currentFile ? [currentFile, ...historyFiles] : historyFiles;
-      const infos = await SessionManager.listAll(paths.sessionDir);
+      const infos = await this.savedSessions();
       const infoByPath = new Map(infos.map((info) => [info.path, info]));
       return allFiles.flatMap((file) => {
         const info = infoByPath.get(file);
@@ -609,16 +626,17 @@ export class AgentHost {
       });
     },
     resumeChatSession: async (chatKey, sessionId) => {
-      const { chatSessions, paths } = this.requireServices();
-      const infos = await SessionManager.listAll(paths.sessionDir);
-      const info = infos.find((i) => sessionRef(i.path) === sessionId);
-      if (!info) throw new Error(`Session ${sessionId} not found.`);
-      if (!chatSessions.resume(chatKey, info.path))
+      const { chatSessions } = this.requireServices();
+      const file = this.findSessionPath(sessionId);
+      if (!file) throw new Error(`Session ${sessionId} not found.`);
+      if (!chatSessions.resume(chatKey, file))
         throw new Error(`Session ${sessionId} is not in this chat's history.`);
       this.closeChat(chatKey);
     },
     steerTurn: async (chatKey, input) => {
       const chat = this.chats.get(chatKey);
+      // Only the owner joins a running turn; anyone else's message waits for its own turn.
+      if (input.sender && !input.sender.owner) return false;
       if (!chat?.turn || !chat.session.isStreaming) return false;
       const message = await buildPrompt(
         input.text || ATTACHMENTS_ONLY_PROMPT,
@@ -888,12 +906,7 @@ export class AgentHost {
       case "list_skills":
         return services.skills.list(services.settings.get().disabledSkills);
       case "list_workspace_skills":
-        return this.session
-          ? listWorkspaceSkills(
-              this.session.sessionManager.getCwd(),
-              services.settings.get().disabledSkills,
-            )
-          : [];
+        return this.session ? this.loadedWorkspaceSkills(this.session.sessionManager.getCwd()) : [];
       case "list_workspace_skill_options":
         return this.allWorkspaceSkills();
       case "get_skill":
@@ -966,6 +979,12 @@ export class AgentHost {
         return this.readWorkspaceInstructions(command.id);
       case "save_workspace_instructions":
         return this.saveWorkspaceInstructions(command.id, command.content);
+      case "get_workspace_skills_trust":
+        return this.skillsTrusted(
+          workspaceFolder(this.requireWorkspace(command.id), services.paths.workspaceDir),
+        );
+      case "set_workspace_skills_trust":
+        return this.setWorkspaceSkillsTrust(command.id, command.trusted);
       case "delete_workspace":
         return this.deleteWorkspace(command.id);
 
@@ -1541,7 +1560,7 @@ export class AgentHost {
     const { workspaces, pinnedSessions } = settings.get();
     const pins = new Set(pinnedSessions);
     // Conversations of every workspace and agent.
-    const sessions = await SessionManager.listAll(paths.sessionDir);
+    const sessions = await this.savedSessions();
     const saved = new Set(sessions.map((info) => info.path));
     // Titles proposed during a turn, not yet written to their session.
     const proposed = new Map<string, string>();
@@ -1603,7 +1622,7 @@ export class AgentHost {
         task.lastRun?.sessionPath ? [task.lastRun.sessionPath] : [],
       ),
     );
-    const infos = await SessionManager.listAll(paths.sessionDir);
+    const infos = await this.savedSessions();
     return infos
       .filter((info) => info.messageCount > 0)
       .sort((a, b) => b.modified.getTime() - a.modified.getTime())
@@ -1627,12 +1646,9 @@ export class AgentHost {
 
   /** The messages of the saved session with `id`; only files in the session folder are read. */
   private async sessionHistory(id: string): Promise<HistoryLine[]> {
-    const { paths } = this.requireServices();
-    const info = (await SessionManager.listAll(paths.sessionDir)).find(
-      (candidate) => sessionRef(candidate.path) === id,
-    );
-    if (!info) return [];
-    const manager = SessionManager.open(info.path, paths.sessionDir);
+    const file = this.findSessionPath(id);
+    if (!file) return [];
+    const manager = SessionManager.open(file, this.requireServices().paths.sessionDir);
     return historyLines(
       manager.getBranch().flatMap((entry) => (entry.type === "message" ? [entry.message] : [])),
     );
@@ -1690,7 +1706,7 @@ export class AgentHost {
     this.requireWorkspace(workspaceId);
     const { paths, settings } = this.requireServices();
     const { workspaces } = settings.get();
-    const infos = await SessionManager.listAll(paths.sessionDir);
+    const infos = await this.savedSessions();
     const targets = infos
       .filter(
         (info) => workspaceForCwd(workspaces, info.cwd, paths.workspaceDir).id === workspaceId,
@@ -1953,13 +1969,12 @@ export class AgentHost {
       agent: () => this.agentOf(conversation),
       workspace: () => this.workspaceOf(conversation),
       mcpServers: conversation.mcpServers,
-      approvalGate: this.gateFor(
-        () => this.agentOf(conversation),
-        (request) => this.requestApproval(conversation, request),
-        undefined,
-        conversation.computerApps,
-        () => conversation.yolo,
-      ),
+      approvalGate: this.gateFor({
+        agent: () => this.agentOf(conversation),
+        ask: (request) => this.requestApproval(conversation, request),
+        computerApps: conversation.computerApps,
+        yolo: () => conversation.yolo,
+      }),
       askUser: (call, signal) => this.requestQuestion(conversation, call, signal),
       surface: { kind: "window", label: "in the desktop window" },
       visibility: "all",
@@ -2010,14 +2025,15 @@ export class AgentHost {
       agentDir: paths.agentDir,
       settingsManager,
       // Only our own extensions run, and MCP servers come from <agentDir>/mcp.json (registered by
-      // the agent extension). Skills come from two folders only: the workspace's .agents/skills
-      // and <agentDir>/skills (managed in Settings). Pi's own search (parent folders, the user's
-      // ~/.agents/skills) is off. The workspace folder is listed first, so it wins a name clash.
+      // the agent extension). Skills come from two folders only: <agentDir>/skills (managed in
+      // Settings) and the workspace's .agents/skills. Pi's own search (parent folders, the user's
+      // ~/.agents/skills) is off. The installed folder is listed first, so a workspace skill never
+      // replaces an installed one of the same name.
       noExtensions: true,
       noPromptTemplates: true,
       noThemes: true,
       noSkills: true,
-      additionalSkillPaths: [workspaceSkillsDir(cwd), skills.dir],
+      additionalSkillPaths: [skills.dir, workspaceSkillsDir(cwd)],
       extensionFactories: [
         { name: "approval-gate", factory: scope.approvalGate },
         // Two or more skills in one message: pi expands only one leading command.
@@ -2039,12 +2055,15 @@ export class AgentHost {
       skillsOverride: (base) => {
         const disabled = settings.get().disabledSkills;
         const allowed = scope.agent().skills;
+        // A folder's own skills load only once the person trusted that workspace for skills.
+        const workspaceTrusted = this.skillsTrusted(cwd);
         return {
           skills: base.skills.filter(
             (skill) =>
+              (workspaceTrusted || isInside(resolve(skills.dir), resolve(skill.filePath))) &&
               !disabled.includes(skill.name) &&
-              // The agent's list is the last, closest filter over the workspace's and the
-              // installed skills.
+              // The agent's list is the last, closest filter over the installed and the
+              // workspace's skills.
               (allowed === null || allowed.includes(skill.name)),
           ),
           diagnostics: base.diagnostics,
@@ -2103,6 +2122,7 @@ export class AgentHost {
               model: findAvailable(runtime, agent.model),
               tools: helperTools(settings.get(), agent.tools),
             })),
+          pathRules: () => this.pathRules(),
         }),
       ],
       resourceLoader,
@@ -2605,36 +2625,53 @@ export class AgentHost {
 
   /**
    * Extension that applies tool policies for `agent` and settles tools that need approval through
-   * `ask`: the open conversation asks the person, a scheduled run (nobody there) denies.
-   * `computerApps` (the window's conversations only) holds the apps the person allowed for the
-   * conversation; without it the computer tool is blocked. `yolo` (the window's conversations
-   * only) reports the conversation's own yolo switch; it runs every allowed tool without asking,
-   * on top of Settings › Tools, and auto-allows a computer app's first use in the conversation too
-   * (an app that is protected or blocked still refuses).
+   * `ask`: the open conversation asks the person, a chat asks its owner, a scheduled run (nobody
+   * there) denies.
+   * - `computerApps` (the window's conversations only) holds the apps the person allowed for the
+   *   conversation; without it the computer tool is blocked.
+   * - `yolo` (the window's conversations only) reports the conversation's own yolo switch; it runs
+   *   every allowed tool without asking, on top of Settings › Tools, and auto-allows a computer
+   *   app's first use in the conversation too (an app that is protected or blocked still refuses).
+   * - `chatAccess` (chats only): a chat other people may talk in ignores yolo mode and asks the
+   *   owner before every tool that reaches beyond the chat (`callRule`).
+   * File reads are rated by where they reach: the app's own folder and `~/.ssh` are refused, a
+   * path outside the workspace asks unless yolo mode is on.
    */
-  private gateFor(
-    agent: () => AgentProfile,
-    ask: (request: ApprovalRequest) => Promise<boolean>,
-    declinedReason = "The user declined this action.",
-    computerApps?: Set<string>,
-    yolo?: () => boolean,
-  ): ExtensionFactory {
+  private gateFor(options: {
+    agent: () => AgentProfile;
+    ask: (request: ApprovalRequest) => Promise<boolean>;
+    declinedReason?: string;
+    computerApps?: Set<string>;
+    yolo?: () => boolean;
+    chatAccess?: () => ChatAccess;
+  }): ExtensionFactory {
+    const { agent, ask, computerApps, yolo, chatAccess } = options;
+    const declinedReason = options.declinedReason ?? "The user declined this action.";
     return (pi) => {
-      pi.on("tool_call", async (event) => {
+      pi.on("tool_call", async (event, ctx) => {
         const info = pi.getAllTools().find((tool) => tool.name === event.toolName);
         const computer = event.toolName === COMPUTER_TOOL;
         const tier = computer
           ? computerActionTier(event.input.action)
-          : toolTier(event.toolName, info?.annotations);
+          : event.toolName === BROWSER_TOOL
+            ? browserActionTier(event.input.action)
+            : toolTier(
+                event.toolName,
+                info?.annotations,
+                (server) => this.services?.mcpConfig.trustedServers().has(server) ?? false,
+              );
         const saved = this.services?.settings.get();
         if (!saved) return { block: true, reason: "The app is still starting." };
         const active = saved.yoloMode || yolo?.() === true;
         const settings = active ? { ...saved, yoloMode: true } : saved;
+        const reach = await pathAccess(event.toolName, event.input, ctx.cwd, this.pathRules());
         // Tools that are off stay registered (codemode can reach any registered tool), so the gate
         // blocks them too.
-        const rule = toolRule(event.toolName, tier, settings);
-        if (rule.effective === "off")
-          return { block: true, reason: `${event.toolName} is turned off in Settings.` };
+        const rule = callRule(event.toolName, tier, settings, {
+          path: reach,
+          ...(chatAccess ? { chat: chatAccess() } : {}),
+        });
+        if (rule.effective === "off") return { block: true, reason: rule.reason };
         const profile = agent();
         if (!agentAllowsTool(profile.tools, event.toolName))
           return { block: true, reason: `${event.toolName} is not available to ${profile.name}.` };
@@ -2654,13 +2691,20 @@ export class AgentHost {
           }
         }
         if (rule.effective === "allow" && !app) return undefined;
+        const described = describeToolCall(
+          event.toolName,
+          this.approvalInput(event.toolName, event.input),
+        );
         const approved = await ask({
           requestId: randomUUID(),
           toolCallId: event.toolCallId,
           anchorToolCallId: event.parentToolCallId ?? event.toolCallId,
           toolName: event.toolName,
           tier,
-          ...describeToolCall(event.toolName, this.approvalInput(event.toolName, event.input)),
+          ...described,
+          ...(reach?.access === "outside"
+            ? { title: t("approvals.readOutside", { path: reach.path }) }
+            : {}),
           ...(app ? { app } : {}),
         });
         if (!approved) return { block: true, reason: declinedReason };
@@ -2677,6 +2721,24 @@ export class AgentHost {
         return undefined;
       });
     };
+  }
+
+  /**
+   * Folders file tools read freely besides the workspace (the installed skills, which the model
+   * opens to follow them) and the ones they never read: the app's data folder and `~/.ssh`.
+   */
+  private pathRules(): PathRules {
+    const services = this.services;
+    if (!services) return { trusted: [], denied: [] };
+    return {
+      trusted: [services.skills.dir],
+      denied: deniedFolders(dirname(services.paths.settingsFile)),
+    };
+  }
+
+  /** Whether the person trusted the skills of the workspace folder `cwd`. */
+  private skillsTrusted(cwd: string): boolean {
+    return (this.services?.settings.get().trustedSkillFolders ?? []).includes(resolve(cwd));
   }
 
   /** What the approval card describes: a note to forget is shown by its text, not its id. */
@@ -2701,9 +2763,11 @@ export class AgentHost {
       // The memory profile is taken at the first turn and kept for the session's life, so a note
       // saved meanwhile (by a tool or the background pass) does not change the prompt and drop its
       // cache; it shows from the next session on. A workspace change takes it afresh.
-      let profile: { workspaceId: string; text: string } | null = null;
-      // Old tool output is replaced by a note in what the model reads; the chat keeps showing it.
-      pi.on("context", (event) => ({ messages: pruneToolOutputs(event.messages) }));
+      let profile: { workspaceId: string; shared: boolean; text: string } | null = null;
+      // Old tool output and older screenshots are replaced by a note in what the model reads; the
+      // chat keeps showing them.
+      const pruneContext = createContextPruner();
+      pi.on("context", (event) => ({ messages: pruneContext(event.messages) }));
       pi.on("before_agent_start", (event) => {
         const { sections } = event.systemPromptOptions;
         const agentSection = agentPromptSection(scope.agent());
@@ -2722,9 +2786,17 @@ export class AgentHost {
         });
         const memory = this.services?.memory;
         const workspaceId = scope.workspace().id;
+        // A chat other people talk in gets only the workspace's own notes, never the owner's
+        // notes that every workspace shares.
+        const shared = scope.chatAccess !== undefined && scope.chatAccess() !== "owner";
         if (memory && this.memoryOn(scope.agent())) {
-          if (profile?.workspaceId !== workspaceId)
-            profile = { workspaceId, text: memorySection(memory.entriesFor(workspaceId)) };
+          if (profile?.workspaceId !== workspaceId || profile.shared !== shared) {
+            const global = new Set(memory.entriesFor(null).map((entry) => entry.id));
+            const entries = memory
+              .entriesFor(workspaceId)
+              .filter((entry) => !shared || !global.has(entry.id));
+            profile = { workspaceId, shared, text: memorySection(entries) };
+          }
           sections.memory = profile.text;
         } else delete sections.memory;
         const planning = planningSection(pi.getActiveTools());
@@ -3030,6 +3102,20 @@ export class AgentHost {
     );
   }
 
+  /**
+   * Waits for the session's MCP servers to connect, at most `MCP_READY_WAIT_MS`: a server that
+   * hangs must not hold up the turn, which goes ahead with the servers that are ready.
+   */
+  private async mcpReady(session: AgentSession): Promise<void> {
+    const waited = Promise.withResolvers<void>();
+    const timer = setTimeout(waited.resolve, MCP_READY_WAIT_MS);
+    try {
+      await Promise.race([this.mcp.status(session).catch(() => undefined), waited.promise]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   private async mcpStatus(): Promise<string | null> {
     if (!this.session) return null;
     try {
@@ -3269,12 +3355,15 @@ export class AgentHost {
   private listTools(): ToolSummary[] {
     const session = this.session;
     if (!session) return [];
-    const settings = this.requireServices().settings.get();
+    const { settings: store, mcpConfig } = this.requireServices();
+    const settings = store.get();
+    // Read once for the whole list; each MCP tool would otherwise read mcp.json again.
+    const trusted = mcpConfig.trustedServers();
     return session
       .getAllTools()
       .filter((tool) => tool.exposure !== "hidden" && isListedTool(tool.name))
       .map((tool) => {
-        const tier = toolTier(tool.name, tool.annotations);
+        const tier = toolTier(tool.name, tool.annotations, (server) => trusted.has(server));
         return {
           name: tool.name,
           description: tool.description.split("\n")[0] ?? "",
@@ -3300,17 +3389,46 @@ export class AgentHost {
     this.changed(["tools"], { tools: true });
   }
 
-  /** Skills in the `.agents/skills` of every workspace folder (one entry per name), for the agent editor. */
+  /**
+   * The skills of a workspace folder's `.agents/skills` that load: none until the person trusted
+   * the folder, and never one named like an installed skill (the installed one wins).
+   */
+  private async loadedWorkspaceSkills(folder: string): Promise<SkillSummary[]> {
+    const { settings, skills } = this.requireServices();
+    if (!this.skillsTrusted(folder)) return [];
+    const { disabledSkills } = settings.get();
+    const [own, installed] = await Promise.all([
+      listWorkspaceSkills(folder, disabledSkills),
+      skills.list(disabledSkills),
+    ]);
+    const taken = new Set(installed.map((skill) => skill.name));
+    return own.filter((skill) => !taken.has(skill.name));
+  }
+
+  /** Skills in the `.agents/skills` of every workspace folder that load (one entry per name), for the agent editor. */
   private async allWorkspaceSkills(): Promise<SkillSummary[]> {
     const { settings, paths } = this.requireServices();
-    const { workspaces, disabledSkills } = settings.get();
-    const folders = new Set(workspaces.map((ws) => workspaceFolder(ws, paths.workspaceDir)));
+    const folders = new Set(
+      settings.get().workspaces.map((ws) => workspaceFolder(ws, paths.workspaceDir)),
+    );
     const lists = await Promise.all(
-      [...folders].map((folder) => listWorkspaceSkills(folder, disabledSkills)),
+      [...folders].map((folder) => this.loadedWorkspaceSkills(folder)),
     );
     const byName = new Map<string, SkillSummary>();
     for (const skill of lists.flat()) if (!byName.has(skill.name)) byName.set(skill.name, skill);
     return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /** Trusts or stops trusting a workspace folder's skills; the open conversation there reloads. */
+  private setWorkspaceSkillsTrust(id: string, trusted: boolean): boolean {
+    const { settings, paths } = this.requireServices();
+    const folder = resolve(workspaceFolder(this.requireWorkspace(id), paths.workspaceDir));
+    settings.update((draft) => {
+      draft.trustedSkillFolders = draft.trustedSkillFolders.filter((other) => other !== folder);
+      if (trusted) draft.trustedSkillFolders.push(folder);
+    });
+    this.changed(["workspaces", "skills"], { reload: id === this.workspaceId });
+    return trusted;
   }
 
   private async saveSkill(input: SaveSkillInput): Promise<SkillSummary> {
@@ -3795,14 +3913,14 @@ export class AgentHost {
         agent: () => agent,
         workspace: () => workspace,
         mcpServers,
-        approvalGate: this.gateFor(
-          () => agent,
-          async () => {
+        approvalGate: this.gateFor({
+          agent: () => agent,
+          ask: async () => {
             denied += 1;
             return false;
           },
-          SCHEDULED_DENIED_REASON,
-        ),
+          declinedReason: SCHEDULED_DENIED_REASON,
+        }),
         systemNote: {
           section: "scheduled_task",
           text: originContext
@@ -3819,7 +3937,7 @@ export class AgentHost {
         void session?.abort();
       }, TASK_RUN_LIMIT_MS);
       // The agent's MCP servers connect in the background; wait for them to settle.
-      if (mcpServers.hasServers()) await this.mcp.status(session).catch(() => undefined);
+      if (mcpServers.hasServers()) await this.mcpReady(session);
       await session.prompt(task.prompt);
       await session.waitForIdle();
       reply = session.messages.findLast(
@@ -3840,66 +3958,84 @@ export class AgentHost {
       clearTimeout(limit);
       this.taskSessions.delete(task.id);
     }
-    // Deliver the result according to the task's delivery setting.
-    const finalText =
-      reply?.content?.find(
-        (b): b is { type: "text"; text: string } => (b as { type?: string }).type === "text",
-      )?.text ?? "";
-    const isSilent = task.silentIfEmpty && finalText.trim() === "[SILENT]";
-    if (outcome.status === "completed" && !isSilent) {
-      const delivery = task.delivery ?? { to: "session" as const };
-      if (delivery.to === "peer") {
-        try {
-          await this.deliverToPeer(delivery.peer, task.name, finalText);
-          runDelivery = "sent";
-        } catch (error) {
-          runDelivery = `failed: ${(error as Error).message}`;
-        }
-      } else if (delivery.to === "session") {
-        if (target.mode === "current") {
-          const committed = await this.commitToOriginSession(
-            target.sessionId,
-            task.origin,
-            task.name,
-            finalText,
-          );
-          runDelivery = committed ? "session" : "failed: origin session not found";
+    // Deliver the result according to the task's delivery setting. Whatever happens, the session
+    // and its MCP servers are released and the run is recorded, so a failed delivery is not
+    // retried every minute.
+    try {
+      const finalText =
+        reply?.content?.find(
+          (b): b is { type: "text"; text: string } => (b as { type?: string }).type === "text",
+        )?.text ?? "";
+      const isSilent = task.silentIfEmpty && finalText.trim() === "[SILENT]";
+      if (outcome.status === "completed" && !isSilent) {
+        const delivery = task.delivery ?? { to: "session" as const };
+        if (delivery.to === "peer") {
+          try {
+            await this.deliverToPeer(delivery.peer, task.name, finalText);
+            runDelivery = "sent";
+          } catch (error) {
+            runDelivery = `failed: ${errorMessage(error)}`;
+          }
+        } else if (delivery.to === "session") {
+          if (target.mode === "current") {
+            const committed = await this.commitToOriginSession(
+              target.sessionId,
+              task.origin,
+              task.name,
+              finalText,
+            );
+            runDelivery = committed ? "session" : "failed: origin session not found";
+          } else {
+            runDelivery = "session";
+          }
         } else {
-          runDelivery = "session";
+          runDelivery = "none";
         }
-      } else {
-        runDelivery = "none";
+      }
+    } catch (error) {
+      outcome = { status: "failed", error: errorMessage(error) };
+      runDelivery = `failed: ${errorMessage(error)}`;
+    } finally {
+      const run: TaskRun = {
+        at: startedAt,
+        durationMs: Date.now() - startedAt,
+        ...outcome,
+        deniedTools: denied,
+        ...(session?.sessionFile ? { sessionPath: session.sessionFile } : {}),
+        ...(runDelivery ? { delivery: runDelivery } : {}),
+      };
+      try {
+        mcpServers?.detach();
+        session?.dispose();
+      } finally {
+        this.updateTask(task.id, (draft) => {
+          draft.lastRun = run;
+        });
+        // A one-shot task that asked to be removed after firing is gone now.
+        if (task.deleteAfterRun) {
+          this.requireServices().settings.update((draft) => {
+            draft.scheduledTasks = draft.scheduledTasks.filter((entry) => entry.id !== task.id);
+          });
+        }
+        emit({ type: "settings_changed", scopes: ["scheduledTasks"] });
+        emit({ type: "sessions_changed" });
       }
     }
-    const run: TaskRun = {
-      at: startedAt,
-      durationMs: Date.now() - startedAt,
-      ...outcome,
-      deniedTools: denied,
-      ...(session?.sessionFile ? { sessionPath: session.sessionFile } : {}),
-      ...(runDelivery ? { delivery: runDelivery } : {}),
-    };
-    mcpServers?.detach();
-    session?.dispose();
-    this.updateTask(task.id, (draft) => {
-      draft.lastRun = run;
-    });
-    // A one-shot task that asked to be removed after firing is gone now.
-    if (task.deleteAfterRun) {
-      this.requireServices().settings.update((draft) => {
-        draft.scheduledTasks = draft.scheduledTasks.filter((entry) => entry.id !== task.id);
-      });
-    }
-    emit({ type: "settings_changed", scopes: ["scheduledTasks"] });
-    emit({ type: "sessions_changed" });
   }
+
+  /** The file of the saved session `idOrPath` names; only files in the session folder are found. */
   private findSessionPath(idOrPath: string): string | null {
-    const { paths } = this.requireServices();
-    if (existsSync(idOrPath)) return idOrPath;
-    const ref = sessionRef(idOrPath);
-    const candidate = join(paths.sessionDir, `${ref}.jsonl`);
-    if (existsSync(candidate)) return candidate;
-    return null;
+    const { sessionDir } = this.requireServices().paths;
+    const candidate = join(sessionDir, `${sessionRef(idOrPath)}.jsonl`);
+    return existsSync(candidate) ? candidate : null;
+  }
+
+  /** Every saved session, newest first; files are read again only when they changed. */
+  private savedSessions(): Promise<SavedSession[]> {
+    const { sessionDir } = this.requireServices().paths;
+    if (this.sessionInfoCache?.dir !== sessionDir)
+      this.sessionInfoCache = new SessionInfoCache(sessionDir);
+    return this.sessionInfoCache.list();
   }
 
   private async commitToOriginSession(
@@ -4306,18 +4442,27 @@ export class AgentHost {
   ): SessionScope {
     const { settings } = this.requireServices();
     const agent = () => findAgent(settings.get().agents, chat.agentId);
-    // The paired owner's own chat sees everything; any other chat sees only itself.
-    const owns = () => this.channelFor(chatKey)?.summary().ownerKey === chatKey;
+    // The paired owner's own chat sees everything; any other chat sees only itself, and other
+    // people may talk in it, so its tools ask the owner (off while nobody is paired).
+    const chatAccess = (): ChatAccess => {
+      const ownerKey = this.channelFor(chatKey)?.summary().ownerKey ?? null;
+      return ownerKey === chatKey ? "owner" : ownerKey === null ? "unpaired" : "members";
+    };
     return {
       agent,
       workspace: () => findWorkspace(settings.get().workspaces, chat.workspaceId),
       mcpServers,
-      approvalGate: this.gateFor(agent, (request) => this.askInChat(chat, request)),
+      approvalGate: this.gateFor({
+        agent,
+        ask: (request) => this.askInChat(chat, request),
+        chatAccess,
+      }),
+      chatAccess,
       askUser: (call, signal) => this.askQuestionInChat(chat, call, signal),
       systemNote: { section: "channel", text: channelNote(this.channelOf(chatKey).label) },
       surface: { kind: "chat", label: `a ${this.channelOf(chatKey).label} chat (${chatKey})` },
       get visibility() {
-        return owns() ? "all" : "self";
+        return chatAccess() === "owner" ? "all" : "self";
       },
     };
   }
@@ -4363,8 +4508,8 @@ export class AgentHost {
       session.dispose();
       throw new Error(t("models.noneChosen"));
     }
-    // The agent's MCP servers connect in the background; wait for them to settle.
-    if (mcpServers.hasServers()) await this.mcp.status(session).catch(() => undefined);
+    // The agent's MCP servers connect in the background; wait a little for them to settle.
+    if (mcpServers.hasServers()) await this.mcpReady(session);
     const unsubscribe = session.subscribe((event) => this.onChatEvent(runtime, event));
     return Object.assign(runtime, { session, mcpServers, unsubscribe });
   }
@@ -4376,14 +4521,15 @@ export class AgentHost {
     try {
       switch (event.type) {
         case "message_update":
-          if (event.message.role === "assistant")
-            turn.hooks.onText(
-              [...turn.texts, assistantText(event.message)].filter(Boolean).join("\n\n"),
-            );
+          if (event.message.role === "assistant") {
+            const live = assistantText(event.message);
+            turn.hooks.onText(turn.done && live ? `${turn.done}\n\n${live}` : turn.done || live);
+          }
           break;
         case "message_end":
           if (event.message.role === "assistant") {
-            turn.texts.push(assistantText(event.message));
+            const text = assistantText(event.message);
+            if (text) turn.done = turn.done ? `${turn.done}\n\n${text}` : text;
             turn.reply = event.message;
           }
           break;
@@ -4479,8 +4625,15 @@ export class AgentHost {
     input: ChannelInput,
     hooks: TurnHooks,
   ): Promise<TurnResult> {
-    const text = input.text.trim();
-    if (!text && input.attachments.length === 0) return { text: "", status: "done" };
+    const typed = input.text.trim();
+    if (!typed && input.attachments.length === 0) return { text: "", status: "done" };
+    // In a chat other people talk in, the model learns who wrote each message; the id cannot be
+    // faked by a display name.
+    const body = typed || ATTACHMENTS_ONLY_PROMPT;
+    const text =
+      input.sender && this.channelFor(chatKey)?.summary().ownerKey !== chatKey
+        ? `[Message from ${input.sender.name} (id ${input.sender.id}${input.sender.owner ? ", the owner" : ""})]\n${body}`
+        : body;
     let chat: ChatSession;
     try {
       chat = await this.chatSession(chatKey);
@@ -4489,11 +4642,11 @@ export class AgentHost {
     }
     const { chatSessions } = this.requireServices();
     chat.stopped = false;
-    chat.turn = { hooks, texts: [] };
+    chat.turn = { hooks, done: "" };
     try {
       // Copy files and encode images before the run, so a bad attachment fails the turn.
       const message = await buildPrompt(
-        text || ATTACHMENTS_ONLY_PROMPT,
+        text,
         input.attachments,
         chat.session.sessionManager.getCwd(),
       );

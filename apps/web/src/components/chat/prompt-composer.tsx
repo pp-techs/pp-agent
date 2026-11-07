@@ -24,6 +24,7 @@ import { ComposerMenu } from "@/components/chat/composer-menu";
 import { ComposerToken } from "@/components/chat/composer-token";
 import { GoalBanner } from "@/components/chat/goal-banner";
 import { HelperPanel } from "@/components/chat/helper-panel";
+import { InlineImage } from "@/components/chat/inline-image";
 import { TodoPanel } from "@/components/chat/todo-panel";
 import { ModelPicker } from "@/components/chat/model-picker";
 import { SlashSuggestions } from "@/components/chat/slash-suggestions";
@@ -33,7 +34,7 @@ import { useSendMessage } from "@/hooks/use-send-message";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { voiceQuery } from "@/lib/extension-queries";
 import { parseGoalCommand, type GoalParams } from "@/lib/goal";
-import { useAgentCommands, useGoalPending } from "@/lib/queries";
+import { useAbort, useGoalPending, useRespondQuestion, useSetGoal } from "@/lib/queries";
 import {
   filterSlashItems,
   findTypedCommand,
@@ -64,7 +65,9 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
   const draft = useComposerStore((state) => state.draft);
   const attachments = useComposerStore((state) => state.attachments);
   const { setDraft, add, remove } = useComposerStore.getState();
-  const { abort, respondQuestion, setGoal } = useAgentCommands(bridge);
+  const abort = useAbort(bridge);
+  const respondQuestion = useRespondQuestion(bridge);
+  const setGoal = useSetGoal(bridge);
   const goalPending = useGoalPending();
   // The agent's question takes the place of the composer until it is answered.
   const question = useChatStore((state) => Object.values(state.questions)[0]);
@@ -286,7 +289,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
                 <Attachment key={attachment.id} size="sm">
                   <AttachmentMedia variant={attachment.data ? "image" : "icon"}>
                     {attachment.data ? (
-                      <img src={`data:${attachment.mimeType};base64,${attachment.data}`} alt="" />
+                      <InlineImage data={attachment.data} mimeType={attachment.mimeType} alt="" />
                     ) : (
                       <FileTextIcon />
                     )}

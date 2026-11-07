@@ -71,7 +71,10 @@ function usePageBounds(bridge: DesktopBridge, element: HTMLElement | null, visib
       bridge.browser.setBounds(null);
       return;
     }
-    let overlay = document.querySelector(OVERLAY_SELECTOR) !== null;
+    // The open popups, kept from the mutation records: searching the whole document on every
+    // change would cost more the longer the chat gets, and a streamed reply changes it often.
+    const overlays = new Set(document.querySelectorAll(OVERLAY_SELECTOR));
+    let overlay = overlays.size > 0;
     let frame = 0;
     const send = () => {
       cancelAnimationFrame(frame);
@@ -87,8 +90,18 @@ function usePageBounds(bridge: DesktopBridge, element: HTMLElement | null, visib
     const resize = new ResizeObserver(send);
     resize.observe(element);
     window.addEventListener("resize", send);
-    const popups = new MutationObserver(() => {
-      const next = document.querySelector(OVERLAY_SELECTOR) !== null;
+    const popups = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (!(node instanceof Element)) continue;
+          if (node.matches(OVERLAY_SELECTOR)) overlays.add(node);
+          for (const inner of node.querySelectorAll(OVERLAY_SELECTOR)) overlays.add(inner);
+        }
+        if (record.removedNodes.length > 0) {
+          for (const element of overlays) if (!element.isConnected) overlays.delete(element);
+        }
+      }
+      const next = overlays.size > 0;
       if (next === overlay) return;
       overlay = next;
       send();
