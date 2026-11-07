@@ -16,5 +16,7 @@ describe("createServiceControl", () => {
     expect(status.detail).toMatch(/not supported on freebsd/);
     await expect(service.install()).rejects.toThrow(/not supported on freebsd/);
     await expect(service.uninstall()).rejects.toThrow(/not supported on freebsd/);
+    await expect(service.startIfInstalled()).resolves.toBeUndefined();
+    await expect(service.refreshIfOutdated()).resolves.toBe(false);
   });
 });

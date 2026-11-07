@@ -14,9 +14,9 @@ import {
   WebContentsView,
 } from "electron";
 import { translator } from "../i18n.ts";
-import { isWebUrl, toAddress } from "./address.ts";
+import { isPrivateTarget, isWebUrl, toAddress } from "./address.ts";
 import { type PortableCookie, toElectronCookie } from "./cookies/portable.ts";
-import type { BrowserDriver } from "./driver.ts";
+import type { BrowserDriver, NavigationSource } from "./driver.ts";
 
 /** Partition folders are `Partitions/pp-browser-<profile id>` inside the app's data folder. */
 const PARTITION_PREFIX = "pp-browser-";
@@ -82,6 +82,14 @@ export class BrowserHost implements BrowserDriver {
   private window: BrowserWindow | null = null;
   private nextId = 1;
   private emitQueued = false;
+  /**
+   * Pages (web contents ids) the agent opened or acted on, with the popups and tabs they opened:
+   * their page loads may not reach this computer or the local network. A page leaves the set when
+   * the person types an address into it.
+   */
+  private readonly agentPages = new Set<number>();
+  /** Tabs an agent step is acting on now (with a count, for overlapping steps): not throttled. */
+  private readonly driving = new Map<string, number>();
 
   constructor(private readonly options: BrowserHostOptions) {}
 
@@ -104,9 +112,13 @@ export class BrowserHost implements BrowserDriver {
     return { tabs: [...this.tabs.values()].map(describe), activeId: this.activeId };
   }
 
-  async open(profileId: string, url?: string): Promise<BrowserTab> {
+  async open(
+    profileId: string,
+    url: string | undefined,
+    by: NavigationSource,
+  ): Promise<BrowserTab> {
     await this.options.requireProfile(profileId);
-    return describe(this.openTab(profileId, url ? toAddress(url) : "about:blank", true));
+    return describe(this.openTab(profileId, url ? toAddress(url) : "about:blank", true, by));
   }
 
   async close(tabId: string): Promise<void> {
@@ -116,6 +128,7 @@ export class BrowserHost implements BrowserDriver {
     this.window?.contentView.removeChildView(tab.view);
     if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close();
     this.tabs.delete(tabId);
+    this.driving.delete(tabId);
     if (this.activeId === tabId) this.activeId = order[index + 1] ?? order[index - 1] ?? null;
     this.layout();
     this.emit();
@@ -128,8 +141,36 @@ export class BrowserHost implements BrowserDriver {
     this.emit();
   }
 
-  async navigate(tabId: string, input: string): Promise<void> {
-    load(this.requireTab(tabId).view.webContents, toAddress(input));
+  async navigate(tabId: string, input: string, by: NavigationSource): Promise<void> {
+    const contents = this.requireTab(tabId).view.webContents;
+    if (by === "agent") this.agentPages.add(contents.id);
+    else this.agentPages.delete(contents.id);
+    load(contents, toAddress(input));
+  }
+
+  /**
+   * An agent step starts acting on a tab: its page counts as the agent's from now on, and runs at
+   * full speed while hidden until `release`.
+   */
+  drive(tabId: string): void {
+    const contents = this.requireTab(tabId).view.webContents;
+    if (contents.isDestroyed()) return;
+    this.agentPages.add(contents.id);
+    const count = this.driving.get(tabId) ?? 0;
+    this.driving.set(tabId, count + 1);
+    if (count === 0) contents.setBackgroundThrottling(false);
+  }
+
+  /** The agent step that called `drive` ended: a hidden page is throttled again. */
+  release(tabId: string): void {
+    const count = this.driving.get(tabId) ?? 0;
+    if (count > 1) {
+      this.driving.set(tabId, count - 1);
+      return;
+    }
+    this.driving.delete(tabId);
+    const contents = this.tabs.get(tabId)?.view.webContents;
+    if (contents && !contents.isDestroyed()) contents.setBackgroundThrottling(true);
   }
 
   async go(tabId: string, action: BrowserAction): Promise<void> {
@@ -221,19 +262,19 @@ export class BrowserHost implements BrowserDriver {
     return tab;
   }
 
-  private openTab(profileId: string, url: string, activate: boolean): Tab {
+  private openTab(profileId: string, url: string, activate: boolean, by: NavigationSource): Tab {
     if (this.tabs.size >= MAX_TABS)
       throw new Error(translator()("panel.browser.tooManyTabs", { max: MAX_TABS }));
+    // Hidden pages are throttled as in any browser; `drive` lifts that while the agent acts.
     const view = new WebContentsView({
       webPreferences: {
         partition: partitionOf(profileId),
         sandbox: true,
         contextIsolation: true,
         nodeIntegration: false,
-        // The agent's browser tool works on pages the panel is not showing.
-        backgroundThrottling: false,
       },
     });
+    if (by === "agent") this.agentPages.add(view.webContents.id);
     this.configureSession(view.webContents.session);
     view.setBounds(this.pixelBounds(this.lastBounds));
     const tab: Tab = { id: `tab-${this.nextId++}`, profileId, view };
@@ -248,10 +289,14 @@ export class BrowserHost implements BrowserDriver {
     return tab;
   }
 
-  /** A link the page or its menu opens in a new tab; past the tab limit it is only logged. */
+  /**
+   * A link the page or its menu opens in a new tab; past the tab limit it is only logged. A tab
+   * opened from one of the agent's pages is the agent's too.
+   */
   private openLink(tab: Tab, url: string, activate: boolean): void {
+    const by = this.agentPages.has(tab.view.webContents.id) ? "agent" : "person";
     try {
-      this.openTab(tab.profileId, url, activate);
+      this.openTab(tab.profileId, url, activate, by);
     } catch (error) {
       console.error("Could not open the link in a new tab:", error);
     }
@@ -259,6 +304,8 @@ export class BrowserHost implements BrowserDriver {
 
   private wire(tab: Tab): void {
     const contents = tab.view.webContents;
+    const pageId = contents.id;
+    contents.once("destroyed", () => this.agentPages.delete(pageId));
     guard(contents);
     contents.setWindowOpenHandler(({ url, disposition }) => {
       if (!isWebUrl(url)) return { action: "deny" };
@@ -268,6 +315,9 @@ export class BrowserHost implements BrowserDriver {
       return { action: "deny" };
     });
     contents.on("did-create-window", (popup) => {
+      const popupId = popup.webContents.id;
+      if (this.agentPages.has(pageId)) this.agentPages.add(popupId);
+      popup.webContents.once("destroyed", () => this.agentPages.delete(popupId));
       guard(popup.webContents);
       popup.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     });
@@ -386,6 +436,22 @@ export class BrowserHost implements BrowserDriver {
     );
     target.setPermissionCheckHandler((_contents, permission) =>
       ALLOWED_PERMISSIONS.has(permission),
+    );
+    // Pages of the agent may not load this computer or the local network, also through a link it
+    // clicks or a redirect. The host is resolved here and Chromium resolves it again when it
+    // connects, so a host that changes its address in between is not caught.
+    target.webRequest.onBeforeRequest(
+      { urls: ["http://*/*", "https://*/*"], types: ["mainFrame", "subFrame"] },
+      (details, callback) => {
+        if (details.webContentsId === undefined || !this.agentPages.has(details.webContentsId)) {
+          callback({});
+          return;
+        }
+        void isPrivateTarget(details.url).then(
+          (refused) => callback({ cancel: refused }),
+          () => callback({ cancel: true }),
+        );
+      },
     );
   }
 }

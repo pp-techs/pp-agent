@@ -42,7 +42,12 @@ import {
   telegramChatSettings,
   type TelegramChatDraft,
 } from "@/components/settings/telegram-chat-fields";
+import { ComputerOnlyNotice } from "@/components/settings/computer-only-notice";
+import { maySend } from "@/lib/bridge";
 import { telegramStatusQuery, useBackgroundCommands } from "@/lib/extension-queries";
+
+/** Whoever pairs with the bot talks to the agent from anywhere, so only the computer sets it up. */
+const CAN_SET_UP = maySend("save_telegram") && maySend("start_telegram_pairing");
 
 /** Explicit chat-id entry also works before the bot has received any messages. */
 function ChatsStep({ bridge, status }: { bridge: DesktopBridge; status: TelegramStatus }) {
@@ -353,11 +358,17 @@ export function TelegramPage({ bridge }: { bridge: DesktopBridge }) {
       {status && view && (
         <>
           <StatusLine channel="telegram" view={view} />
-          <ConnectStep channel="telegram" view={view} actions={actions} />
-          <PairStep channel="telegram" view={view} actions={actions} />
-          <RepliesStep channel="telegram" view={view} actions={actions} bridge={bridge} />
-          <ChatsStep bridge={bridge} status={status} />
-          {(status.hasToken || status.ownerId !== null) && (
+          {CAN_SET_UP ? (
+            <>
+              <ConnectStep channel="telegram" view={view} actions={actions} />
+              <PairStep channel="telegram" view={view} actions={actions} />
+              <RepliesStep channel="telegram" view={view} actions={actions} bridge={bridge} />
+              <ChatsStep bridge={bridge} status={status} />
+            </>
+          ) : (
+            <ComputerOnlyNotice />
+          )}
+          {(status.hasToken || status.ownerId !== null) && maySend("forget_telegram") && (
             <div>
               <Button
                 variant="destructive"

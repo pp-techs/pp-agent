@@ -10,10 +10,16 @@ import { useTranslation } from "react-i18next";
 import { HelperStatusIcon } from "@/components/chat/helper-status";
 import { useChatStore } from "@/stores/chat-store";
 
-/** Status of the helpers of the `delegate_task` call running now, if any. */
+/**
+ * Status of the helpers of the `delegate_task` call running now, if any.
+ * Runs on every store update and keystroke, so it walks backwards in place instead of copying.
+ */
 function runningHelpers(state: { messages: ChatMessage[] }): HelperProgress[] | undefined {
-  for (const message of state.messages.toReversed()) {
-    for (const part of message.parts.toReversed()) {
+  const { messages } = state;
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const { parts } = messages[index];
+    for (let partIndex = parts.length - 1; partIndex >= 0; partIndex--) {
+      const part = parts[partIndex];
       if (part.type === "tool" && part.name === DELEGATE_TASK_TOOL && part.status === "running")
         return part.helpers;
     }

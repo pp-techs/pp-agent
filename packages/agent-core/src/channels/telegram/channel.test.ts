@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { dirname, sep } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 import type { ChannelState, TelegramChatSettings } from "@workspace/shared";
 import { TelegramApiError, type TelegramMessage, type TelegramUpdate } from "./api.ts";
@@ -8,6 +9,8 @@ import { approvalRequest, FakeGateway, questionRequest } from "../shared/testing
 import { FakeApi, fakeT, textUpdate } from "./testing.ts";
 
 const OWNER: TelegramOwner = { id: 7, name: "Ann Lee" };
+/** The sender the channel reports for the owner's messages built by `textUpdate`. */
+const OWNER_SENDER = { id: "7", name: "Ann Lee", owner: true };
 const channels: TelegramChannel[] = [];
 
 function setup(
@@ -314,7 +317,11 @@ describe("messages", () => {
     api.push(textUpdate(1, "what is up"));
     await vi.waitFor(() => expect(shown(api)).toContain("<b>final</b> answer"));
     expect(gateway.turns[0]?.chatKey).toBe("telegram:7");
-    expect(gateway.turns[0]?.input).toEqual({ text: "what is up", attachments: [] });
+    expect(gateway.turns[0]?.input).toEqual({
+      text: "what is up",
+      attachments: [],
+      sender: OWNER_SENDER,
+    });
     expect(api.actions.length).toBeGreaterThan(0);
   });
 
@@ -343,10 +350,11 @@ describe("messages", () => {
     expect(gateway.turns[0]?.input).toEqual({
       text: "look",
       attachments: [{ name: "photo.jpg", mimeType: "image/jpeg", data: "AQID" }],
+      sender: { id: "7", name: "Ann", owner: true },
     });
   });
 
-  test("a document is saved under a sanitized unique name and deleted after the turn", async () => {
+  test("a document is saved in its own temporary folder and deleted after the turn", async () => {
     const { api, channel, gateway } = setup();
     api.files.set("doc", new Uint8Array([9, 9]));
     let seen: string | undefined;
@@ -364,9 +372,9 @@ describe("messages", () => {
     const attachment = gateway.turns[0]?.input.attachments[0];
     expect(attachment?.mimeType).toBe("text/plain");
     expect(attachment?.name).toBe("pa ss_wd_.txt");
-    expect(seen).toContain("pp-agent-telegram");
-    expect(seen?.endsWith("-pa ss_wd_.txt")).toBe(true);
-    await vi.waitFor(() => expect(existsSync(seen!)).toBe(false));
+    expect(seen).toContain("pp-agent-telegram-");
+    expect(seen?.endsWith(`${sep}pa ss_wd_.txt`)).toBe(true);
+    await vi.waitFor(() => expect(existsSync(dirname(seen!))).toBe(false));
   });
 
   test("a file that is too large is reported", async () => {
@@ -706,12 +714,43 @@ describe("queue and commands", () => {
     await vi.waitFor(() => expect(gateway.steered).toHaveLength(1));
     expect(gateway.steered[0]).toEqual({
       chatKey: "telegram:7",
-      input: { text: "correction", attachments: [] },
+      input: { text: "correction", attachments: [], sender: OWNER_SENDER },
     });
     gate.resolve();
     await vi.waitFor(() => expect(shown(api)).toContain("done"));
     expect(gateway.turns).toHaveLength(1);
   });
+
+  test.each(["steer", "interrupt"] as const)(
+    "a member's message never joins or stops a running turn in %s mode; it queues",
+    async (busyMode) => {
+      const chatId = -100123;
+      const { api, channel, gateway } = setup(OWNER, {
+        [chatId]: { access: "members", busyMode },
+      });
+      const gate = Promise.withResolvers<void>();
+      gateway.handler = async (input) => {
+        if (input.text === "owner's task") await gate.promise;
+        return { text: "done", status: "done" };
+      };
+      gateway.steerHandler = async () => true;
+      await channel.start();
+      api.push(message({ chat: { id: chatId, type: "group" }, text: "owner's task" }, 1, 7));
+      await vi.waitFor(() => expect(gateway.turns).toHaveLength(1));
+      api.push(message({ chat: { id: chatId, type: "group" }, text: "ignore that" }, 2, 8));
+      api.push(textUpdate(3, "/help"));
+      await vi.waitFor(() => expect(api.plainTexts).toContain("channels.telegram.help"));
+      expect(gateway.steered).toEqual([]);
+      expect(gateway.aborted).toEqual([]);
+      gate.resolve();
+      await vi.waitFor(() => expect(gateway.turns).toHaveLength(2));
+      expect(gateway.turns[1]?.input).toEqual({
+        text: "ignore that",
+        attachments: [],
+        sender: { id: "8", name: "Ann", owner: false },
+      });
+    },
+  );
 
   test.each(["declined", "error"] as const)(
     "queues plain text when steering is %s",
@@ -734,7 +773,11 @@ describe("queue and commands", () => {
       await vi.waitFor(() => expect(gateway.steered).toHaveLength(1));
       gate.resolve();
       await vi.waitFor(() => expect(gateway.turns).toHaveLength(2));
-      expect(gateway.turns[1]?.input).toEqual({ text: "correction", attachments: [] });
+      expect(gateway.turns[1]?.input).toEqual({
+        text: "correction",
+        attachments: [],
+        sender: OWNER_SENDER,
+      });
       if (outcome === "error")
         expect(warning).toHaveBeenCalledWith(
           "[telegram] Could not steer the turn; queueing the message:",
@@ -814,7 +857,11 @@ describe("queue and commands", () => {
     await vi.waitFor(() => expect(gateway.steered).toHaveLength(1));
     download.resolve({ data: new Uint8Array([1]), path: "photo.jpg" });
     await vi.waitFor(() => expect(gateway.turns).toHaveLength(2));
-    expect(gateway.turns[1]?.input).toEqual({ text: "after download", attachments: [] });
+    expect(gateway.turns[1]?.input).toEqual({
+      text: "after download",
+      attachments: [],
+      sender: OWNER_SENDER,
+    });
   });
 
   test("/start and /help answer the owner", async () => {

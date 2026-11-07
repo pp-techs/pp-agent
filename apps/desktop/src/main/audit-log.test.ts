@@ -15,9 +15,8 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-function lines(log: AuditLog): Array<Record<string, unknown>> {
-  return log
-    .read()
+async function lines(log: AuditLog): Promise<Array<Record<string, unknown>>> {
+  return (await log.read())
     .trim()
     .split("\n")
     .filter(Boolean)
@@ -91,58 +90,68 @@ describe("auditEntryFor", () => {
 });
 
 describe("AuditLog", () => {
-  test("writes one redacted JSON line per record", () => {
+  test("writes one redacted JSON line per record", async () => {
     const log = new AuditLog({ dir, home: "/Users/jane" });
     log.record("agent_error", { message: "cannot read /Users/jane/x with token=abc123" });
-    const [entry] = lines(log);
+    const [entry] = await lines(log);
     expect(entry?.kind).toBe("agent_error");
     expect(entry?.message).toBe("cannot read ~/x with token=[redacted]");
     expect(typeof entry?.time).toBe("string");
   });
 
-  test("logs a failed turn once, however often its message is sent", () => {
+  test("logs a failed turn once, however often its message is sent", async () => {
     const log = new AuditLog({ dir });
     const event: AgentEvent = { type: "message", message: failedTurn };
     log.event(event, { session: "s1" });
     log.event(event, { session: "s1" });
-    const entries = lines(log);
+    const entries = await lines(log);
     expect(entries).toHaveLength(1);
     expect(entries[0]?.session).toBe("s1");
   });
 
-  test("logs the same message id again when it comes from another conversation", () => {
+  test("logs the same message id again when it comes from another conversation", async () => {
     const log = new AuditLog({ dir });
     const event: AgentEvent = { type: "message", message: failedTurn };
     log.event(event, { session: "s1" });
     log.event(event, { session: "s2" });
     log.event(event, { session: null });
     log.event(event, { session: null });
-    expect(lines(log).map((entry) => entry.session)).toEqual(["s1", "s2", null, null]);
+    expect((await lines(log)).map((entry) => entry.session)).toEqual(["s1", "s2", null, null]);
   });
 
-  test("rotates when full and keeps the older file", () => {
+  test("rotates when full and keeps the older file", async () => {
     const log = new AuditLog({ dir, maxBytes: 300 });
     for (let i = 0; i < 12; i += 1) log.record("tick", { i });
+    const all = (await lines(log)).map((entry) => entry.i as number);
     expect(readFileSync(join(dir, "audit.1.log"), "utf8")).toContain('"kind":"tick"');
-    const all = lines(log).map((entry) => entry.i as number);
     expect(all.at(-1)).toBe(11);
     // Only the newest part survives two rotations, and it stays in order.
     expect(all).toEqual([...all].sort((a, b) => a - b));
-    expect(log.bytes()).toBeLessThan(700);
+    expect(await log.bytes()).toBeLessThan(700);
   });
 
-  test("clear removes both files", () => {
+  test("keeps lines in order across separate writes", async () => {
+    const log = new AuditLog({ dir });
+    log.record("tick", { i: 0 });
+    await log.bytes();
+    log.record("tick", { i: 1 });
+    log.record("tick", { i: 2 });
+    expect((await lines(log)).map((entry) => entry.i)).toEqual([0, 1, 2]);
+  });
+
+  test("clear removes both files", async () => {
     const log = new AuditLog({ dir, maxBytes: 100 });
     for (let i = 0; i < 6; i += 1) log.record("tick", { i });
-    log.clear();
-    expect(log.read()).toBe("");
-    expect(log.bytes()).toBe(0);
+    await log.clear();
+    expect(await log.read()).toBe("");
+    expect(await log.bytes()).toBe(0);
   });
 
-  test("does not throw when the folder cannot be written", () => {
+  test("does not throw when the folder cannot be written", async () => {
     const log = new AuditLog({ dir: join(dir, "missing", "deeper") });
     rmSync(dir, { recursive: true, force: true });
     expect(() => log.record("tick")).not.toThrow();
+    expect(await log.read()).toBe("");
   });
 });
 
@@ -157,12 +166,12 @@ describe("readTail", () => {
 });
 
 describe("buildReport", () => {
-  test("joins the facts, the audit log and the redacted daemon log", () => {
+  test("joins the facts, the audit log and the redacted daemon log", async () => {
     const log = new AuditLog({ dir });
     log.record("app_start");
     const daemonLog = join(dir, "daemon.log");
     writeFileSync(daemonLog, "[model] 401 bad key sk-abcdefghijklmnopqrstu\n");
-    const report = buildReport(log, {
+    const report = await buildReport(log, {
       facts: { App: "1.2.3" },
       daemonLog,
       daemonLogBytes: 4096,

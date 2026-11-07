@@ -8,14 +8,19 @@ import {
   CodeBlockLine,
   CodeBlockTitle,
 } from "@workspace/ui/components/code-block";
-import { Streamdown, useIsCodeFenceIncomplete, type ExtraProps } from "streamdown";
+import {
+  defaultRehypePlugins,
+  Streamdown,
+  useIsCodeFenceIncomplete,
+  type ExtraProps,
+} from "streamdown";
 
 import { useHighlightedCode } from "@/hooks/use-highlighted-code";
 
 function MarkdownCodeBlock({ code, language }: { code: string; language: string }) {
   // True while the closing fence has not arrived yet.
   const incomplete = useIsCodeFenceIncomplete();
-  const lines = useHighlightedCode(code, language);
+  const lines = useHighlightedCode(code, language, incomplete);
 
   return (
     <CodeBlock>
@@ -59,9 +64,37 @@ function MarkdownCode({
 
 const components = { code: MarkdownCode };
 
+type RehypePlugins = NonNullable<React.ComponentProps<typeof Streamdown>["rehypePlugins"]>;
+
+/**
+ * Streamdown's own plugins, with images limited to ones already in the message (`data:` and
+ * `blob:`). An image from the web would load the moment the reply shows it, so a prompt-injected
+ * model could send what it read to any server inside the image's address. A blocked image shows
+ * its description instead. Links keep Streamdown's defaults.
+ */
+const rehypePlugins = [
+  defaultRehypePlugins.raw,
+  defaultRehypePlugins.sanitize,
+  [
+    (defaultRehypePlugins.harden as unknown[])[0],
+    {
+      allowedImagePrefixes: [],
+      allowDataImages: true,
+      allowedLinkPrefixes: ["*"],
+      allowedProtocols: ["*"],
+      imageBlockPolicy: "text-only",
+    },
+  ],
+] as RehypePlugins;
+
 export function Markdown({ children, streaming }: { children: string; streaming?: boolean }) {
   return (
-    <Streamdown controls={false} components={components} isAnimating={streaming}>
+    <Streamdown
+      controls={false}
+      components={components}
+      rehypePlugins={rehypePlugins}
+      isAnimating={streaming}
+    >
       {children}
     </Streamdown>
   );

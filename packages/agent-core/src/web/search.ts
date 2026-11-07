@@ -92,9 +92,15 @@ export class WebSearchService {
     return { providers: views.sort((a, b) => rank(a) - rank(b)) };
   }
 
+  /**
+   * Saves the configuration. A stored key goes only to the address it was saved for: changing a
+   * service's endpoint deletes its key unless a new one comes in the same save, so nobody (a paired
+   * phone with a copied token included) can redirect a saved key to a server of their choosing.
+   */
   async save(input: SaveWebSearchInput): Promise<WebSearchView> {
     const providers = [...new Set(input.providers)];
     if (!providers.every(isSearchProviderId)) throw new Error(t("webSearch.unknownProvider"));
+    const before = this.settings.get().webSearch.endpoints;
     const endpoints: Partial<Record<SearchProviderId, string>> = {};
     for (const def of SEARCH_PROVIDER_DEFS) {
       const raw = input.endpoints[def.id]?.trim();
@@ -103,15 +109,17 @@ export class WebSearchService {
       if (!endpoint) throw new Error(t("webSearch.endpointInvalid", { provider: def.label }));
       endpoints[def.id] = endpoint;
     }
-    for (const [id, key] of Object.entries(input.keys)) {
-      if (!isSearchProviderId(id) || key === undefined || !providerDef(id).usesKey) continue;
+    for (const def of SEARCH_PROVIDER_DEFS) {
+      if (!def.usesKey) continue;
+      const key = input.keys[def.id];
       const trimmed = key?.trim();
       if (trimmed)
-        await this.credentials.modify(WEB_KEY_PREFIX + id, async () => ({
+        await this.credentials.modify(WEB_KEY_PREFIX + def.id, async () => ({
           type: "api_key",
           key: trimmed,
         }));
-      else await this.credentials.delete(WEB_KEY_PREFIX + id);
+      else if (key !== undefined || (endpoints[def.id] ?? "") !== (before[def.id] ?? ""))
+        await this.credentials.delete(WEB_KEY_PREFIX + def.id);
     }
     this.settings.update((draft) => {
       draft.webSearch = { providers, endpoints };

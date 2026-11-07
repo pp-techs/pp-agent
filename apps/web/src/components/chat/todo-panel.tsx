@@ -21,10 +21,16 @@ interface TodoItem {
   status: "pending" | "in_progress" | "done";
 }
 
-/** Arguments of the newest `todo_write` call of the chat (a stable reference between updates). */
+/**
+ * Arguments of the newest `todo_write` call of the chat (a stable reference between updates).
+ * Runs on every store update and keystroke, so it walks backwards in place instead of copying.
+ */
 function latestTodoArgs(state: { messages: ChatMessage[] }): Record<string, unknown> | undefined {
-  for (const message of state.messages.toReversed()) {
-    for (const part of message.parts.toReversed()) {
+  const { messages } = state;
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const { parts } = messages[index];
+    for (let partIndex = parts.length - 1; partIndex >= 0; partIndex--) {
+      const part = parts[partIndex];
       if (part.type === "tool" && part.name === "todo_write" && part.status !== "denied")
         return part.args;
     }

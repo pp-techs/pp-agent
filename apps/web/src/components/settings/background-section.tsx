@@ -13,8 +13,13 @@ import { useQuery } from "@tanstack/react-query";
 import { TriangleAlertIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { ComputerOnlyNotice } from "@/components/settings/computer-only-notice";
 import { SectionHeading } from "@/components/settings/section-heading";
+import { maySend } from "@/lib/bridge";
 import { serviceStatusQuery, useBackgroundCommands } from "@/lib/extension-queries";
+
+/** Only the computer installs or removes its login service. */
+const CAN_INSTALL = maySend("set_service_installed");
 
 function ServiceCard({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("settings");
@@ -54,7 +59,7 @@ function ServiceCard({ bridge }: { bridge: DesktopBridge }) {
             <Switch
               id="background-service"
               checked={data?.installed ?? false}
-              disabled={!data?.supported || setInstalled.isPending}
+              disabled={!data?.supported || setInstalled.isPending || !CAN_INSTALL}
               aria-label={t("background.service.switchLabel")}
               onCheckedChange={(installed) => setInstalled.mutate(installed)}
             />
@@ -87,6 +92,7 @@ export function BackgroundSection({ bridge }: { bridge: DesktopBridge }) {
   return (
     <div className="flex flex-col gap-6">
       <SectionHeading title={t("background.title")} description={t("background.description")} />
+      {!CAN_INSTALL && <ComputerOnlyNotice />}
       <ServiceCard bridge={bridge} />
     </div>
   );

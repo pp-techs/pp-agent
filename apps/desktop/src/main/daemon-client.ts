@@ -7,7 +7,7 @@ import { connect, type Socket } from "node:net";
 import { dirname, join } from "node:path";
 import { app } from "electron";
 import { encodeFrame, FrameDecoder } from "@workspace/daemon/framing";
-import { type DaemonPaths, resolveDaemonPaths } from "@workspace/daemon/paths";
+import { APP_SPAWN_ENV, type DaemonPaths, resolveDaemonPaths } from "@workspace/daemon/paths";
 import {
   type AgentCommand,
   type AgentEvent,
@@ -519,6 +519,8 @@ export class DaemonClient {
           PP_AGENT_WORKSPACE: join(app.getPath("documents"), "PP Agent"),
           PP_AGENT_RESOURCES: this.options.resourcesDir,
           PP_AGENT_VERSION: this.options.appVersion,
+          // Lets this daemon update and start the login service, which only the app's may do.
+          [APP_SPAWN_ENV]: "1",
         },
       });
       child.on("error", (error) => {

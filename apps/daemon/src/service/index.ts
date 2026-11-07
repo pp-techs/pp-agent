@@ -1,16 +1,15 @@
 import { homedir, userInfo } from "node:os";
 
-import type { ServiceControl } from "@workspace/agent-core";
 import type { ServiceManagerKind, ServiceStatus } from "@workspace/shared";
 
 import { createLaunchdService } from "./launchd.ts";
 import { execRunner } from "./runner.ts";
 import { createSystemdService } from "./systemd.ts";
 import { DEFAULT_SERVICE_LABEL } from "./types.ts";
-import type { ServiceBackend, ServiceDeps, ServiceSpec } from "./types.ts";
+import type { DaemonService, ServiceBackend, ServiceDeps, ServiceSpec } from "./types.ts";
 import { createWindowsTaskService } from "./windows-task.ts";
 
-export type { ServiceManagerKind, ServiceStatus };
+export type { DaemonService, ServiceManagerKind, ServiceStatus };
 export { DEFAULT_SERVICE_LABEL };
 
 export interface ServiceOptions {
@@ -36,7 +35,7 @@ const BACKENDS: Partial<Record<NodeJS.Platform, ServiceBackend>> = {
   win32: createWindowsTaskService,
 };
 
-function unsupported(platform: NodeJS.Platform): ServiceControl {
+function unsupported(platform: NodeJS.Platform): DaemonService {
   const detail = `Running in the background as a service is not supported on ${platform}.`;
   return {
     async status(): Promise<ServiceStatus> {
@@ -48,11 +47,15 @@ function unsupported(platform: NodeJS.Platform): ServiceControl {
     async uninstall(): Promise<void> {
       throw new Error(detail);
     },
+    async startIfInstalled(): Promise<void> {},
+    async refreshIfOutdated(): Promise<boolean> {
+      return false;
+    },
   };
 }
 
 /** The service control for this machine's service manager (launchd, systemd or Task Scheduler). */
-export function createServiceControl(options: ServiceOptions): ServiceControl {
+export function createServiceControl(options: ServiceOptions): DaemonService {
   const platform = options.platform ?? process.platform;
   const backend = BACKENDS[platform];
   if (!backend) return unsupported(platform);

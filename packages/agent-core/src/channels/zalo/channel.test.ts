@@ -7,6 +7,8 @@ import { MAX_QUEUED_MESSAGES, MESSAGE_LIMIT, ZaloChannel, type ZaloOwner } from 
 import { FakeZaloApi, fakeT, textUpdate } from "./testing.ts";
 
 const OWNER: ZaloOwner = { id: "u7", name: "Ann" };
+/** The sender the channel reports for the owner's messages built by `textUpdate`. */
+const OWNER_SENDER = { id: "u7", name: "Ann", owner: true };
 const channels: ZaloChannel[] = [];
 
 function setup(initialOwner: ZaloOwner | null = OWNER, chats?: Record<string, ZaloChatSettings>) {
@@ -99,7 +101,7 @@ describe("who is answered", () => {
     api.push(textUpdate(1, "Hi"));
     await vi.waitFor(() => expect(api.texts).toEqual(["Hello Ann"]));
     expect(gateway.turns[0]?.chatKey).toBe("zalo:u7");
-    expect(gateway.turns[0]?.input).toEqual({ text: "Hi", attachments: [] });
+    expect(gateway.turns[0]?.input).toEqual({ text: "Hi", attachments: [], sender: OWNER_SENDER });
     expect(api.actions).toContain("u7");
   });
 
@@ -310,6 +312,7 @@ describe("attachments", () => {
     expect(gateway.turns[0]?.input).toEqual({
       text: "What is this?",
       attachments: [{ name: "photo.png", mimeType: "image/png", data: "AQID" }],
+      sender: OWNER_SENDER,
     });
   });
 
@@ -514,7 +517,7 @@ describe("busy mode", () => {
     await vi.waitFor(() => expect(gateway.steered).toHaveLength(1));
     expect(gateway.steered[0]).toEqual({
       chatKey: "zalo:u7",
-      input: { text: "correction", attachments: [] },
+      input: { text: "correction", attachments: [], sender: OWNER_SENDER },
     });
     gate.resolve();
     await vi.waitFor(() => expect(api.texts).toContain("done"));
@@ -542,7 +545,11 @@ describe("busy mode", () => {
       await vi.waitFor(() => expect(gateway.steered).toHaveLength(1));
       gate.resolve();
       await vi.waitFor(() => expect(gateway.turns).toHaveLength(2));
-      expect(gateway.turns[1]?.input).toEqual({ text: "correction", attachments: [] });
+      expect(gateway.turns[1]?.input).toEqual({
+        text: "correction",
+        attachments: [],
+        sender: OWNER_SENDER,
+      });
       if (outcome === "error")
         expect(warning).toHaveBeenCalledWith(
           "[zalo] Could not steer the turn; queueing the message:",

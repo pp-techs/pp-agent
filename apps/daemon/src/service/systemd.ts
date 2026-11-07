@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 
 import type { ServiceStatus } from "@workspace/shared";
 
-import { DEFAULT_SERVICE_LABEL, firstLine } from "./types.ts";
+import { DEFAULT_SERVICE_LABEL, firstLine, readTextIfExists } from "./types.ts";
 import type { ServiceBackend, ServiceDeps, ServiceSpec } from "./types.ts";
 
 const DEFAULT_UNIT_NAME = "pp-agentd.service";
@@ -44,7 +44,10 @@ export function quoteSystemdEnvironment(key: string, value: string): string {
   return `"${escaped}"`;
 }
 
-/** The user unit that starts the daemon at login and restarts it whenever it stops. */
+/**
+ * The user unit that starts the daemon at login and restarts it when it fails.
+ * A clean exit (exit 0, e.g. another daemon already holds the socket) stays stopped.
+ */
 export function renderSystemdUnit(spec: ServiceSpec): string {
   const execStart = [spec.execPath, ...spec.args].map(quoteSystemdWord).join(" ");
   const environment = Object.entries(spec.env)
@@ -60,7 +63,7 @@ Description=PP Agent background daemon
 [Service]
 Type=simple
 ExecStart=${execStart}
-${environment}${environment ? "\n" : ""}Restart=always
+${environment}${environment ? "\n" : ""}Restart=on-failure
 RestartSec=10
 StandardOutput=${logTarget}
 StandardError=${logTarget}
@@ -156,6 +159,26 @@ export const createSystemdService: ServiceBackend = (spec, deps) => {
       if (await exists(unitPath)) await systemctl(["disable", "--now", unitName], "disable");
       await rm(unitPath, { force: true });
       await systemctl(["daemon-reload"], "reload its units for");
+    },
+
+    async startIfInstalled(): Promise<void> {
+      if (!(await exists(unitPath))) return;
+      await requireAvailable();
+      await systemctl(["start", unitName], "start");
+    },
+
+    async refreshIfOutdated(): Promise<boolean> {
+      const current = await readTextIfExists(unitPath);
+      const wanted = renderSystemdUnit(spec);
+      if (current === null || current === wanted) return false;
+      const program = [spec.execPath, spec.args[0] ?? ""];
+      if (!program.every((part) => current.includes(quoteSystemdWord(part)))) return false;
+      await requireAvailable();
+      await writeFile(unitPath, wanted, { encoding: "utf8", mode: 0o644 });
+      // No restart: the daemon calling this holds the socket, so the unit stays stopped until a
+      // failure, the next login, or `startIfInstalled`.
+      await systemctl(["daemon-reload"], "reload its units for");
+      return true;
     },
   };
 };

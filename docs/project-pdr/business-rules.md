@@ -4,11 +4,11 @@ Rules enforced in code. Paths are under `packages/agent-core/src/` unless noted.
 
 ## Approvals and tools (`tools.ts`)
 
-| Tool tier | Tools                                                                                                                                                                                                                               |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| read      | `read`, `ls`, `find`, `grep`, `read_document`, `current_datetime`, `web_search`, `web_fetch`, `memory_list`, `memory_search`, `todo_write`, `delegate_task`, `ask_user`, `sessions`, discovery tools, MCP tools with `readOnlyHint` |
-| write     | `write`, `edit`, `memory_save`, `memory_forget`, `schedule_task`, `telegram_notify`, MCP tools without `readOnlyHint`                                                                                                               |
-| exec      | `bash`, `powershell`, and any tool without a tier                                                                                                                                                                                   |
+| Tool tier | Tools                                                                                                                                                                                                                                                                                       |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| read      | `read`, `ls`, `find`, `grep`, `read_document`, `current_datetime`, `web_search`, `web_fetch`, `memory_list`, `memory_search`, `todo_write`, `delegate_task`, `ask_user`, `sessions`, discovery tools, `browser` looking actions, MCP tools with `readOnlyHint` from a server marked trusted |
+| write     | `write`, `edit`, `memory_save`, `memory_forget`, `schedule_task`, `telegram_notify`, `browser` acting actions, every other MCP tool                                                                                                                                                         |
+| exec      | `bash`, `powershell`, and any tool without a tier                                                                                                                                                                                                                                           |
 
 | Tool policy    | Effect                                                    |
 | -------------- | --------------------------------------------------------- |
@@ -27,7 +27,14 @@ Rules enforced in code. Paths are under `packages/agent-core/src/` unless noted.
 - `edit` is off by default; non-developers use `write`.
 - **Computer use** (`computer-tool.ts`, `computer-apps.ts`): `computer` is off by default and listed as write tier; the approval gate rates each call by its action (`apps`, `windows`, `snapshot`, `screenshot` read; the rest write). It runs only in window conversations (blocked in chats, scheduled runs and helpers) and only while a window with cua-driver is connected. Protected apps (PP Agent, terminals and script runners, system and password settings) are always refused; blocked apps are refused; the first use of any other app in a conversation asks once (Allow once / in this chat / always). See [Computer use](../architecture/computer-use.md).
 - Discovery tools (`codemode`, `tool_search`, MCP resource tools) are always allowed; the calls they make pass the gate individually.
+- **File reads by path** (`path-access.ts`): the approval gate resolves the path of `read`, `ls`, `find`, `grep` and `read_document` (symbolic links followed, `~`/`@`/`file://` as pi reads them). Inside the workspace (or the installed skills folder) the usual rule applies; outside it the call asks even when the tool runs freely, unless yolo mode is on. The app's data folder (vault, keys, tokens, `mcp.json`, sessions) and `~/.ssh` are always refused, whatever the policy or yolo mode; a recursive `find`/`grep` of a folder that holds one is refused too. Helpers (`delegate_task`) read only inside the workspace. Scheduled runs deny the asks as before.
+- **Browser** (`browser-tool.ts`): listed as write; the gate rates each call by its action: `tabs`, `select`, `snapshot`, `text`, `screenshot`, `scroll`, `wait` read; `open`, `navigate`, `back`, `forward`, `reload`, `close`, `click`, `type`, `press`, `select_option`, `eval` write (they ask under `auto`).
+- **MCP read-only labels** (`mcp.ts`): a tool's `readOnlyHint` counts only when the person marked its server trusted (`trusted: true` in `mcp.json`, the switch in the server form, off by default); otherwise every tool of the server is write tier.
+- **Chats other people talk in** (`index.ts`, `callRule`): a Telegram/Zalo chat that is not the owner's own private chat ignores yolo mode and asks the owner before every tool except discovery tools, `todo_write`, `ask_user` and `current_datetime`; with nobody paired those tools are off. Its prompt carries only the workspace's own memory notes, never the global ones; each message is prefixed with the sender's name and id; only the owner's messages steer or interrupt a running turn (others queue).
+- **Approval cards** show the whole text of a call (no cut at 600 characters; the window card scrolls). Telegram (1500) and Zalo (1200) cards keep the start and the end around a "… N characters hidden …" line.
+- **Sub agents under a named agent** get only the tools both that agent and the calling agent allow.
 - Stopping a run denies all pending approvals and skips all open questions first.
+- Telegram and Zalo `/pair`: besides the global lock after 5 wrong codes, a sender (user id) is locked out alone for 15 minutes after 3 wrong codes.
 
 ## Agents (`agents.ts`)
 
@@ -66,6 +73,7 @@ Rules enforced in code. Paths are under `packages/agent-core/src/` unless noted.
 - Name: lowercase letters, digits, single hyphens (`^[a-z0-9]+(-[a-z0-9]+)*$`), at most 64 characters — the same rule Pi applies.
 - Description required, at most 1024 characters.
 - Duplicate names are refused on import; archives > 100 MB expanded are refused.
+- A workspace folder's own skills (`.agents/skills`) load only after the person trusts that folder (Settings › Workspaces, saved in `trustedSkillFolders`, off by default, only from the computer), and never replace an installed skill of the same name.
 
 ## MCP servers (`mcp.ts`)
 

@@ -2,7 +2,13 @@ import * as React from "react";
 
 import { loadHighlighter } from "@/lib/highlighter";
 
-export function useHighlightedCode(value: string, language: string) {
+/**
+ * `value` split into lines, highlighted once the language has loaded. A block that is complete
+ * when it mounts is highlighted in a transition, so opening a long chat paints its text first and
+ * tokenizes the blocks without freezing the window; a block still being written (`streaming`)
+ * highlights at once and then line by line.
+ */
+export function useHighlightedCode(value: string, language: string, streaming = false) {
   // A trailing newline would render as an extra empty line.
   const code = value.endsWith("\n") ? value.slice(0, -1) : value;
   const [loaded, setLoaded] = React.useState<{
@@ -10,15 +16,21 @@ export function useHighlightedCode(value: string, language: string) {
     highlighter: Awaited<ReturnType<typeof loadHighlighter>>;
   } | null>(null);
   const highlighter = loaded?.language === language ? loaded.highlighter : null;
+  const streamingRef = React.useRef(streaming);
+  // Declared before the loading effect, so it runs first.
+  React.useEffect(() => {
+    streamingRef.current = streaming;
+  });
 
   React.useEffect(() => {
     let cancelled = false;
 
     loadHighlighter(language)
       .then((next) => {
-        if (!cancelled) {
-          setLoaded({ language, highlighter: next });
-        }
+        if (cancelled) return;
+        const apply = () => setLoaded({ language, highlighter: next });
+        if (streamingRef.current) apply();
+        else React.startTransition(apply);
       })
       .catch(() => {});
 

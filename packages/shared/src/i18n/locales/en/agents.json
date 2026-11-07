@@ -236,6 +236,11 @@
     "saved": "Workspace “{{name}}” saved",
     "create": "Create workspace",
     "builtInSrOnly": "Built-in workspace",
+    "skills": {
+      "legend": "Skills in this folder",
+      "label": "Use the skills this folder carries",
+      "description": "Loads the skills in the folder's .agents/skills. Turn on only for folders you trust: a downloaded folder can carry skills that steer the agent. A skill with the same name as an installed one is never used."
+    },
     "namePlaceholder": "Finance team",
     "errors": {
       "nameRequired": "Give the workspace a name.",

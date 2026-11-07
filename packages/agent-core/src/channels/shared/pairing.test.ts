@@ -55,4 +55,33 @@ describe("PairingGuard", () => {
     expect(guard.attempt("WRONGCODE", 3)).toEqual({ status: "invalid" });
     expect(guard.attempt(code, 4)).toEqual({ status: "ok" });
   });
+
+  test("three wrong codes lock out only that sender, and the owner can still pair", () => {
+    const guard = new PairingGuard();
+    const { code } = guard.open(0);
+    expect(guard.attempt("WRONGCODE", 1, "stranger")).toEqual({ status: "invalid" });
+    expect(guard.attempt("WRONGCODE", 2, "stranger")).toEqual({ status: "invalid" });
+    expect(guard.attempt("WRONGCODE", 3, "stranger")).toEqual({
+      status: "locked",
+      until: 3 + PAIRING_LOCK_MS,
+    });
+    // Locked out, the stranger's guesses no longer count, even the right code.
+    expect(guard.attempt(code, 4, "stranger")).toEqual({
+      status: "locked",
+      until: 3 + PAIRING_LOCK_MS,
+    });
+    expect(guard.attempt("WRONGCODE", 5, "stranger")).toEqual({
+      status: "locked",
+      until: 3 + PAIRING_LOCK_MS,
+    });
+    expect(guard.attempt(code, 6, "owner")).toEqual({ status: "ok" });
+  });
+
+  test("a sender's lockout ends after 15 minutes", () => {
+    const guard = new PairingGuard();
+    guard.open(0);
+    for (let i = 1; i <= 3; i++) guard.attempt("WRONGCODE", i, "u1");
+    // No longer locked: the guess is judged again (the ten-minute code has expired by now).
+    expect(guard.attempt("WRONGCODE", 3 + PAIRING_LOCK_MS, "u1")).toEqual({ status: "closed" });
+  });
 });

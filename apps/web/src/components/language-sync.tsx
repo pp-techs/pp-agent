@@ -1,5 +1,5 @@
 import * as React from "react";
-import { resolveLanguage } from "@workspace/shared/i18n";
+import { resolveLanguage } from "@workspace/shared/i18n/renderer";
 import { useQuery } from "@tanstack/react-query";
 
 import { bridge } from "@/lib/bridge";

@@ -1,8 +1,10 @@
-import type { ServiceControl } from "@workspace/agent-core";
 import type { DaemonPaths } from "./paths.ts";
-import { createServiceControl } from "./service/index.ts";
+import { createServiceControl, type DaemonService } from "./service/index.ts";
 
-/** Variables the service manager must hand to the daemon so it finds the same data and resources. */
+/**
+ * Variables the service manager must hand to the daemon so it finds the same data and resources.
+ * `APP_SPAWN_ENV` is deliberately not one of them: the service's daemon is not the app's.
+ */
 const SERVICE_ENV = [
   "ELECTRON_RUN_AS_NODE",
   "PP_AGENT_HOME",
@@ -12,7 +14,7 @@ const SERVICE_ENV = [
 ] as const;
 
 /** Service control for this very install: the service runs `<this runtime> <this script> run`. */
-export function serviceControlFor(paths: DaemonPaths): ServiceControl {
+export function serviceControlFor(paths: DaemonPaths): DaemonService {
   const env: Record<string, string> = {};
   for (const name of SERVICE_ENV) {
     const value = process.env[name];

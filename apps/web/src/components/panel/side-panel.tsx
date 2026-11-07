@@ -42,11 +42,19 @@ const MIN_CHAT_WIDTH = 420;
 function ResizeHandle({ onResizing }: { onResizing: (resizing: boolean) => void }) {
   const { t } = useTranslation("chat");
   const setWidth = usePanelStore((state) => state.setWidth);
+  const dragWidth = usePanelStore((state) => state.dragWidth);
   const width = usePanelStore((state) => state.width);
   const drag = React.useRef<{ x: number; width: number } | null>(null);
 
-  const resize = (next: number) =>
-    setWidth(Math.min(clampWidth(next), Math.max(window.innerWidth - MIN_CHAT_WIDTH, 320)));
+  const fit = (next: number) =>
+    Math.min(clampWidth(next), Math.max(window.innerWidth - MIN_CHAT_WIDTH, 320));
+  // The width is saved once the drag ends, not on every move.
+  const endDrag = () => {
+    if (!drag.current) return;
+    drag.current = null;
+    setWidth(usePanelStore.getState().width);
+    onResizing(false);
+  };
 
   return (
     <div
@@ -61,19 +69,13 @@ function ResizeHandle({ onResizing }: { onResizing: (resizing: boolean) => void 
         onResizing(true);
       }}
       onPointerMove={(event) => {
-        if (drag.current) resize(drag.current.width + drag.current.x - event.clientX);
+        if (drag.current) dragWidth(fit(drag.current.width + drag.current.x - event.clientX));
       }}
-      onPointerUp={() => {
-        drag.current = null;
-        onResizing(false);
-      }}
-      onPointerCancel={() => {
-        drag.current = null;
-        onResizing(false);
-      }}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
       onKeyDown={(event) => {
-        if (event.key === "ArrowLeft") resize(width + 24);
-        else if (event.key === "ArrowRight") resize(width - 24);
+        if (event.key === "ArrowLeft") setWidth(fit(width + 24));
+        else if (event.key === "ArrowRight") setWidth(fit(width - 24));
       }}
     />
   );

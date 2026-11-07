@@ -3,8 +3,17 @@ import type { AddressInfo } from "node:net";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentEvent, AgentPaths, AgentSnapshot, StoredCredential } from "@workspace/shared";
-import { afterEach, beforeEach, expect, test } from "vite-plus/test";
+import { AgentSession } from "@earendil-works/pi-coding-agent";
+import {
+  DEFAULT_AGENT_ID,
+  DEFAULT_WORKSPACE_ID,
+  type AgentEvent,
+  type AgentPaths,
+  type AgentSnapshot,
+  type ScheduledTaskView,
+  type StoredCredential,
+} from "@workspace/shared";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { AgentHost } from "./index.ts";
 
 /**
@@ -117,6 +126,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await host.dispose();
   await new Promise((resolve) => model.server.close(resolve));
   await rm(dir, { recursive: true, force: true });
@@ -203,7 +213,8 @@ test("a new chat is listed as soon as its first message is sent, and the list is
   const before = events.length;
   await host.handle({ type: "prompt", text: "hold-e", attachments: [] });
   await until(async () => (await snapshot()).status === "running");
-  expect(events.slice(before).some((event) => event.type === "sessions_changed")).toBe(true);
+  // `sessions_changed` is coalesced: it may follow the earlier one a moment later.
+  await until(() => events.slice(before).some((event) => event.type === "sessions_changed"));
 
   // Moved to the background, its reply not yet written to disk.
   await host.handle({ type: "new_chat" });
@@ -287,4 +298,38 @@ test("a temporary chat answers but is never saved, and ends when the person leav
   expect(next.messages).toEqual([]);
   expect(await host.handle({ type: "list_sessions" })).toEqual([]);
   expect(await saved()).toEqual([]);
+});
+
+test("a scheduled run whose delivery throws is still released and recorded as failed", async () => {
+  const disposed = vi.spyOn(AgentSession.prototype, "dispose");
+  const delivery = host as unknown as { commitToOriginSession: () => Promise<boolean> };
+  vi.spyOn(delivery, "commitToOriginSession").mockRejectedValue(new Error("disk full"));
+  model.release("hold-task");
+  const { id } = (await host.handle({
+    type: "save_scheduled_task",
+    task: {
+      name: "Report",
+      prompt: "hold-task",
+      agentId: DEFAULT_AGENT_ID,
+      workspaceId: DEFAULT_WORKSPACE_ID,
+      schedule: { kind: "daily", time: "09:00" },
+      enabled: false,
+      target: { mode: "current", sessionId: "origin-session" },
+      delivery: { to: "session" },
+    },
+  })) as ScheduledTaskView;
+  const lastRun = async () =>
+    ((await host.handle({ type: "list_scheduled_tasks" })) as ScheduledTaskView[]).find(
+      (task) => task.id === id,
+    )?.lastRun;
+
+  await host.handle({ type: "run_scheduled_task", id });
+  await until(async () => Boolean(await lastRun()));
+
+  expect(await lastRun()).toMatchObject({
+    status: "failed",
+    error: "disk full",
+    delivery: "failed: disk full",
+  });
+  expect(disposed).toHaveBeenCalled();
 });

@@ -570,6 +570,8 @@ export function createWebBridge(): DesktopBridge {
       list: async () => [],
       create: desktopOnly,
       backlog: desktopOnly,
+      ack: () => undefined,
+      detach: () => undefined,
       write: () => undefined,
       resize: () => undefined,
       close: async () => undefined,
@@ -599,6 +601,7 @@ export function createWebBridge(): DesktopBridge {
       onReveal: noop,
       cookieSources: async () => [],
       cookieSourceRunning: async () => false,
+      cookieSites: async () => [],
       importCookies: desktopOnly,
     },
     computer: {

@@ -1,4 +1,4 @@
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { basename, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { type Attachment, EXPORT_FORMATS, type ExportFormat } from "@workspace/shared";
 import { type BrowserWindow, dialog, shell } from "electron";
@@ -200,11 +200,31 @@ export async function saveDiagnosticsFile(
   return true;
 }
 
-/** Opens an existing folder in Finder / Explorer. */
-export async function openFolder(dir: string): Promise<void> {
-  const info = await stat(dir).catch(() => null);
-  if (!info?.isDirectory()) throw new Error(translator()("app.folderMissing"));
-  const error = await shell.openPath(dir);
+/**
+ * Folders macOS runs, installs or hands to an app when Finder "opens" them, instead of showing
+ * what is inside (apps, installers, plug-ins, Automator workflows).
+ */
+const MAC_BUNDLE =
+  /\.(app|appex|action|bundle|component|docktileplugin|framework|kext|mdimporter|mpkg|osax|pkg|plugin|prefpane|qlgenerator|saver|scptd|service|systemextension|wdgt|workflow|xpc)$/i;
+
+/**
+ * Opens a workspace folder in Finder / Explorer. Only folders of the person's workspaces, and never
+ * a macOS bundle: `shell.openPath` would launch it, and opening must never run anything.
+ */
+export async function openFolder(
+  dir: string,
+  workspaces: readonly string[],
+  platform: NodeJS.Platform = process.platform,
+): Promise<void> {
+  if (!isAbsolute(dir) || !workspaces.includes(resolve(dir)))
+    throw new Error(translator()("app.folderCannotOpen"));
+  // The folder a symbolic link leads to is the one that opens.
+  const real = await realpath(dir).catch(() => null);
+  const info = real ? await stat(real).catch(() => null) : null;
+  if (!real || !info?.isDirectory()) throw new Error(translator()("app.folderMissing"));
+  if (platform === "darwin" && MAC_BUNDLE.test(basename(real)))
+    throw new Error(translator()("app.folderCannotOpen"));
+  const error = await shell.openPath(real);
   if (error) throw new Error(error);
 }
 

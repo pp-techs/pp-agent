@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { AgentHost, type HostOutput } from "@workspace/agent-core";
-import { resolveDaemonPaths } from "./paths.ts";
+import { rotateLog } from "./log-rotation.ts";
+import { APP_SPAWN_ENV, resolveDaemonPaths } from "./paths.ts";
 import { RemoteServer } from "./remote/server.ts";
 import { findWebDir } from "./remote/web-dir.ts";
 import { DaemonServer, ensureToken } from "./server.ts";
@@ -42,24 +43,41 @@ function describe(error: unknown): string {
 
 /**
  * Hosts the agent until asked to stop: owns the socket, the vault, and the one `AgentHost`.
- * Resolves with the exit code; another daemon already running is not a failure.
+ * Resolves with the exit code: 0 when it stopped or another daemon is already running (a service
+ * manager leaves a clean exit alone), 1 when it failed, so the service manager restarts it.
  */
 export async function runDaemon(): Promise<number> {
+  try {
+    return await serve();
+  } catch (error) {
+    log(`pp-agentd failed: ${describe(error)}`);
+    return 1;
+  }
+}
+
+async function serve(): Promise<number> {
   const paths = resolveDaemonPaths();
   const version = appVersion();
   await mkdir(paths.home, { recursive: true });
+  const rotated = await rotateLog(paths.logFile);
   log(`pp-agentd ${version} starting (pid ${process.pid}, home ${paths.home}).`);
+  if (rotated) log(`The previous log moved to ${paths.logFile}.1.`);
 
   process.on("unhandledRejection", (reason) => log(`Unhandled rejection: ${describe(reason)}`));
   process.on("uncaughtException", (error) => log(`Uncaught exception: ${describe(error)}`));
 
   // Listening first is the single-instance guard: nothing else is opened by a second daemon.
   const stopped = Promise.withResolvers<void>();
+  // Set when a client (the app quitting, or replacing an old version) asked this daemon to stop.
+  let shutdownRequested = false;
   const server = new DaemonServer({
     endpoint: paths.endpoint,
     token: await ensureToken(paths.tokenFile),
     appVersion: version,
-    onShutdown: () => stopped.resolve(),
+    onShutdown: () => {
+      shutdownRequested = true;
+      stopped.resolve();
+    },
     log,
   });
   if ((await server.listen()) === "already-running") {
@@ -74,12 +92,30 @@ export async function runDaemon(): Promise<number> {
   };
   process.once("SIGTERM", () => stop("SIGTERM"));
   process.once("SIGINT", () => stop("SIGINT"));
+  const service = serviceControlFor(paths);
+  // Only a daemon the app spawned touches the login service: a daemon the service started (even
+  // from an older service file without any marker) would stop itself by reloading its own job.
+  const spawnedByApp = process.env[APP_SPAWN_ENV] === "1";
+  // A service file written by an older build (a restart rule since fixed, an old version) is
+  // brought up to date. This daemon holds the socket, so the service instance the reload starts
+  // exits as "already running".
+  const serviceRefreshed = spawnedByApp
+    ? service.refreshIfOutdated().then(
+        (updated) => {
+          if (updated) log("Updated the login service to this version.");
+        },
+        (error: unknown) => log(`Could not update the login service: ${describe(error)}`),
+      )
+    : Promise.resolve();
   let host: AgentHost | null = null;
   let remote: RemoteServer | null = null;
   try {
     // An app started from the Dock or a service manager has the minimal PATH; MCP commands
-    // such as `npx` need the login shell's.
-    const shellPath = await resolveShellPath();
+    // such as `npx` need the login shell's. The login shell can be slow, so the vault opens meanwhile.
+    const [shellPath, vault] = await Promise.all([
+      resolveShellPath(),
+      createVaultBackend(paths.home),
+    ]);
     if (shellPath) process.env.PATH = shellPath;
 
     // What the host emits reaches the socket clients (the window) and the web app's devices.
@@ -105,8 +141,8 @@ export async function runDaemon(): Promise<number> {
     });
     host = new AgentHost({
       output,
-      vault: await createVaultBackend(paths.home),
-      service: serviceControlFor(paths),
+      vault,
+      service,
       browser: server.browser,
       computer: server.computer,
       remote,
@@ -138,6 +174,14 @@ export async function runDaemon(): Promise<number> {
     clearTimeout(timer);
     await remote?.close().catch((error: unknown) => log(describe(error)));
     await server.close();
+    // The login service exited quietly while this daemon held the socket; it takes over now, so
+    // scheduled tasks and the bots keep running after the app that started this daemon quits.
+    if (shutdownRequested && spawnedByApp) {
+      await serviceRefreshed;
+      await service
+        .startIfInstalled()
+        .catch((error: unknown) => log(`Could not start the login service: ${describe(error)}`));
+    }
   }
   return 0;
 }

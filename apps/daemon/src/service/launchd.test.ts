@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -47,7 +47,9 @@ describe("renderLaunchdPlist", () => {
   it("describes the job", () => {
     expect(plist).toContain(`<key>Label</key>\n  <string>${label}</string>`);
     expect(plist).toContain("<key>RunAtLoad</key>\n  <true/>");
-    expect(plist).toContain("<key>KeepAlive</key>\n  <true/>");
+    expect(plist).toContain(
+      "<key>KeepAlive</key>\n  <dict>\n    <key>SuccessfulExit</key>\n    <false/>\n  </dict>",
+    );
     expect(plist).toContain("<key>ThrottleInterval</key>\n  <integer>10</integer>");
     expect(plist).toContain("<key>ProcessType</key>\n  <string>Background</string>");
     expect(plist).toContain("<key>StandardErrorPath</key>");
@@ -130,6 +132,74 @@ describe("launchd service", () => {
     expect(calls).toEqual([`launchctl bootout gui/501/${label}`]);
     expect(await exists(plistPath())).toBe(false);
     await service.uninstall();
+  });
+
+  it("starts the installed job without restarting a running one, and skips when absent", async () => {
+    const { runner, calls } = fakeRunner();
+    const service = createServiceControl({
+      ...real,
+      platform: "darwin",
+      runner,
+      homeDir: home,
+      uid: 501,
+    });
+    await service.startIfInstalled();
+    expect(calls).toEqual([]);
+    await service.install();
+    calls.length = 0;
+    await service.startIfInstalled();
+    expect(calls).toEqual([`launchctl kickstart gui/501/${label}`]);
+  });
+
+  it("refreshes an outdated plist: rewrites and reloads without kickstart; same → no-op", async () => {
+    const { runner, calls } = fakeRunner();
+    const service = createServiceControl({
+      ...real,
+      platform: "darwin",
+      runner,
+      homeDir: home,
+      uid: 501,
+    });
+    expect(await service.refreshIfOutdated()).toBe(false);
+    await service.install();
+    calls.length = 0;
+    expect(await service.refreshIfOutdated()).toBe(false);
+    expect(calls).toEqual([]);
+    // An older build wrote `KeepAlive` true.
+    const old = renderLaunchdPlist(real).replace(
+      /<key>KeepAlive<\/key>\n {2}<dict>[\s\S]*?<\/dict>/,
+      "<key>KeepAlive</key>\n  <true/>",
+    );
+    await writeFile(plistPath(), old);
+    expect(await service.refreshIfOutdated()).toBe(true);
+    expect(await readFile(plistPath(), "utf8")).toBe(renderLaunchdPlist(real));
+    expect(calls).toEqual([
+      `launchctl bootout gui/501/${label}`,
+      `launchctl bootstrap gui/501 ${plistPath()}`,
+    ]);
+  });
+
+  it("leaves a plist of another program alone", async () => {
+    const { runner, calls } = fakeRunner();
+    await createServiceControl({
+      ...real,
+      platform: "darwin",
+      runner,
+      homeDir: home,
+      uid: 501,
+    }).install();
+    calls.length = 0;
+    const dev = createServiceControl({
+      ...real,
+      execPath: "/work/node_modules/electron/dist/Electron",
+      platform: "darwin",
+      runner,
+      homeDir: home,
+      uid: 501,
+    });
+    expect(await dev.refreshIfOutdated()).toBe(false);
+    expect(calls).toEqual([]);
+    expect(await readFile(plistPath(), "utf8")).toBe(renderLaunchdPlist(real));
   });
 
   it("reports status from the plist and the loaded job", async () => {

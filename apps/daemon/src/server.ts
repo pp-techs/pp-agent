@@ -14,7 +14,7 @@ import {
   type DaemonFrame,
   type StoredCredential,
 } from "@workspace/shared";
-import { encodeFrame, FrameDecoder, FrameError, MAX_FRAME_BYTES } from "./framing.ts";
+import { encodeFrame, FrameDecoder, FrameError } from "./framing.ts";
 
 import { proof, validNonce, validateSocketDirectory, verifyProof } from "./auth.ts";
 import { acquireEndpointLock } from "./endpoint-lock.ts";
@@ -22,8 +22,11 @@ import { restrictWindowsPipeAccess } from "./windows-pipe.ts";
 
 const HELLO_TIMEOUT_MS = 5_000;
 const CLOSE_GRACE_MS = 1_000;
-/** A client that lets this much pile up unread is gone or stuck; it is dropped, not waited for. */
-const MAX_BACKLOG_BYTES = 2 * MAX_FRAME_BYTES;
+/**
+ * A client that lets this much pile up unread is gone or stuck; it is dropped, not waited for.
+ * Checked before each write, so one large frame (up to `MAX_FRAME_BYTES`) still goes out whole.
+ */
+const MAX_BACKLOG_BYTES = 16 * 1024 * 1024;
 
 /** What the server needs from the agent host; `AgentHost` satisfies it. */
 export interface DaemonHost {

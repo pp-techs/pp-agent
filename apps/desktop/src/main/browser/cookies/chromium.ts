@@ -6,7 +6,23 @@ import { basename, dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { CookieSourceBrowser, CookieSourceProfile } from "@workspace/shared";
 import { readDatabaseCopy, run } from "./database.ts";
-import { fromChromiumSameSite, fromChromiumSeconds, type PortableCookie } from "./portable.ts";
+import {
+  cookieSite,
+  fromChromiumSameSite,
+  fromChromiumSeconds,
+  type PortableCookie,
+} from "./portable.ts";
+
+/** Windows PowerShell by its full path: a `powershell` found through PATH could be anything. */
+export function powershellPath(): string {
+  return join(
+    process.env.SystemRoot ?? "C:\\Windows",
+    "System32",
+    "WindowsPowerShell",
+    "v1.0",
+    "powershell.exe",
+  );
+}
 
 /** Where a Chromium-based browser keeps its profiles, and how it protects its cookies. */
 export interface ChromiumBrowser {
@@ -98,7 +114,7 @@ async function runningProcessIds(definition: ChromiumBrowser): Promise<number[] 
   const folder = installFolder(definition);
   try {
     // Filtering instead of `Get-Process -Name`, which fails when nothing matches.
-    const out = await run("powershell", [
+    const out = await run(powershellPath(), [
       "-NoProfile",
       "-NonInteractive",
       "-Command",
@@ -138,7 +154,7 @@ export async function quitBrowser(definition: ChromiumBrowser): Promise<void> {
   if (ids === null) throw new Error("The running processes of the browser could not be listed.");
   if (ids.length === 0) return;
   const list = ids.join(",");
-  await run("powershell", [
+  await run(powershellPath(), [
     "-NoProfile",
     "-NonInteractive",
     "-Command",
@@ -207,9 +223,17 @@ export function macKey(password: string): Buffer {
   return pbkdf2Sync(password, "saltysalt", 1003, 16, "sha1");
 }
 
-/** Asks the Keychain for the browser's cookie password; macOS asks the person to allow it. */
+/**
+ * Asks the Keychain for the browser's cookie password, in this process: macOS names PP Agent in its
+ * prompt, and "Always Allow" trusts only PP Agent's signature (through `/usr/bin/security` it would
+ * trust that tool, which any program can run).
+ */
 export async function readMacPassword(service: string): Promise<string> {
-  return (await run("security", ["find-generic-password", "-w", "-s", service])).trim();
+  // Loaded on use: a native binding that fails to load must not stop main (or the reader) starting.
+  const { findCredentialsAsync } = await import("@napi-rs/keyring");
+  const password = (await findCredentialsAsync(service))[0]?.password;
+  if (!password) throw new Error(`No ${service} item in the Keychain.`);
+  return password;
 }
 
 /**
@@ -231,7 +255,7 @@ export async function readWindowsKey(userData: string): Promise<Buffer> {
     "[Convert]::ToBase64String($plain)",
   ].join("; ");
   const output = await run(
-    "powershell.exe",
+    powershellPath(),
     ["-NoProfile", "-NonInteractive", "-Command", script],
     protectedKey.subarray(5).toString("base64"),
   );
@@ -305,6 +329,8 @@ export async function readChromiumCookies(
   file: string,
   key: Buffer,
   platform: "darwin" | "win32",
+  /** Sites (see `cookieSite`) whose cookies to read; null reads every cookie. */
+  sites: ReadonlySet<string> | null = null,
 ): Promise<ChromiumRead> {
   return readDatabaseCopy(file, (db) => {
     const meta = db.prepare("SELECT value FROM meta WHERE key = 'version'").get() as
@@ -318,6 +344,7 @@ export async function readChromiumCookies(
       .all() as unknown as CookieRow[];
     const result: ChromiumRead = { cookies: [], unreadable: 0, appBound: 0 };
     for (const row of rows) {
+      if (sites && !sites.has(cookieSite(row.host_key))) continue;
       let value = row.value;
       if (!value && row.encrypted_value && row.encrypted_value.length > 0) {
         const decrypted = decryptChromiumValue(row.encrypted_value, key, platform, hostPrefix);
@@ -345,4 +372,17 @@ export async function readChromiumCookies(
     }
     return result;
   });
+}
+
+/** How many cookies each host has, without reading (or decrypting) a value. */
+export async function chromiumCookieHosts(
+  file: string,
+): Promise<{ host: string; count: number }[]> {
+  return readDatabaseCopy(
+    file,
+    (db) =>
+      db
+        .prepare("SELECT host_key AS host, COUNT(*) AS count FROM cookies GROUP BY host_key")
+        .all() as unknown as { host: string; count: number }[],
+  );
 }

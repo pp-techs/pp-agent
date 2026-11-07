@@ -1,7 +1,8 @@
 import { realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
-function isInside(root: string, path: string): boolean {
+/** Whether `path` is `root` or lies below it (both absolute, compared as written). */
+export function isInside(root: string, path: string): boolean {
   const inside = relative(root, path);
   return (
     inside === "" || (inside !== ".." && !inside.startsWith(`..${sep}`) && !isAbsolute(inside))
@@ -9,7 +10,7 @@ function isInside(root: string, path: string): boolean {
 }
 
 /** `realpath` of the nearest ancestor that exists, followed by the not-yet-created remainder. */
-async function realpathOfExistingPart(path: string): Promise<string> {
+export async function realpathOfExistingPart(path: string): Promise<string> {
   const missing: string[] = [];
   let current = path;
   for (;;) {

@@ -17,7 +17,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { SettingsModal } from "@/components/modals/settings-modal";
-import { agentsQuery, useAgentCommands } from "@/lib/queries";
+import { agentsQuery, useSetAgent } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
 
 /** Agent of the open conversation (in the top bar); new conversations start with the one picked last. */
@@ -25,7 +25,7 @@ export function AgentPicker({ bridge, disabled }: { bridge: DesktopBridge; disab
   const current = useChatStore((state) => state.agent);
   const running = useChatStore((state) => state.status === "running");
   const agents = useQuery(agentsQuery(bridge));
-  const { setAgent } = useAgentCommands(bridge);
+  const setAgent = useSetAgent(bridge);
   const [open, setOpen] = React.useState(false);
   const { t } = useTranslation("chat");
   const currentId = current?.id ?? DEFAULT_AGENT_ID;

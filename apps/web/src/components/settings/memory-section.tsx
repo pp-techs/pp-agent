@@ -45,6 +45,7 @@ import { toast } from "sonner";
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { OptionGroup, SwitchRow } from "@/components/settings/option-group";
 import { SectionHeading } from "@/components/settings/section-heading";
+import { maySend } from "@/lib/bridge";
 import { memoryQuery, useMemoryCommands } from "@/lib/extension-queries";
 import { workspacesQuery } from "@/lib/queries";
 
@@ -295,7 +296,7 @@ export function MemorySection({ bridge }: { bridge: DesktopBridge }) {
   return (
     <div className="flex flex-col gap-6">
       <SectionHeading title={t("memory.title")} description={t("memory.description")}>
-        {entries.length > 0 && (
+        {entries.length > 0 && maySend("clear_memory") && (
           <Button variant="destructive" disabled={clear.isPending} onClick={() => void onClear()}>
             {clear.isPending ? <Spinner /> : <Trash2Icon data-icon="inline-start" />}
             {t("memory.clearAll")}

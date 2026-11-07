@@ -4,9 +4,10 @@ packages:
 
 catalogMode: prefer
 
-# Project policy: always take the newest published versions. This turns off pnpm's default
-# release-age delay (a supply-chain guard); restore it by deleting this line.
-minimumReleaseAge: 0
+# Supply-chain guard: a version must be public for a day before pnpm installs it, so a
+# hijacked release is usually pulled before it reaches this repo. Exceptions are listed in
+# `minimumReleaseAgeExclude` below.
+minimumReleaseAge: 1440
 
 allowBuilds:
   "@google/genai": false
@@ -75,6 +76,9 @@ catalog:
   "@iconify/utils": ^3.1.7
 overrides:
   vite@*: "catalog:"
+  # Security fixes the dependents' ranges do not pick up yet; each stays on its own major line.
+  "undici@>=8.0.0 <8.12.2": ^8.12.2
+  "body-parser@>=2.0.0 <2.4.0": ^2.4.0
 peerDependencyRules:
   allowAny:
     - vite

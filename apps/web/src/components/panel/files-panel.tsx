@@ -267,18 +267,23 @@ type Editing =
   | { kind: "new"; entry: "file" | "folder"; dir: string }
   | { kind: "rename"; path: string };
 
-/** What the rows of the tree do; shared by every level. */
-interface TreeOps {
-  expanded: ReadonlySet<string>;
-  editing: Editing | null;
+/** What a row of the tree does; keeps its identity, so rows re-render only when they change. */
+interface RowActions {
   onToggle: (path: string) => void;
   onOpen: (path: string) => void;
   onStartCreate: (dir: string, entry: "file" | "folder") => void;
   onStartRename: (path: string) => void;
-  onSubmitName: (name: string) => void;
-  onCancelEdit: () => void;
   onRemove: (path: string) => void;
   onReveal: (path: string) => void;
+}
+
+/** What the levels of the tree share. */
+interface TreeOps {
+  expanded: ReadonlySet<string>;
+  editing: Editing | null;
+  row: RowActions;
+  onSubmitName: (name: string) => void;
+  onCancelEdit: () => void;
 }
 
 /** A row that asks for a name: Enter confirms, Escape or leaving the field cancels. */
@@ -330,22 +335,23 @@ function NameInput({
 }
 
 /** One file or folder of the tree; right click opens its menu. */
-function EntryRow({
+const EntryRow = React.memo(function EntryRow({
   entry,
-  tree,
+  actions,
   indent,
   isOpen,
-  icon,
 }: {
   entry: WorkspaceEntry;
-  tree: TreeOps;
+  actions: RowActions;
   indent: React.CSSProperties;
   isOpen: boolean;
-  icon: React.ReactNode;
 }) {
   const { t } = useTranslation("chat");
   // Where the right click happened; the menu is open while it is set.
   const [point, setPoint] = React.useState<{ x: number; y: number } | null>(null);
+  // The menu mounts on the first right click, not for each of up to thousands of rows, and then
+  // stays so it can animate closed.
+  const [menuMounted, setMenuMounted] = React.useState(false);
   const anchor = React.useMemo(
     () =>
       point
@@ -358,6 +364,7 @@ function EntryRow({
       className="relative"
       onContextMenu={(event) => {
         event.preventDefault();
+        setMenuMounted(true);
         setPoint({ x: event.clientX, y: event.clientY });
       }}
     >
@@ -369,11 +376,11 @@ function EntryRow({
         title={entry.path}
         aria-expanded={entry.kind === "folder" ? isOpen : undefined}
         onClick={() =>
-          entry.kind === "folder" ? tree.onToggle(entry.path) : tree.onOpen(entry.path)
+          entry.kind === "folder" ? actions.onToggle(entry.path) : actions.onOpen(entry.path)
         }
         onKeyDown={(event) => {
-          if (event.key === "F2") tree.onStartRename(entry.path);
-          else if (event.key === "Delete") tree.onRemove(entry.path);
+          if (event.key === "F2") actions.onStartRename(entry.path);
+          else if (event.key === "Delete") actions.onRemove(entry.path);
           else return;
           event.preventDefault();
         }}
@@ -381,49 +388,51 @@ function EntryRow({
         <ChevronRightIcon
           className={`size-3.5 shrink-0 text-muted-foreground transition-transform ${entry.kind === "file" ? "invisible" : ""} ${isOpen ? "rotate-90" : ""}`}
         />
-        {icon}
+        <FileTypeIcon kind={entry.kind} name={entry.name} open={isOpen} />
         <span className="truncate">{entry.name}</span>
       </button>
-      <DropdownMenu open={point !== null} onOpenChange={(open) => !open && setPoint(null)}>
-        {/* The name field takes the focus; the menu must not take it back when it closes. */}
-        <DropdownMenuContent
-          align="start"
-          sideOffset={0}
-          anchor={anchor}
-          className="w-48"
-          finalFocus={false}
-        >
-          {entry.kind === "folder" && (
-            <>
-              <DropdownMenuItem onClick={() => tree.onStartCreate(entry.path, "file")}>
-                <FilePlusIcon />
-                {t("panel.files.newFile")}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => tree.onStartCreate(entry.path, "folder")}>
-                <FolderPlusIcon />
-                {t("panel.files.newFolder")}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-            </>
-          )}
-          <DropdownMenuItem onClick={() => tree.onStartRename(entry.path)}>
-            <PencilIcon />
-            {t("panel.files.rename")}
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => tree.onReveal(entry.path)}>
-            <SquareArrowOutUpRightIcon />
-            {t("panel.files.reveal")}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onClick={() => tree.onRemove(entry.path)}>
-            <Trash2Icon />
-            {t("panel.files.moveToTrash")}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {menuMounted && (
+        <DropdownMenu open={point !== null} onOpenChange={(open) => !open && setPoint(null)}>
+          {/* The name field takes the focus; the menu must not take it back when it closes. */}
+          <DropdownMenuContent
+            align="start"
+            sideOffset={0}
+            anchor={anchor}
+            className="w-48"
+            finalFocus={false}
+          >
+            {entry.kind === "folder" && (
+              <>
+                <DropdownMenuItem onClick={() => actions.onStartCreate(entry.path, "file")}>
+                  <FilePlusIcon />
+                  {t("panel.files.newFile")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => actions.onStartCreate(entry.path, "folder")}>
+                  <FolderPlusIcon />
+                  {t("panel.files.newFolder")}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            <DropdownMenuItem onClick={() => actions.onStartRename(entry.path)}>
+              <PencilIcon />
+              {t("panel.files.rename")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => actions.onReveal(entry.path)}>
+              <SquareArrowOutUpRightIcon />
+              {t("panel.files.reveal")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={() => actions.onRemove(entry.path)}>
+              <Trash2Icon />
+              {t("panel.files.moveToTrash")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </div>
   );
-}
+});
 
 function FolderRows({
   bridge,
@@ -440,7 +449,7 @@ function FolderRows({
 }) {
   const { t } = useTranslation("chat");
   const entries = useQuery(workspaceFolderQuery(bridge, root, dir));
-  const indent = { paddingLeft: `${0.5 + depth * 0.875}rem` };
+  const indent = React.useMemo(() => ({ paddingLeft: `${0.5 + depth * 0.875}rem` }), [depth]);
   const { editing } = tree;
   const creating = editing?.kind === "new" && editing.dir === dir ? editing : null;
 
@@ -474,13 +483,12 @@ function FolderRows({
       )}
       {entries.data.map((entry) => {
         const isOpen = entry.kind === "folder" && tree.expanded.has(entry.path);
-        const icon = <FileTypeIcon kind={entry.kind} name={entry.name} open={isOpen} />;
         if (editing?.kind === "rename" && editing.path === entry.path)
           return (
             <NameInput
               key={entry.path}
               initial={entry.name}
-              icon={icon}
+              icon={<FileTypeIcon kind={entry.kind} name={entry.name} open={isOpen} />}
               indent={indent}
               onSubmit={tree.onSubmitName}
               onCancel={tree.onCancelEdit}
@@ -488,7 +496,7 @@ function FolderRows({
           );
         return (
           <React.Fragment key={entry.path}>
-            <EntryRow entry={entry} tree={tree} indent={indent} isOpen={isOpen} icon={icon} />
+            <EntryRow entry={entry} actions={tree.row} indent={indent} isOpen={isOpen} />
             {isOpen && (
               <FolderRows
                 bridge={bridge}
@@ -518,17 +526,29 @@ function FolderTree({ bridge, root }: { bridge: DesktopBridge; root: string }) {
   const commands = useWorkspaceFileCommands(bridge, root);
   const [editing, setEditing] = React.useState<Editing | null>(null);
 
+  const { mutate: removeEntry } = commands.remove;
+  const row = React.useMemo<RowActions>(
+    () => ({
+      onToggle: (path) => toggleFolder(root, path),
+      onOpen: (path) => openFile(root, path),
+      onStartCreate: (dir, entry) => {
+        // The new row appears inside the folder, so it has to be open.
+        const open = useFileTabsStore.getState().byRoot[root]?.expanded.includes(dir) ?? false;
+        if (dir !== "" && !open) toggleFolder(root, dir);
+        setEditing({ kind: "new", entry, dir });
+      },
+      onStartRename: (path) => setEditing({ kind: "rename", path }),
+      onRemove: (path) => removeEntry(path),
+      onReveal: (path) =>
+        bridge.workspace.reveal(root, path).catch((error: Error) => toast.error(error.message)),
+    }),
+    [bridge, root, toggleFolder, openFile, removeEntry],
+  );
+
   const tree: TreeOps = {
     expanded,
     editing,
-    onToggle: (path) => toggleFolder(root, path),
-    onOpen: (path) => openFile(root, path),
-    onStartCreate: (dir, entry) => {
-      // The new row appears inside the folder, so it has to be open.
-      if (dir !== "" && !expanded.has(dir)) toggleFolder(root, dir);
-      setEditing({ kind: "new", entry, dir });
-    },
-    onStartRename: (path) => setEditing({ kind: "rename", path }),
+    row,
     onCancelEdit: () => setEditing(null),
     onSubmitName: (name) => {
       const trimmed = name.trim();
@@ -540,9 +560,6 @@ function FolderTree({ bridge, root }: { bridge: DesktopBridge; root: string }) {
         commands.create.mutate({ dir: editing.dir, name: trimmed, kind: editing.entry }, done);
       else commands.rename.mutate({ path: editing.path, name: trimmed }, done);
     },
-    onRemove: (path) => commands.remove.mutate(path),
-    onReveal: (path) =>
-      bridge.workspace.reveal(root, path).catch((error: Error) => toast.error(error.message)),
   };
 
   return (
@@ -558,7 +575,7 @@ function FolderTree({ bridge, root }: { bridge: DesktopBridge; root: string }) {
                 variant="ghost"
                 size="icon-sm"
                 aria-label={t("panel.files.newFile")}
-                onClick={() => tree.onStartCreate("", "file")}
+                onClick={() => row.onStartCreate("", "file")}
               />
             }
           >
@@ -573,7 +590,7 @@ function FolderTree({ bridge, root }: { bridge: DesktopBridge; root: string }) {
                 variant="ghost"
                 size="icon-sm"
                 aria-label={t("panel.files.newFolder")}
-                onClick={() => tree.onStartCreate("", "folder")}
+                onClick={() => row.onStartCreate("", "folder")}
               />
             }
           >

@@ -17,11 +17,12 @@ The monorepo is driven by Vite+ (`vp`) with pnpm workspaces and a version catalo
 
 `apps/desktop/vite.config.ts` defines two pack configs, both `platform: "node"`, `target: "node24"`, output `dist/`, with source maps and `electron` and `@napi-rs/keyring` (a native addon) never bundled:
 
-| Output             | Source                   | Format | Why                                                                                                                  |
-| ------------------ | ------------------------ | ------ | -------------------------------------------------------------------------------------------------------------------- |
-| `dist/main.mjs`    | `src/main/index.ts`      | ESM    | Main process; `package.json` `main` points here.                                                                     |
-| `dist/daemon.mjs`  | `../daemon/src/index.ts` | ESM    | `pp-agentd`. Main spawns it (`node` mode via `ELECTRON_RUN_AS_NODE`), a service manager runs it, or a terminal does. |
-| `dist/preload.cjs` | `src/preload/index.ts`   | CJS    | Sandboxed preload scripts must be CommonJS.                                                                          |
+| Output                  | Source                               | Format | Why                                                                                                                                   |
+| ----------------------- | ------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `dist/main.mjs`         | `src/main/index.ts`                  | ESM    | Main process; `package.json` `main` points here.                                                                                      |
+| `dist/daemon.mjs`       | `../daemon/src/index.ts`             | ESM    | `pp-agentd`. Main spawns it (`node` mode via `ELECTRON_RUN_AS_NODE`), a service manager runs it, or a terminal does.                  |
+| `dist/cookieReader.mjs` | `src/main/browser/cookies/reader.ts` | ESM    | Utility process main forks for one cookie import step: it reads the browser's database copy and decrypts cookies off the main thread. |
+| `dist/preload.cjs`      | `src/preload/index.ts`               | CJS    | Sandboxed preload scripts must be CommonJS.                                                                                           |
 
 The preload entry uses `clean: false` so it does not wipe the ESM outputs. The Pi SDK is kept out of the bundle and loaded from `node_modules` at runtime because it loads assets and wasm itself.
 
@@ -32,8 +33,9 @@ The other runtime `dependencies` of `apps/desktop` (`fflate`, `officeparser`, `t
 `apps/web/vite.config.ts`:
 
 - `base: "./"` so the built `index.html` loads its assets over `file://`.
-- React and Tailwind plugins, plus `pp-agent:csp`, which injects the Content-Security-Policy meta tag in builds only.
-- `@` aliases `apps/web/src`; `chunkSizeWarningLimit` is raised because the bundle is loaded from disk.
+- React and Tailwind plugins, plus `pp-agent:csp`, which injects the Content-Security-Policy meta tag in builds only. Images are limited to `'self' data: blob:`, so a reply cannot load a remote image (see the Markdown rule in [electron-security.md](../code-standard/electron-security.md)).
+- `@` aliases `apps/web/src`.
+- `build.rolldownOptions.output.codeSplitting` puts React and Streamdown in their own chunks. Settings sections and Schedules load with `React.lazy`, like the side-panel tools, so the startup bundle stays small; the default chunk-size warning stays on to flag regressions.
 
 ## Packaging (electron-builder)
 
@@ -44,6 +46,11 @@ The other runtime `dependencies` of `apps/desktop` (`fflate`, `officeparser`, `t
 - `extraResources` copies `../web/dist` to `resources/renderer`. In a packaged app main loads `process.resourcesPath/renderer/index.html`, which is why `dist` builds the web app first.
 - Targets: macOS `dmg` + `zip` (category productivity), Windows `nsis` (assisted installer, install folder selectable), Linux `AppImage` + `deb`. `publish: null`: the release workflow uploads installers itself (see [Release process](../code-standard/release-process.md)).
 - `asarUnpack: node_modules/@napi-rs/**` and `node_modules/node-pty/**`: native addons cannot load from inside the asar archive (the daemon's OS keyring binding, the side panel terminal). `afterPack: scripts/after-pack.cjs` restores the execute bit of node-pty's macOS `spawn-helper` before signing. `node-pty` is also in the pack configs' `neverBundle`.
+- `electronFuses` (flipped in the packaged binary before signing; check one with `npx @electron/fuses read --app "release/mac-arm64/PP Agent.app"`):
+  - `enableCookieEncryption: true`: the side panel partitions, which hold imported sign-ins, store cookies encrypted with the OS key (Keychain item "PP Agent Safe Storage" on macOS, DPAPI on Windows, the Secret Service or KWallet on Linux), as Chrome does. One way: cookies already on disk in plain text are encrypted when Chromium next writes them, and turning the fuse off again would leave the store unreadable, so never turn it off.
+  - `enableNodeOptionsEnvironmentVariable: false`, `enableNodeCliInspectArguments: false`: `NODE_OPTIONS`, `NODE_EXTRA_CA_CERTS` and `--inspect` are ignored, also by the daemon, so no other program can run code inside the signed app (and its macOS grants). A company proxy's certificate has to come from the OS store instead of `NODE_EXTRA_CA_CERTS`.
+  - `enableEmbeddedAsarIntegrityValidation: true`, `onlyLoadAppFromAsar: true`: only `app.asar` loads, and its contents must match the hash stored in the binary.
+  - `runAsNode: true`, left on: main starts the daemon (and the OS service runs it) as `ELECTRON_RUN_AS_NODE=1 <app> daemon.mjs`. It can go off once the daemon has its own start mode.
 
 ```mermaid
 flowchart LR

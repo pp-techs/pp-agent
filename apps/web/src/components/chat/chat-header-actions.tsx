@@ -1,6 +1,6 @@
 import * as React from "react";
 import type { DesktopBridge, SessionUsage } from "@workspace/shared";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@workspace/ui/components/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@workspace/ui/components/popover";
 import { Spinner } from "@workspace/ui/components/spinner";
@@ -26,7 +26,13 @@ import { toast } from "sonner";
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { confirmLeaveTemporary } from "@/lib/confirm-leave-temporary";
 import { useExportSession } from "@/hooks/use-export-session";
-import { useAgentCommands, usageQuery } from "@/lib/queries";
+import {
+  useCompact,
+  useNewChat,
+  useNewTemporaryChat,
+  useSetConversationYolo,
+  usageQuery,
+} from "@/lib/queries";
 import { IS_MAC } from "@/hooks/use-panel-shortcut";
 import { useChatStore } from "@/stores/chat-store";
 import { usePanelStore } from "@/stores/panel-store";
@@ -142,11 +148,19 @@ function ContextButton({ bridge }: { bridge: DesktopBridge }) {
   const status = useChatStore((state) => state.status);
   const hasMessages = useChatStore((state) => state.messages.length > 0);
   const sessionPath = useChatStore((state) => state.sessionPath);
-  const { compact } = useAgentCommands(bridge);
+  const compact = useCompact(bridge);
   const { t, i18n } = useTranslation("chat");
   const { language } = i18n;
-  // The context figure changes after every reply, which is when the totals change as well.
-  const usage = useQuery(usageQuery(bridge, sessionPath, `${status}:${context?.tokens ?? ""}`));
+  const [open, setOpen] = React.useState(false);
+  const queryClient = useQueryClient();
+  // Asked for only while the numbers are on screen.
+  const usage = useQuery({ ...usageQuery(bridge, sessionPath), enabled: open });
+  const tokens = context?.tokens;
+  // The context figure changes after every reply, which is when the totals change as well; an
+  // open popover refetches, a closed one fetches when it opens next.
+  React.useEffect(() => {
+    void queryClient.invalidateQueries({ queryKey: usageQuery(bridge, sessionPath).queryKey });
+  }, [queryClient, bridge, sessionPath, status, tokens]);
   if (!context) return null;
 
   const share = context.tokens === null ? null : context.tokens / context.window;
@@ -156,7 +170,7 @@ function ContextButton({ bridge }: { bridge: DesktopBridge }) {
   const canCompact = status === "idle" && hasMessages && !compact.isPending;
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <Tooltip>
         <TooltipTrigger
           render={
@@ -313,7 +327,7 @@ function SidePanelButton() {
  */
 function YoloButton({ bridge }: { bridge: DesktopBridge }) {
   const yolo = useChatStore((state) => state.yolo);
-  const { setConversationYolo } = useAgentCommands(bridge);
+  const setConversationYolo = useSetConversationYolo(bridge);
   const { t } = useTranslation("chat");
   const locked = yolo.source === "settings";
   const label = yolo.active ? t("header.yolo.on") : t("header.yolo.off");
@@ -365,7 +379,8 @@ function YoloButton({ bridge }: { bridge: DesktopBridge }) {
 function TemporaryToggle({ bridge }: { bridge: DesktopBridge }) {
   const temporary = useChatStore((state) => state.temporary);
   const status = useChatStore((state) => state.status);
-  const { newChat, newTemporaryChat } = useAgentCommands(bridge);
+  const newChat = useNewChat(bridge);
+  const newTemporaryChat = useNewTemporaryChat(bridge);
   const { t } = useTranslation("chat");
   const label = temporary ? t("header.temporary.on") : t("header.temporary.off");
 

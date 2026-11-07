@@ -29,7 +29,6 @@ import { PromptComposer } from "@/components/chat/prompt-composer";
 import { SidePanel } from "@/components/panel/side-panel";
 import { SettingsModal } from "@/components/modals/settings-modal";
 import { ConnectionBanner, RemoteGate } from "@/components/remote/remote-gate";
-import { ScheduledTasksSection } from "@/components/settings/scheduled-tasks-section";
 import { useAgentConnection } from "@/hooks/use-agent-connection";
 import { useCloseTabShortcut, usePanelShortcut } from "@/hooks/use-panel-shortcut";
 import { bridge, isWebApp } from "@/lib/bridge";
@@ -37,6 +36,13 @@ import { useChatStore } from "@/stores/chat-store";
 import { usePanelStore } from "@/stores/panel-store";
 import { toAttachments, useComposerStore } from "@/stores/composer-store";
 import { connectUpdates } from "@/stores/update-store";
+
+// Opened from the sidebar only; kept out of the bundle the app starts with.
+const ScheduledTasksSection = React.lazy(() =>
+  import("@/components/settings/scheduled-tasks-section").then((module) => ({
+    default: module.ScheduledTasksSection,
+  })),
+);
 
 /** The top bar's sidebar toggle: only for mobile, where the sheet closes out of reach of the rail. */
 function HiddenSidebarTrigger() {
@@ -105,6 +111,54 @@ function DesktopShortcuts({ bridge }: { bridge: DesktopBridge }) {
   return null;
 }
 
+/**
+ * "Drop files" over the page while files are dragged onto it. It counts the drag itself, so a
+ * drag over the chat re-renders only this overlay, not the sidebar, thread and composer.
+ */
+function DropOverlay({ active }: { active: boolean }) {
+  const { t } = useTranslation("modals");
+  const ref = React.useRef<HTMLDivElement>(null);
+  // Counts nested dragenter/dragleave pairs so the overlay does not flicker over child elements.
+  const [dragDepth, setDragDepth] = React.useState(0);
+
+  React.useEffect(() => {
+    const target = ref.current?.parentElement;
+    if (!target) return;
+    const enter = (event: DragEvent) => {
+      if (event.dataTransfer?.types.includes("Files")) setDragDepth((depth) => depth + 1);
+    };
+    const leave = () => setDragDepth((depth) => Math.max(0, depth - 1));
+    const drop = () => setDragDepth(0);
+    target.addEventListener("dragenter", enter);
+    target.addEventListener("dragleave", leave);
+    target.addEventListener("drop", drop);
+    return () => {
+      target.removeEventListener("dragenter", enter);
+      target.removeEventListener("dragleave", leave);
+      target.removeEventListener("drop", drop);
+    };
+  }, []);
+
+  const shown = active && dragDepth > 0;
+  return (
+    <div
+      ref={ref}
+      className={
+        shown
+          ? "pointer-events-none absolute inset-2 z-50 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-primary/40 bg-background/80 text-sm font-medium"
+          : "hidden"
+      }
+    >
+      {shown && (
+        <>
+          <FileUpIcon className="size-6" />
+          {t("app.dropFiles")}
+        </>
+      )}
+    </div>
+  );
+}
+
 function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("modals");
   useAgentConnection(bridge);
@@ -113,12 +167,9 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
   const [page, setPage] = React.useState<"chat" | "schedules">("chat");
   // An expanded side panel takes the page's place; the page stays mounted, only hidden.
   const panelCovers = usePanelStore((state) => state.open && state.expanded);
-  // Counts nested dragenter/dragleave pairs so the overlay does not flicker over child elements.
-  const [dragDepth, setDragDepth] = React.useState(0);
 
   async function onDrop(event: React.DragEvent) {
     event.preventDefault();
-    setDragDepth(0);
     if (!ready || page !== "chat") return;
     try {
       useComposerStore
@@ -137,12 +188,6 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
         // Inset leaves an 0.5rem gutter around the chat panel on desktop; keep it within the window.
         // dvh follows a phone's browser bars and on-screen keyboard; svh would leave a gap.
         className={`relative h-dvh overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] md:h-[calc(100svh-(--spacing(4)))] md:pt-0 ${panelCovers ? "md:hidden" : ""}`}
-        onDragEnter={(event) => {
-          if (page === "chat" && event.dataTransfer.types.includes("Files")) {
-            setDragDepth((depth) => depth + 1);
-          }
-        }}
-        onDragLeave={() => setDragDepth((depth) => Math.max(0, depth - 1))}
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => void onDrop(event)}
       >
@@ -158,7 +203,15 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
             </header>
             <div className="min-h-0 flex-1 overflow-y-auto">
               <div className="mx-auto w-full max-w-5xl p-4 md:p-6">
-                <ScheduledTasksSection bridge={bridge} />
+                <React.Suspense
+                  fallback={
+                    <div className="flex justify-center p-6">
+                      <Spinner />
+                    </div>
+                  }
+                >
+                  <ScheduledTasksSection bridge={bridge} />
+                </React.Suspense>
               </div>
             </div>
           </>
@@ -171,12 +224,7 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
             <PromptComposer bridge={bridge} disabled={!ready} />
           </>
         )}
-        {page === "chat" && dragDepth > 0 && ready && (
-          <div className="pointer-events-none absolute inset-2 z-50 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-primary/40 bg-background/80 text-sm font-medium">
-            <FileUpIcon className="size-6" />
-            {t("app.dropFiles")}
-          </div>
-        )}
+        <DropOverlay active={page === "chat" && ready} />
       </SidebarInset>
       {/* On every page, so the agent's browser shows without leaving (and losing) a schedule draft. */}
       {!isWebApp && <SidePanel bridge={bridge} />}

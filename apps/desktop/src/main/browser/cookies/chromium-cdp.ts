@@ -1,11 +1,11 @@
-import { spawn } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { type ChildProcess, spawn } from "node:child_process";
+import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
+import type { Readable, Writable } from "node:stream";
 import type { PortableCookie } from "./portable.ts";
 
-const START_TIMEOUT_MS = 20_000;
-const COMMAND_TIMEOUT_MS = 15_000;
+const COMMAND_TIMEOUT_MS = 20_000;
 
 /** A cookie as the DevTools protocol's `Storage.getCookies` returns it. */
 interface CdpCookie {
@@ -42,41 +42,65 @@ export function fromCdpCookie(cookie: CdpCookie): PortableCookie {
   };
 }
 
-async function waitForFile(file: string, timeoutMs: number): Promise<string> {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const text = await readFile(file, "utf8").catch(() => "");
-    if (text.includes("\n")) return text;
-    if (Date.now() > deadline) throw new Error("The browser did not start in time.");
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-}
+/**
+ * The DevTools protocol over `--remote-debugging-pipe`: the browser reads commands from file
+ * descriptor 3 and writes replies to 4, each message JSON ended by a NUL byte. Unlike a debugging
+ * port, no other program on the computer can connect.
+ */
+class CdpPipe {
+  private nextId = 1;
+  private buffer = "";
+  private readonly waiting = new Map<number, (message: CdpMessage) => void>();
 
-function cdpCall(socket: WebSocket, id: number, method: string): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${method} timed out.`)), COMMAND_TIMEOUT_MS);
-    socket.addEventListener("message", function onMessage(event: MessageEvent) {
-      const message = JSON.parse(String(event.data)) as {
-        id?: number;
-        result?: unknown;
-        error?: { message: string };
-      };
-      if (message.id !== id) return;
-      socket.removeEventListener("message", onMessage);
+  constructor(
+    private readonly input: Writable,
+    output: Readable,
+  ) {
+    // A browser that exits breaks the pipe; its `exit` event reports that, so stream errors (EPIPE)
+    // must not become uncaught exceptions.
+    input.on("error", () => {});
+    output.on("error", () => {});
+    output.setEncoding("utf8");
+    output.on("data", (chunk: string) => {
+      this.buffer += chunk;
+      for (let end = this.buffer.indexOf("\0"); end >= 0; end = this.buffer.indexOf("\0")) {
+        const message = JSON.parse(this.buffer.slice(0, end)) as CdpMessage;
+        this.buffer = this.buffer.slice(end + 1);
+        if (message.id !== undefined) this.waiting.get(message.id)?.(message);
+      }
+    });
+  }
+
+  call(method: string): Promise<unknown> {
+    const id = this.nextId++;
+    const { promise, resolve, reject } = Promise.withResolvers<unknown>();
+    const timer = setTimeout(() => {
+      this.waiting.delete(id);
+      reject(new Error(`${method} timed out.`));
+    }, COMMAND_TIMEOUT_MS);
+    this.waiting.set(id, (message) => {
+      this.waiting.delete(id);
       clearTimeout(timer);
       if (message.error) reject(new Error(message.error.message));
       else resolve(message.result);
     });
-    socket.send(JSON.stringify({ id, method }));
-  });
+    this.input.write(`${JSON.stringify({ id, method })}\0`);
+    return promise;
+  }
+}
+
+interface CdpMessage {
+  id?: number;
+  result?: unknown;
+  error?: { message: string };
 }
 
 /**
  * Reads every cookie of a profile through the browser itself. Windows Chrome, Edge and Brave
  * encrypt cookies with a key only their own program may unwrap ("app-bound"), so the app copies the
  * profile's cookie database into a throwaway user data folder, starts the browser headless on that
- * copy with remote debugging (allowed for a non-default folder), and asks it over the DevTools
- * protocol. The person's own profile is never opened.
+ * copy with remote debugging over a pipe (allowed for a non-default folder), and asks it over the
+ * DevTools protocol. The person's own profile is never opened.
  */
 export async function readCookiesThroughBrowser(
   executable: string,
@@ -85,19 +109,19 @@ export async function readCookiesThroughBrowser(
   cookieDb: string,
 ): Promise<PortableCookie[]> {
   const dir = await mkdtemp(join(tmpdir(), "pp-agent-browser-"));
-  const child = { process: null as ReturnType<typeof spawn> | null };
+  let started: ChildProcess | null = null;
   try {
     await copyFile(join(userData, "Local State"), join(dir, "Local State"));
     const target = join(dir, relative(userData, cookieDb));
     await mkdir(dirname(target), { recursive: true });
     await copyFile(cookieDb, target);
-    child.process = spawn(
+    const browser = spawn(
       executable,
       [
         `--user-data-dir=${dir}`,
         `--profile-directory=${profileDir}`,
         "--headless=new",
-        "--remote-debugging-port=0",
+        "--remote-debugging-pipe",
         "--no-first-run",
         "--no-default-browser-check",
         "--disable-extensions",
@@ -105,33 +129,24 @@ export async function readCookiesThroughBrowser(
         "--disable-background-networking",
         "about:blank",
       ],
-      { stdio: "ignore", windowsHide: true },
+      { stdio: ["ignore", "ignore", "ignore", "pipe", "pipe"], windowsHide: true },
     );
+    started = browser;
     // A browser that cannot start (missing, blocked by security software) reports an `error`
-    // event; without a listener that would be an uncaught exception of the main process.
-    const failed = new Promise<never>((_, reject) => child.process?.once("error", reject));
+    // event, or exits; without a listener that would be an uncaught exception of the main process.
+    const { promise: failed, reject: fail } = Promise.withResolvers<never>();
+    browser.once("error", fail);
+    browser.once("exit", (code) => fail(new Error(`The browser exited (code ${code}).`)));
     failed.catch(() => {});
-    const started = await Promise.race([
-      waitForFile(join(dir, "DevToolsActivePort"), START_TIMEOUT_MS),
-      failed,
-    ]);
-    const [port, path] = started.trim().split("\n");
-    const socket = new WebSocket(`ws://127.0.0.1:${port}${path}`);
-    await new Promise<void>((resolve, reject) => {
-      socket.addEventListener("open", () => resolve(), { once: true });
-      socket.addEventListener("error", () => reject(new Error("No connection to the browser.")), {
-        once: true,
-      });
-    });
-    try {
-      const result = (await cdpCall(socket, 1, "Storage.getCookies")) as { cookies: CdpCookie[] };
-      await cdpCall(socket, 2, "Browser.close").catch(() => {});
-      return result.cookies.map(fromCdpCookie);
-    } finally {
-      socket.close();
-    }
+    const pipe = new CdpPipe(browser.stdio[3] as Writable, browser.stdio[4] as Readable);
+    // The first command waits until the browser listens on the pipe.
+    const result = (await Promise.race([pipe.call("Storage.getCookies"), failed])) as {
+      cookies: CdpCookie[];
+    };
+    await Promise.race([pipe.call("Browser.close"), failed]).catch(() => {});
+    return result.cookies.map(fromCdpCookie);
   } finally {
-    child.process?.kill();
+    started?.kill();
     // The browser may still hold files for a moment after it closes.
     await new Promise((resolve) => setTimeout(resolve, 500));
     await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 }).catch(() => {});

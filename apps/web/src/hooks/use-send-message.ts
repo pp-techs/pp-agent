@@ -1,7 +1,7 @@
 import type { Attachment, ChatMessage, ChatPart, DesktopBridge } from "@workspace/shared";
 import { toast } from "sonner";
 
-import { useAgentCommands } from "@/lib/queries";
+import { usePrompt } from "@/lib/queries";
 import { newId } from "@/lib/id";
 import { useChatStore } from "@/stores/chat-store";
 import { useComposerStore } from "@/stores/composer-store";
@@ -28,7 +28,7 @@ function pendingMessage(text: string, attachments: Attachment[]): ChatMessage {
  * nothing is lost.
  */
 export function useSendMessage(bridge: DesktopBridge) {
-  const { prompt } = useAgentCommands(bridge);
+  const prompt = usePrompt(bridge);
   return (text: string) => {
     const { attachments, setDraft, clear, restore } = useComposerStore.getState();
     const { setPending } = useChatStore.getState();

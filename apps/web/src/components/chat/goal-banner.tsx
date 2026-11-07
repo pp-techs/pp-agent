@@ -6,13 +6,13 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { goalStatusKey } from "@/lib/goal";
-import { useAgentCommands, useGoalPending } from "@/lib/queries";
+import { useGoalPending, useSetGoal } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
 
 /** The open conversation's goal above the message box, with pause/resume and clear. */
 export function GoalBanner({ bridge }: { bridge: DesktopBridge }) {
   const goal = useChatStore((state) => state.goal);
-  const { setGoal } = useAgentCommands(bridge);
+  const setGoal = useSetGoal(bridge);
   const pending = useGoalPending();
   const { t } = useTranslation("chat");
   if (!goal) return null;

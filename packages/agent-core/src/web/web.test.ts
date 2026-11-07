@@ -427,3 +427,60 @@ describe("web search order", () => {
     expect(String(error)).toMatch(/DuckDuckGo: the usage limit was reached/);
   });
 });
+
+describe("saving web search", () => {
+  function service(endpoints: Record<string, string>, keys: Record<string, string>) {
+    let webSearch = { providers: ["webclaw"], endpoints };
+    const settings = {
+      get: () => ({ webSearch }),
+      update: (recipe: (draft: { webSearch: typeof webSearch }) => void) => {
+        const draft = { webSearch };
+        recipe(draft);
+        webSearch = draft.webSearch;
+      },
+    };
+    const vault = {
+      read: async (id: string) => {
+        const key = keys[id];
+        return key ? { type: "api_key", key } : undefined;
+      },
+      modify: async (id: string, change: () => Promise<{ key: string }>) => {
+        keys[id] = (await change()).key;
+      },
+      delete: async (id: string) => {
+        delete keys[id];
+      },
+    };
+    return new WebSearchService(
+      settings as unknown as SettingsStore,
+      vault as unknown as VaultCredentialStore,
+    );
+  }
+
+  test("a changed endpoint drops the stored key, so it never reaches another server", async () => {
+    const keys: Record<string, string> = { "websearch:webclaw": "paid" };
+    const view = await service({ webclaw: "https://a.example" }, keys).save({
+      providers: ["webclaw"],
+      endpoints: { webclaw: "http://attacker.example" },
+      keys: {},
+    });
+    expect(keys).toEqual({});
+    expect(view.providers.find((p) => p.id === "webclaw")?.hasKey).toBe(false);
+  });
+
+  test("the same endpoint keeps the key; a new key with a new endpoint is stored", async () => {
+    const keys: Record<string, string> = { "websearch:webclaw": "paid" };
+    await service({ webclaw: "https://a.example" }, keys).save({
+      providers: ["webclaw"],
+      endpoints: { webclaw: "https://a.example/" },
+      keys: {},
+    });
+    expect(keys).toEqual({ "websearch:webclaw": "paid" });
+    await service({ webclaw: "https://a.example" }, keys).save({
+      providers: ["webclaw"],
+      endpoints: { webclaw: "https://b.example" },
+      keys: { webclaw: "new" },
+    });
+    expect(keys).toEqual({ "websearch:webclaw": "new" });
+  });
+});

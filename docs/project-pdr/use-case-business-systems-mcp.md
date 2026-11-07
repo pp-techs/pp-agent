@@ -7,12 +7,13 @@
 - **Settings › MCP servers** adds, edits, removes, enables/disables servers, shows status, reconnects, and signs in/out of OAuth servers.
 - A raw JSON editor accepts configurations pasted from Claude Desktop or Cursor; the file is `<user-data>/agent/mcp.json` (`mcpServers` format). Keys the app does not edit (`oauth`, `toolExposure`, …) are preserved on save (`packages/agent-core/src/mcp.ts`).
 - `exposure: "direct"` declares tools to the model; the default `codemode` lets the model call them from a sandboxed script, suited to large servers.
+- `trusted: true` on a server (the **Trust this server's read-only labels** switch, off by default) makes the app believe the tools the server marks read-only. Leave it off unless you trust who runs the server.
 - HTTP servers without an `Authorization` header can sign in with OAuth from Settings.
 
 ## Use
 
 1. A conversation connects only the MCP servers its agent uses; they connect when the chat starts and reconnect when their settings change.
-2. When the agent calls an MCP tool, the approval gate decides: tools the server marks `readOnlyHint` have tier `read` and run freely under `auto`; all others have tier `write` and ask.
+2. When the agent calls an MCP tool, the approval gate decides: tools the server marks `readOnlyHint` have tier `read` and run freely under `auto`, but only when the server is marked `trusted`; all others, and every tool of an untrusted server, have tier `write` and ask.
 3. The user approves or denies in the chat. Stopping a run denies pending approvals first.
 
 ```mermaid
@@ -21,9 +22,9 @@ sequenceDiagram
   participant A as Daemon
   participant S as MCP server
   A->>A: tool call mcp__server__tool
-  alt readOnlyHint and policy auto, or policy allow
+  alt readOnlyHint on a trusted server and policy auto, or policy allow
     A->>S: call
-  else policy ask, or auto without readOnlyHint
+  else policy ask, or auto without readOnlyHint or on an untrusted server
     A->>U: approval request
     U-->>A: approve / deny
     A->>S: call (if approved)

@@ -25,6 +25,7 @@ import { OFFICE_EDIT_TOOL, OFFICE_READ_TOOL } from "./office/names.ts";
 import { ASK_TOOL } from "./ask.ts";
 import { SCHEDULE_TOOL } from "./schedule-tool.ts";
 import { SESSIONS_TOOL } from "./sessions-tool.ts";
+import type { PathAccess } from "./path-access.ts";
 
 /** Example business tool. Replace or extend with tools that reach your own systems. */
 export const currentDateTimeTool = defineTool({
@@ -125,9 +126,9 @@ const TIERS: Record<string, ToolTier> = {
   [currentDateTimeTool.name]: "read",
   [WEB_SEARCH_TOOL]: "read",
   [WEB_FETCH_TOOL]: "read",
-  // Runs on its own like the web tools; the person watches every step in the side panel and can
-  // switch it to ask (or off) in Settings › Tools.
-  [BROWSER_TOOL]: "read",
+  // Listed as write: what it does in the person's signed-in tabs is theirs to approve. The approval
+  // gate rates each call by its action instead (`browserActionTier`), so looking runs on its own.
+  [BROWSER_TOOL]: "write",
   // Listed as write: what it does with an app is the person's to approve. The approval gate rates
   // each call by its action instead (`computerActionTier`), so looking at a window runs on its own.
   [COMPUTER_TOOL]: "write",
@@ -196,6 +197,61 @@ export function toolRule(name: string, tier: ToolTier, settings: AppSettings): T
   return { policy, effective, locked: false };
 }
 
+/** Tools that change nothing outside the chat itself; a members chat runs them without asking. */
+const CHAT_ONLY_TOOLS: Record<string, true> = {
+  [TODO_TOOL]: true,
+  [ASK_TOOL]: true,
+  [currentDateTimeTool.name]: true,
+};
+
+/**
+ * Who a chat session answers: the paired owner's own chat, a chat other people may talk in
+ * (`members`), or such a chat while nobody is paired to approve anything (`unpaired`).
+ */
+export type ChatAccess = "owner" | "members" | "unpaired";
+
+/** What the approval gate does with one call; `reason` tells the model why it was blocked. */
+export interface CallRule {
+  effective: "allow" | "ask" | "off";
+  reason?: string;
+}
+
+/**
+ * The approval gate's decision for one call, on top of `toolRule`:
+ * - `path`: where a read-tier file tool reaches. A denied folder is refused whatever the policy;
+ *   a path outside the workspace asks even when the tool runs freely, unless yolo mode is on.
+ * - `chat`: a chat other people may talk in ignores yolo mode and asks the owner before every
+ *   tool that reaches beyond the chat; with nobody paired, those tools are off.
+ */
+export function callRule(
+  name: string,
+  tier: ToolTier,
+  settings: AppSettings,
+  context: { path?: { access: PathAccess; path: string } | null; chat?: ChatAccess } = {},
+): CallRule {
+  const shared = context.chat === "members" || context.chat === "unpaired";
+  const applied = shared && settings.yoloMode ? { ...settings, yoloMode: false } : settings;
+  const rule = toolRule(name, tier, applied);
+  if (rule.effective === "off")
+    return { effective: "off", reason: `${name} is turned off in Settings.` };
+  if (context.path?.access === "denied")
+    return {
+      effective: "off",
+      reason: `${context.path.path} is in a folder PP Agent never reads (its own data or SSH keys). Search a narrower folder that does not contain it.`,
+    };
+  if (shared && !rule.locked && CHAT_ONLY_TOOLS[name] !== true) {
+    if (context.chat === "unpaired")
+      return {
+        effective: "off",
+        reason: `${name} needs the owner's approval in this chat, and nobody is paired to give it.`,
+      };
+    return { effective: "ask" };
+  }
+  if (context.path?.access === "outside" && rule.effective === "allow" && !applied.yoloMode)
+    return { effective: "ask" };
+  return { effective: rule.effective };
+}
+
 /** Whether the tool is shown in Settings › Tools. */
 export function isListedTool(name: string): boolean {
   return name !== FOREIGN_SHELL;
@@ -250,18 +306,18 @@ export function parseMcpToolName(toolName: string): { server: string; tool: stri
 }
 
 /**
- * MCP tools run freely only when their server marks them read-only; everything else asks.
+ * MCP tools run freely only when their server marks them read-only and the person marked that
+ * server trusted (`trusts`); a server's own label is otherwise ignored and everything asks.
  * Unknown tools are treated as `exec` so a newly added tool asks before it runs.
  */
-export function toolTier(toolName: string, annotations?: { readOnlyHint?: boolean }): ToolTier {
-  if (toolName.startsWith(MCP_PREFIX)) return annotations?.readOnlyHint ? "read" : "write";
+export function toolTier(
+  toolName: string,
+  annotations?: { readOnlyHint?: boolean },
+  trusts: (server: string) => boolean = () => false,
+): ToolTier {
+  const mcp = parseMcpToolName(toolName);
+  if (mcp) return annotations?.readOnlyHint && trusts(mcp.server) ? "read" : "write";
   return Object.hasOwn(TIERS, toolName) ? TIERS[toolName] : "exec";
-}
-
-const PREVIEW_LIMIT = 600;
-
-function preview(text: string): string {
-  return text.length > PREVIEW_LIMIT ? `${text.slice(0, PREVIEW_LIMIT)}\n…` : text;
 }
 
 export function describeToolCall(
@@ -273,14 +329,14 @@ export function describeToolCall(
     if (toolName === "edit")
       return {
         title: t("approvals.edit", { path }),
-        detail: preview(JSON.stringify(input.edits ?? input, null, 2)),
+        detail: JSON.stringify(input.edits ?? input, null, 2),
       };
     const content = typeof input.content === "string" ? input.content : "";
-    return { title: t("approvals.save", { path }), detail: preview(content) };
+    return { title: t("approvals.save", { path }), detail: content };
   }
   if (toolName === SHELL_TOOL) {
     const command = typeof input.command === "string" ? input.command : "";
-    return { title: t("approvals.runCommand"), detail: preview(command) };
+    return { title: t("approvals.runCommand"), detail: command };
   }
   if (toolName === WEB_FETCH_TOOL) {
     const url = typeof input.url === "string" ? input.url : t("approvals.aWebPage");
@@ -288,18 +344,18 @@ export function describeToolCall(
   }
   if (toolName === WEB_SEARCH_TOOL) {
     const query = typeof input.query === "string" ? input.query : "";
-    return { title: t("approvals.searchWeb"), detail: preview(query) };
+    return { title: t("approvals.searchWeb"), detail: query };
   }
   if (toolName === MEMORY_SAVE_TOOL) {
     const text = typeof input.text === "string" ? input.text : "";
-    return { title: t("approvals.remember"), detail: preview(text) };
+    return { title: t("approvals.remember"), detail: text };
   }
   if (toolName === MEMORY_FORGET_TOOL) {
     // The approval gate adds the note's text next to its id so the person sees what would go.
     const text = typeof input.text === "string" ? input.text : "";
     return {
       title: t("approvals.forget"),
-      detail: preview(text || (typeof input.id === "string" ? input.id : "")),
+      detail: text || (typeof input.id === "string" ? input.id : ""),
     };
   }
   if (toolName === OFFICE_EDIT_TOOL) {
@@ -308,7 +364,7 @@ export function describeToolCall(
     const args = Array.isArray(input.args) ? input.args.map(String) : [];
     return {
       title: t("approvals.editOffice", { file }),
-      detail: preview([command, ...args].join(" ")),
+      detail: [command, ...args].join(" "),
     };
   }
   if (toolName === SCHEDULE_TOOL) {
@@ -328,30 +384,30 @@ export function describeToolCall(
       typeof input.deleteAfterRun === "boolean" ? `deleteAfterRun: ${input.deleteAfterRun}` : "",
       typeof input.silentIfEmpty === "boolean" ? `silentIfEmpty: ${input.silentIfEmpty}` : "",
     ].filter(Boolean);
-    // Reserve room for every control; a long field must never crowd later disclosures out.
-    const controlDetail = controls
-      .map((value) => (value.length > 100 ? `${value.slice(0, 99)}…` : value))
-      .join("\n");
-    const promptBudget = PREVIEW_LIMIT - controlDetail.length - (controlDetail ? 1 : 0);
-    const promptDetail =
-      prompt.length > promptBudget ? `${prompt.slice(0, promptBudget - 1)}…` : prompt;
     return {
       title: t("approvals.scheduleTask", { name }),
-      detail: [controlDetail, promptDetail].filter(Boolean).join("\n"),
+      detail: [...controls, prompt].filter(Boolean).join("\n"),
     };
   }
   if (toolName === ASK_TOOL) return { title: t("approvals.askUser"), detail: "" };
+  if (toolName === BROWSER_TOOL) {
+    const action = typeof input.action === "string" ? input.action : "";
+    return {
+      title: t("approvals.browser", { action }),
+      detail: JSON.stringify(input, null, 2),
+    };
+  }
   if (toolName === COMPUTER_TOOL) return describeComputerCall(input);
   const mcp = parseMcpToolName(toolName);
   if (mcp) {
     return {
       title: t("approvals.useTool", { tool: mcp.tool, server: mcp.server }),
-      detail: preview(JSON.stringify(input, null, 2)),
+      detail: JSON.stringify(input, null, 2),
     };
   }
   return {
     title: t("approvals.run", { tool: toolName }),
-    detail: preview(JSON.stringify(input, null, 2)),
+    detail: JSON.stringify(input, null, 2),
   };
 }
 
@@ -405,10 +461,9 @@ function describeComputerCall(input: Record<string, unknown>): { title: string; 
       : typeof input.app === "string"
         ? input.app
         : t("approvals.computer.anApp");
-  const detail = computerCallDetail(action, input);
   return {
     title: t(COMPUTER_TITLES[action as ComputerToolAction] ?? "approvals.computer.use", { app }),
-    detail: preview(detail),
+    detail: computerCallDetail(action, input),
   };
 }
 

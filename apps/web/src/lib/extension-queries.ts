@@ -539,6 +539,24 @@ export function useSaveWorkspaceInstructions(bridge: DesktopBridge) {
   });
 }
 
+/** Whether a workspace folder's own skills load; keyed under the workspaces. */
+export const workspaceSkillsTrustQuery = (bridge: DesktopBridge, id: string) =>
+  queryOptions({
+    queryKey: [...queryKeys.workspaces, "skills-trust", id] as const,
+    queryFn: () => bridge.agent.command({ type: "get_workspace_skills_trust", id }),
+  });
+
+export function useSetWorkspaceSkillsTrust(bridge: DesktopBridge) {
+  const invalidateWorkspaces = useInvalidateWorkspaces();
+  const invalidateSkills = useInvalidateSkills();
+  return useMutation({
+    mutationFn: (input: { id: string; trusted: boolean }) =>
+      bridge.agent.command({ type: "set_workspace_skills_trust", ...input }),
+    onSuccess: () => Promise.all([invalidateWorkspaces(), invalidateSkills()]),
+    onError: showError,
+  });
+}
+
 export function useDeleteWorkspace(bridge: DesktopBridge) {
   const invalidate = useInvalidateWorkspaces();
   return useMutation({

@@ -1,9 +1,33 @@
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import { BROWSER_TOOL_ACTIONS, type BrowserRequest } from "@workspace/shared";
+import {
+  BROWSER_TOOL_ACTIONS,
+  type BrowserRequest,
+  type BrowserToolAction,
+  type ToolTier,
+} from "@workspace/shared";
 import { Type } from "typebox";
 import type { BrowserBridge } from "./host-io.ts";
 
 export const BROWSER_TOOL = "browser";
+
+/** Actions that only look at the browser or wait; the others act in the user's signed-in tabs. */
+const BROWSER_READ_ACTIONS: readonly BrowserToolAction[] = [
+  "tabs",
+  "select",
+  "snapshot",
+  "text",
+  "screenshot",
+  "scroll",
+  "wait",
+];
+
+/**
+ * Looking is read tier; anything that loads a page, clicks, types, presses keys, closes a tab or
+ * runs JavaScript is write tier, so it asks under `auto`.
+ */
+export function browserActionTier(action: unknown): ToolTier {
+  return BROWSER_READ_ACTIONS.includes(action as BrowserToolAction) ? "read" : "write";
+}
 
 const UNAVAILABLE =
   "The browser is available only while the PP Agent window is open. Ask the user to open PP Agent and try again.";
@@ -82,7 +106,13 @@ export function createBrowserTool(bridge: BrowserBridge | undefined) {
         content: [
           { type: "text", text: fencePage(result.text) },
           ...(result.image
-            ? [{ type: "image" as const, data: result.image, mimeType: "image/png" }]
+            ? [
+                {
+                  type: "image" as const,
+                  data: result.image,
+                  mimeType: result.imageType ?? "image/png",
+                },
+              ]
             : []),
         ],
         details: undefined,

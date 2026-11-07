@@ -57,15 +57,17 @@ function XtermView({ bridge, terminal }: { bridge: DesktopBridge; terminal: Term
     xterm.current = term;
 
     // Listen first, then read the backlog: chunks that arrive meanwhile are kept and those the
-    // backlog already holds are skipped by their sequence number.
+    // backlog already holds are skipped by their sequence number. Every chunk after the backlog
+    // is acked once xterm has drawn it, so the main process can pause a shell that outruns it.
     let shown = -1;
     const early: Array<{ data: string; seq: number }> = [];
+    const show = (data: string) => term.write(data, () => bridge.terminal.ack(id, data.length));
     const unsubscribe = bridge.terminal.onData((terminalId, data, seq) => {
       if (terminalId !== id) return;
       if (shown < 0) early.push({ data, seq });
       else if (seq > shown) {
         shown = seq;
-        term.write(data);
+        show(data);
       }
     });
     let disposed = false;
@@ -78,7 +80,7 @@ function XtermView({ bridge, terminal }: { bridge: DesktopBridge; terminal: Term
         for (const chunk of early) {
           if (chunk.seq > shown) {
             shown = chunk.seq;
-            term.write(chunk.data);
+            show(chunk.data);
           }
         }
       })
@@ -100,6 +102,7 @@ function XtermView({ bridge, terminal }: { bridge: DesktopBridge; terminal: Term
       observer.disconnect();
       input.dispose();
       unsubscribe();
+      bridge.terminal.detach(id);
       term.dispose();
       xterm.current = null;
     };

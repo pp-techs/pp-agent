@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 
 import type { ServiceStatus } from "@workspace/shared";
 
-import { DEFAULT_SERVICE_LABEL, firstLine } from "./types.ts";
+import { DEFAULT_SERVICE_LABEL, firstLine, readTextIfExists } from "./types.ts";
 import type { ServiceBackend, ServiceSpec } from "./types.ts";
 
 const DEFAULT_TASK_NAME = "PP Agent Daemon";
@@ -152,6 +152,27 @@ export const createWindowsTaskService: ServiceBackend = (spec, deps) => {
       }
       await rm(launcherPath, { force: true });
       await rm(xmlPath, { force: true });
+    },
+
+    async startIfInstalled(): Promise<void> {
+      if ((await query()).code !== 0) return;
+      const started = await deps.runner("schtasks", ["/Run", "/TN", taskName]);
+      if (started.code !== 0) {
+        throw new Error(`Windows could not start the PP Agent task: ${firstLine(started)}`);
+      }
+    },
+
+    async refreshIfOutdated(): Promise<boolean> {
+      // The task only names the launcher, which PowerShell reads on every start; the launcher
+      // holds the command and environment, so it is the file that can be out of date.
+      const current = (await readTextIfExists(launcherPath))?.replace(/^\uFEFF/, "") ?? null;
+      const wanted = renderWindowsLauncher(spec);
+      if (current === null || current === wanted) return false;
+      const program = [spec.execPath, spec.args[0] ?? ""];
+      if (!program.every((part) => current.includes(powershellQuote(part)))) return false;
+      if ((await query()).code !== 0) return false;
+      await writeFile(launcherPath, `\uFEFF${wanted}`, "utf8");
+      return true;
     },
   };
 };

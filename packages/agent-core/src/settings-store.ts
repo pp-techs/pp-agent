@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, isAbsolute } from "node:path";
 import {
   DEFAULT_AGENT_ID,
   DEFAULT_SHORTCUT,
@@ -73,6 +73,7 @@ function parse(raw: unknown): SettingsFile {
     memoryEnabled: true,
     browserProfiles: readBrowserProfiles(null),
     computerApps: readComputerApps(null),
+    trustedSkillFolders: [],
   };
   if (typeof raw !== "object" || raw === null) return settings;
   const value = raw as Partial<Record<keyof SettingsFile, unknown>>;
@@ -120,6 +121,14 @@ function parse(raw: unknown): SettingsFile {
   settings.memoryEnabled = value.memoryEnabled !== false;
   settings.browserProfiles = readBrowserProfiles(value.browserProfiles);
   settings.computerApps = readComputerApps(value.computerApps);
+  if (Array.isArray(value.trustedSkillFolders))
+    settings.trustedSkillFolders = [
+      ...new Set(
+        value.trustedSkillFolders.filter(
+          (folder): folder is string => typeof folder === "string" && isAbsolute(folder),
+        ),
+      ),
+    ];
   return settings;
 }
 

@@ -17,7 +17,7 @@ import {
   ChatThreadProvider,
   type ChatThreadContextValue,
 } from "@/components/chat/chat-thread-context";
-import { useAgentCommands } from "@/lib/queries";
+import { useBranchSession, useEditMessage, useRegenerate, useRespondApproval } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
 
 export function ChatThread({ bridge }: { bridge: DesktopBridge }) {
@@ -29,25 +29,39 @@ export function ChatThread({ bridge }: { bridge: DesktopBridge }) {
   const approvals = React.useMemo(() => Object.values(approvalsById), [approvalsById]);
   const running = useChatStore((state) => state.status === "running");
   const { t } = useTranslation("chat");
-  const { respondApproval, regenerate, branchSession, editMessage } = useAgentCommands(bridge);
-  const respondToApproval = respondApproval.mutate;
-  const responding = respondApproval.isPending;
-
-  // Mutation results change with their state, so the value is rebuilt each render, as the props were.
-  const thread: ChatThreadContextValue = {
-    state: { busy: running, approvals, responding },
-    actions: {
+  const respondApproval = useRespondApproval(bridge);
+  const regenerate = useRegenerate(bridge);
+  const branchSession = useBranchSession(bridge);
+  const editMessage = useEditMessage(bridge);
+  // `mutate` keeps its identity, so the actions do too.
+  const { mutate: respond } = respondApproval;
+  const { mutate: regenerateAnswer } = regenerate;
+  const { mutate: branch } = branchSession;
+  const { mutate: edit } = editMessage;
+  const actions = React.useMemo<ChatThreadContextValue["actions"]>(() => {
+    const onError = (error: Error) => toast.error(error.message);
+    return {
       respondApproval: (requestId, approved, remember) =>
-        respondToApproval(
-          { requestId, approved, remember },
-          { onError: (error) => toast.error(error.message) },
-        ),
-      regenerate,
-      branchSession,
-      editMessage,
-    },
-    meta: { bridge },
-  };
+        respond({ requestId, approved, remember }, { onError }),
+      regenerate: () => regenerateAnswer(undefined, { onError }),
+      branchSession: (entryId) => branch(entryId, { onError }),
+      editMessage: (entryId, change, onSuccess) =>
+        edit({ entryId, ...change }, { onSuccess, onError }),
+    };
+  }, [respond, regenerateAnswer, branch, edit]);
+  const responding = respondApproval.isPending;
+  const regenerating = regenerate.isPending;
+  const branching = branchSession.isPending;
+  const editing = editMessage.isPending;
+  // Rebuilt only when what the messages read changes, not on every streamed update.
+  const thread = React.useMemo<ChatThreadContextValue>(
+    () => ({
+      state: { busy: running, approvals, responding, regenerating, branching, editing },
+      actions,
+      meta: { bridge },
+    }),
+    [running, approvals, responding, regenerating, branching, editing, actions, bridge],
+  );
 
   const sending = pending !== null;
   // The run has nothing on screen yet while the answer is still just a working agent: no reply

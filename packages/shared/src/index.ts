@@ -620,6 +620,8 @@ export interface SettingsFile extends AppSettings {
   browserProfiles: BrowserProfile[];
   /** Apps the agent's `computer` tool may always use, or never. */
   computerApps: ComputerAppAccess;
+  /** Workspace folders (absolute) whose `.agents/skills` the person trusted; others' skills do not load. */
+  trustedSkillFolders: string[];
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -789,8 +791,10 @@ export interface RemoteAccessStatus {
 /**
  * Commands only the computer itself may send; the web app is refused them. Besides phone access
  * itself, these are the settings that let the computer run programs without anyone approving each
- * one (MCP servers start commands, tool policies can skip approvals), and a path on the computer
- * that only its own file picker can supply.
+ * one (MCP servers start commands, tool policies can skip approvals), a path on the computer that
+ * only its own file picker can supply, the Telegram and Zalo set-up (whoever pairs there talks to
+ * the agent from anywhere, and keeps doing so after the device is forgotten), and bulk deletions
+ * and the login service, which a copied device token must not be able to do.
  */
 export const REMOTE_LOCAL_ONLY_COMMANDS = [
   "get_remote_access",
@@ -803,17 +807,34 @@ export const REMOTE_LOCAL_ONLY_COMMANDS = [
   // mcp.json holds the servers' keys and tokens in plain text.
   "get_mcp_json",
   "import_skill",
+  "save_telegram",
+  "start_telegram_pairing",
+  "forget_telegram",
+  "save_zalo",
+  "start_zalo_pairing",
+  "forget_zalo",
+  "delete_workspace",
+  "clear_sessions",
+  "clear_memory",
+  "set_service_installed",
 ] as const satisfies readonly AgentCommandType[];
 
 /**
  * Whether the web app may send `command`. Turning the shell, yolo mode or an always-allowed app
- * off is fine from a phone; turning them on is not.
+ * off is fine from a phone; turning them on is not. A device may also not create a workspace
+ * (its folder is created anywhere, and the AGENTS.md written there is read by every agent working
+ * below it); editing an existing one keeps its folder. Unblocking an app depends on the current
+ * lists, so the phone access server checks that itself.
  */
 export function remoteMayRun(command: AgentCommand): boolean {
   if ((REMOTE_LOCAL_ONLY_COMMANDS as readonly string[]).includes(command.type)) return false;
   if (command.type === "set_conversation_yolo") return command.active !== true;
   // "Always allowed" lets the agent use an app on the computer without asking.
   if (command.type === "set_computer_app_access") return command.access !== "allowed";
+  if (command.type === "respond_approval") return command.remember !== "always";
+  if (command.type === "save_workspace") return typeof command.workspace?.id === "string";
+  // Trusting a workspace loads the skills in its folder, written by whoever made the folder.
+  if (command.type === "set_workspace_skills_trust") return command.trusted !== true;
   if (command.type === "update_settings") {
     const patch: SettingsPatch = command.patch ?? {};
     return patch.shellEnabled !== true && patch.yoloMode !== true;
@@ -1041,7 +1062,10 @@ export interface SaveWebSearchInput {
   /** Enabled providers in the order they are tried. */
   providers: SearchProviderId[];
   endpoints: Partial<Record<SearchProviderId, string>>;
-  /** Provider → new key; `null` removes the stored key; a provider left out keeps its key. */
+  /**
+   * Provider → new key; `null` removes the stored key; a provider left out keeps its key, unless
+   * its endpoint changed (a stored key never goes to another address than the one it was saved for).
+   */
   keys: Partial<Record<SearchProviderId, string | null>>;
 }
 
@@ -1089,6 +1113,11 @@ export interface McpServerSettings {
   exposure: McpExposure;
   /** Per-request timeout in seconds. */
   timeout?: number;
+  /**
+   * The person trusts this server's own labels: a tool it marks read-only runs without asking under
+   * `auto`. Off by default, so every tool of the server asks.
+   */
+  trusted?: boolean;
   transport: "stdio" | "http";
   command?: string;
   args?: string[];
@@ -1290,6 +1319,13 @@ export interface AgentCommandMap {
   read_workspace_instructions: { params: { id: string }; result: WorkspaceInstructions };
   /** Writes the folder's AGENTS.md; the open conversation reloads it when it is in that folder. */
   save_workspace_instructions: { params: { id: string; content: string }; result: void };
+  /** Whether the skills in the workspace folder's `.agents/skills` load (off until the person trusts them). */
+  get_workspace_skills_trust: { params: { id: string }; result: boolean };
+  /**
+   * Trusts the workspace folder's skills or stops trusting them; open conversations reload. Even
+   * trusted, a workspace skill never replaces an installed skill of the same name.
+   */
+  set_workspace_skills_trust: { params: { id: string; trusted: boolean }; result: boolean };
   /** The default workspace cannot be deleted. Its conversations move to the default workspace. */
   delete_workspace: { params: { id: string }; result: void };
 
@@ -1495,6 +1531,16 @@ export interface CookieSource {
   profiles: CookieSourceProfile[];
 }
 
+/**
+ * A site with cookies in a source browser profile (`google.com` for `mail.google.com` and
+ * `.google.com`), for picking which sign-ins to import.
+ */
+export interface CookieSite {
+  site: string;
+  /** Cookies of the site and its subdomains. */
+  count: number;
+}
+
 export interface CookieImportResult {
   imported: number;
   /** Expired, unreadable, or refused by the browser engine. */
@@ -1577,11 +1623,12 @@ export interface BrowserRequest {
   offset?: number;
 }
 
-/** What the tool returns to the model: page text (untrusted web content) and maybe a PNG. */
+/** What the tool returns to the model: page text (untrusted web content) and maybe an image. */
 export interface BrowserResult {
   text: string;
-  /** Base64 PNG for `screenshot`. */
+  /** Base64 image for `screenshot`. */
   image?: string;
+  imageType?: "image/png" | "image/jpeg";
 }
 
 /** Rectangle of the page area in the window, in CSS pixels. */
@@ -1643,8 +1690,10 @@ export type ComputerAppRemember = "conversation" | "always";
 
 /**
  * Apps the agent may never drive, by bundle id (lower case) or name: PP Agent itself (it would
- * approve its own requests), terminals and script runners (they would get around the shell
- * setting), and where macOS and Windows keep passwords and privacy switches.
+ * approve its own requests), terminals, script runners and editors with a built-in terminal (they
+ * would get around the shell setting), Task Manager ("Run new task"), and where macOS and Windows
+ * keep passwords and privacy switches. Finder and Explorer stay usable, though opening a script or
+ * program file there runs it: approving them is close to approving the shell.
  */
 const PROTECTED_COMPUTER_APP_IDS = new Set([
   "com.pptechs.agent",
@@ -1668,7 +1717,24 @@ const PROTECTED_COMPUTER_APP_IDS = new Set([
   "com.1password.1password",
   "com.agilebits.onepassword7",
   "com.bitwarden.desktop",
+  "com.microsoft.vscode",
+  "com.microsoft.vscodeinsiders",
+  "com.vscodium",
+  "com.todesktop.230313mzl4w4u92",
+  "com.exafunction.windsurf",
+  "dev.zed.zed",
 ]);
+/** Id prefixes: app families (JetBrains IDEs) and Windows package names (`<name>_<publisher>!App`). */
+const PROTECTED_COMPUTER_APP_ID_PREFIXES = [
+  "com.jetbrains.",
+  "microsoft.windowsterminal",
+  "microsoft.powershell",
+  "microsoft.visualstudiocode",
+  "microsoft.wsl",
+  "microsoftcorporationii.windowssubsystemforlinux",
+  "canonicalgrouplimited.ubuntu",
+  "thedebianproject.debianlinux",
+];
 const PROTECTED_COMPUTER_APP_NAMES = new Set([
   "pp agent",
   "electron",
@@ -1701,16 +1767,39 @@ const PROTECTED_COMPUTER_APP_NAMES = new Set([
   "regedit",
   "windows security",
   "settings",
+  "visual studio code",
+  "code",
+  "code - insiders",
+  "vscodium",
+  "cursor",
+  "windsurf",
+  "zed",
+  "git bash",
+  "git-bash",
+  "bash",
+  "wsl",
+  "windows subsystem for linux",
+  "debian",
+  "task manager",
+  "taskmgr",
 ]);
+/** Name prefixes, for names that carry a version or edition ("PowerShell 7 (x64)", "Ubuntu 24.04 LTS"). */
+const PROTECTED_COMPUTER_APP_NAME_PREFIXES = ["powershell", "ubuntu", "visual studio code"];
 
 export function isProtectedComputerApp(app: ComputerApp): boolean {
+  const id = app.id.trim().toLowerCase();
   const name = app.name
     .trim()
     .toLowerCase()
     .replace(/\.(exe|app)$/, "");
+  // A Windows launch path (`C:\…\Code.exe`) also counts by its program name.
+  const program = (id.split(/[\\/]/).pop() ?? "").replace(/\.(exe|app)$/, "");
   return (
-    PROTECTED_COMPUTER_APP_IDS.has(app.id.trim().toLowerCase()) ||
-    PROTECTED_COMPUTER_APP_NAMES.has(name)
+    PROTECTED_COMPUTER_APP_IDS.has(id) ||
+    PROTECTED_COMPUTER_APP_ID_PREFIXES.some((prefix) => id.startsWith(prefix)) ||
+    PROTECTED_COMPUTER_APP_NAMES.has(name) ||
+    PROTECTED_COMPUTER_APP_NAMES.has(program) ||
+    PROTECTED_COMPUTER_APP_NAME_PREFIXES.some((prefix) => name.startsWith(prefix))
   );
 }
 
@@ -1854,7 +1943,15 @@ export interface DesktopBridge {
     list(): Promise<TerminalInfo[]>;
     /** Starts the person's shell in a workspace folder. */
     create(cwd: string, size: TerminalSize): Promise<TerminalInfo>;
+    /**
+     * Output so far, for a view that starts showing the terminal. The view then acks every chunk
+     * it has drawn (`ack`); the shell pauses while too much output waits, until `detach`.
+     */
     backlog(id: string): Promise<TerminalBacklog>;
+    /** The view drew `chars` more characters of this terminal's output. */
+    ack(id: string, chars: number): void;
+    /** The view stopped showing the terminal: its output is no longer held back for it. */
+    detach(id: string): void;
     write(id: string, data: string): void;
     resize(id: string, size: TerminalSize): void;
     close(id: string): Promise<void>;
@@ -1902,14 +1999,20 @@ export interface DesktopBridge {
      */
     cookieSourceRunning(browser: CookieSourceBrowser): Promise<boolean>;
     /**
-     * Copies every cookie of a source browser profile into a profile. `quitSource` first quits the
-     * source browser, with its background processes (Windows).
+     * The sites with cookies in a source browser profile, most cookies first. `quitSource` first
+     * quits the source browser, with its background processes (Windows).
      */
+    cookieSites(
+      browser: CookieSourceBrowser,
+      sourceProfile: string,
+      quitSource?: boolean,
+    ): Promise<CookieSite[]>;
+    /** Copies the cookies of the chosen sites (from `cookieSites`) of a source browser profile into a profile. */
     importCookies(
       profileId: string,
       browser: CookieSourceBrowser,
       sourceProfile: string,
-      quitSource?: boolean,
+      sites: string[],
     ): Promise<CookieImportResult>;
   };
   computer: {
@@ -1975,6 +2078,8 @@ export const IPC = {
   terminalBacklog: "terminal:backlog",
   terminalWrite: "terminal:write",
   terminalResize: "terminal:resize",
+  terminalAck: "terminal:ack",
+  terminalDetach: "terminal:detach",
   terminalClose: "terminal:close",
   terminalData: "terminal:data",
   terminalChanged: "terminal:changed",
@@ -1997,6 +2102,7 @@ export const IPC = {
   browserChanged: "browser:changed",
   browserCookieSources: "browser:cookie-sources",
   browserCookieSourceRunning: "browser:cookie-source-running",
+  browserCookieSites: "browser:cookie-sites",
   browserImportCookies: "browser:import-cookies",
   browserReveal: "browser:reveal",
   computerStatus: "computer:status",

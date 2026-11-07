@@ -25,6 +25,8 @@ export const MAX_DEVICE_NAME = 60;
 export const MAX_DEVICES = 20;
 /** `lastSeenAt` is written to disk at most this often per device; it is kept in memory meanwhile. */
 const TOUCH_SAVE_MS = 60_000;
+/** A device unused this long is signed out: its token stops working and it is removed. */
+export const DEVICE_IDLE_MS = 30 * 24 * 60 * 60_000;
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
@@ -144,8 +146,11 @@ export class RemoteStore {
     return { device, token: `${device.id}.${secret}`, evicted };
   }
 
-  /** The device a token belongs to, or null; the comparison takes the same time either way. */
-  authenticate(token: string | null): StoredDevice | null {
+  /**
+   * The device a token belongs to, or null; the comparison takes the same time either way. A
+   * device unused for `DEVICE_IDLE_MS` no longer signs in.
+   */
+  authenticate(token: string | null, now: number): StoredDevice | null {
     if (!token) return null;
     const dot = token.indexOf(".");
     if (dot <= 0) return null;
@@ -155,7 +160,20 @@ export class RemoteStore {
     const device = this.data.devices.find((candidate) => candidate.id === id);
     const given = Buffer.from(sha256(secret), "hex");
     const expected = Buffer.from(device?.secretHash ?? "0".repeat(64), "hex");
-    return timingSafeEqual(given, expected) && device ? device : null;
+    const matches = timingSafeEqual(given, expected) && device !== undefined;
+    return matches && now - device.lastSeenAt < DEVICE_IDLE_MS ? device : null;
+  }
+
+  /** Removes the devices unused for `DEVICE_IDLE_MS` and returns their ids. */
+  async removeIdle(now: number): Promise<string[]> {
+    const idle = this.data.devices
+      .filter((device) => now - device.lastSeenAt >= DEVICE_IDLE_MS)
+      .map((device) => device.id);
+    if (idle.length === 0) return idle;
+    this.data.devices = this.data.devices.filter((device) => !idle.includes(device.id));
+    for (const id of idle) this.savedSeen.delete(id);
+    await this.save();
+    return idle;
   }
 
   async removeDevice(id: string): Promise<boolean> {

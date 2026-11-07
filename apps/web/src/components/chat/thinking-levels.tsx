@@ -4,7 +4,7 @@ import { Slider } from "@workspace/ui/components/slider";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import { useAgentCommands } from "@/lib/queries";
+import { useSetThinkingLevel } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
 
 /** Width of the slider's thumb (`size-6`); the tick marks line up with the thumb's travel. */
@@ -18,7 +18,7 @@ const THUMB = "1.5rem";
 export function ThinkingLevels({ bridge }: { bridge: DesktopBridge }) {
   const thinking = useChatStore((state) => state.thinking);
   const running = useChatStore((state) => state.status === "running");
-  const { setThinkingLevel } = useAgentCommands(bridge);
+  const setThinkingLevel = useSetThinkingLevel(bridge);
   const { t } = useTranslation("chat");
   // Follows the thumb while it is dragged; the level is saved when it is released.
   const [dragged, setDragged] = React.useState<number | null>(null);

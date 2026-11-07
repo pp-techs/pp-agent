@@ -534,15 +534,22 @@
     "privacy": "Cookie được sao chép một lần và chỉ nằm trên máy này. Đăng xuất ở đây không đăng xuất bạn khỏi trình duyệt kia.",
     "import": {
       "title": "Nhập cookie vào {{name}}",
-      "description": "Sao chép mọi cookie của một hồ sơ trình duyệt trên máy này, để các trang bạn đã đăng nhập ở đó cũng được đăng nhập ở đây. Cookie cùng tên đã có trong hồ sơ này sẽ bị thay thế.",
+      "description": "Sao chép cookie của các trang web bạn chọn từ một hồ sơ trình duyệt trên máy này, để bạn cũng được đăng nhập vào các trang đó ở đây. Cookie cùng tên đã có trong hồ sơ này sẽ bị thay thế.",
       "browser": "Trình duyệt",
       "sourceProfile": "Hồ sơ trong trình duyệt đó",
       "hintMac": "macOS sẽ hỏi quyền truy cập khóa đã lưu của trình duyệt. Hãy chọn “Cho phép”.",
-      "running": "{{browser}} đang chạy, kể cả chạy nền, nên khóa cookie của nó. Khi nhập, trình duyệt này sẽ được thoát và đóng các cửa sổ; các tab sẽ được khôi phục khi bạn mở lại. Bạn cũng có thể tự thoát nó, ghi chú này sẽ tự mất.",
+      "running": "{{browser}} đang chạy, kể cả chạy nền, nên khóa cookie của nó. Khi tiếp tục, trình duyệt này sẽ được thoát và đóng các cửa sổ; các tab sẽ được khôi phục khi bạn mở lại. Bạn cũng có thể tự thoát nó, ghi chú này sẽ tự mất.",
       "hintFirefox": "Cookie của các tab container và cửa sổ riêng tư sẽ không được sao chép.",
       "none": "Không tìm thấy trình duyệt nào được hỗ trợ có cookie trên máy này (Chrome, Edge, Brave, Arc, Chromium hoặc Firefox).",
+      "next": "Chọn trang web",
+      "nextQuit": "Thoát {{browser}} và chọn trang web",
+      "sitesDescription": "Chọn các trang web có thông tin đăng nhập cần sao chép từ {{browser}} ({{profile}}). Công cụ trình duyệt của agent có thể dùng chúng, nên chỉ chọn những gì cần thiết.",
+      "noSites": "Hồ sơ trình duyệt này không có cookie nào.",
+      "filterSites": "Tìm trang web",
+      "siteCookies_other": "{{count}} cookie",
+      "moreSites_other": "Còn {{count}} trang web nữa; hãy gõ để tìm.",
+      "sitesChosen_other": "Đã chọn {{count}} trang web",
       "submit": "Nhập",
-      "submitQuit": "Thoát {{browser}} và nhập",
       "done_other": "Đã nhập {{count}} cookie từ {{browser}} vào {{profile}}.",
       "skipped_other": "Đã bỏ qua {{count}} cookie (hết hạn hoặc không đọc được)."
     }
@@ -550,7 +557,7 @@
   "computerSection": {
     "title": "Điều khiển máy tính",
     "description": "Cho phép agent dùng các ứng dụng trên máy này: agent đọc nội dung cửa sổ, rồi bấm, gõ chữ và dùng menu, thường là không chiếm màn hình của bạn.",
-    "risk": "Agent có thể làm trong một ứng dụng bất cứ điều gì bạn làm được ở đó. Nội dung agent đọc trong ứng dụng (một email, một tin nhắn) có thể tìm cách đánh lừa nó, nên hãy giữ chế độ “hỏi trước khi thao tác” trừ khi bạn tin tưởng tác vụ. Agent không bao giờ được dùng chính PP Agent, các terminal, hay phần cài đặt mật khẩu và quyền riêng tư.",
+    "risk": "Agent có thể làm trong một ứng dụng bất cứ điều gì bạn làm được ở đó. Nội dung agent đọc trong ứng dụng (một email, một tin nhắn) có thể tìm cách đánh lừa nó, nên hãy giữ chế độ “hỏi trước khi thao tác” trừ khi bạn tin tưởng tác vụ. Agent không bao giờ được dùng chính PP Agent, các terminal hay trình soạn code có terminal, Task Manager, hay phần cài đặt mật khẩu và quyền riêng tư. Cho phép Finder hoặc File Explorer gần như là cho phép agent chạy chương trình, vì mở một script ở đó sẽ chạy nó.",
     "enable": {
       "title": "Cho phép agent dùng ứng dụng",
       "description": "Việc xem cửa sổ chạy luôn. Bấm, gõ chữ và mở ứng dụng sẽ hỏi bạn trước, trừ khi bạn đặt công cụ điều khiển máy tính chạy không cần hỏi trong Cài đặt › Công cụ."

@@ -19,6 +19,8 @@ name: Release
 #   (a warning is printed when some of those are missing). Without a certificate the app is
 #   ad-hoc signed and not notarized.
 # - Windows: WIN_CSC_LINK + WIN_CSC_KEY_PASSWORD sign the installer; without them it is unsigned.
+# Signed builds get `ppCodeSigned` in their package.json and update themselves in-app; unsigned
+# ones (and Linux) send people to the release page instead (apps/desktop/src/main/updates.ts).
 
 on:
   push:
@@ -239,10 +241,10 @@ jobs:
               echo "::warning::CSC_LINK is not set: macOS build is ad-hoc signed and not notarized."
             elif [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
               # Developer ID signing with the hardened runtime, then notarization (electron-builder.yml).
-              args+=(-c.extraMetadata.ppDeveloperIdSigned=true)
+              args+=(-c.extraMetadata.ppCodeSigned=true)
             else
               # electron-builder fails on partial Apple credentials, so skip notarization explicitly.
-              args+=(-c.mac.notarize=false -c.extraMetadata.ppDeveloperIdSigned=true)
+              args+=(-c.mac.notarize=false -c.extraMetadata.ppCodeSigned=true)
               echo "::warning::APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD or APPLE_TEAM_ID is not set: macOS build is signed but not notarized."
             fi
           fi
@@ -279,9 +281,14 @@ jobs:
             [ -n "${!name}" ] || unset "$name"
           done
           # Windows builds are signed only with WIN_CSC_LINK; never pick up the macOS CSC_LINK there.
-          if [ "$PLATFORM" = "--win" ] && [ -z "${WIN_CSC_LINK:-}" ]; then
-            unset CSC_LINK CSC_KEY_PASSWORD
-            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          if [ "$PLATFORM" = "--win" ]; then
+            if [ -z "${WIN_CSC_LINK:-}" ]; then
+              unset CSC_LINK CSC_KEY_PASSWORD
+              export CSC_IDENTITY_AUTO_DISCOVERY=false
+              echo "::warning::WIN_CSC_LINK is not set: the Windows installer is unsigned, and installed copies update through the release page."
+            else
+              args+=(-c.extraMetadata.ppCodeSigned=true)
+            fi
           fi
           vp exec electron-builder "${args[@]}"
           # Each macOS job writes a feed for its own architecture; `publish` merges them.

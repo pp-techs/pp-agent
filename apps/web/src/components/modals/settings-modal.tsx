@@ -8,6 +8,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@workspace/ui/components/dialog";
+import { Spinner } from "@workspace/ui/components/spinner";
 import {
   Sidebar,
   SidebarContent,
@@ -41,22 +42,84 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { AgentsSection } from "@/components/settings/agents-section";
-import { BackgroundSection } from "@/components/settings/background-section";
-import { BrowserSection } from "@/components/settings/browser-section";
-import { ChannelsSection } from "@/components/settings/channels-section";
-import { ComputerSection } from "@/components/settings/computer-section";
-import { GeneralSection } from "@/components/settings/general-section";
-import { McpSection } from "@/components/settings/mcp-section";
-import { MemorySection } from "@/components/settings/memory-section";
-import { ModelsSection } from "@/components/settings/models-section";
-import { RemoteAccessSection } from "@/components/settings/remote-access-section";
-import { SkillsSection } from "@/components/settings/skills-section";
 import { SettingsSubPageProvider } from "@/components/settings/settings-subpage";
-import { VoiceSection } from "@/components/settings/voice-section";
-import { ToolsSection } from "@/components/settings/tools-section";
-import { WorkspacesSection } from "@/components/settings/workspaces-section";
 import { isWebApp } from "@/lib/bridge";
+
+type SectionComponent = React.ComponentType<{ bridge: DesktopBridge }>;
+
+/** A section loads the first time it is shown, so Settings stays out of the startup bundle. */
+function lazySection<Module>(
+  load: () => Promise<Module>,
+  pick: (module: Module) => SectionComponent,
+): SectionComponent {
+  return React.lazy(() => load().then((module) => ({ default: pick(module) })));
+}
+
+const GeneralSection = lazySection(
+  () => import("@/components/settings/general-section"),
+  (module) => module.GeneralSection,
+);
+const VoiceSection = lazySection(
+  () => import("@/components/settings/voice-section"),
+  (module) => module.VoiceSection,
+);
+const ModelsSection = lazySection(
+  () => import("@/components/settings/models-section"),
+  (module) => module.ModelsSection,
+);
+const WorkspacesSection = lazySection(
+  () => import("@/components/settings/workspaces-section"),
+  (module) => module.WorkspacesSection,
+);
+const AgentsSection = lazySection(
+  () => import("@/components/settings/agents-section"),
+  (module) => module.AgentsSection,
+);
+const ToolsSection = lazySection(
+  () => import("@/components/settings/tools-section"),
+  (module) => module.ToolsSection,
+);
+const McpSection = lazySection(
+  () => import("@/components/settings/mcp-section"),
+  (module) => module.McpSection,
+);
+const SkillsSection = lazySection(
+  () => import("@/components/settings/skills-section"),
+  (module) => module.SkillsSection,
+);
+const MemorySection = lazySection(
+  () => import("@/components/settings/memory-section"),
+  (module) => module.MemorySection,
+);
+const ChannelsSection = lazySection(
+  () => import("@/components/settings/channels-section"),
+  (module) => module.ChannelsSection,
+);
+const BrowserSection = lazySection(
+  () => import("@/components/settings/browser-section"),
+  (module) => module.BrowserSection,
+);
+const ComputerSection = lazySection(
+  () => import("@/components/settings/computer-section"),
+  (module) => module.ComputerSection,
+);
+const BackgroundSection = lazySection(
+  () => import("@/components/settings/background-section"),
+  (module) => module.BackgroundSection,
+);
+const RemoteAccessSection = lazySection(
+  () => import("@/components/settings/remote-access-section"),
+  (module) => module.RemoteAccessSection,
+);
+
+/** Shown while a section's code loads. */
+function SectionFallback() {
+  return (
+    <div className="flex justify-center p-6">
+      <Spinner />
+    </div>
+  );
+}
 
 export type SettingsSection =
   | "general"
@@ -77,7 +140,7 @@ export type SettingsSection =
 const ALL_SECTIONS: {
   id: SettingsSection;
   icon: LucideIcon;
-  Component: React.ComponentType<{ bridge: DesktopBridge }>;
+  Component: SectionComponent;
   /** Set where only the app window can show it (its browser, its access to this computer). */
   desktopOnly?: true;
 }[] = [
@@ -217,7 +280,9 @@ function SettingsPanes({
           {current ? (
             <div className="px-4 pt-4">
               <SettingsSubPageProvider value={setSubPage}>
-                <current.Component key={`${current.id}-${resetCount}`} bridge={bridge} />
+                <React.Suspense fallback={<SectionFallback />}>
+                  <current.Component key={`${current.id}-${resetCount}`} bridge={bridge} />
+                </React.Suspense>
               </SettingsSubPageProvider>
             </div>
           ) : (
@@ -290,7 +355,9 @@ function SettingsPanes({
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-1 pb-6">
           <SettingsSubPageProvider value={setSubPage}>
-            <Component key={`${shown.id}-${resetCount}`} bridge={bridge} />
+            <React.Suspense fallback={<SectionFallback />}>
+              <Component key={`${shown.id}-${resetCount}`} bridge={bridge} />
+            </React.Suspense>
           </SettingsSubPageProvider>
         </div>
       </main>

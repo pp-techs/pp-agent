@@ -19,6 +19,7 @@ import {
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { pathAccess, type PathRules } from "./path-access.ts";
 import { DELEGATE_TASK_TOOL, type HelperProgress } from "@workspace/shared";
 
 export const DELEGATE_TOOL = DELEGATE_TASK_TOOL;
@@ -81,15 +82,39 @@ export function pickModel(
   );
 }
 
-/** Blocks every call to a tool that is not on the sub agent's read-only list. */
-function readOnlyGuard(allowed: ReadonlySet<string>): ExtensionFactory {
+/**
+ * Blocks every call to a tool that is not on the sub agent's read-only list, and every file read
+ * outside the workspace: nobody is there to approve one.
+ */
+function readOnlyGuard(
+  allowed: ReadonlySet<string>,
+  cwd: string,
+  pathRules: () => PathRules,
+): ExtensionFactory {
   return (pi) => {
-    pi.on("tool_call", (event) =>
-      allowed.has(event.toolName)
-        ? undefined
-        : { block: true, reason: `${event.toolName} is not available to a helper.` },
-    );
+    pi.on("tool_call", async (event) => {
+      if (!allowed.has(event.toolName))
+        return { block: true, reason: `${event.toolName} is not available to a helper.` };
+      const reach = await pathAccess(event.toolName, event.input, cwd, pathRules());
+      if (reach && reach.access !== "inside")
+        return {
+          block: true,
+          reason: `A helper can only read files inside the workspace; ${reach.path} is not.`,
+        };
+      return undefined;
+    });
   };
+}
+
+/**
+ * Tools a helper under a named agent gets: that agent's helper tools, limited to the ones the
+ * calling agent may hand out, so delegating never adds a tool the caller lacks.
+ */
+export function delegatedTools(
+  agentTools: readonly string[],
+  callerTools: readonly string[],
+): string[] {
+  return agentTools.filter((name) => callerTools.includes(name));
 }
 
 /** The error behind a reply that failed, or the text of the last reply. */
@@ -129,6 +154,8 @@ export interface DelegateToolOptions {
   allowedTools: () => string[];
   /** Agents a task can name, read when the tool is built and again on every call. */
   agents: () => HelperAgent[];
+  /** Folders file reads may and may not reach besides the workspace. */
+  pathRules: () => PathRules;
 }
 
 /** What one sub agent runs with. */
@@ -163,7 +190,12 @@ async function runHelper(
     noSkills: true,
     noPromptTemplates: true,
     noThemes: true,
-    extensionFactories: [{ name: "helper-guard", factory: readOnlyGuard(allowed) }],
+    extensionFactories: [
+      {
+        name: "helper-guard",
+        factory: readOnlyGuard(allowed, options.cwd, options.pathRules),
+      },
+    ],
     systemPrompt: spec.prompt,
   });
   await resourceLoader.reload();
@@ -353,7 +385,9 @@ export function createDelegateTool(options: DelegateToolOptions) {
             .filter((part): part is string => Boolean(part))
             .join("\n\n"),
           model,
-          tools: agent ? agent.tools : options.allowedTools(),
+          tools: agent
+            ? delegatedTools(agent.tools, options.allowedTools())
+            : options.allowedTools(),
         };
       });
 

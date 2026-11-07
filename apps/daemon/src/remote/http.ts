@@ -1,8 +1,11 @@
-import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { rm, stat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { isIP } from "node:net";
 import { networkInterfaces, hostname } from "node:os";
 import { extname, join, resolve, sep } from "node:path";
+import { Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 /** A failure with the HTTP status to answer and a message the person may read. */
 export class HttpError extends Error {
@@ -53,6 +56,33 @@ export async function readBody(req: IncomingMessage, limit: number, tooLarge: st
   return Buffer.concat(chunks);
 }
 
+/**
+ * Writes the request body to `path` (mode 0600) as it arrives, refused with 413 past `limit`
+ * bytes; nothing is held in memory and a partial file is removed.
+ */
+export async function saveBody(
+  req: IncomingMessage,
+  path: string,
+  limit: number,
+  tooLarge: string,
+): Promise<void> {
+  const declared = Number(req.headers["content-length"]);
+  if (Number.isFinite(declared) && declared > limit) throw new HttpError(413, tooLarge);
+  let size = 0;
+  const counter = new Transform({
+    transform(chunk: Buffer, _encoding, done) {
+      size += chunk.length;
+      done(size > limit ? new HttpError(413, tooLarge) : null, chunk);
+    },
+  });
+  try {
+    await pipeline(req, counter, createWriteStream(path, { mode: 0o600 }));
+  } catch (error) {
+    await rm(path, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
 export function bearerToken(req: IncomingMessage): string | null {
   const header = req.headers.authorization;
   if (typeof header !== "string") return null;
@@ -72,6 +102,58 @@ export function sameOrigin(req: IncomingMessage): boolean {
   } catch {
     return false;
   }
+}
+
+/** Carrier-grade NAT (`100.64.0.0/10`): Tailscale addresses, but also some ISPs' WAN addresses. */
+export function isCgnatAddress(address: string): boolean {
+  const v4 = address.startsWith("::ffff:") ? address.slice(7) : address;
+  if (isIP(v4) !== 4) return false;
+  const [a = 0, b = 0] = v4.split(".").map(Number);
+  return a === 100 && b >= 64 && b <= 127;
+}
+
+/** Addresses of this computer's network interfaces, loopback included, in lower case. */
+export function ownAddresses(): string[] {
+  const addresses: string[] = [];
+  for (const entries of Object.values(networkInterfaces()))
+    for (const entry of entries ?? []) addresses.push(entry.address.toLowerCase());
+  return addresses;
+}
+
+/** The name in a `Host` header, without port or IPv6 brackets, in lower case. */
+function hostName(header: string | undefined): string | null {
+  if (!header) return null;
+  try {
+    return new URL(`http://${header}`).hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether the `Host` header names this computer's loopback (`localhost`, `127.0.0.1`, `[::1]`):
+ * what a browser or dev proxy on the computer itself sends. Tunnels to the internet (`tailscale
+ * funnel`, `cloudflared`, `ngrok`) send their public name instead.
+ */
+export function isLoopbackHost(header: string | undefined): boolean {
+  const name = hostName(header);
+  return name === "localhost" || name === "::1" || (name?.startsWith("127.") ?? false);
+}
+
+/**
+ * Whether the `Host` header names this computer: one of its own addresses, its name (with or
+ * without `.local`), `localhost`, or a Tailscale name (`*.ts.net`) while it is on a tailnet.
+ * Anything else is a page that rebound its own domain to this address (DNS rebinding), which must
+ * not reach the pairing endpoint as if it were the app.
+ */
+export function isOwnHost(header: string | undefined, addresses: readonly string[]): boolean {
+  const name = hostName(header);
+  if (!name) return false;
+  if (name === "localhost" || addresses.includes(name)) return true;
+  const own = hostname().toLowerCase();
+  const short = own.split(".")[0] ?? own;
+  if (name === own || name === short || name === `${short}.local`) return true;
+  return name.endsWith(".ts.net") && addresses.some(isCgnatAddress);
 }
 
 /**
@@ -167,9 +249,7 @@ export async function serveStatic(
     res.end();
     return;
   }
-  const stream = createReadStream(file);
-  stream.on("error", () => res.destroy());
-  stream.pipe(res);
+  await pipeline(createReadStream(file), res);
 }
 
 /** Private IPv4 ranges a phone on the same Wi-Fi can reach. */

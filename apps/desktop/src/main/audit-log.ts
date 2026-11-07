@@ -1,14 +1,5 @@
-import {
-  appendFileSync,
-  closeSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  readSync,
-  renameSync,
-  rmSync,
-  statSync,
-} from "node:fs";
+import { closeSync, mkdirSync, openSync, readSync, statSync } from "node:fs";
+import { appendFile, readFile, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentEvent } from "@workspace/shared";
 
@@ -109,7 +100,8 @@ export interface AuditLogOptions {
 /**
  * A local record, one JSON object per line, of what went wrong or changed while the app ran: for
  * the person to hand to whoever debugs it. Writing never throws; a log that cannot be written
- * must not break the app.
+ * must not break the app. Lines are written off the main thread's critical path: `record` queues
+ * them and one write at a time appends everything queued so far.
  */
 export class AuditLog {
   readonly file: string;
@@ -118,6 +110,12 @@ export class AuditLog {
   private readonly maxBytes: number;
   private size = 0;
   private readonly seenErrors = new Set<string>();
+  /** Lines recorded but not yet handed to a write. */
+  private pending: string[] = [];
+  /** A write of `pending` is queued and has not started yet. */
+  private writeQueued = false;
+  /** Every file operation runs after the previous one, so lines stay in order. */
+  private queue: Promise<void> = Promise.resolve();
 
   constructor(options: AuditLogOptions) {
     this.file = join(options.dir, "audit.log");
@@ -134,21 +132,49 @@ export class AuditLog {
 
   record(kind: string, data: Record<string, unknown> = {}): void {
     try {
-      const line = `${JSON.stringify({
-        time: new Date().toISOString(),
-        kind,
-        ...(sanitize(data, this.home) as Record<string, unknown>),
-      })}\n`;
-      const bytes = Buffer.byteLength(line);
-      if (this.size > 0 && this.size + bytes > this.maxBytes) {
-        renameSync(this.file, this.previous);
-        this.size = 0;
-      }
-      appendFileSync(this.file, line);
-      this.size += bytes;
+      this.pending.push(
+        `${JSON.stringify({
+          time: new Date().toISOString(),
+          kind,
+          ...(sanitize(data, this.home) as Record<string, unknown>),
+        })}\n`,
+      );
     } catch (error) {
       console.error("Could not write the audit log:", error);
+      return;
     }
+    if (this.writeQueued) return;
+    this.writeQueued = true;
+    void this.enqueue(() => this.writePending());
+  }
+
+  /** Runs `task` after every queued file operation; a failure is reported, never thrown at `record`. */
+  private enqueue<T>(task: () => Promise<T>): Promise<T> {
+    const result = this.queue.then(task);
+    this.queue = result.then(
+      () => undefined,
+      (error: unknown) => console.error("Could not write the audit log:", error),
+    );
+    return result;
+  }
+
+  private async writePending(): Promise<void> {
+    this.writeQueued = false;
+    const lines = this.pending;
+    this.pending = [];
+    let chunk = "";
+    for (const line of lines) {
+      const bytes = Buffer.byteLength(line);
+      if (this.size > 0 && this.size + bytes > this.maxBytes) {
+        if (chunk) await appendFile(this.file, chunk);
+        chunk = "";
+        await rename(this.file, this.previous);
+        this.size = 0;
+      }
+      chunk += line;
+      this.size += bytes;
+    }
+    if (chunk) await appendFile(this.file, chunk);
   }
 
   /** Logs what an event from the agent means for the audit log, if anything. */
@@ -166,35 +192,39 @@ export class AuditLog {
     this.record(entry.kind, { ...entry.data, ...context });
   }
 
-  /** The older file first, then the current one. */
-  read(): string {
-    return [this.previous, this.file]
-      .map((path) => {
-        try {
-          return readFileSync(path, "utf8");
-        } catch {
-          return "";
-        }
-      })
-      .join("");
+  /** The older file first, then the current one, once queued lines are written. */
+  read(): Promise<string> {
+    return this.enqueue(async () => {
+      const parts = await Promise.all(
+        [this.previous, this.file].map((path) => readFile(path, "utf8").catch(() => "")),
+      );
+      return parts.join("");
+    });
   }
 
-  /** Bytes the log files take. */
-  bytes(): number {
-    return [this.previous, this.file].reduce((sum, path) => {
-      try {
-        return sum + statSync(path).size;
-      } catch {
-        return sum;
-      }
-    }, 0);
+  /** Bytes the log files take, once queued lines are written. */
+  bytes(): Promise<number> {
+    return this.enqueue(async () => {
+      const sizes = await Promise.all(
+        [this.previous, this.file].map((path) =>
+          stat(path).then(
+            (stats) => stats.size,
+            () => 0,
+          ),
+        ),
+      );
+      return sizes.reduce((sum, size) => sum + size, 0);
+    });
   }
 
-  clear(): void {
-    rmSync(this.previous, { force: true });
-    rmSync(this.file, { force: true });
-    this.size = 0;
+  /** Removes both files; lines recorded before this call are removed with them. */
+  clear(): Promise<void> {
     this.seenErrors.clear();
+    return this.enqueue(async () => {
+      await rm(this.previous, { force: true });
+      await rm(this.file, { force: true });
+      this.size = 0;
+    });
   }
 }
 
@@ -228,17 +258,18 @@ export interface ReportInput {
 }
 
 /** The text a person sends to whoever debugs a problem: system facts, the audit log, the daemon's log tail. */
-export function buildReport(audit: AuditLog, input: ReportInput): string {
+export async function buildReport(audit: AuditLog, input: ReportInput): Promise<string> {
   const facts = Object.entries(input.facts)
     .map(([name, value]) => `${name}: ${redact(value, input.home)}`)
     .join("\n");
   const daemon = redact(readTail(input.daemonLog, input.daemonLogBytes), input.home);
+  const auditText = await audit.read();
   return [
     "PP Agent diagnostics",
     facts,
     "",
     "=== Audit log (one JSON object per line) ===",
-    audit.read().trim() || "(empty)",
+    auditText.trim() || "(empty)",
     "",
     `=== Background service log (last ${Math.round(input.daemonLogBytes / 1024)} KB) ===`,
     daemon.trim() || "(empty)",

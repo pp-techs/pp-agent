@@ -112,10 +112,10 @@ export const searchSessionsQuery = (bridge: DesktopBridge, query: string) =>
     staleTime: 0,
   });
 
-/** Tokens and estimated cost of the open conversation; `version` refetches it after each reply. */
-export const usageQuery = (bridge: DesktopBridge, sessionPath: string | null, version: unknown) =>
+/** Tokens and estimated cost of the open conversation; invalidated after each reply. */
+export const usageQuery = (bridge: DesktopBridge, sessionPath: string | null) =>
   queryOptions({
-    queryKey: ["usage", sessionPath, version] as const,
+    queryKey: ["usage", sessionPath] as const,
     queryFn: () => bridge.agent.command({ type: "get_usage" }),
     placeholderData: keepPreviousData,
   });
@@ -192,53 +192,87 @@ export function useProviderCommands(bridge: DesktopBridge): ProviderCommands {
   return { connect, disconnect, saveGateway, deleteGateway, fetchGatewayModels };
 }
 
-/** Agent commands are fire-and-forget from the UI's view; state changes arrive as events. */
-export function useAgentCommands(bridge: DesktopBridge) {
-  const prompt = useMutation({
+// Agent commands are fire-and-forget from the UI's view; state changes arrive as events. One hook
+// per command, so each component only creates the mutation observers it uses.
+
+export function usePrompt(bridge: DesktopBridge) {
+  return useMutation({
     mutationFn: (input: { text: string; attachments: Attachment[] }) =>
       bridge.agent.command({ type: "prompt", ...input }),
   });
-  const abort = useMutation({
-    mutationFn: () => bridge.agent.command({ type: "abort" }),
-  });
-  const newChat = useMutation({
+}
+
+export function useAbort(bridge: DesktopBridge) {
+  return useMutation({ mutationFn: () => bridge.agent.command({ type: "abort" }) });
+}
+
+export function useNewChat(bridge: DesktopBridge) {
+  return useMutation({
     /** Without a workspace id: in the workspace of the open conversation. */
     mutationFn: (workspaceId?: string) => bridge.agent.command({ type: "new_chat", workspaceId }),
   });
-  /** In the workspace of the open conversation, kept out of history. */
-  const newTemporaryChat = useMutation({
+}
+
+/** In the workspace of the open conversation, kept out of history. */
+export function useNewTemporaryChat(bridge: DesktopBridge) {
+  return useMutation({
     mutationFn: () => bridge.agent.command({ type: "new_chat", temporary: true }),
   });
-  const respondApproval = useMutation({
+}
+
+export function useRespondApproval(bridge: DesktopBridge) {
+  return useMutation({
     mutationFn: (input: { requestId: string; approved: boolean; remember?: ComputerAppRemember }) =>
       bridge.agent.command({ type: "respond_approval", ...input }),
   });
-  const respondQuestion = useMutation({
+}
+
+export function useRespondQuestion(bridge: DesktopBridge) {
+  return useMutation({
     mutationFn: (input: { requestId: string; answers: QuestionAnswer[] | null }) =>
       bridge.agent.command({ type: "respond_question", ...input }),
   });
-  const openSession = useMutation({
+}
+
+export function useOpenSession(bridge: DesktopBridge) {
+  return useMutation({
     mutationFn: (path: string) => bridge.agent.command({ type: "open_session", path }),
   });
-  const renameSession = useMutation({
+}
+
+export function useRenameSession(bridge: DesktopBridge) {
+  return useMutation({
     mutationFn: (input: { path: string; name: string }) =>
       bridge.agent.command({ type: "rename_session", ...input }),
   });
-  const deleteSession = useMutation({
+}
+
+export function useDeleteSession(bridge: DesktopBridge) {
+  return useMutation({
     mutationFn: (path: string) => bridge.agent.command({ type: "delete_session", path }),
   });
-  const clearSessions = useMutation({
+}
+
+export function useClearSessions(bridge: DesktopBridge) {
+  return useMutation({
     mutationFn: (workspaceId: string) =>
       bridge.agent.command({ type: "clear_sessions", workspaceId }),
   });
-  const pinSession = useMutation({
+}
+
+export function usePinSession(bridge: DesktopBridge) {
+  return useMutation({
     mutationFn: (input: { path: string; pinned: boolean }) =>
       bridge.agent.command({ type: "pin_session", ...input }),
   });
-  const regenerate = useMutation({
-    mutationFn: () => bridge.agent.command({ type: "regenerate" }),
-  });
-  const editMessage = useMutation({
+}
+
+export function useRegenerate(bridge: DesktopBridge) {
+  return useMutation({ mutationFn: () => bridge.agent.command({ type: "regenerate" }) });
+}
+
+export function useEditMessage(bridge: DesktopBridge) {
+  return useMutation({
     mutationFn: (input: {
       entryId: string;
       text: string;
@@ -246,51 +280,48 @@ export function useAgentCommands(bridge: DesktopBridge) {
       keep: { files: string[]; images: number[] };
     }) => bridge.agent.command({ type: "edit_message", ...input }),
   });
-  const branchSession = useMutation({
+}
+
+export function useBranchSession(bridge: DesktopBridge) {
+  return useMutation({
     mutationFn: (entryId: string) => bridge.agent.command({ type: "branch_session", entryId }),
   });
-  const setModel = useMutation({
+}
+
+export function useSetModel(bridge: DesktopBridge) {
+  return useMutation({
     mutationFn: (model: ModelRef) => bridge.agent.command({ type: "set_model", ...model }),
   });
-  const setAgent = useMutation({
+}
+
+export function useSetAgent(bridge: DesktopBridge) {
+  return useMutation({
     mutationFn: (id: string) => bridge.agent.command({ type: "set_agent", id }),
   });
-  const setThinkingLevel = useMutation({
+}
+
+export function useSetThinkingLevel(bridge: DesktopBridge) {
+  return useMutation({
     mutationFn: (level: ThinkingLevel) =>
       bridge.agent.command({ type: "set_thinking_level", level }),
   });
-  const setConversationYolo = useMutation({
+}
+
+export function useSetConversationYolo(bridge: DesktopBridge) {
+  return useMutation({
     mutationFn: (active: boolean) =>
       bridge.agent.command({ type: "set_conversation_yolo", active }),
   });
-  const setGoal = useMutation({
+}
+
+export function useSetGoal(bridge: DesktopBridge) {
+  return useMutation({
     mutationKey: SET_GOAL_KEY,
     mutationFn: (params: AgentCommandMap["set_goal"]["params"]) =>
       bridge.agent.command({ type: "set_goal", ...params }),
   });
-  const compact = useMutation({
-    mutationFn: () => bridge.agent.command({ type: "compact" }),
-  });
-  return {
-    prompt,
-    abort,
-    newChat,
-    newTemporaryChat,
-    respondApproval,
-    respondQuestion,
-    openSession,
-    renameSession,
-    deleteSession,
-    clearSessions,
-    pinSession,
-    regenerate,
-    editMessage,
-    branchSession,
-    setModel,
-    setAgent,
-    setThinkingLevel,
-    setConversationYolo,
-    setGoal,
-    compact,
-  };
+}
+
+export function useCompact(bridge: DesktopBridge) {
+  return useMutation({ mutationFn: () => bridge.agent.command({ type: "compact" }) });
 }

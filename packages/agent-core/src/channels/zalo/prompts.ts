@@ -1,5 +1,6 @@
 import type { ApprovalRequest, QuestionAnswer, QuestionRequest } from "@workspace/shared";
 import { ASK_LIMITS } from "../../ask.ts";
+import { clipMiddle } from "../shared/clip.ts";
 import type { ZaloTranslate } from "./text.ts";
 
 export const PROMPT_TIMEOUT_MS = 10 * 60_000;
@@ -32,7 +33,9 @@ export class ZaloPrompts {
 
   /** Sends the question and resolves with the decision (false on timeout or when cancelled). */
   async askApproval(chatId: string, request: ApprovalRequest): Promise<boolean> {
-    const detail = request.detail.trim().slice(0, MAX_DETAIL_LENGTH);
+    const detail = clipMiddle(request.detail.trim(), MAX_DETAIL_LENGTH, (count) =>
+      this.t("channels.zalo.detailHidden", { count }),
+    );
     const text = [
       `🔐 ${this.t("channels.zalo.approvalTitle")}`,
       request.title,

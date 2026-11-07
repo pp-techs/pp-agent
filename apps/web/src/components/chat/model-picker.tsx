@@ -21,7 +21,7 @@ import { toast } from "sonner";
 import { SettingsModal } from "@/components/modals/settings-modal";
 import { ThinkingLevels } from "@/components/chat/thinking-levels";
 import { groupByProvider, modelKey, modelLabeler } from "@/lib/models";
-import { modelsQuery, useAgentCommands } from "@/lib/queries";
+import { modelsQuery, useSetModel } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
 
 /** Model of the open conversation (in the composer); changing it only affects this chat. */
@@ -31,7 +31,7 @@ export function ModelPicker({ bridge }: { bridge: DesktopBridge }) {
   const status = useChatStore((state) => state.status);
   const models = useQuery(modelsQuery(bridge));
   const label = modelLabeler(models.data ?? []);
-  const { setModel } = useAgentCommands(bridge);
+  const setModel = useSetModel(bridge);
   const [open, setOpen] = React.useState(false);
   const { t } = useTranslation("chat");
 

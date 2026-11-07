@@ -7,6 +7,12 @@ import type { AgentPaths } from "@workspace/shared";
 const APP_FOLDER = "PP Agent";
 /** Longest Unix socket path used as is; sockaddr_un holds 104 bytes on macOS and 108 on Linux. */
 const MAX_SOCKET_PATH = 100;
+/**
+ * Set to "1" by the desktop app in the environment of a daemon it spawns. Such a daemon may
+ * update and start the login service: it is never the service's own process, unlike a daemon
+ * started by launchd, systemd or the Windows task (with or without an older service file).
+ */
+export const APP_SPAWN_ENV = "PP_AGENT_SPAWNED_BY_APP";
 
 export interface DaemonPaths {
   /** Folder with settings.json, agent/, sessions/, logs/, vault, socket and token. */

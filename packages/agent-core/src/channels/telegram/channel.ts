@@ -1,6 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { randomUUID } from "node:crypto";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { Attachment, ChannelState, TelegramChatSettings } from "@workspace/shared";
@@ -262,12 +261,14 @@ export class TelegramChannel {
         const updates = await this.api.getUpdates(offset, signal);
         failures = 0;
         if (!this.online) this.setState("online", null);
+        const before = offset;
         for (const update of updates) {
           this.dispatch(update);
           offset = Math.max(offset, update.update_id + 1);
         }
-        // Persist the offset so a restart does not re-process these updates.
-        this.saveOffset(offset);
+        // Persist the offset so a restart does not re-process these updates; an empty poll leaves
+        // nothing new to save.
+        if (offset !== before) this.saveOffset(offset);
       } catch (error) {
         if (signal.aborted) break;
         failures++;
@@ -444,14 +445,17 @@ export class TelegramChannel {
     )
       return;
 
-    // Busy mode: steer joins the running turn, interrupt stops it, queue waits.
-    const busyMode = this.chatSettings(chatId).busyMode ?? "queue";
+    // Busy mode: steer joins the running turn, interrupt stops it, queue waits. Only the owner may
+    // steer or stop a running turn; anyone else's message waits for its own turn.
+    const isOwner = from.id === owner?.id;
+    const busyMode = isOwner ? (this.chatSettings(chatId).busyMode ?? "queue") : "queue";
     const queue = this.queue(chatId);
     if (queue.running && busyMode === "steer" && plain && message.text?.trim()) {
       try {
         const accepted = await this.deps.gateway.steerTurn(`telegram:${chatId}`, {
           text: message.text.trim(),
           attachments: [],
+          sender: { id: String(from.id), name: displayName(from), owner: isOwner },
         });
         if (accepted) return;
       } catch (error) {
@@ -629,7 +633,7 @@ export class TelegramChannel {
       return;
     }
     const now = Date.now();
-    const result = this.deps.pairing.attempt(code, now);
+    const result = this.deps.pairing.attempt(code, now, String(from.id));
     if (result.status === "ok") {
       const name = displayName(from);
       this.deps.onPaired({ id: from.id, name });
@@ -692,7 +696,9 @@ export class TelegramChannel {
       const input = await this.readInput(chatId, message, temporary);
       if (input) await this.runTurn(chatId, input);
     } finally {
-      await Promise.all(temporary.map((path) => rm(path, { force: true }).catch(() => {})));
+      await Promise.all(
+        temporary.map((path) => rm(path, { recursive: true, force: true }).catch(() => {})),
+      );
     }
   }
 
@@ -721,11 +727,11 @@ export class TelegramChannel {
       if (message.document) {
         const { data } = await this.api.downloadFile(message.document.file_id, MAX_DOWNLOAD_BYTES);
         const name = safeFileName(message.document.file_name);
-        const directory = join(tmpdir(), "pp-agent-telegram");
-        await mkdir(directory, { recursive: true, mode: 0o700 });
-        const path = join(directory, `${randomUUID()}-${name}`);
+        // A fresh private folder per message: a shared fixed one could belong to another user.
+        const directory = await mkdtemp(join(tmpdir(), "pp-agent-telegram-"));
+        temporary.push(directory);
+        const path = join(directory, name);
         await writeFile(path, data, { mode: 0o600 });
-        temporary.push(path);
         attachments.push({
           name,
           mimeType: message.document.mime_type ?? "application/octet-stream",
@@ -760,7 +766,20 @@ export class TelegramChannel {
       await this.reply(chatId, "unsupported");
       return null;
     }
-    return { text, attachments };
+    const from = message.from;
+    return {
+      text,
+      attachments,
+      ...(from
+        ? {
+            sender: {
+              id: String(from.id),
+              name: displayName(from),
+              owner: from.id === this.deps.owner()?.id,
+            },
+          }
+        : {}),
+    };
   }
 
   private async replyDownloadFailure(chatId: number, error: unknown): Promise<void> {

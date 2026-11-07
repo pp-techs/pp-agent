@@ -42,7 +42,12 @@ import {
   zaloChatSettings,
   type ZaloChatDraft,
 } from "@/components/settings/zalo-chat-fields";
+import { ComputerOnlyNotice } from "@/components/settings/computer-only-notice";
+import { maySend } from "@/lib/bridge";
 import { useBackgroundCommands, zaloStatusQuery } from "@/lib/extension-queries";
+
+/** Whoever pairs with the bot talks to the agent from anywhere, so only the computer sets it up. */
+const CAN_SET_UP = maySend("save_zalo") && maySend("start_zalo_pairing");
 
 /** Explicit chat-id entry also works before the bot has received any messages. */
 function ChatsStep({ bridge, status }: { bridge: DesktopBridge; status: ZaloStatus }) {
@@ -341,11 +346,17 @@ export function ZaloPage({ bridge }: { bridge: DesktopBridge }) {
       {status && view && (
         <>
           <StatusLine channel="zalo" view={view} />
-          <ConnectStep channel="zalo" view={view} actions={actions} />
-          <PairStep channel="zalo" view={view} actions={actions} />
-          <RepliesStep channel="zalo" view={view} actions={actions} bridge={bridge} />
-          <ChatsStep bridge={bridge} status={status} />
-          {(status.hasToken || status.ownerId !== null) && (
+          {CAN_SET_UP ? (
+            <>
+              <ConnectStep channel="zalo" view={view} actions={actions} />
+              <PairStep channel="zalo" view={view} actions={actions} />
+              <RepliesStep channel="zalo" view={view} actions={actions} bridge={bridge} />
+              <ChatsStep bridge={bridge} status={status} />
+            </>
+          ) : (
+            <ComputerOnlyNotice />
+          )}
+          {(status.hasToken || status.ownerId !== null) && maySend("forget_zalo") && (
             <div>
               <Button
                 variant="destructive"

@@ -10,19 +10,7 @@ export interface ShellSettings {
   shortcut: string;
 }
 
-/**
- * Reads them from settings.json. The agent process owns the file and writes it before it emits
- * `settings_changed`, so main re-reads after that event (same approach as the language in
- * `i18n.ts`). A missing or malformed file gives the defaults.
- */
-export function readShellSettings(file: string): ShellSettings {
-  let raw: unknown = null;
-  try {
-    raw = JSON.parse(readFileSync(file, "utf8"));
-  } catch {
-    // First start, or the file is being replaced: defaults.
-  }
-  const value = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+function shellSettingsFrom(value: Record<string, unknown>): ShellSettings {
   return {
     notifications: value.notifications !== false,
     tray: value.tray === true,
@@ -34,22 +22,56 @@ export function readShellSettings(file: string): ShellSettings {
   };
 }
 
-/**
- * Folders of the workspaces in settings.json plus the default one: the only folders the side panel
- * may open a terminal in or list. Read on each call, like `readShellSettings`.
- */
-export function readWorkspaceFolders(file: string, defaultDir: string): string[] {
-  let raw: unknown = null;
-  try {
-    raw = JSON.parse(readFileSync(file, "utf8"));
-  } catch {
-    // First start: only the default folder.
-  }
-  const workspaces = (raw as { workspaces?: unknown } | null)?.workspaces;
+function workspaceFoldersFrom(value: Record<string, unknown>, defaultDir: string): string[] {
   const folders = [resolve(defaultDir)];
-  for (const entry of Array.isArray(workspaces) ? workspaces : []) {
+  for (const entry of Array.isArray(value.workspaces) ? value.workspaces : []) {
     const dir = (entry as { dir?: unknown } | null)?.dir;
     if (typeof dir === "string" && isAbsolute(dir)) folders.push(resolve(dir));
   }
   return folders;
+}
+
+/**
+ * What main reads from settings.json, parsed once and kept. The agent process owns the file and
+ * writes it before it emits `settings_changed`, so main calls `refresh` after that event (and
+ * after it connects to the daemon), never on each IPC call. A missing or malformed file gives the
+ * defaults.
+ */
+export class DesktopSettings {
+  private shellValue!: ShellSettings;
+  private foldersValue!: string[];
+
+  constructor(
+    private readonly file: string,
+    /** Folder of the built-in workspace, always allowed. */
+    private readonly defaultWorkspaceDir: string,
+  ) {
+    this.refresh();
+  }
+
+  /** Notifications, tray icon and global shortcut. */
+  get shell(): ShellSettings {
+    return this.shellValue;
+  }
+
+  /**
+   * Folders of the workspaces in settings.json plus the default one: the only folders the side
+   * panel may open a terminal in or list.
+   */
+  get workspaceFolders(): readonly string[] {
+    return this.foldersValue;
+  }
+
+  /** Re-reads settings.json. */
+  refresh(): void {
+    let raw: unknown = null;
+    try {
+      raw = JSON.parse(readFileSync(this.file, "utf8"));
+    } catch {
+      // First start, or the file is being replaced: defaults.
+    }
+    const value = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+    this.shellValue = shellSettingsFrom(value);
+    this.foldersValue = workspaceFoldersFrom(value, this.defaultWorkspaceDir);
+  }
 }

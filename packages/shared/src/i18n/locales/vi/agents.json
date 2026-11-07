@@ -236,6 +236,11 @@
     "saved": "Đã lưu không gian làm việc “{{name}}”",
     "create": "Tạo không gian làm việc",
     "builtInSrOnly": "Không gian làm việc có sẵn",
+    "skills": {
+      "legend": "Kỹ năng trong thư mục này",
+      "label": "Dùng các kỹ năng có sẵn trong thư mục này",
+      "description": "Nạp các kỹ năng trong .agents/skills của thư mục. Chỉ bật cho thư mục bạn tin cậy: một thư mục tải về có thể chứa kỹ năng điều khiển Agent. Kỹ năng trùng tên với kỹ năng đã cài sẽ không bao giờ được dùng."
+    },
     "namePlaceholder": "Nhóm tài chính",
     "errors": {
       "nameRequired": "Hãy đặt tên cho không gian làm việc.",

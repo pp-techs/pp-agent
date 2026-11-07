@@ -28,7 +28,7 @@ import { ArrowLeftIcon, GlobeIcon, PlusIcon, TerminalIcon, XIcon } from "lucide-
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import { OptionGroup } from "@/components/settings/option-group";
+import { OptionGroup, SwitchRow } from "@/components/settings/option-group";
 import { useSettingsSubPage } from "@/components/settings/settings-subpage";
 import { useSaveMcpServer } from "@/lib/extension-queries";
 
@@ -149,6 +149,7 @@ export function McpServerForm({
   const [headers, setHeaders] = React.useState(() => toPairs(server?.headers));
   const [exposure, setExposure] = React.useState<McpExposure>(server?.exposure ?? "codemode");
   const [timeoutText, setTimeoutText] = React.useState(server?.timeout?.toString() ?? "");
+  const [trusted, setTrusted] = React.useState(server?.trusted === true);
   const [touched, setTouched] = React.useState(false);
   const save = useSaveMcpServer(bridge);
   const exposureItems = MCP_EXPOSURES.map((value) => ({
@@ -192,6 +193,7 @@ export function McpServerForm({
       enabled: server?.enabled ?? true,
       exposure,
       timeout: timeoutValue,
+      trusted: trusted || undefined,
       transport,
       ...(transport === "stdio"
         ? {
@@ -408,6 +410,13 @@ export function McpServerForm({
               <FieldDescription>{t("mcpForm.fields.timeout.hint")}</FieldDescription>
             )}
           </Field>
+          <SwitchRow
+            id="mcp-trusted"
+            label={t("mcpForm.fields.trusted.label")}
+            description={t("mcpForm.fields.trusted.description")}
+            checked={trusted}
+            onCheckedChange={setTrusted}
+          />
         </FieldGroup>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onDone}>

@@ -188,4 +188,37 @@ describe("ComputerAutomation", () => {
       automation.run({ action: "menu", app: "com.apple.Notes", path: ["File", "New"] }),
     ).rejects.toThrow("refused invoke_menu");
   });
+
+  it("reuses one app list for steps close together, and lists again after a launch", async () => {
+    const { automation, call } = fakeDriver();
+    const listings = () => call.mock.calls.filter(([name]) => name === "list_apps").length;
+    await automation.run({ action: "snapshot", app: "com.apple.Notes" });
+    await automation.run({ action: "windows", app: "com.apple.Notes" });
+    expect(listings()).toBe(1);
+    await automation.run({ action: "launch", app: "com.apple.calculator" });
+    await automation.run({ action: "apps" });
+    expect(listings()).toBe(2);
+  });
+
+  it.each([
+    { name: "Visual Studio Code", bundle_id: "com.microsoft.VSCode" },
+    { name: "Cursor", bundle_id: "com.todesktop.230313mzl4w4u92" },
+    { name: "IntelliJ IDEA", bundle_id: "com.jetbrains.intellij" },
+    { name: "PowerShell 7 (x64)", launch_path: "C:\\Program Files\\PowerShell\\7\\pwsh.exe" },
+    { name: "Terminal", bundle_id: "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App" },
+    {
+      name: "Ubuntu 24.04 LTS",
+      bundle_id: "CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc!ubuntu",
+    },
+    { name: "Git", launch_path: "C:\\Program Files\\Git\\git-bash.exe" },
+    { name: "Task Manager", launch_path: "C:\\Windows\\System32\\Taskmgr.exe" },
+  ])("refuses $name, which can run commands", async (app) => {
+    const call = vi.fn<DriverCall>(async () =>
+      reply("apps", { apps: [{ ...app, pid: 400, running: true }] }),
+    );
+    const id = app.bundle_id ?? app.launch_path;
+    await expect(
+      new ComputerAutomation(call, () => []).run({ action: "snapshot", app: id }),
+    ).rejects.toThrow(/cannot be used/);
+  });
 });
