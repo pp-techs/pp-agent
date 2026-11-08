@@ -89,6 +89,7 @@ let script: Step[];
 let requests: Request[];
 let events: AgentEvent[];
 let planAnswer = "Start";
+let autoAnswer = true;
 let server: Server;
 let host: AgentHost;
 
@@ -99,6 +100,7 @@ beforeEach(async () => {
   requests = [];
   events = [];
   planAnswer = "Start";
+  autoAnswer = true;
   server = modelServer(script, requests);
   const store = new Map<string, StoredCredential>();
   host = new AgentHost({
@@ -106,7 +108,8 @@ beforeEach(async () => {
       emit: (event: AgentEvent) => {
         events.push(event);
         // The plan card is answered here in place of a person.
-        if (event.type === "question_requested") void answerPlan(event.request, planAnswer);
+        if (event.type === "question_requested" && autoAnswer)
+          void answerPlan(event.request, planAnswer);
       },
       openUrl: () => undefined,
     },
@@ -334,4 +337,55 @@ test("a report save never overwrites a file the run did not create", async () =>
   const run = (await snapshot()).research;
   expect(run?.report?.markdown).not.toBe("research/report.md");
   expect(run?.report?.markdown).toMatch(/^research\/report-\d{4}-\d{2}-\d{2}(-\d+)?\.md$/);
+});
+
+test("a clarifying question that reuses an id does not mispair the depth answer", async () => {
+  autoAnswer = false;
+  script.push(
+    {
+      tool: "research_plan",
+      args: {
+        plan: "Plan",
+        questions: [
+          {
+            id: "depth",
+            question: "Which market?",
+            options: [{ label: "Vietnam" }, { label: "Global" }],
+          },
+        ],
+      },
+    },
+    { tool: "research_report", args: { markdown: "# R", final: true } },
+    { text: "Done." },
+  );
+  await host.handle({
+    type: "set_research",
+    action: "start",
+    question: "A market question",
+    depth: "standard",
+  });
+  // Wait for the plan card, then answer every question by its options.
+  let request: QuestionRequest | undefined;
+  await until(() => {
+    request = events.find((event) => event.type === "question_requested")?.request;
+    return request !== undefined;
+  });
+  const ids = request!.questions.map((question) => question.id);
+  // The plan's own ids were moved aside so they cannot collide with the agent's "depth".
+  expect(new Set(ids).size).toBe(ids.length);
+  const answers = request!.questions.map((question) => ({
+    id: question.id,
+    selected: [
+      question.options.some((option) => option.label === "Standard")
+        ? "Standard"
+        : question.options.some((option) => option.label === "Start")
+          ? "Start"
+          : question.options[0]!.label,
+    ],
+  }));
+  await host.handle({ type: "respond_question", requestId: request!.requestId, answers });
+  await until(async () => (await snapshot()).research?.status === "done");
+  const run = (await snapshot()).research;
+  // The depth picked on the plan card was applied, not the clarifying answer's label.
+  expect(run?.depth).toBe("standard");
 });
