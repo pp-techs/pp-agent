@@ -106,11 +106,12 @@ A mermaid diagram may go in when a process, timeline or structure is easier to s
 
 ## Charts
 
-When the report compares numbers (revenue, share, growth, counts over time, options scored), include at least one chart, not only a table:
+When the report compares numbers (revenue, share, growth, counts over time, options scored), include at least one chart, not only a table. In the Markdown report use a **mermaid chart**, which the app draws:
 
-- In the Markdown report, write an \`\`\`svg code block with a bar or line chart drawn as inline SVG: a labelled axis or a value on each bar, the unit, a zero baseline, and the source under it (\`[1]\`). PP Agent draws \`\`\`svg and \`\`\`mermaid blocks in the Files panel; never use image files or remote image URLs.
-- Keep it readable: at most about 8 bars, one colour, values printed on the bars, and a title that says what is measured and the period. A flow or timeline is a \`\`\`mermaid block instead.
-- The HTML report repeats the same chart as inline SVG (see its guide).
+- \`\`\`mermaid with \`pie\` for shares (market share, split of a total), \`xychart-beta\` with \`bar\` and/or \`line\` for values over time or across items, \`quadrantChart\` for two criteria, \`sankey-beta\` for flows, \`treemap-beta\` for composition.
+- Keep it small and labelled: up to about 8 bars, a unit on the axis or values printed in the labels, and the source under the chart (\`[1]\`). Prefer the mermaid chart over hand-drawn SVG whenever one fits.
+- For something mermaid cannot draw, an \`\`\`svg code block with a labelled axis, the unit, a zero baseline and the source under it. Never use image files or remote image URLs.
+- The HTML report cannot run mermaid (it has no scripts): redraw the same chart as inline SVG there, or as a table with the numbers and a note.
 
 ## Citations
 
