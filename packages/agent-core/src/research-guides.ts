@@ -102,7 +102,15 @@ One row per key claim the conclusions rest on; the quote is a short verbatim ext
 [2] …
 \`\`\`
 
-A mermaid diagram may go in when a process, timeline or structure is easier to see than to read; a table when numbers are compared.
+A mermaid diagram may go in when a process, timeline or structure is easier to see than to read; numbers are compared in a table with a chart beside it (see Charts).
+
+## Charts
+
+When the report compares numbers (revenue, share, growth, counts over time, options scored), include at least one chart, not only a table:
+
+- In the Markdown report, write an \`\`\`svg code block with a bar or line chart drawn as inline SVG: a labelled axis or a value on each bar, the unit, a zero baseline, and the source under it (\`[1]\`). PP Agent draws \`\`\`svg and \`\`\`mermaid blocks in the Files panel; never use image files or remote image URLs.
+- Keep it readable: at most about 8 bars, one colour, values printed on the bars, and a title that says what is measured and the period. A flow or timeline is a \`\`\`mermaid block instead.
+- The HTML report repeats the same chart as inline SVG (see its guide).
 
 ## Citations
 
