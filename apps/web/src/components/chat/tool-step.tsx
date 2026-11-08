@@ -37,7 +37,9 @@ import {
   FolderOpenIcon,
   GlobeIcon,
   HistoryIcon,
+  LinkIcon,
   ListChecksIcon,
+  BookOpenIcon,
   type LucideIcon,
   MessageCircleQuestionIcon,
   MonitorIcon,
@@ -73,6 +75,10 @@ const ICONS: Record<string, LucideIcon> = {
   memory_search: BrainIcon,
   todo_write: ListChecksIcon,
   complete_goal: TargetIcon,
+  research_plan: SearchIcon,
+  research_sources: LinkIcon,
+  research_report: FileTextIcon,
+  research_guide: BookOpenIcon,
   delegate_task: BotIcon,
   ask_user: MessageCircleQuestionIcon,
   sessions: HistoryIcon,
@@ -193,6 +199,14 @@ function stepTitle(part: ToolPart, t: TFunction<"chat">) {
       return t(`toolStep.titles.todo.${state}`);
     case "complete_goal":
       return t(`toolStep.titles.goal.${state}`);
+    case "research_plan":
+      return t(`toolStep.titles.researchPlan.${state}`);
+    case "research_sources":
+      return t(`toolStep.titles.researchSources.${state}`);
+    case "research_report":
+      return t(`toolStep.titles.researchReport.${state}`);
+    case "research_guide":
+      return t(`toolStep.titles.researchGuide.${state}`);
     case "delegate_task":
       return t(`toolStep.titles.delegate.${state}`);
     case "ask_user":

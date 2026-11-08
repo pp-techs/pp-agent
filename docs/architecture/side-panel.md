@@ -10,7 +10,7 @@ flowchart LR
   subgraph M["Main process"]
     IPC["panel/ipc.ts<br/>sender guard, argument checks"]
     TH["TerminalHost<br/>node-pty"]
-    WF["workspace-files.ts<br/>list, preview, watch"]
+    WF["workspace-files.ts<br/>list, preview, watch, save preview"]
     BH["BrowserHost<br/>WebContentsView per tab"]
     CI["browser/cookies/<br/>Chromium, Firefox readers"]
     CR["cookie reader<br/>utility process"]
@@ -49,6 +49,8 @@ node-pty 1.1 publishes its macOS `spawn-helper` without the execute bit ("posix_
 ## Files
 
 The Files tool's first tab is the folder tree; every file opened from it becomes a tab (at most 20, the oldest close first). Tabs and expanded folders live per workspace folder in `stores/file-tabs-store.ts`, for the life of the window. `workspace-files.ts` lists one folder at a time (folders first, at most 2000 entries, `.git` and OS clutter hidden), previews a file (text up to 256 KiB, images up to 10 MiB as a data URL, anything else "no preview"), reveals it, or returns it as an `Attachment` for the message box. One recursive `fs.watch` per window follows the open workspace and sends `workspace:changed` (debounced 300 ms, and at least once a second while changes keep coming); changes under `.git`, `node_modules`, `.venv`, `__pycache__`, `.next`, `.turbo`, `.cache`, `dist` and `build` are ignored. The renderer invalidates `["workspace-files", root]`. The allowed workspace folders come from `DesktopSettings` (`main/settings.ts`), which parses `settings.json` once and again only on `settings_changed` (`settings` or `workspaces`) and on each daemon connection, never per IPC call.
+
+Markdown files show rendered (mermaid blocks drawn) and HTML files show a **Run** button that runs the page in the sandboxed preview frame (`components/visual-preview.tsx`, see [Electron security](../code-standard/electron-security.md)); a file cut at 256 KiB shows only its text, and a change to the file resets the preview to **Run**. An HTML block in the chat can be saved and opened here: `workspace:save-artifact` (`saveArtifact`) writes it as a new `artifacts/preview-<date>-<time>.html` (at most 256 KiB, never over an existing file, the `artifacts` folder created inside the workspace and resolved with `realpath`) and the renderer opens it as a tab.
 
 ## Browser
 

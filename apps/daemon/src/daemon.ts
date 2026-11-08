@@ -70,10 +70,14 @@ async function serve(): Promise<number> {
   const stopped = Promise.withResolvers<void>();
   // Set when a client (the app quitting, or replacing an old version) asked this daemon to stop.
   let shutdownRequested = false;
+  // Only an app's `spawnDaemon` sets this marker; a service or terminal daemon never has it. It is
+  // sent to clients, so quitting stops a daemon left behind by an earlier app, not a service one.
+  const spawnedByApp = process.env[APP_SPAWN_ENV] === "1";
   const server = new DaemonServer({
     endpoint: paths.endpoint,
     token: await ensureToken(paths.tokenFile),
     appVersion: version,
+    spawnedByApp,
     onShutdown: () => {
       shutdownRequested = true;
       stopped.resolve();
@@ -95,7 +99,6 @@ async function serve(): Promise<number> {
   const service = serviceControlFor(paths);
   // Only a daemon the app spawned touches the login service: a daemon the service started (even
   // from an older service file without any marker) would stop itself by reloading its own job.
-  const spawnedByApp = process.env[APP_SPAWN_ENV] === "1";
   // A service file written by an older build (a restart rule since fixed, an old version) is
   // brought up to date. This daemon holds the socket, so the service instance the reload starts
   // exits as "already running".

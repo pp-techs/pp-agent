@@ -166,6 +166,7 @@ describe("DaemonServer", () => {
       protocol: DAEMON_PROTOCOL,
       appVersion: "1.2.3",
       pid: process.pid,
+      spawnedByApp: false,
       proof: proof(
         TOKEN,
         "daemon",

@@ -37,6 +37,7 @@
     "@workspace/agent-core": "workspace:*",
     "@workspace/daemon": "workspace:*",
     "@workspace/shared": "workspace:*",
+    "chart.js": "catalog:",
     "electron": "catalog:",
     "electron-builder": "catalog:",
     "typescript": "catalog:",

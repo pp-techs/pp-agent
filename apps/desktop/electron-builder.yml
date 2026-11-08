@@ -30,6 +30,12 @@ extraResources:
     to: licenses/officecli
   - from: resources/skills
     to: skills
+  # Chart.js (MIT), the one library HTML previews may load, served as pp-artifact://lib/chart.js
+  # by main/artifact-protocol.ts.
+  - from: node_modules/chart.js/dist/chart.umd.min.js
+    to: artifact-libs/chart.js
+  - from: node_modules/chart.js/LICENSE.md
+    to: licenses/chart.js/LICENSE.md
   # webclaw (AGPL-3.0) turns the HTML of a web page into Markdown: the binary scripts/fetch-webclaw.mjs
   # downloaded for this platform, plus its license and where its source is. Windows on ARM has no
   # build; the app then converts pages with its own code.

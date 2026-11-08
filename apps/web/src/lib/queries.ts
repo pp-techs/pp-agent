@@ -64,6 +64,8 @@ export const queryKeys = {
   /** Prefix of every file preview of one workspace. */
   filePreviews: (root: string) => ["file-preview", root] as const,
   filePreview: (root: string, path: string) => ["file-preview", root, path] as const,
+  /** The saved report text of the open conversation's research run, keyed by its path. */
+  researchReport: (path: string) => ["research-report", path] as const,
 };
 
 export const settingsQuery = (bridge: DesktopBridge) =>
@@ -319,6 +321,30 @@ export function useSetGoal(bridge: DesktopBridge) {
     mutationKey: SET_GOAL_KEY,
     mutationFn: (params: AgentCommandMap["set_goal"]["params"]) =>
       bridge.agent.command({ type: "set_goal", ...params }),
+  });
+}
+
+const SET_RESEARCH_KEY = ["set-research"] as const;
+
+/** A research command is in flight, whichever component sent it. */
+export function useResearchPending(): boolean {
+  return useIsMutating({ mutationKey: SET_RESEARCH_KEY }) > 0;
+}
+
+export function useSetResearch(bridge: DesktopBridge) {
+  return useMutation({
+    mutationKey: SET_RESEARCH_KEY,
+    mutationFn: (params: AgentCommandMap["set_research"]["params"]) =>
+      bridge.agent.command({ type: "set_research", ...params }),
+  });
+}
+
+/** The saved report of the open conversation's run, for a client that cannot read the workspace. */
+export function researchReportQuery(bridge: DesktopBridge, path: string) {
+  return queryOptions({
+    queryKey: queryKeys.researchReport(path),
+    queryFn: () => bridge.agent.command({ type: "get_research_report" }),
+    staleTime: 0,
   });
 }
 

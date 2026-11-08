@@ -25,7 +25,10 @@ const text = (message: ChatMessage | undefined): string =>
     ? message.content
     : (message?.content ?? []).map((part) => part.text ?? "").join("");
 
-/** Requests the sub agents sent (their system prompt names them "research helper"). */
+/**
+ * Requests the sub agents sent, told apart by the opening of their system prompt (the parent's
+ * prompt lists skills whose descriptions may mention research helpers too).
+ */
 let helperRequests: ChatRequest[];
 /** Settles with the tool result the parent saw in its follow-up request. */
 let parentSaw: PromiseWithResolvers<string>;
@@ -59,8 +62,8 @@ function modelServer(): ModelServer {
           })}\n\n`,
         );
       send({ role: "assistant", content: "" });
-      const isHelper = text(body.messages.find((m) => m.role === "system")).includes(
-        "research helper",
+      const isHelper = text(body.messages.find((m) => m.role === "system")).startsWith(
+        "You are a research helper",
       );
       const toolMessage = body.messages.find((m) => m.role === "tool");
       // The background title and memory passes are not part of the scripted conversation.

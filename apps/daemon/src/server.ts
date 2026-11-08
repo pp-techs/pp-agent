@@ -40,6 +40,8 @@ export interface DaemonServerOptions {
   /** Shared secret used for mutual HMAC authentication; never sent on the socket. */
   token: string;
   appVersion: string;
+  /** True when an app's `spawnDaemon` started this daemon (see `hello_ok`); a service never is. */
+  spawnedByApp?: boolean;
   /** A client asked the daemon to exit. */
   onShutdown(): void;
   log?(message: string): void;
@@ -409,6 +411,7 @@ export class DaemonServer {
       protocol: DAEMON_PROTOCOL,
       appVersion: this.options.appVersion,
       pid: process.pid,
+      spawnedByApp: this.options.spawnedByApp === true,
       proof: proof(
         this.options.token,
         "daemon",

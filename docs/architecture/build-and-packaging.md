@@ -33,9 +33,9 @@ The other runtime `dependencies` of `apps/desktop` (`fflate`, `officeparser`, `t
 `apps/web/vite.config.ts`:
 
 - `base: "./"` so the built `index.html` loads its assets over `file://`.
-- React and Tailwind plugins, plus `pp-agent:csp`, which injects the Content-Security-Policy meta tag in builds only. Images are limited to `'self' data: blob:`, so a reply cannot load a remote image (see the Markdown rule in [electron-security.md](../code-standard/electron-security.md)).
+- React and Tailwind plugins, plus `pp-agent:csp`, which injects the Content-Security-Policy meta tag in builds only. Images are limited to `'self' data: blob:`, so a reply cannot load a remote image (see the Markdown rule in [electron-security.md](../code-standard/electron-security.md)); frames only from `pp-artifact:` (HTML previews).
 - `@` aliases `apps/web/src`.
-- `build.rolldownOptions.output.codeSplitting` puts React and Streamdown in their own chunks. Settings sections and Schedules load with `React.lazy`, like the side-panel tools, so the startup bundle stays small; the default chunk-size warning stays on to flag regressions.
+- `build.rolldownOptions.output.codeSplitting` puts React and Streamdown in their own chunks. Settings sections and Schedules load with `React.lazy`, like the side-panel tools, and Pele (the mermaid renderer, `pele/lazy`, about 50 KB) is imported only when a reply holds a diagram, then loads each diagram type on demand, so the startup bundle stays small; the default chunk-size warning stays on to flag regressions.
 
 ## Packaging (electron-builder)
 
@@ -43,7 +43,7 @@ The other runtime `dependencies` of `apps/desktop` (`fflate`, `officeparser`, `t
 
 - App id `com.pptechs.agent`, product name "PP Agent", output `apps/desktop/release`, asset names `pp-agent-<version>-<os>-<arch>.<ext>`.
 - Ships `dist/**` and `package.json` inside an asar archive; production `dependencies` (including the Pi SDK) come along from `node_modules`.
-- `extraResources` copies `../web/dist` to `resources/renderer`. In a packaged app main loads `process.resourcesPath/renderer/index.html`, which is why `dist` builds the web app first.
+- `extraResources` copies `../web/dist` to `resources/renderer`. In a packaged app main loads `process.resourcesPath/renderer/index.html`, which is why `dist` builds the web app first. It also copies Chart.js (`chart.js`, a devDependency, `dist/chart.umd.min.js`) to `resources/artifact-libs/chart.js` with its license; in development main serves it from `node_modules`.
 - Targets: macOS `dmg` + `zip` (category productivity), Windows `nsis` (assisted installer, install folder selectable), Linux `AppImage` + `deb`. `publish: null`: the release workflow uploads installers itself (see [Release process](../code-standard/release-process.md)).
 - `asarUnpack: node_modules/@napi-rs/**` and `node_modules/node-pty/**`: native addons cannot load from inside the asar archive (the daemon's OS keyring binding, the side panel terminal). `afterPack: scripts/after-pack.cjs` restores the execute bit of node-pty's macOS `spawn-helper` before signing. `node-pty` is also in the pack configs' `neverBundle`.
 - `electronFuses` (flipped in the packaged binary before signing; check one with `npx @electron/fuses read --app "release/mac-arm64/PP Agent.app"`):

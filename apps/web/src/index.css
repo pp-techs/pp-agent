@@ -29,6 +29,40 @@
 }
 
 /*
+ * Mermaid diagrams drawn by Pele take the app's colors and fonts; the tokens switch with the
+ * theme, so diagrams follow light and dark without being drawn again. Series colors keep Pele's
+ * defaults, which stay distinct where the app's chart tokens are shades of gray.
+ */
+.pele {
+  --pele-bg: var(--background);
+  --pele-fg: var(--foreground);
+  --pele-muted: var(--muted-foreground);
+  --pele-line: color-mix(in oklch, var(--foreground) 70%, transparent);
+  --pele-surface: var(--muted);
+  --pele-surface-alt: color-mix(in oklch, var(--muted) 50%, var(--background));
+  --pele-border: color-mix(in oklch, var(--foreground) 30%, transparent);
+  --pele-accent: var(--primary);
+  --pele-critical: var(--destructive);
+  --pele-error: var(--destructive);
+  --pele-font: var(--font-sans);
+  --pele-font-mono: var(--font-mono);
+  --pele-radius: 6px;
+}
+
+/* Zoom buttons sit over the diagram's corner; with a mouse they show only while it is hovered or focused. */
+@media (hover: hover) {
+  .pele-zoom {
+    opacity: 0;
+    transition: opacity 150ms ease-out;
+  }
+
+  :hover > .pele-zoom,
+  :focus-within > .pele-zoom {
+    opacity: 1;
+  }
+}
+
+/*
  * The bottom safe area (the home indicator), which the composer pads above. The phone app sets
  * `data-keyboard="open"` while the keyboard shows: the composer then sits right on the keyboard.
  */

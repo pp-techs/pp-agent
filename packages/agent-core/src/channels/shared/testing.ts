@@ -7,7 +7,11 @@ import type {
   ChatPickKind,
   TurnHooks,
   TurnResult,
+  ResearchResult,
 } from "../types.ts";
+
+/** What `runResearch` receives as its input. */
+type ResearchInput = Parameters<ChannelGateway["runResearch"]>[1];
 
 /** Test double of the agent gateway, shared by the channel tests. */
 export class FakeGateway implements ChannelGateway {
@@ -60,6 +64,25 @@ export class FakeGateway implements ChannelGateway {
   runTurn(chatKey: string, input: ChannelInput, hooks: TurnHooks): Promise<TurnResult> {
     this.turns.push({ chatKey, input, hooks });
     return this.handler(input, hooks);
+  }
+
+  researches: { chatKey: string; input: ResearchInput; hooks: TurnHooks }[] = [];
+  /** What a research run does; the default finishes with a saved report. */
+  researchHandler: (input: ResearchInput, hooks: TurnHooks) => Promise<ResearchResult> =
+    async () => ({
+      text: "Summary of the findings.",
+      status: "done",
+      report: {
+        markdownPath: "/work/research/topic-2026-11-08.md",
+        htmlPath: "/work/research/topic-2026-11-08.html",
+        markdownName: "research/topic-2026-11-08.md",
+        htmlName: "research/topic-2026-11-08.html",
+      },
+    });
+
+  runResearch(chatKey: string, input: ResearchInput, hooks: TurnHooks): Promise<ResearchResult> {
+    this.researches.push({ chatKey, input, hooks });
+    return this.researchHandler(input, hooks);
   }
 
   async newConversation(chatKey: string): Promise<void> {

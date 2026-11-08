@@ -191,6 +191,10 @@
         "label": "Set a goal",
         "description": "The agent keeps working on its own until it is done. Type /goal and what to achieve; /goal pause, resume or clear manages it.",
         "current": "Goal ({{status}}): {{objective}}"
+      },
+      "research": {
+        "label": "Research a question",
+        "description": "Research a question in depth and get a cited report. Type /research and the question; add quick or deep before it to pick the depth."
       }
     }
   },
@@ -260,6 +264,22 @@
         "hint": "Deepest reasoning, slowest"
       }
     }
+  },
+  "visual": {
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "zoomReset": "Fit to view",
+    "mermaidError": "This diagram could not be drawn: {{error}}",
+    "svgError": "This picture could not be shown. Switch to the code to see it.",
+    "svgAlt": "Picture from the reply",
+    "run": "Run preview",
+    "restart": "Run again",
+    "sandboxNote": "Runs in a sandbox without internet access.",
+    "htmlTitle": "HTML preview",
+    "showCode": "Show code",
+    "showPreview": "Show preview",
+    "openInPanel": "Save to workspace and open in the panel",
+    "saved": "Saved as {{path}}."
   },
   "toolStep": {
     "declined": "Declined",
@@ -461,6 +481,26 @@
           "done": "Used {{target}}",
           "notDone": "Use {{target}}"
         }
+      },
+      "researchPlan": {
+        "active": "Showing the plan",
+        "done": "Plan presented",
+        "notDone": "Show the plan"
+      },
+      "researchSources": {
+        "active": "Recording sources",
+        "done": "Sources recorded",
+        "notDone": "Record the sources"
+      },
+      "researchReport": {
+        "active": "Saving the report",
+        "done": "Report saved",
+        "notDone": "Save the report"
+      },
+      "researchGuide": {
+        "active": "Reading the playbook",
+        "done": "Playbook read",
+        "notDone": "Read the playbook"
       }
     },
     "ask": {
@@ -567,5 +607,35 @@
     },
     "expand": "Expand over the chat",
     "restore": "Show beside the chat"
+  },
+  "research": {
+    "toggle": "Research",
+    "off": "Turn research off",
+    "pause": "Pause the research",
+    "resume": "Resume the research",
+    "clear": "Clear the research run",
+    "openReport": "Open the report",
+    "summary": "{{status}} · {{depth}} · {{visited}} pages · {{sources}} sources",
+    "status": {
+      "done": "Report ready",
+      "paused": "Paused",
+      "waiting": "Waiting for you"
+    },
+    "phase": {
+      "planning": "Planning",
+      "plan": "Plan to confirm",
+      "researching": "Researching",
+      "writing": "Writing the report",
+      "waiting": "Waiting for you",
+      "paused": "Paused",
+      "done": "Report ready"
+    },
+    "depth": {
+      "quick": "Quick",
+      "standard": "Standard",
+      "deep": "Deep"
+    },
+    "noSources": "No sources recorded yet.",
+    "loadingReport": "Loading the report…"
   }
 }

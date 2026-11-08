@@ -34,6 +34,7 @@ import {
   removeEntry,
   renameEntry,
   revealEntry,
+  saveArtifact,
   WorkspaceWatcher,
 } from "./workspace-files.ts";
 
@@ -184,6 +185,9 @@ export function createSidePanel(options: SidePanelOptions) {
   );
   ipc.handle(IPC.workspaceRemove, (_event, root: unknown, path: unknown) =>
     removeEntry(requireWorkspace(root), requireText(path)),
+  );
+  ipc.handle(IPC.workspaceSaveArtifact, (_event, root: unknown, html: unknown) =>
+    saveArtifact(requireWorkspace(root), html),
   );
   ipc.handle(IPC.workspaceWatch, (_event, root: unknown) =>
     watcher.watch(root === null ? null : requireWorkspace(root)),

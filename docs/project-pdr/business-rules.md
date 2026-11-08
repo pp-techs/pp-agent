@@ -4,11 +4,11 @@ Rules enforced in code. Paths are under `packages/agent-core/src/` unless noted.
 
 ## Approvals and tools (`tools.ts`)
 
-| Tool tier | Tools                                                                                                                                                                                                                                                                                       |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| read      | `read`, `ls`, `find`, `grep`, `read_document`, `current_datetime`, `web_search`, `web_fetch`, `memory_list`, `memory_search`, `todo_write`, `delegate_task`, `ask_user`, `sessions`, discovery tools, `browser` looking actions, MCP tools with `readOnlyHint` from a server marked trusted |
-| write     | `write`, `edit`, `memory_save`, `memory_forget`, `schedule_task`, `telegram_notify`, `browser` acting actions, every other MCP tool                                                                                                                                                         |
-| exec      | `bash`, `powershell`, and any tool without a tier                                                                                                                                                                                                                                           |
+| Tool tier | Tools                                                                                                                                                                                                                                                                                                                    |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| read      | `read`, `ls`, `find`, `grep`, `read_document`, `current_datetime`, `web_search`, `web_fetch`, `memory_list`, `memory_search`, `todo_write`, `delegate_task`, `ask_user`, `sessions`, the four `research_*` tools, discovery tools, `browser` looking actions, MCP tools with `readOnlyHint` from a server marked trusted |
+| write     | `write`, `edit`, `memory_save`, `memory_forget`, `schedule_task`, `telegram_notify`, `browser` acting actions, every other MCP tool                                                                                                                                                                                      |
+| exec      | `bash`, `powershell`, and any tool without a tier                                                                                                                                                                                                                                                                        |
 
 | Tool policy    | Effect                                                    |
 | -------------- | --------------------------------------------------------- |
@@ -60,6 +60,15 @@ Rules enforced in code. Paths are under `packages/agent-core/src/` unless noted.
 - Runs happen one at a time, never twice for the same task at once, each in its own Pi session and saved conversation titled `⏰ <name> – <date>`, apart from the open conversation. A run is stopped after 30 minutes and recorded as failed.
 - Unattended runs never approve anything: a tool call that would ask is denied (counted in `lastRun.deniedTools`) and the model is told. Only tools that run without asking (read tier under `auto`, or policy `allow`) run. Tools with policy `off` stay off.
 - A slot missed while the app was closed runs once when the app starts if it was due within the last 24 hours; older ones are skipped. A task that is created, switched on, or whose schedule changes counts from that moment. Deleting a task stops its run in progress.
+
+## Research mode (`research.ts`)
+
+- A window conversation or the owner's private chat runs one research run at a time (and not together with a goal). `set_research` takes a question (≤ 4000 characters) and a depth (`quick`, `standard`, `deep`); `pause`, `resume` and `clear` manage it. Refused while the conversation is answering (except pause and clear), without a model, or when a run or goal already exists.
+- The state is saved on the branch as a `pp-agent-research` custom entry while the conversation is idle; a reopened conversation shows an unfinished run **paused**, a finished one stays `done`. The host starts each turn after the first with a hidden message until the final report is saved. A turn that errors or is stopped pauses the run, one without a tool call waits for the person, and a turn cap (60; 15 for quick) pauses it with an error. In a chat, the loop runs inside `ChannelGateway.runResearch`.
+- The four tools (`research_plan`, `research_sources`, `research_report`, `research_guide`) are read tier with a locked `allow` policy and exist only while a run is active. `research_plan` reuses the question plumbing and puts the plan on `QuestionRequest.plan`; the host appends the depth and Start/Narrow/Broader questions.
+- `research_report` writes `<workspace>/research/<slug>-<YYYY-MM-DD>.md` (and `.html`) itself, without approval: new files only, later saves replace the run's own files, a name owned by something else gets `-2`, `-3`…, the folder is resolved with `realpath` and refused through a link that leads out. Markdown ≤ 300 KB, HTML ≤ 256 KB (what the Files panel previews whole).
+- `visited` counts distinct pages the lead and its helpers opened; sources the report cites come from `research_sources` (one number per URL, first-cited order). A deep run allows 8 helpers in one `delegate_task` call; other runs and ordinary calls keep 5.
+- Not in scheduled runs, helper sessions, or chats other people talk in.
 
 ## Voice input (`transcription.ts`)
 

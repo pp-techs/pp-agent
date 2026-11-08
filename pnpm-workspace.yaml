@@ -74,6 +74,8 @@ catalog:
   zustand: ^5.0.16
   "@iconify-json/vscode-icons": ^1.2.96
   "@iconify/utils": ^3.1.7
+  chart.js: ^4.6.1
+  pele: ^1.13.0
 overrides:
   vite@*: "catalog:"
   # Security fixes the dependents' ranges do not pick up yet; each stays on its own major line.
