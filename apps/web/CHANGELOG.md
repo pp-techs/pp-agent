@@ -1,5 +1,9 @@
 # @workspace/web
 
+## 0.26.1
+
+No changes in this release.
+
 ## 0.26.0
 
 ### Minor Changes

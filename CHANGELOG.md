@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.26.1] — 2026-11-08
+
+Research fixes. The plan card no longer fails with "An answer … is not one of the options" when a clarifying question reuses the id `depth` or `start`: those ids are made unique and the clarifying questions are validated. Reports are always written into the workspace's `research/` folder by the app (the prompt says not to use `write` for them), and a report that compares numbers now includes a chart — an `svg` block in the Markdown that the app draws, and the same chart inline in the HTML.
+
 ## [0.26.0] — 2026-11-08
 
 Quitting the app (including from the tray) now stops the daemon it started, even when the daemon was left behind by an earlier, crashed app and reused. The daemon tells clients in its handshake whether an app started it (`hello_ok.spawnedByApp`), and main shuts it down on quit in that case. A daemon started by the login service or from a terminal still keeps running, so background work is unaffected.
