@@ -609,8 +609,6 @@
     "restore": "Hiện bên cạnh khung chat"
   },
   "research": {
-    "toggle": "Nghiên cứu",
-    "off": "Tắt chế độ nghiên cứu",
     "pause": "Tạm dừng nghiên cứu",
     "resume": "Tiếp tục nghiên cứu",
     "clear": "Xóa lần nghiên cứu",

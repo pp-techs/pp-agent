@@ -10,25 +10,11 @@ export interface ResearchCommand {
   question: string;
 }
 
-/** The depth remembered from the last run, so a new one starts where the person left off. */
-const LAST_DEPTH_KEY = "pp-agent:research-depth";
-
 /** A depth name from storage, or null when it is not one of the three. */
 export function parseResearchDepth(value: string | null): ResearchDepth | null {
   return value && (RESEARCH_DEPTHS as readonly string[]).includes(value)
     ? (value as ResearchDepth)
     : null;
-}
-
-export function lastResearchDepth(): ResearchDepth {
-  const saved = typeof localStorage === "undefined" ? null : localStorage.getItem(LAST_DEPTH_KEY);
-  return parseResearchDepth(saved) ?? "standard";
-}
-
-export function rememberResearchDepth(depth: ResearchDepth): void {
-  try {
-    localStorage.setItem(LAST_DEPTH_KEY, depth);
-  } catch {}
 }
 
 /**

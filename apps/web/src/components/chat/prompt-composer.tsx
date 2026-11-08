@@ -25,7 +25,6 @@ import { ComposerToken } from "@/components/chat/composer-token";
 import { GoalBanner } from "@/components/chat/goal-banner";
 import { HelperPanel } from "@/components/chat/helper-panel";
 import { ResearchBanner } from "@/components/chat/research-banner";
-import { ResearchToggle } from "@/components/chat/research-toggle";
 import { InlineImage } from "@/components/chat/inline-image";
 import { TodoPanel } from "@/components/chat/todo-panel";
 import { ModelPicker } from "@/components/chat/model-picker";
@@ -36,12 +35,7 @@ import { useSendMessage } from "@/hooks/use-send-message";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { voiceQuery } from "@/lib/extension-queries";
 import { parseGoalCommand, type GoalParams } from "@/lib/goal";
-import {
-  lastResearchDepth,
-  parseResearchCommand,
-  rememberResearchDepth,
-  type ResearchStart,
-} from "@/lib/research";
+import { parseResearchCommand, type ResearchStart } from "@/lib/research";
 import {
   useAbort,
   useGoalPending,
@@ -86,13 +80,6 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
   const goalPending = useGoalPending();
   const setResearch = useSetResearch(bridge);
   const researchPending = useResearchPending();
-  const goal = useChatStore((state) => state.goal);
-  const researchRun = useChatStore((state) => state.research);
-  // The research switch: on with a chosen depth, or off (a normal message).
-  const [researchMode, setResearchMode] = React.useState(() => ({
-    on: false,
-    depth: lastResearchDepth(),
-  }));
   // The agent's question takes the place of the composer until it is answered.
   const question = useChatStore((state) => Object.values(state.questions)[0]);
   const asking = question !== undefined;
@@ -187,12 +174,10 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
     });
   }
 
-  /** Starts a research run from the switch or `/research`; the draft comes back when it fails. */
+  /** Starts a research run from `/research`; the draft comes back when it fails. */
   function runResearch(params: ResearchStart) {
     const text = draft;
     setDraft("");
-    rememberResearchDepth(params.depth);
-    setResearchMode({ on: false, depth: params.depth });
     setResearch.mutate(params, {
       onError: (error) => {
         if (useComposerStore.getState().draft === "") setDraft(text);
@@ -220,10 +205,8 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
         runResearch({
           action: "start",
           question: parsedResearch.question,
-          depth: parsedResearch.depth ?? researchMode.depth,
+          depth: parsedResearch.depth ?? "standard",
         });
-    } else if (researchMode.on && draft.trim() && !running && !sending) {
-      runResearch({ action: "start", question: draft.trim(), depth: researchMode.depth });
     } else if (canSend && !running && !sending) send(draft);
   }
 
@@ -366,12 +349,6 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
               skills={skills}
               onAttach={() => void pick()}
               onPick={pickItem}
-            />
-            <ResearchToggle
-              depth={researchMode.depth}
-              on={researchMode.on}
-              disabled={disabled || Boolean(goal) || Boolean(researchRun) || attachments.length > 0}
-              onChange={setResearchMode}
             />
             {/* The first row: the skills (or `/goal`) the message starts with as chips, then the text. */}
             <div className="order-first flex basis-full flex-wrap items-start">

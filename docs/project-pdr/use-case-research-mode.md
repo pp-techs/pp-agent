@@ -4,7 +4,7 @@ A conversation can run a **research** run: the person gives a question and a dep
 
 ## Starting a run
 
-- **Window and phone:** the **Research** toggle in the message box (with a depth choice: quick 2–5 min, standard 5–15 min, deep 15–30 min) or `/research [quick|standard|deep] <question>`. Sending starts the run (`set_research { action: "start", question, depth }`) instead of a normal message; the toggle then turns itself off. Not available with attachments, while a goal or another run exists, or while the agent is answering. The depth last chosen is remembered.
+- **Window and phone:** `/research [quick|standard|deep] <question>` in the message box, a slash command like `/goal` (it shows as a chip and in the `/` suggestions): quick 2–5 min, standard 5–15, deep 15–30; no depth means standard. Sending starts the run (`set_research { action: "start", question, depth }`) instead of a normal message. Not available with attachments, while a goal or another run exists, or while the agent is answering.
 - **Telegram and Zalo:** `/research [quick|standard|deep] <question>` in the owner's own private chat only.
 - Not in scheduled runs (nobody can confirm a plan), not for helpers, and not in chats other people talk in.
 

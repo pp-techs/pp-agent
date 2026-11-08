@@ -609,8 +609,6 @@
     "restore": "Show beside the chat"
   },
   "research": {
-    "toggle": "Research",
-    "off": "Turn research off",
     "pause": "Pause the research",
     "resume": "Resume the research",
     "clear": "Clear the research run",
