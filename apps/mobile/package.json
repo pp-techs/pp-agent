@@ -1,6 +1,6 @@
 {
   "name": "@workspace/mobile",
-  "version": "0.25.2",
+  "version": "0.26.0",
   "private": true,
   "description": "PP Agent for iOS and Android: the web app in a Capacitor shell, connected to the computer over Phone access",
   "license": "Apache-2.0",
