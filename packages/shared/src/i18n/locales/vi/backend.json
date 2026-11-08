@@ -142,6 +142,15 @@
     "exists": "Cuộc trò chuyện này đã có mục tiêu. Hãy xóa mục tiêu đó trước.",
     "nothingToResume": "Không có mục tiêu nào đang tạm dừng để tiếp tục."
   },
+  "research": {
+    "empty": "Hãy nhập câu hỏi cần nghiên cứu.",
+    "tooLong": "Câu hỏi quá dài (tối đa {{max}} ký tự).",
+    "exists": "Cuộc trò chuyện này đã có một lần nghiên cứu. Hãy xóa lần đó trước.",
+    "goalRunning": "Cuộc trò chuyện này đang làm việc theo mục tiêu. Hãy xóa mục tiêu đó trước.",
+    "ownerOnly": "Chỉ chủ sở hữu mới bắt đầu được nghiên cứu, trong cuộc trò chuyện riêng.",
+    "nothingToResume": "Không có lần nghiên cứu nào đang tạm dừng để tiếp tục.",
+    "turnCap": "Lần nghiên cứu đã đạt giới hạn số lượt ({{max}} lượt) nên bị tạm dừng. Tiếp tục để làm thêm, hoặc xóa lần nghiên cứu."
+  },
   "conversations": {
     "notInHistory": "Cuộc trò chuyện đó không có trong lịch sử của ứng dụng này.",
     "enterName": "Hãy nhập tên.",
@@ -308,7 +317,7 @@
     "telegram": {
       "start": "Xin chào! Để dùng bot này, hãy mở PP Agent › Cài đặt › Kênh chat › Telegram, bắt đầu ghép nối, rồi gửi cho tôi /pair kèm mã.",
       "startPaired": "Xin chào {{name}}! Hãy nhắn cho tôi và tôi sẽ bắt tay vào việc. /help liệt kê các lệnh.",
-      "help": "Gửi văn bản, ảnh, tệp hoặc tin nhắn thoại.\n/new – bắt đầu cuộc trò chuyện mới\n/agent – chọn tác nhân trả lời\n/workspace – chọn không gian làm việc\n/model – chọn mô hình\n/thinking – chọn mức suy nghĩ\n/stop – dừng việc tôi đang làm\n/sessions – xem các cuộc trò chuyện đã lưu\n/resume <số> – chuyển sang cuộc trò chuyện đã lưu\n/id – hiện id cuộc trò chuyện này\n/help – hiện trợ giúp này",
+      "help": "Gửi văn bản, ảnh, tệp hoặc tin nhắn thoại.\n/new – bắt đầu cuộc trò chuyện mới\n/agent – chọn tác nhân trả lời\n/workspace – chọn không gian làm việc\n/model – chọn mô hình\n/thinking – chọn mức suy nghĩ\n/research <câu hỏi> – nghiên cứu một câu hỏi và nhận báo cáo (thêm quick hoặc deep trước câu hỏi để chọn mức kỹ lưỡng)\n/stop – dừng việc tôi đang làm\n/sessions – xem các cuộc trò chuyện đã lưu\n/resume <số> – chuyển sang cuộc trò chuyện đã lưu\n/id – hiện id cuộc trò chuyện này\n/help – hiện trợ giúp này",
       "pairUsage": "Gửi /pair kèm mã hiển thị trong PP Agent.",
       "pairInvalid": "Mã không hợp lệ hoặc đã hết hạn.",
       "pairLocked": "Nhập sai mã quá nhiều lần. Thử lại sau {{minutes}} phút.",
@@ -382,12 +391,19 @@
       "commandModel": "Chọn mô hình cho cuộc trò chuyện này",
       "commandThinking": "Chọn mức suy nghĩ của mô hình",
       "idReply": "ID cuộc trò chuyện: {{chatId}} ({{chatType}})",
-      "commandId": "Hiện id cuộc trò chuyện này"
+      "commandId": "Hiện id cuộc trò chuyện này",
+      "commandResearch": "Nghiên cứu một câu hỏi và nhận báo cáo",
+      "researchUsage": "Gửi /research kèm câu hỏi của bạn, ví dụ “/research so sánh máy bơm nhiệt với nồi hơi gas”. Thêm quick hoặc deep trước câu hỏi để chọn mức kỹ lưỡng; mặc định là standard.",
+      "researchStarted": "Tôi bắt đầu ngay. Tôi sẽ nhắn cho bạn khi kế hoạch sẵn sàng và khi báo cáo hoàn tất. /stop sẽ dừng việc nghiên cứu.",
+      "researchBusy": "Tôi vẫn đang xử lý tin nhắn trước đó. Hãy gửi lại /research khi xong, hoặc /stop để dừng.",
+      "researchOwnerOnly": "Chỉ chủ sở hữu mới dùng được tính năng nghiên cứu, trong cuộc trò chuyện riêng.",
+      "researchTooLong": "Câu hỏi quá dài. Hãy giữ dưới {{max}} ký tự.",
+      "researchDocumentFailed": "Tôi không gửi được {{name}}: {{error}}. Tệp được lưu trong không gian làm việc của bạn."
     },
     "zalo": {
       "start": "Xin chào! Để dùng bot này, hãy mở PP Agent › Cài đặt › Kênh chat › Zalo, bắt đầu ghép nối, rồi gửi cho tôi /pair kèm mã.",
       "startPaired": "Xin chào {{name}}! Hãy nhắn cho tôi và tôi sẽ bắt tay vào việc. /help liệt kê các lệnh.",
-      "help": "Gửi văn bản, ảnh hoặc tin nhắn thoại.\n/new – bắt đầu cuộc trò chuyện mới\n/agent – chọn tác nhân trả lời\n/workspace – chọn không gian làm việc\n/model – chọn mô hình\n/thinking – chọn mức suy nghĩ\n/stop – dừng việc tôi đang làm\n/sessions – xem các cuộc trò chuyện đã lưu\n/resume <số> – chuyển sang cuộc trò chuyện đã lưu\n/id – hiện id cuộc trò chuyện này\n/help – hiện trợ giúp này",
+      "help": "Gửi văn bản, ảnh hoặc tin nhắn thoại.\n/new – bắt đầu cuộc trò chuyện mới\n/agent – chọn tác nhân trả lời\n/workspace – chọn không gian làm việc\n/model – chọn mô hình\n/thinking – chọn mức suy nghĩ\n/research <câu hỏi> – nghiên cứu một câu hỏi và nhận báo cáo (thêm quick hoặc deep trước câu hỏi để chọn mức kỹ lưỡng)\n/stop – dừng việc tôi đang làm\n/sessions – xem các cuộc trò chuyện đã lưu\n/resume <số> – chuyển sang cuộc trò chuyện đã lưu\n/id – hiện id cuộc trò chuyện này\n/help – hiện trợ giúp này",
       "pairUsage": "Gửi /pair kèm mã hiển thị trong PP Agent.",
       "pairInvalid": "Mã không hợp lệ hoặc đã hết hạn.",
       "pairLocked": "Nhập sai mã quá nhiều lần. Thử lại sau {{minutes}} phút.",
@@ -440,7 +456,13 @@
       "noChoices": "Không có gì để chọn ở đây. Mô hình hiện tại có thể không hỗ trợ các mức suy nghĩ.",
       "moreChoices": "…và {{count}} mục nữa. Gõ một phần của tên sau lệnh để tìm.",
       "chooseHint": "Trả lời /{{command}} kèm một số hoặc một tên.",
-      "idReply": "ID cuộc trò chuyện: {{chatId}} ({{chatType}})"
+      "idReply": "ID cuộc trò chuyện: {{chatId}} ({{chatType}})",
+      "researchUsage": "Gửi /research kèm câu hỏi của bạn, ví dụ “/research so sánh máy bơm nhiệt với nồi hơi gas”. Thêm quick hoặc deep trước câu hỏi để chọn mức kỹ lưỡng; mặc định là standard.",
+      "researchStarted": "Tôi bắt đầu ngay. Tôi sẽ nhắn cho bạn khi kế hoạch sẵn sàng và khi báo cáo hoàn tất. /stop sẽ dừng việc nghiên cứu.",
+      "researchBusy": "Tôi vẫn đang xử lý tin nhắn trước đó. Hãy gửi lại /research khi xong, hoặc /stop để dừng.",
+      "researchOwnerOnly": "Chỉ chủ sở hữu mới dùng được tính năng nghiên cứu, trong cuộc trò chuyện riêng.",
+      "researchTooLong": "Câu hỏi quá dài. Hãy giữ dưới {{max}} ký tự.",
+      "researchReportSaved": "Báo cáo đầy đủ được lưu trên máy tính của bạn: {{files}}"
     }
   },
   "browserProfiles": {
@@ -463,7 +485,9 @@
       "outsideWorkspace": "Tệp này không nằm trong không gian làm việc.",
       "notAFile": "Chỉ có thể đính kèm tệp, không phải thư mục.",
       "invalidName": "Đây không phải là tên tệp hoặc thư mục hợp lệ.",
-      "exists": "“{{name}}” đã tồn tại ở đây."
+      "exists": "“{{name}}” đã tồn tại ở đây.",
+      "invalidArtifact": "Bản xem trước này không có gì để lưu.",
+      "artifactTooLarge": "Bản xem trước này quá lớn để lưu (tối đa 256 KB)."
     },
     "browser": {
       "tabNotFound": "Tab này đã được đóng.",

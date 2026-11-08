@@ -40,6 +40,8 @@ interface ChatState {
   yolo: AgentSnapshot["yolo"];
   /** Goal the open conversation is working toward, if any. */
   goal: AgentSnapshot["goal"];
+  /** Research run of the open conversation (also after it finished, until cleared). */
+  research: AgentSnapshot["research"];
   /** Workspace of the open conversation. */
   workspace: WorkspaceSummary | null;
   /** Folder the open conversation works in. */
@@ -67,6 +69,7 @@ export const useChatStore = create<ChatState>()((set) => ({
   thinking: { level: "off", available: [] },
   yolo: { active: false, source: "conversation" },
   goal: null,
+  research: null,
   workspace: null,
   workspaceDir: null,
   context: null,
@@ -97,6 +100,7 @@ export const useChatStore = create<ChatState>()((set) => ({
             thinking: snapshot.thinking,
             yolo: snapshot.yolo,
             goal: snapshot.goal,
+            research: snapshot.research,
             workspace: snapshot.workspace,
             workspaceDir: snapshot.workspaceDir,
             sessionPath: snapshot.sessionPath,
@@ -140,6 +144,8 @@ export const useChatStore = create<ChatState>()((set) => ({
         }
         case "context":
           return { context: event.context };
+        case "research":
+          return { research: event.research };
         case "activity":
           return { activity: event.activity };
         case "sessions_changed":

@@ -191,6 +191,10 @@
         "label": "Đặt mục tiêu",
         "description": "Trợ lý tự làm việc liên tục cho đến khi xong. Gõ /goal kèm điều cần đạt; /goal pause, resume hoặc clear để quản lý.",
         "current": "Mục tiêu ({{status}}): {{objective}}"
+      },
+      "research": {
+        "label": "Nghiên cứu một câu hỏi",
+        "description": "Nghiên cứu sâu một câu hỏi và nhận báo cáo có trích dẫn. Gõ /research kèm câu hỏi; thêm quick hoặc deep trước câu hỏi để chọn mức."
       }
     }
   },
@@ -260,6 +264,22 @@
         "hint": "Suy luận sâu nhất, chậm nhất"
       }
     }
+  },
+  "visual": {
+    "zoomIn": "Phóng to",
+    "zoomOut": "Thu nhỏ",
+    "zoomReset": "Vừa khung",
+    "mermaidError": "Không vẽ được sơ đồ này: {{error}}",
+    "svgError": "Không hiển thị được hình này. Chuyển sang mã để xem.",
+    "svgAlt": "Hình trong câu trả lời",
+    "run": "Chạy bản xem trước",
+    "restart": "Chạy lại",
+    "sandboxNote": "Chạy trong môi trường cách ly, không có Internet.",
+    "htmlTitle": "Bản xem trước HTML",
+    "showCode": "Xem mã",
+    "showPreview": "Xem bản xem trước",
+    "openInPanel": "Lưu vào không gian làm việc và mở trong bảng bên",
+    "saved": "Đã lưu thành {{path}}."
   },
   "toolStep": {
     "declined": "Đã từ chối",
@@ -461,6 +481,26 @@
           "done": "Đã dùng {{target}}",
           "notDone": "Dùng {{target}}"
         }
+      },
+      "researchPlan": {
+        "active": "Đang trình kế hoạch",
+        "done": "Đã trình kế hoạch",
+        "notDone": "Trình kế hoạch"
+      },
+      "researchSources": {
+        "active": "Đang ghi nguồn",
+        "done": "Đã ghi nguồn",
+        "notDone": "Ghi nguồn"
+      },
+      "researchReport": {
+        "active": "Đang lưu báo cáo",
+        "done": "Đã lưu báo cáo",
+        "notDone": "Lưu báo cáo"
+      },
+      "researchGuide": {
+        "active": "Đang đọc hướng dẫn",
+        "done": "Đã đọc hướng dẫn",
+        "notDone": "Đọc hướng dẫn"
       }
     },
     "ask": {
@@ -567,5 +607,33 @@
     },
     "expand": "Mở rộng che khung chat",
     "restore": "Hiện bên cạnh khung chat"
+  },
+  "research": {
+    "pause": "Tạm dừng nghiên cứu",
+    "resume": "Tiếp tục nghiên cứu",
+    "clear": "Xóa lần nghiên cứu",
+    "openReport": "Mở báo cáo",
+    "summary": "{{status}} · {{depth}} · {{visited}} trang · {{sources}} nguồn",
+    "status": {
+      "done": "Báo cáo đã xong",
+      "paused": "Đang tạm dừng",
+      "waiting": "Đang chờ bạn"
+    },
+    "phase": {
+      "planning": "Đang lập kế hoạch",
+      "plan": "Kế hoạch cần bạn duyệt",
+      "researching": "Đang nghiên cứu",
+      "writing": "Đang viết báo cáo",
+      "waiting": "Đang chờ bạn",
+      "paused": "Đang tạm dừng",
+      "done": "Báo cáo đã xong"
+    },
+    "depth": {
+      "quick": "Nhanh",
+      "standard": "Chuẩn",
+      "deep": "Sâu"
+    },
+    "noSources": "Chưa ghi nguồn nào.",
+    "loadingReport": "Đang tải báo cáo…"
   }
 }

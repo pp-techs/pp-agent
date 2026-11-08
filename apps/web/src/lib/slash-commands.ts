@@ -29,7 +29,7 @@ export function slashText(item: SlashItem): string {
 }
 
 /** Commands that stay in the message box and take text after them (`/goal <objective>`). */
-const COMMANDS_WITH_TEXT = ["goal"];
+const COMMANDS_WITH_TEXT = ["goal", "research"];
 
 export type LeadingToken = { kind: SlashItem["kind"]; name: string };
 
@@ -170,6 +170,13 @@ export function useSlashItems(bridge: DesktopBridge): {
           // The objective follows the command in the same message.
           useComposerStore.getState().setDraft("/goal ");
         },
+      },
+      {
+        kind: "command",
+        name: "research",
+        label: t("slash.commands.research.label"),
+        description: t("slash.commands.research.description"),
+        run: () => useComposerStore.getState().setDraft("/research "),
       },
     ];
   }, [newChat, newTemporaryChat, compact, setConversationYolo, yolo, goal, running, t]);

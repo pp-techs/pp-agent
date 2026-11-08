@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { REMOTE_DEFAULT_PORT } from "@workspace/shared";
+import { ARTIFACT_SCHEME, REMOTE_DEFAULT_PORT } from "@workspace/shared";
 import { defineConfig, type Plugin } from "vite-plus";
 
 /**
@@ -22,6 +22,8 @@ function contentSecurityPolicy(mode: string) {
     "font-src 'self' data:",
     mode === "mobile" ? "connect-src 'self' http: https:" : "connect-src 'self'",
     "object-src 'none'",
+    // HTML previews: sandboxed iframes of the desktop app's own scheme.
+    `frame-src ${ARTIFACT_SCHEME}:`,
     "base-uri 'none'",
   ].join("; ");
 }

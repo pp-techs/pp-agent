@@ -26,6 +26,7 @@ import {
 } from "@workspace/ui/components/empty";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
+import { cn } from "@workspace/ui/lib/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronRightIcon,
@@ -49,6 +50,7 @@ import { toast } from "sonner";
 import { Markdown } from "@/components/markdown";
 import { FileTypeIcon } from "@/components/panel/file-icon";
 import { PanelTab, PanelTabs } from "@/components/panel/panel-tabs";
+import { HtmlPreview } from "@/components/visual-preview";
 import { useHighlightedCode } from "@/hooks/use-highlighted-code";
 import {
   filePreviewQuery,
@@ -135,8 +137,13 @@ function FilePreviewView({
   const addAttachments = useComposerStore((state) => state.add);
   const name = fileName(path);
   const isMarkdown = /\.(md|markdown)$/i.test(name);
-  // Markdown shows rendered; this switches to its text.
+  const isHtml = /\.html?$/i.test(name);
+  // Markdown shows rendered and HTML as a preview (after Run); this switches to their text.
   const [showSource, setShowSource] = React.useState(false);
+  // A cut-off page would run broken, so only a whole HTML file previews.
+  const canPreview =
+    isMarkdown || (isHtml && preview.data?.kind === "text" && !preview.data.truncated);
+  const showsHtml = isHtml && canPreview && !showSource;
 
   async function attach() {
     try {
@@ -153,7 +160,7 @@ function FilePreviewView({
         <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={path}>
           {path}
         </span>
-        {isMarkdown && (
+        {canPreview && (
           <Tooltip>
             <TooltipTrigger
               render={
@@ -210,7 +217,7 @@ function FilePreviewView({
           <TooltipContent>{t("panel.files.reveal")}</TooltipContent>
         </Tooltip>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className={cn("min-h-0 flex-1", showsHtml ? "flex flex-col" : "overflow-auto")}>
         {preview.isPending ? (
           <div className="flex flex-col gap-2 p-3">
             <Skeleton className="h-4 w-3/4" />
@@ -234,6 +241,10 @@ function FilePreviewView({
             {isMarkdown && !showSource ? (
               <div className="px-4 py-2 text-sm">
                 <Markdown>{preview.data.text}</Markdown>
+              </div>
+            ) : showsHtml ? (
+              <div className="min-h-0 flex-1">
+                <HtmlPreview key={preview.data.text} html={preview.data.text} fill />
               </div>
             ) : (
               <TextPreview path={path} text={preview.data.text} />

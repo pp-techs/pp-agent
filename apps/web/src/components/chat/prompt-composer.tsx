@@ -24,6 +24,7 @@ import { ComposerMenu } from "@/components/chat/composer-menu";
 import { ComposerToken } from "@/components/chat/composer-token";
 import { GoalBanner } from "@/components/chat/goal-banner";
 import { HelperPanel } from "@/components/chat/helper-panel";
+import { ResearchBanner } from "@/components/chat/research-banner";
 import { InlineImage } from "@/components/chat/inline-image";
 import { TodoPanel } from "@/components/chat/todo-panel";
 import { ModelPicker } from "@/components/chat/model-picker";
@@ -34,7 +35,15 @@ import { useSendMessage } from "@/hooks/use-send-message";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { voiceQuery } from "@/lib/extension-queries";
 import { parseGoalCommand, type GoalParams } from "@/lib/goal";
-import { useAbort, useGoalPending, useRespondQuestion, useSetGoal } from "@/lib/queries";
+import { parseResearchCommand, type ResearchStart } from "@/lib/research";
+import {
+  useAbort,
+  useGoalPending,
+  useResearchPending,
+  useRespondQuestion,
+  useSetGoal,
+  useSetResearch,
+} from "@/lib/queries";
 import {
   filterSlashItems,
   findTypedCommand,
@@ -69,6 +78,8 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
   const respondQuestion = useRespondQuestion(bridge);
   const setGoal = useSetGoal(bridge);
   const goalPending = useGoalPending();
+  const setResearch = useSetResearch(bridge);
+  const researchPending = useResearchPending();
   // The agent's question takes the place of the composer until it is answered.
   const question = useChatStore((state) => Object.values(state.questions)[0]);
   const asking = question !== undefined;
@@ -163,6 +174,18 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
     });
   }
 
+  /** Starts a research run from `/research`; the draft comes back when it fails. */
+  function runResearch(params: ResearchStart) {
+    const text = draft;
+    setDraft("");
+    setResearch.mutate(params, {
+      onError: (error) => {
+        if (useComposerStore.getState().draft === "") setDraft(text);
+        toast.error(error.message);
+      },
+    });
+  }
+
   /** Drops one chip; the others and the text after them stay. */
   function removeToken(index: number) {
     setDraft(tokensPrefix(tokens.filter((_, at) => at !== index)) + text);
@@ -173,9 +196,17 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
     event.preventDefault();
     const command = attachments.length === 0 ? findTypedCommand(commands, draft) : undefined;
     const goal = attachments.length === 0 ? parseGoalCommand(draft) : null;
+    const parsedResearch = attachments.length === 0 ? parseResearchCommand(draft) : null;
     if (command) pickItem(command);
     else if (goal) {
       if (!disabled && !sending && !goalPending) runGoal(goal);
+    } else if (parsedResearch) {
+      if (!disabled && !sending && !researchPending)
+        runResearch({
+          action: "start",
+          question: parsedResearch.question,
+          depth: parsedResearch.depth ?? "standard",
+        });
     } else if (canSend && !running && !sending) send(draft);
   }
 
@@ -267,6 +298,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
       <HelperPanel />
       <TodoPanel />
       <GoalBanner bridge={bridge} />
+      <ResearchBanner bridge={bridge} />
       <form
         ref={formRef}
         onSubmit={onSubmit}

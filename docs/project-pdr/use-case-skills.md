@@ -2,6 +2,13 @@
 
 A skill is an [Agent Skills](https://agentskills.io) folder with a `SKILL.md`, stored under `<user-data>/agent/skills/<name>/`. Besides these, a workspace's own skills in `<workspace folder>/.agents/skills/` are loaded in its chats once the person trusts that folder for skills (`packages/agent-core/src/skills.ts`); nothing else is.
 
+## Built-in skills
+
+The app ships two skills in `apps/desktop/resources/skills/` and copies them into the skills folder at start, leaving a copy the person edited alone (`packages/agent-core/src/skills-builtin.ts`):
+
+- `officecli`: the OfficeCLI workflow behind `office_read` and `office_edit`.
+- `skill-creator`: writing and improving skills.
+
 ## Author (Settings › Skills)
 
 - **Import** from a folder (copied) or a `.zip` / `.skill` archive (every directory containing `SKILL.md` becomes a skill). Path traversal is rejected; archives expanding beyond 100 MB are refused. An existing name is an error.

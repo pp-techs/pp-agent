@@ -2,8 +2,23 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import type { Attachment, ChannelState, TelegramChatSettings } from "@workspace/shared";
-import type { ChannelGateway, ChannelInput, ChatOption, TurnResult } from "../types.ts";
+import {
+  MAX_RESEARCH_QUESTION_LENGTH,
+  type Attachment,
+  type ChannelState,
+  type QuestionAnswer,
+  type QuestionRequest,
+  type ResearchDepth,
+  type TelegramChatSettings,
+} from "@workspace/shared";
+import type {
+  ChannelGateway,
+  ChannelInput,
+  ChatOption,
+  ResearchResult,
+  TurnHooks,
+  TurnResult,
+} from "../types.ts";
 import {
   HttpTelegramApi,
   MAX_DOWNLOAD_BYTES,
@@ -17,6 +32,7 @@ import { TelegramApprovals } from "./approvals.ts";
 import { TelegramQuestions } from "./questions.ts";
 import { formatMessage, sendFormatted, splitText } from "./format.ts";
 import { findOption } from "../shared/options.ts";
+import { parseResearchArgument } from "../shared/research.ts";
 import type { PairingGuard } from "../shared/pairing.ts";
 import { abortableSleep } from "../shared/sleep.ts";
 import { LiveMessage } from "./live-message.ts";
@@ -38,6 +54,7 @@ const COMMANDS: Record<string, true> = {
   thinking: true,
   sessions: true,
   resume: true,
+  research: true,
   // Another name for /thinking; the menu lists only the first.
   effort: true,
 };
@@ -219,6 +236,7 @@ export class TelegramChannel {
           { command: "sessions", description: t("channels.telegram.commandSessions") },
           { command: "resume", description: t("channels.telegram.commandResume") },
           { command: "id", description: t("channels.telegram.commandId") },
+          { command: "research", description: t("channels.telegram.commandResearch") },
           { command: "help", description: t("channels.telegram.commandHelp") },
         ],
         signal,
@@ -432,6 +450,9 @@ export class TelegramChannel {
       case "resume":
         await this.resumeSession(chatId, command.argument);
         return;
+      case "research":
+        await this.research(chatId, message, from, command.argument);
+        return;
     }
 
     // The turn in progress waits for this text (the person tapped "Other"); queued, it would wait
@@ -586,6 +607,45 @@ export class TelegramChannel {
     else if (kind === "workspace") await gateway.choose(chatKey, { workspaceId: option.id });
     else await gateway.pick(chatKey, kind, option.id);
     return [`${kind}Changed`, { name: option.label }];
+  }
+
+  /**
+   * `/research [quick|standard|deep] <question>`: only the owner, in their own private chat, and
+   * only when nothing else is running for it. The run queues like a turn, so later messages wait.
+   */
+  private async research(
+    chatId: number,
+    message: TelegramMessage,
+    from: TelegramUser,
+    argument: string,
+  ): Promise<void> {
+    if (from.id !== this.deps.owner()?.id || message.chat.type !== "private") {
+      await this.reply(chatId, "researchOwnerOnly");
+      return;
+    }
+    const { depth, question } = parseResearchArgument(argument);
+    if (!question) {
+      await this.reply(chatId, "researchUsage");
+      return;
+    }
+    if (question.length > MAX_RESEARCH_QUESTION_LENGTH) {
+      await this.reply(chatId, "researchTooLong", { max: MAX_RESEARCH_QUESTION_LENGTH });
+      return;
+    }
+    const queue = this.queue(chatId);
+    if (queue.running || queue.waiting.length > 0) {
+      await this.reply(chatId, "researchBusy");
+      return;
+    }
+    queue.waiting.push(() =>
+      this.runResearch(chatId, {
+        question,
+        depth,
+        sender: { id: String(from.id), name: displayName(from), owner: true },
+      }),
+    );
+    await this.reply(chatId, "researchStarted");
+    void this.drain(queue);
   }
 
   private async handleChoiceCallback(
@@ -789,24 +849,96 @@ export class TelegramChannel {
   }
 
   private async runTurn(chatId: number, input: ChannelInput): Promise<void> {
+    await this.answer(chatId, (hooks) =>
+      this.deps.gateway.runTurn(`telegram:${chatId}`, input, hooks),
+    );
+  }
+
+  /**
+   * `/research`: runs the research for the owner's private chat, then sends the report files. The
+   * summary text comes first, as for any turn.
+   */
+  private async runResearch(
+    chatId: number,
+    request: {
+      question: string;
+      depth: ResearchDepth;
+      sender: NonNullable<ChannelInput["sender"]>;
+    },
+  ): Promise<void> {
+    const result = await this.answer(chatId, (hooks) =>
+      this.deps.gateway.runResearch(`telegram:${chatId}`, request, hooks),
+    );
+    if (result?.status === "done" && result.report) await this.sendReport(chatId, result.report);
+  }
+
+  /** Sends the report files the host saved, the HTML only when there is one. */
+  private async sendReport(
+    chatId: number,
+    report: NonNullable<ResearchResult["report"]>,
+  ): Promise<void> {
+    const files = [
+      { path: report.markdownPath, name: report.markdownName },
+      ...(report.htmlPath && report.htmlName
+        ? [{ path: report.htmlPath, name: report.htmlName }]
+        : []),
+    ];
+    for (const file of files) {
+      try {
+        await this.api.sendDocument(chatId, file.path);
+      } catch (error) {
+        await this.reply(chatId, "researchDocumentFailed", {
+          name: file.name,
+          error: (error as Error).message,
+        });
+      }
+    }
+  }
+
+  /** The plan comes first as its own message(s), so the person reads it before answering. */
+  private async askQuestion(
+    chatId: number,
+    request: QuestionRequest,
+  ): Promise<QuestionAnswer[] | null> {
+    if (request.plan?.trim()) {
+      try {
+        for (const chunk of formatMessage(request.plan))
+          await sendFormatted(this.api, chatId, chunk);
+      } catch (error) {
+        // Confirming a plan the person could not read would be a blind yes: skip instead.
+        console.warn("[telegram] The plan could not be sent:", (error as Error).message);
+        return null;
+      }
+    }
+    return this.questions.ask(chatId, request);
+  }
+
+  /**
+   * Streams a turn (or a research run) into a live message and settles the chat with its final
+   * text. Returns the result, or null when the run itself failed (the person was told).
+   */
+  private async answer<R extends TurnResult>(
+    chatId: number,
+    run: (hooks: TurnHooks) => Promise<R>,
+  ): Promise<R | null> {
     const live = new LiveMessage(this.api, chatId);
     live.start();
     let lastText = "";
-    let result: TurnResult;
+    let result: R;
     try {
-      result = await this.deps.gateway.runTurn(`telegram:${chatId}`, input, {
+      result = await run({
         onText: (text) => {
           lastText = text;
           live.update(text);
         },
         onTool: (summary) => live.setStatus(summary),
         askApproval: (request) => this.approvals.ask(chatId, request),
-        askQuestion: (request) => this.questions.ask(chatId, request),
+        askQuestion: (request) => this.askQuestion(chatId, request),
       });
     } catch (error) {
       live.dispose();
       await this.reply(chatId, "turnFailed", { error: (error as Error).message });
-      return;
+      return null;
     }
     const answer = result.text.trim() === "" ? lastText : result.text;
     try {
@@ -822,6 +954,7 @@ export class TelegramChannel {
       });
     else if (result.status === "done" && answer.trim() === "")
       await this.reply(chatId, "emptyAnswer");
+    return result;
   }
 
   // -------------------------------------------------------------------------------------------

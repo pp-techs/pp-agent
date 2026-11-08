@@ -7,6 +7,8 @@ import { cn } from "@workspace/ui/lib/utils";
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, PencilIcon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { Markdown } from "@/components/markdown";
+
 /** Longest text the person may type for "Other"; the same limit the agent enforces. */
 const MAX_CUSTOM_LENGTH = 2000;
 /** Pause before a pick moves on, so the pick is seen first. */
@@ -175,6 +177,11 @@ export function QuestionCard({
         onKeyDown={onKeyDown}
         className="flex w-full flex-col gap-2 rounded-[28px] border border-input bg-muted/60 p-2 outline-hidden dark:bg-input/40"
       >
+        {request.plan && (
+          <div className="max-h-72 overflow-y-auto rounded-2xl bg-background/80 px-4 py-3 text-sm">
+            <Markdown>{request.plan}</Markdown>
+          </div>
+        )}
         <div className="flex items-start justify-between gap-3 px-3 pt-3">
           <h3 id={`${idPrefix}-title`} className="text-base leading-snug font-medium">
             {question.question}

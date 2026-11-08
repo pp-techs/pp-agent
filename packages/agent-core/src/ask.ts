@@ -25,7 +25,7 @@ export const ASK_LIMITS = {
 
 /** What the host does with a call: show the questions and resolve with the answers (null: skipped). */
 export type AskUser = (
-  call: { toolCallId: string; questions: Question[] },
+  call: { toolCallId: string; questions: Question[]; plan?: string },
   signal?: AbortSignal,
 ) => Promise<QuestionAnswer[] | null>;
 

@@ -3,6 +3,7 @@ import type {
   Attachment,
   QuestionAnswer,
   QuestionRequest,
+  ResearchDepth,
 } from "@workspace/shared";
 
 /** One message a person sent through a chat channel. */
@@ -37,6 +38,19 @@ export interface TurnResult {
   text: string;
   status: "done" | "error" | "aborted";
   error?: string;
+}
+
+/** What a research run in a chat produced. */
+export interface ResearchResult extends TurnResult {
+  /** Set only when the final report was saved. */
+  report: {
+    /** Absolute paths of the saved files, for sending them as documents. */
+    markdownPath: string;
+    htmlPath: string | null;
+    /** The same files relative to the workspace folder, for telling the person where they are. */
+    markdownName: string;
+    htmlName: string | null;
+  } | null;
 }
 
 /** An agent or workspace a person can pick in the chat. */
@@ -102,6 +116,19 @@ export interface ChannelGateway {
    * false when no turn can accept it, so the caller can queue the input instead.
    */
   steerTurn(chatKey: string, input: ChannelInput): Promise<boolean>;
+  /**
+   * Runs a research run in the chat: plans, asks the person to confirm the plan through
+   * `hooks.askQuestion` (the question carries the plan in `plan`), then works turn after turn by
+   * itself until the report is saved, the run is stopped (`abort`), or the agent waits for the
+   * person. Resolves with what the last turn said and, when saved, the report files. Rejects when
+   * the chat is not the owner's own private chat, when it is answering, or when no model is set.
+   * `/stop` ends it like any turn.
+   */
+  runResearch(
+    chatKey: string,
+    input: { question: string; depth: ResearchDepth; sender?: ChannelInput["sender"] },
+    hooks: TurnHooks,
+  ): Promise<ResearchResult>;
 }
 
 /** What the host needs to know about a channel's settings, whichever chat app it is. */

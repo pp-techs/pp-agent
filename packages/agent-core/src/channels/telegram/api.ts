@@ -1,10 +1,15 @@
 /** A minimal Telegram Bot API client: only the calls the Telegram channel needs. */
+import { readFile, stat } from "node:fs/promises";
+import { basename } from "node:path";
 import { abortableSleep } from "../shared/sleep.ts";
 
 const API_ORIGIN = "https://api.telegram.org";
 /** Telegram's own limit for files a bot may download. */
 export const MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024;
+/** Telegram's own limit for files a bot may send. */
+export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 30_000;
+const UPLOAD_TIMEOUT_MS = 5 * 60_000;
 const POLL_SECONDS = 30;
 const MAX_FLOOD_RETRIES = 3;
 const MAX_FLOOD_WAIT_SECONDS = 60;
@@ -133,6 +138,8 @@ export interface TelegramApi {
   deleteMessage(chatId: number, messageId: number): Promise<void>;
   sendChatAction(chatId: number, action?: "typing"): Promise<void>;
   answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void>;
+  /** Sends a file from disk as a document named by its basename; for paths the host produced. */
+  sendDocument(chatId: number, filePath: string, caption?: string): Promise<void>;
   /** Rejects with kind `too_large` above `maxBytes` (the Bot API allows 20 MiB). */
   downloadFile(fileId: string, maxBytes?: number): Promise<DownloadedFile>;
 }
@@ -165,18 +172,21 @@ export class HttpTelegramApi implements TelegramApi {
 
   private async request(
     method: string,
-    params: Record<string, unknown>,
+    params: Record<string, unknown> | FormData,
     signal: AbortSignal | undefined,
     timeoutMs: number,
   ): Promise<unknown> {
+    // A FormData body is multipart (an upload); fetch sets its content-type and boundary.
+    const headers = params instanceof FormData ? undefined : { "content-type": "application/json" };
+    const payload = params instanceof FormData ? params : JSON.stringify(params);
     for (let attempt = 0; ; attempt++) {
       const timeout = AbortSignal.timeout(timeoutMs);
       let response: Response;
       try {
         response = await this.fetchFn(`${API_ORIGIN}/bot${this.token}/${method}`, {
           method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(params),
+          headers,
+          body: payload,
           signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
         });
       } catch (error) {
@@ -214,7 +224,7 @@ export class HttpTelegramApi implements TelegramApi {
 
   private call<T>(
     method: string,
-    params: Record<string, unknown> = {},
+    params: Record<string, unknown> | FormData = {},
     signal?: AbortSignal,
     timeoutMs = REQUEST_TIMEOUT_MS,
   ): Promise<T> {
@@ -285,6 +295,25 @@ export class HttpTelegramApi implements TelegramApi {
 
   async answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
     await this.call("answerCallbackQuery", { callback_query_id: callbackQueryId, text });
+  }
+
+  async sendDocument(chatId: number, filePath: string, caption?: string): Promise<void> {
+    let bytes: Uint8Array<ArrayBuffer>;
+    try {
+      if ((await stat(filePath)).size > MAX_UPLOAD_BYTES)
+        throw new TelegramApiError("too_large", "The file is too large to send.");
+      bytes = await readFile(filePath);
+    } catch (error) {
+      if (error instanceof TelegramApiError) throw error;
+      throw new TelegramApiError("api", "The file could not be read.");
+    }
+    if (bytes.byteLength > MAX_UPLOAD_BYTES)
+      throw new TelegramApiError("too_large", "The file is too large to send.");
+    const form = new FormData();
+    form.append("chat_id", String(chatId));
+    if (caption) form.append("caption", caption);
+    form.append("document", new Blob([bytes]), basename(filePath));
+    await this.call("sendDocument", form, undefined, UPLOAD_TIMEOUT_MS);
   }
 
   async downloadFile(fileId: string, maxBytes = MAX_DOWNLOAD_BYTES): Promise<DownloadedFile> {

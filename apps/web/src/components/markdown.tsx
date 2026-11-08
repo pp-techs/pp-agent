@@ -15,13 +15,28 @@ import {
   type ExtraProps,
 } from "streamdown";
 
+import { isVisualLanguage, VisualCodeBlock } from "@/components/visual-preview";
 import { useHighlightedCode } from "@/hooks/use-highlighted-code";
 
 function MarkdownCodeBlock({ code, language }: { code: string; language: string }) {
   // True while the closing fence has not arrived yet.
   const incomplete = useIsCodeFenceIncomplete();
-  const lines = useHighlightedCode(code, language, incomplete);
+  // Diagrams, pictures and HTML are drawn once the whole block has arrived.
+  if (!incomplete && isVisualLanguage(language))
+    return <VisualCodeBlock code={code} language={language} />;
+  return <HighlightedCodeBlock code={code} language={language} incomplete={incomplete} />;
+}
 
+function HighlightedCodeBlock({
+  code,
+  language,
+  incomplete,
+}: {
+  code: string;
+  language: string;
+  incomplete: boolean;
+}) {
+  const lines = useHighlightedCode(code, language, incomplete);
   return (
     <CodeBlock>
       <CodeBlockHeader>

@@ -90,6 +90,16 @@ export class FakeApi implements TelegramApi {
     this.answers.push({ id, text });
   }
 
+  documents: { chatId: number; filePath: string; caption?: string }[] = [];
+  /** Makes `sendDocument` throw for matching paths. */
+  documentError: ((filePath: string) => Error | null) | null = null;
+
+  async sendDocument(chatId: number, filePath: string, caption?: string): Promise<void> {
+    const error = this.documentError?.(filePath);
+    if (error) throw error;
+    this.documents.push({ chatId, filePath, caption });
+  }
+
   async downloadFile(fileId: string): Promise<DownloadedFile> {
     if (this.downloadError) throw this.downloadError;
     const data = this.files.get(fileId);

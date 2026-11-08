@@ -24,6 +24,7 @@
     "@xterm/xterm": "catalog:",
     "i18next": "catalog:",
     "lucide-react": "catalog:",
+    "pele": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-i18next": "catalog:",

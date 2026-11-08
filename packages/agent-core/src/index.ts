@@ -3,7 +3,15 @@
  * the process around it; `HostEnvironment` supplies the event sink, the vault, and service control.
  */
 import { randomUUID } from "node:crypto";
-import { constants, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  constants,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { copyFile, mkdir } from "node:fs/promises";
 import { rm } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -39,6 +47,10 @@ import {
   type Question,
   type QuestionAnswer,
   type QuestionRequest,
+  type ResearchDepth,
+  type ResearchReport,
+  type ResearchSummary,
+  MAX_RESEARCH_QUESTION_LENGTH,
   type SaveScheduledTaskInput,
   type SessionActivity,
   type ScheduledTask,
@@ -139,6 +151,7 @@ import type {
   ChatChoices,
   ChatPick,
   ChatPickKind,
+  ResearchResult,
   TurnHooks,
   TurnResult,
 } from "./channels/types.ts";
@@ -213,6 +226,7 @@ import { listWorkspaceSkills, SkillLibrary, workspaceSkillsDir } from "./skills.
 import { parseSkillBlocks, skillChainExtension } from "./skill-chain.ts";
 import { seedBuiltInSkills } from "./skills-builtin.ts";
 import { createDelegateTool, DELEGATE_TOOL } from "./subagent.ts";
+import { WEB_FETCH_TOOL } from "./web/names.ts";
 import {
   extractMemory,
   isRunSession,
@@ -243,6 +257,7 @@ import {
   isListedTool,
   parseMcpToolName,
   planningSection,
+  visualSection,
   SHELL_TOOL,
   SYSTEM_PROMPT,
   toolRule,
@@ -264,6 +279,21 @@ import {
   MAX_OBJECTIVE_LENGTH,
   readGoal,
 } from "./goal.ts";
+import {
+  addSources,
+  createResearchTools,
+  MAX_RESEARCH_TURNS,
+  readResearch,
+  RESEARCH_CONTINUE_TYPE,
+  RESEARCH_ENTRY_TYPE,
+  RESEARCH_TOOLS,
+  researchContinuation,
+  researchEntry,
+  researchOutcome,
+  researchSection,
+  type ResearchHost,
+  type ResearchState,
+} from "./research.ts";
 import {
   createScheduleTool,
   SCHEDULE_TOOL,
@@ -383,6 +413,8 @@ interface SessionScope {
   systemNote?: { section: string; text: string };
   /** The goal of a window conversation; absent elsewhere, where nobody can set one. */
   goal?: GoalHost;
+  /** The research run of a window conversation or an owner's chat; absent elsewhere. */
+  research?: ResearchHost;
   /** What kind of session this is and how the model should call it ("a Telegram chat"). */
   surface: { kind: SessionKind; label: string };
   /** Which saved sessions the `sessions` tool shows: every one, or only the one running. */
@@ -414,6 +446,10 @@ interface ChatRuntime {
   cancelQuestions: Set<() => void>;
   /** The person stopped the turn. */
   stopped: boolean;
+  /** Tool calls in the current turn; a research turn without any is not continued. */
+  toolCalls: number;
+  /** The research run of this chat, while `/research` is working; null otherwise. */
+  research?: ResearchState | null;
 }
 
 /**
@@ -440,6 +476,10 @@ interface ConversationState {
   goal: Goal | null;
   /** What the conversation's branch records of the goal (JSON of its entry), to save changes only. */
   goalSaved: string;
+  /** Research run the agent works through; null when there is none. Saved with the conversation, resumed paused. */
+  research: ResearchState | null;
+  /** What the branch records of the research run (JSON of its entry), to save changes only. */
+  researchSaved: string;
   /** Tool calls so far in the current run; a goal turn without any is not continued. */
   toolCalls: number;
   running: boolean;
@@ -493,7 +533,7 @@ const MEMORY_UNDO_MS = 10 * 60_000;
 function channelNote(label: string): string {
   return [
     `You are replying to the person through ${label}, in a chat on their phone.`,
-    "Keep answers short and plain; avoid long tables and heavy formatting.",
+    "Keep answers short and plain; avoid long tables and heavy formatting. This chat shows text only: mermaid, svg and html code blocks are not drawn, so describe things in words or save a file instead.",
     "Tools that need the person's approval will ask them in this chat; wait for the answer.",
   ].join("\n");
 }
@@ -596,6 +636,7 @@ export class AgentHost {
         });
     },
     newConversation: (chatKey) => this.newChat(chatKey),
+    runResearch: (chatKey, input, hooks) => this.runChatResearch(chatKey, input, hooks),
     abort: (chatKey) => this.abortChat(chatKey),
     options: async (chatKey) => this.chatOptions(chatKey),
     choose: (chatKey, choice) => this.chooseForChat(chatKey, choice),
@@ -703,7 +744,7 @@ export class AgentHost {
         mkdirSync(dir, { recursive: true });
       // The library resolves its folder, so it is created after the folder exists.
       const skills = new SkillLibrary(skillsDir);
-      // Copy the skills that ship with the app (OfficeCLI's, skill-creator), leaving anything the person edited.
+      // Copy the skills that ship with the app (OfficeCLI's, skill-creator, deep-research), leaving anything the person edited.
       const builtIn = await seedBuiltInSkills(
         resourcePath("skills"),
         skillsDir,
@@ -831,6 +872,10 @@ export class AgentHost {
         return this.abort();
       case "set_goal":
         return this.setGoal(command);
+      case "set_research":
+        return this.setResearch(command);
+      case "get_research_report":
+        return this.getResearchReport();
       case "new_chat":
         return this.openSession(null, command.workspaceId ?? null, command.temporary === true);
       case "respond_approval":
@@ -1162,6 +1207,7 @@ export class AgentHost {
       goal: open?.goal
         ? { objective: open.goal.objective, status: open.goal.status, waiting: open.goal.stalled }
         : null,
+      research: open?.research ? this.summarizeResearch(open.research) : null,
     };
   }
 
@@ -1216,6 +1262,8 @@ export class AgentHost {
     this.keepTemporaryCopies(promptedOn, session, message.copied);
     // Writing to the agent again picks up a goal that was waiting on the person.
     if (this.open?.goal) this.open.goal.stalled = false;
+    // The same for a research run waiting on the person.
+    if (this.open?.research) this.open.research.stalled = false;
     this.startRun(session, message, onRunError);
   }
 
@@ -1297,6 +1345,11 @@ export class AgentHost {
     if (conversation.goal?.status === "active") {
       conversation.goal.status = "paused";
       this.goalChanged(conversation);
+    }
+    // The same for a research run.
+    if (conversation.research?.status === "active") {
+      conversation.research.status = "paused";
+      this.researchChanged(conversation);
     }
     // Pending approvals and questions block the run; settle them first or abort() would wait forever.
     this.denyAllApprovals(conversation);
@@ -1432,6 +1485,304 @@ export class AgentHost {
       if (conversation.running || conversation.session.isStreaming) return;
       this.continueGoal(conversation);
     });
+  }
+
+  /**
+   * Research runs: the person gives a question and a depth and the agent works through it in
+   * rounds until it saves a report. Same shape as goals (state on the conversation, a saved entry,
+   * hidden continuation turns) plus the plan question and the report files.
+   */
+
+  /** What the UI and channels see of a research run. */
+  private summarizeResearch = (state: ResearchState): ResearchSummary => ({
+    question: state.question,
+    depth: state.depth,
+    status: state.status,
+    phase: state.phase,
+    waiting: state.stalled,
+    visited: state.visited.length,
+    sources: state.sources,
+    report: state.report
+      ? { markdown: state.report.markdown, html: state.htmlSaved ? state.report.html : null }
+      : null,
+  });
+
+  private async setResearch(command: AgentCommandMap["set_research"]["params"]): Promise<void> {
+    const conversation = this.requireOpen();
+    const busy = conversation.running || conversation.session.isStreaming;
+    const run = conversation.research;
+    switch (command.action) {
+      case "start": {
+        const question = command.question.trim();
+        if (!question) throw new Error(t("research.empty"));
+        if (question.length > MAX_RESEARCH_QUESTION_LENGTH)
+          throw new Error(t("research.tooLong", { max: MAX_RESEARCH_QUESTION_LENGTH }));
+        if (run) throw new Error(t("research.exists"));
+        if (conversation.goal) throw new Error(t("research.goalRunning"));
+        if (busy) throw new Error(t("conversations.waitForAnswer"));
+        if (!this.currentModel()) throw new Error(t("models.noneChosen"));
+        conversation.research = {
+          question,
+          depth: command.depth,
+          status: "active",
+          phase: "planning",
+          stalled: false,
+          turns: 0,
+          visited: [],
+          sources: [],
+          report: null,
+          htmlSaved: false,
+          ownedFiles: [],
+        };
+        this.researchChanged(conversation);
+        // The question is the first message; the agent carries on by itself after each turn.
+        try {
+          await this.prompt(question, [], (error) => {
+            if (conversation.research?.status === "active") {
+              conversation.research.status = "paused";
+              this.researchChanged(conversation);
+            }
+            emit({ type: "error", message: errorMessage(error) });
+          });
+        } catch (error) {
+          conversation.research = null;
+          this.researchChanged(conversation);
+          throw error;
+        }
+        return;
+      }
+      case "resume":
+        if (run?.status !== "paused") throw new Error(t("research.nothingToResume"));
+        if (busy) throw new Error(t("conversations.waitForAnswer"));
+        if (!this.currentModel()) throw new Error(t("models.noneChosen"));
+        run.status = "active";
+        run.stalled = false;
+        this.researchChanged(conversation);
+        this.continueResearch(conversation);
+        return;
+      case "pause":
+        if (run?.status === "active") {
+          run.status = "paused";
+          this.researchChanged(conversation);
+        }
+        return;
+      case "clear":
+        if (run) {
+          // A plan question still open belongs to the run being cleared: settle it, or the tool
+          // would wait for an answer to a plan that no longer exists.
+          this.skipAllQuestions(conversation);
+          conversation.research = null;
+          this.researchChanged(conversation);
+        }
+        return;
+    }
+  }
+
+  /** The saved report text of the open conversation's research run, for clients with no workspace. */
+  private getResearchReport(): ResearchReport | null {
+    const state = this.requireOpen().research;
+    const dir = this.session?.sessionManager.getCwd() ?? this.services?.paths.workspaceDir ?? null;
+    if (!state?.report || !dir) return null;
+    const read = (rel: string): string | null => {
+      try {
+        const file = realpathSync(join(dir, rel));
+        if (!file.startsWith(realpathSync(dir))) return null;
+        return readFileSync(file, "utf8");
+      } catch {
+        return null;
+      }
+    };
+    const markdown = read(state.report.markdown);
+    if (markdown === null) return null;
+    return {
+      markdown,
+      html: state.htmlSaved ? (read(state.report.html) ?? null) : null,
+      markdownPath: state.report.markdown,
+      htmlPath: state.htmlSaved ? state.report.html : null,
+    };
+  }
+
+  /**
+   * The research run changed: records it, gives the agent its tools while active, and tells the
+   * open conversation's clients. Mid-answer both wait until the answer settles (a custom entry
+   * between a tool call and its result would split them in the saved branch).
+   */
+  private researchChanged(conversation: Conversation): void {
+    if (!conversation.running && !conversation.session.isStreaming) {
+      this.persistResearch(conversation);
+      this.applyActiveTools(conversation.session, this.liveScope(conversation));
+    }
+    if (conversation === this.open) {
+      emit({
+        type: "research",
+        research: conversation.research ? this.summarizeResearch(conversation.research) : null,
+      });
+      emit({ type: "snapshot", snapshot: this.snapshot() });
+    }
+  }
+
+  private persistResearch(conversation: Conversation): void {
+    const entry = researchEntry(conversation.research);
+    const saved = JSON.stringify(entry);
+    if (saved === conversation.researchSaved) return;
+    conversation.researchSaved = saved;
+    conversation.session.sessionManager.appendCustomEntry(RESEARCH_ENTRY_TYPE, entry);
+  }
+
+  /** Starts the next turn of an active research run with a message the chat does not show. */
+  private continueResearch(conversation: Conversation): void {
+    const run = conversation.research;
+    if (run?.status !== "active") return;
+    conversation.session
+      .sendCustomMessage(
+        { customType: RESEARCH_CONTINUE_TYPE, content: researchContinuation(run), display: false },
+        { triggerTurn: true },
+      )
+      .catch((error: unknown) => {
+        if (conversation.research === run) {
+          run.status = "paused";
+          this.researchChanged(conversation);
+        }
+        emit({ type: "error", message: errorMessage(error) });
+      });
+  }
+
+  /**
+   * A run settled: saves it, then decides what an active run does next. A turn that was stopped or
+   * failed pauses it, one without a tool call waits for the person, one past the turn cap pauses
+   * with an error, and any other one is followed by the next turn.
+   */
+  private afterResearchTurn(conversation: Conversation): void {
+    this.persistResearch(conversation);
+    this.applyActiveTools(conversation.session, this.liveScope(conversation));
+    const run = conversation.research;
+    if (run?.status !== "active") return;
+    run.turns += 1;
+    const last = conversation.session.messages.findLast(
+      (message): message is AssistantMessage => message.role === "assistant",
+    );
+    const outcome = researchOutcome({
+      stopReason: last?.stopReason,
+      toolCalls: conversation.toolCalls,
+    });
+    if (outcome === "pause") run.status = "paused";
+    else if (outcome === "stall") run.stalled = true;
+    else if (run.turns >= MAX_RESEARCH_TURNS[run.depth]) {
+      run.status = "paused";
+      this.researchChanged(conversation);
+      emit({
+        type: "error",
+        message: t("research.turnCap", { max: MAX_RESEARCH_TURNS[run.depth] }),
+      });
+      return;
+    }
+    if (outcome !== "continue") {
+      this.researchChanged(conversation);
+      return;
+    }
+    // Let the settled run finish unwinding before the next one starts.
+    setImmediate(() => {
+      if (conversation.research !== run || run.status !== "active" || run.stalled) return;
+      if (conversation.running || conversation.session.isStreaming) return;
+      this.continueResearch(conversation);
+    });
+  }
+
+  /**
+   * Counts the web pages a research run opened: the lead's own `web_fetch` results and the pages
+   * its helpers visited (reported in `delegate_task`'s `details.helpers[].steps`). Only the count
+   * is shown; the sources the report cites come from `research_sources`.
+   */
+  private noteResearchPages(
+    conversation: Conversation,
+    toolName: string | undefined,
+    content: unknown[],
+    details: unknown,
+  ): void {
+    const run = conversation.research;
+    if (!run || run.status !== "active") return;
+    const urls: string[] = [];
+    const text = content
+      .map((part) => (part && typeof part === "object" && "text" in part ? part.text : ""))
+      .join("\n");
+    if (toolName === WEB_FETCH_TOOL) {
+      for (const match of text.matchAll(/<web_page\s+url="([^"]+)"/g)) urls.push(match[1]);
+    } else if (toolName === DELEGATE_TOOL) {
+      const helpers =
+        details && typeof details === "object" && "helpers" in details
+          ? details.helpers
+          : undefined;
+      if (Array.isArray(helpers)) {
+        for (const helper of helpers) {
+          const steps =
+            helper && typeof helper === "object" && "steps" in helper ? helper.steps : undefined;
+          if (!Array.isArray(steps)) continue;
+          for (const step of steps) {
+            if (
+              step &&
+              typeof step === "object" &&
+              step.tool === "web_fetch" &&
+              typeof step.target === "string"
+            )
+              urls.push(step.target);
+          }
+        }
+      }
+    }
+    if (urls.length > 0) this.liveScope(conversation).research?.noteVisited(urls);
+  }
+
+  /**
+   * The research host a scope exposes: the state of a conversation or chat, plus how a change
+   * reaches the person (persist, reactivate tools, emit).
+   */
+  private researchHost(getState: () => ResearchState | null, changed: () => void): ResearchHost {
+    return {
+      current: getState,
+      setPhase: (phase) => {
+        const run = getState();
+        if (run && run.phase !== phase) {
+          run.phase = phase;
+          changed();
+        }
+      },
+      setDepth: (depth) => {
+        const run = getState();
+        if (run && run.depth !== depth) {
+          run.depth = depth;
+          changed();
+        }
+      },
+      addSources: (sources) => {
+        const run = getState();
+        if (!run) return [];
+        const numbers = addSources(run, sources);
+        changed();
+        return numbers;
+      },
+      noteVisited: (urls) => {
+        const run = getState();
+        if (!run) return;
+        let added = false;
+        for (const url of urls) {
+          const trimmed = url.trim();
+          if (trimmed && !run.visited.includes(trimmed)) {
+            run.visited.push(trimmed);
+            added = true;
+          }
+        }
+        if (added) changed();
+      },
+      markChanged: changed,
+      complete: () => {
+        const run = getState();
+        if (run && run.status !== "done") {
+          run.status = "done";
+          run.phase = "done";
+          changed();
+        }
+      },
+    };
   }
 
   /**
@@ -1986,6 +2337,13 @@ export class AgentHost {
           if (live) this.goalChanged(live);
         },
       },
+      research: this.researchHost(
+        () => conversation.research,
+        () => {
+          const live = this.conversations().find((other) => other === conversation);
+          if (live) this.researchChanged(live);
+        },
+      ),
     };
   }
 
@@ -2094,6 +2452,9 @@ export class AgentHost {
         }),
         createTodoTool(),
         ...(scope.goal ? [createGoalTool(scope.goal)] : []),
+        ...(scope.research && scope.askUser
+          ? createResearchTools(cwd, scope.research, scope.askUser)
+          : []),
         ...(scope.askUser ? [createAskTool(scope.askUser)] : []),
         // Like ask_user, only where a person is present: a scheduled run cannot create tasks.
         ...(scope.askUser ? [createScheduleTool(this.scheduleHost(scope, sessionManager))] : []),
@@ -2147,6 +2508,7 @@ export class AgentHost {
   ): Promise<void> {
     const { mcpConfig } = this.requireServices();
     const restoredGoal = readGoal(sessionManager);
+    const restoredResearch = readResearch(sessionManager);
     const state: ConversationState = {
       transcript: new Transcript((message) => {
         if (this.open === conversation) emit({ type: "message", message });
@@ -2156,6 +2518,8 @@ export class AgentHost {
       yolo: false,
       goal: restoredGoal,
       goalSaved: JSON.stringify(goalEntry(restoredGoal)),
+      research: restoredResearch,
+      researchSaved: JSON.stringify(researchEntry(restoredResearch)),
       toolCalls: 0,
       questions: new Map(),
       mcpServers: new McpRegistrations(mcpConfig, (name) => {
@@ -2277,6 +2641,7 @@ export class AgentHost {
           setImmediate(() => this.finishBackground(conversation));
         }
         this.afterGoalTurn(conversation);
+        this.afterResearchTurn(conversation);
         emit({ type: "sessions_changed" });
         this.emitActivity();
         break;
@@ -2316,6 +2681,12 @@ export class AgentHost {
           event.toolCallId,
           Array.isArray(content) ? content : [],
           event.isError,
+        );
+        this.noteResearchPages(
+          conversation,
+          event.toolName,
+          Array.isArray(content) ? content : [],
+          event.result?.details,
         );
         break;
       }
@@ -2808,6 +3179,12 @@ export class AgentHost {
         const goal = goalSection(scope.goal?.current() ?? null);
         if (goal) sections.goal = goal;
         else delete sections.goal;
+        const research = researchSection(scope.research?.current() ?? null);
+        if (research) sections.research = research;
+        else delete sections.research;
+        const visual = visualSection(scope.surface.kind);
+        if (visual) sections.visual = visual;
+        else delete sections.visual;
       });
     };
   }
@@ -2880,11 +3257,16 @@ export class AgentHost {
    */
   private requestQuestion(
     conversation: ConversationState,
-    call: { toolCallId: string; questions: Question[] },
+    call: { toolCallId: string; questions: Question[]; plan?: string },
     signal?: AbortSignal,
   ): Promise<QuestionAnswer[] | null> {
     if (signal?.aborted) return Promise.resolve(null);
-    const request: QuestionRequest = { requestId: randomUUID(), ...call };
+    const request: QuestionRequest = {
+      requestId: randomUUID(),
+      toolCallId: call.toolCallId,
+      questions: call.questions,
+      ...(call.plan ? { plan: call.plan } : {}),
+    };
     conversation.transcript.setToolStatus(request.toolCallId, "awaiting-answer");
     const { promise, resolve } = Promise.withResolvers<QuestionAnswer[] | null>();
     const onAbort = () => this.resolveQuestion(request.requestId, null);
@@ -3039,11 +3421,19 @@ export class AgentHost {
       : withMemory.filter((name) => name !== ASK_TOOL && name !== SCHEDULE_TOOL);
     // The agent can end the goal only while one is active.
     const goalActive = scope.goal?.current()?.status === "active";
-    const next = goalActive
+    const withGoal = goalActive
       ? base.includes(GOAL_TOOL)
         ? base
         : [...base, GOAL_TOOL]
       : base.filter((name) => name !== GOAL_TOOL);
+    // Research tools work only while a research run is active.
+    const researchActive = scope.research?.current()?.status === "active";
+    const next = researchActive
+      ? RESEARCH_TOOLS.reduce(
+          (names, name) => (names.includes(name) ? names : [...names, name]),
+          withGoal,
+        )
+      : withGoal.filter((name) => !(RESEARCH_TOOLS as readonly string[]).includes(name));
     // Only touch the loadout when it changes: replacing it drops MCP tools still connecting.
     const same = next.length === current.length && next.every((name) => current.includes(name));
     if (!same) session.setActiveToolsByName(next);
@@ -4433,7 +4823,7 @@ export class AgentHost {
 
   /** Agent and workspace are read from settings on use, so edits and deletions apply live. */
   private chatScope(
-    chat: Pick<ChatRuntime, "turn" | "pending" | "cancelQuestions"> & {
+    chat: Pick<ChatRuntime, "turn" | "pending" | "cancelQuestions" | "research"> & {
       agentId: string;
       workspaceId: string;
     },
@@ -4464,6 +4854,12 @@ export class AgentHost {
       get visibility() {
         return chatAccess() === "owner" ? "all" : "self";
       },
+      // Only the owner's own chat researches; its run lives on the chat for the duration of
+      // `runResearch`. Changes need no emit: a chat is not the window's conversation.
+      research: this.researchHost(
+        () => chat.research ?? null,
+        () => {},
+      ),
     };
   }
 
@@ -4495,6 +4891,8 @@ export class AgentHost {
       pending: new Set(),
       cancelQuestions: new Set(),
       stopped: false,
+      toolCalls: 0,
+      research: null,
       agentId: agent.id,
       workspaceId: workspace.id,
     };
@@ -4534,6 +4932,7 @@ export class AgentHost {
           }
           break;
         case "tool_execution_start":
+          chat.toolCalls += 1;
           turn.hooks.onTool(describeToolCall(event.toolName, event.args ?? {}).title);
           break;
       }
@@ -4563,12 +4962,17 @@ export class AgentHost {
   /** `ask_user` of a chat: the person answers in the chat; with nobody to ask, skip. */
   private askQuestionInChat(
     chat: Pick<ChatRuntime, "turn" | "cancelQuestions">,
-    call: { toolCallId: string; questions: Question[] },
+    call: { toolCallId: string; questions: Question[]; plan?: string },
     signal?: AbortSignal,
   ): Promise<QuestionAnswer[] | null> {
     const hooks = chat.turn?.hooks;
     if (!hooks || signal?.aborted) return Promise.resolve(null);
-    const request: QuestionRequest = { requestId: randomUUID(), ...call };
+    const request: QuestionRequest = {
+      requestId: randomUUID(),
+      toolCallId: call.toolCallId,
+      questions: call.questions,
+      ...(call.plan ? { plan: call.plan } : {}),
+    };
     const { promise, resolve } = Promise.withResolvers<QuestionAnswer[] | null>();
     const settle = (answers: QuestionAnswer[] | null) => {
       if (!chat.cancelQuestions.delete(cancel)) return;
@@ -4617,6 +5021,120 @@ export class AgentHost {
             this.closeChat(chatKey);
         })
         .catch(() => undefined);
+    }
+  }
+
+  /**
+   * Runs a research run in a chat (`/research`): the agent plans, asks the person to confirm the
+   * plan through the chat, then works turn after turn by itself until the final report is saved,
+   * the run waits or pauses, or `/stop` ends it. The channel sends the report files from the
+   * result. Only the owner's own private chat.
+   */
+  private async runChatResearch(
+    chatKey: string,
+    input: { question: string; depth: ResearchDepth; sender?: ChannelInput["sender"] },
+    hooks: TurnHooks,
+  ): Promise<ResearchResult> {
+    const ownerKey = this.channelFor(chatKey)?.summary().ownerKey ?? null;
+    if (ownerKey !== chatKey) throw new Error(t("research.ownerOnly"));
+    const question = input.question.trim();
+    if (!question) throw new Error(t("research.empty"));
+    if (question.length > MAX_RESEARCH_QUESTION_LENGTH)
+      throw new Error(t("research.tooLong", { max: MAX_RESEARCH_QUESTION_LENGTH }));
+    let chat: ChatSession;
+    try {
+      chat = await this.chatSession(chatKey);
+    } catch (error) {
+      return { text: "", status: "error", error: errorMessage(error), report: null };
+    }
+    if (chat.turn || chat.research?.status === "active")
+      return { text: "", status: "error", error: t("research.exists"), report: null };
+    const run: ResearchState = {
+      question,
+      depth: input.depth,
+      status: "active",
+      phase: "planning",
+      stalled: false,
+      turns: 0,
+      visited: [],
+      sources: [],
+      report: null,
+      htmlSaved: false,
+      ownedFiles: [],
+    };
+    chat.research = run;
+    chat.stopped = false;
+    chat.turn = { hooks, done: "" };
+    // Give the session the research tools, now that a run is active.
+    this.applyActiveTools(chat.session, this.chatScope(chat, chatKey, chat.mcpServers));
+    try {
+      // The question starts it; the agent then continues on its own until the report is saved.
+      chat.toolCalls = 0;
+      await chat.session.prompt(question, {});
+      await chat.session.waitForIdle();
+      while (
+        run.status === "active" &&
+        !run.stalled &&
+        !chat.stopped &&
+        run.turns < MAX_RESEARCH_TURNS[run.depth]
+      ) {
+        run.turns += 1;
+        chat.toolCalls = 0;
+        await chat.session.sendCustomMessage(
+          {
+            customType: RESEARCH_CONTINUE_TYPE,
+            content: researchContinuation(run),
+            display: false,
+          },
+          { triggerTurn: true },
+        );
+        await chat.session.waitForIdle();
+        const outcome = researchOutcome({
+          stopReason: chat.stopped ? "aborted" : undefined,
+          toolCalls: chat.toolCalls,
+        });
+        if (outcome === "pause") {
+          run.status = "paused";
+          break;
+        }
+        if (outcome === "stall") {
+          run.stalled = true;
+          break;
+        }
+      }
+      if (run.status === "active" && run.turns >= MAX_RESEARCH_TURNS[run.depth])
+        run.status = "paused";
+      const { chatSessions } = this.requireServices();
+      const file = chat.session.sessionFile;
+      if (file && existsSync(file)) chatSessions.set(chatKey, file);
+      const cwd = chat.session.sessionManager.getCwd();
+      const report =
+        run.status === "done" && run.report
+          ? {
+              markdownPath: join(cwd, run.report.markdown),
+              htmlPath: run.htmlSaved ? join(cwd, run.report.html) : null,
+              markdownName: run.report.markdown,
+              htmlName: run.htmlSaved ? run.report.html : null,
+            }
+          : null;
+      return {
+        text: chat.turn.done,
+        status: chat.stopped ? "aborted" : "done",
+        report,
+      };
+    } catch (error) {
+      return {
+        text: chat.turn.done,
+        status: chat.stopped ? "aborted" : "error",
+        error: errorMessage(error),
+        report: null,
+      };
+    } finally {
+      chat.turn = null;
+      chat.research = null;
+      this.denyChatApprovals(chat);
+      this.chatUsed.set(chatKey, Date.now());
+      emit({ type: "sessions_changed" });
     }
   }
 

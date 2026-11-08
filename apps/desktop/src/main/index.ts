@@ -6,11 +6,13 @@ import {
   type AgentCommand,
   type AgentEvent,
   type AgentSnapshot,
+  ARTIFACT_FRAME_URL,
   EXPORT_FORMATS,
   IPC,
   type RendererReport,
 } from "@workspace/shared";
 import { app, BrowserWindow, session, shell } from "electron";
+import { handleArtifactScheme, registerArtifactScheme } from "./artifact-protocol.ts";
 import { AuditLog, buildReport } from "./audit-log.ts";
 import { DaemonClient } from "./daemon-client.ts";
 import {
@@ -186,6 +188,16 @@ async function openExternal(url: string): Promise<void> {
 
 /** Folder with OfficeCLI and the built-in skills, for the daemon. */
 const RESOURCES_DIR = app.isPackaged ? process.resourcesPath : join(DIST_DIR, "..", "resources");
+/** Where each HTML preview library lives in node_modules; electron-builder copies them for packaged builds. */
+const ARTIFACT_LIB_SOURCES: Record<string, string> = {
+  "chart.js": join("chart.js", "dist", "chart.umd.min.js"),
+};
+function artifactLibPath(name: string): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, "artifact-libs", name)
+    : join(DIST_DIR, "..", "node_modules", ARTIFACT_LIB_SOURCES[name] ?? name);
+}
+registerArtifactScheme();
 
 /** cua-driver for the agent's computer tool; it runs as a child of this process (see ComputerHost). */
 const computer = new ComputerHost({
@@ -341,11 +353,18 @@ function createWindow(): void {
     return { action: "deny" };
   });
   window.webContents.on("will-navigate", (event) => event.preventDefault());
+  // HTML previews are iframes in the chat and the Files panel; a link clicked inside one goes nowhere.
+  window.webContents.on("will-frame-navigate", (event) => {
+    if (!event.isMainFrame && event.url !== ARTIFACT_FRAME_URL) event.preventDefault();
+  });
 
   if (RENDERER_URL) {
     const url = RENDERER_URL;
-    // The dev server may still be starting; keep retrying until it answers.
-    window.webContents.on("did-fail-load", () => setTimeout(() => void window?.loadURL(url), 500));
+    // The dev server may still be starting; keep retrying until it answers. A subframe that fails
+    // (an HTML preview whose navigation was refused) must not reload the app.
+    window.webContents.on("did-fail-load", (_event, _code, _description, _url, isMainFrame) => {
+      if (isMainFrame) setTimeout(() => void window?.loadURL(url), 500);
+    });
     void window.loadURL(url);
   } else {
     void window.loadFile(join(process.resourcesPath, "renderer", "index.html"));
@@ -468,6 +487,7 @@ void app.whenReady().then(() => {
   // browsers). Only the fallback reaches `navigator.userAgent`, and only of pages created later.
   app.userAgentFallback = chromeUserAgent(process.platform, process.versions.chrome);
   restrictPermissions(session.defaultSession, () => window);
+  handleArtifactScheme(session.defaultSession, artifactLibPath);
   void startDaemon();
   createWindow();
   applyShellSettings();

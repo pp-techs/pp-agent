@@ -102,6 +102,7 @@ const bridge: DesktopBridge = {
     create: (root, dir, name, kind) => invoke(IPC.workspaceCreate, root, dir, name, kind),
     rename: (root, path, name) => invoke(IPC.workspaceRename, root, path, name),
     remove: (root, path) => invoke(IPC.workspaceRemove, root, path),
+    saveArtifact: (root, html) => invoke(IPC.workspaceSaveArtifact, root, html),
     watch: (root) => invoke(IPC.workspaceWatch, root),
     onChanged: (listener) => subscribe<[string]>(IPC.workspaceChanged, listener),
   },

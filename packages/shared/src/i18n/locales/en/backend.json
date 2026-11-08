@@ -142,6 +142,15 @@
     "exists": "This conversation already has a goal. Clear it first.",
     "nothingToResume": "There is no paused goal to resume."
   },
+  "research": {
+    "empty": "Write the question to research.",
+    "tooLong": "The question is too long (at most {{max}} characters).",
+    "exists": "This conversation already has a research run. Clear it first.",
+    "goalRunning": "This conversation is working on a goal. Clear it first.",
+    "ownerOnly": "Only the owner can start a research run, in their own private chat.",
+    "nothingToResume": "There is no paused research run to resume.",
+    "turnCap": "The research run reached its turn limit ({{max}} turns) and was paused. Resume it to keep going, or clear it."
+  },
   "conversations": {
     "notInHistory": "That conversation is not in this app's history.",
     "enterName": "Enter a name.",
@@ -308,7 +317,7 @@
     "telegram": {
       "start": "Hi! To use this bot, open PP Agent › Settings › Channels › Telegram, start pairing, then send me /pair followed by the code.",
       "startPaired": "Hi {{name}}! Send me a message and I will get to work. /help lists the commands.",
-      "help": "Send text, photos, files or voice messages.\n/new – start a new conversation\n/agent – choose the agent that answers\n/workspace – choose the workspace it works in\n/model – choose the model\n/thinking – choose how much it thinks\n/stop – stop what I am doing\n/sessions – list saved conversations\n/resume <number> – switch to a saved conversation\n/id – show this chat's id\n/help – show this help",
+      "help": "Send text, photos, files or voice messages.\n/new – start a new conversation\n/agent – choose the agent that answers\n/workspace – choose the workspace it works in\n/model – choose the model\n/thinking – choose how much it thinks\n/research <question> – research a question and get a report (quick or deep before the question sets how thorough)\n/stop – stop what I am doing\n/sessions – list saved conversations\n/resume <number> – switch to a saved conversation\n/id – show this chat's id\n/help – show this help",
       "pairUsage": "Send /pair followed by the code shown in PP Agent.",
       "pairInvalid": "That code is not valid or has expired.",
       "pairLocked": "Too many wrong codes. Try again in {{minutes}} minutes.",
@@ -382,12 +391,19 @@
       "commandModel": "Choose the model for this conversation",
       "commandThinking": "Choose how much the model thinks",
       "idReply": "Chat id: {{chatId}} ({{chatType}})",
-      "commandId": "Show this chat's id"
+      "commandId": "Show this chat's id",
+      "commandResearch": "Research a question and get a report",
+      "researchUsage": "Send /research followed by your question, for example “/research how do heat pumps compare with gas boilers?”. Put quick or deep before the question to choose how thorough it is; the default is standard.",
+      "researchStarted": "On it. I will message you when the plan is ready and again when the report is done. /stop ends the research.",
+      "researchBusy": "I am still working on an earlier message. Send /research again when it is done, or /stop to end it.",
+      "researchOwnerOnly": "Research is only available to the owner in a private chat.",
+      "researchTooLong": "That question is too long. Keep it under {{max}} characters.",
+      "researchDocumentFailed": "I could not send {{name}}: {{error}}. The file is saved in your workspace."
     },
     "zalo": {
       "start": "Hi! To use this bot, open PP Agent › Settings › Channels › Zalo, start pairing, then send me /pair followed by the code.",
       "startPaired": "Hi {{name}}! Send me a message and I will get to work. /help lists the commands.",
-      "help": "Send text, photos or voice messages.\n/new – start a new conversation\n/agent – choose the agent that answers\n/workspace – choose the workspace it works in\n/model – choose the model\n/thinking – choose how much it thinks\n/stop – stop what I am doing\n/sessions – list saved conversations\n/resume <number> – switch to a saved conversation\n/id – show this chat's id\n/help – show this help",
+      "help": "Send text, photos or voice messages.\n/new – start a new conversation\n/agent – choose the agent that answers\n/workspace – choose the workspace it works in\n/model – choose the model\n/thinking – choose how much it thinks\n/research <question> – research a question and get a report (quick or deep before the question sets how thorough)\n/stop – stop what I am doing\n/sessions – list saved conversations\n/resume <number> – switch to a saved conversation\n/id – show this chat's id\n/help – show this help",
       "pairUsage": "Send /pair followed by the code shown in PP Agent.",
       "pairInvalid": "That code is not valid or has expired.",
       "pairLocked": "Too many wrong codes. Try again in {{minutes}} minutes.",
@@ -440,7 +456,13 @@
       "noChoices": "There is nothing to choose from here. The current model may not support thinking levels.",
       "moreChoices": "…and {{count}} more. Type a part of the name after the command to find it.",
       "chooseHint": "Reply /{{command}} followed by a number or a name.",
-      "idReply": "Chat id: {{chatId}} ({{chatType}})"
+      "idReply": "Chat id: {{chatId}} ({{chatType}})",
+      "researchUsage": "Send /research followed by your question, for example “/research how do heat pumps compare with gas boilers?”. Put quick or deep before the question to choose how thorough it is; the default is standard.",
+      "researchStarted": "On it. I will message you when the plan is ready and again when the report is done. /stop ends the research.",
+      "researchBusy": "I am still working on an earlier message. Send /research again when it is done, or /stop to end it.",
+      "researchOwnerOnly": "Research is only available to the owner in a private chat.",
+      "researchTooLong": "That question is too long. Keep it under {{max}} characters.",
+      "researchReportSaved": "The full report is saved on your computer: {{files}}"
     }
   },
   "browserProfiles": {
@@ -463,7 +485,9 @@
       "outsideWorkspace": "This file is not inside the workspace.",
       "notAFile": "Only files can be attached, not folders.",
       "invalidName": "This is not a valid file or folder name.",
-      "exists": "“{{name}}” already exists here."
+      "exists": "“{{name}}” already exists here.",
+      "invalidArtifact": "There is nothing to save in this preview.",
+      "artifactTooLarge": "This preview is too large to save (at most 256 KB)."
     },
     "browser": {
       "tabNotFound": "This tab is already closed.",

@@ -100,6 +100,8 @@ export class DaemonClient {
   private spawnedPid: number | null = null;
   private spawnError: Error | null = null;
   private ownsDaemon = false;
+  /** The daemon answering says an app spawned it (true even for one left by an earlier app). */
+  private daemonSpawnedByApp = false;
   /** Last value given to `setBrowserAvailable`, sent again after every (re)connection. */
   private browserAvailable = false;
   /** Last value given to `setComputerAvailable`, likewise. */
@@ -147,12 +149,16 @@ export class DaemonClient {
     );
   }
 
-  /** Quitting: stops the daemon this app started, leaves any other running. */
+  /**
+   * Quitting: stops a daemon an app started (this one, or one left by an earlier app), and leaves
+   * a login-service or terminal daemon running. Without the second case a daemon from a crashed
+   * app would be reused and never stopped, so quitting would leave it behind.
+   */
   dispose(): void {
     this.quitting = true;
     const { conn } = this;
     if (conn) {
-      if (this.ownsDaemon)
+      if (this.ownsDaemon || this.daemonSpawnedByApp)
         conn.socket.write(encodeFrame({ kind: "shutdown" } satisfies ClientFrame));
       conn.socket.end();
     }
@@ -232,6 +238,7 @@ export class DaemonClient {
           );
         }
         this.ownsDaemon = hello.pid === this.spawnedPid;
+        this.daemonSpawnedByApp = hello.spawnedByApp === true;
         this.adopt(conn);
         return conn;
       }

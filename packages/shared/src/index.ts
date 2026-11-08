@@ -112,6 +112,11 @@ export interface QuestionRequest {
   /** Tool call in the transcript that the card belongs to. */
   toolCallId: string;
   questions: Question[];
+  /**
+   * Markdown the card shows above the questions: the research plan the person is asked to
+   * confirm. Absent for ordinary questions.
+   */
+  plan?: string;
 }
 
 /** What the person answered to one question. `custom` is the text typed for "Other". */
@@ -141,6 +146,54 @@ export interface GoalSummary {
   waiting: boolean;
 }
 
+/** How much effort a research run puts in: rounds of helpers, critique, number of sources. */
+export const RESEARCH_DEPTHS = ["quick", "standard", "deep"] as const;
+export type ResearchDepth = (typeof RESEARCH_DEPTHS)[number];
+
+/** Longest question a research run takes. */
+export const MAX_RESEARCH_QUESTION_LENGTH = 4000;
+
+/** A source the research report cites, as the agent recorded it with `research_sources`. */
+export interface ResearchSource {
+  /** The number the report cites it by: [n]. */
+  n: number;
+  title: string;
+  url: string;
+  publisher?: string;
+  /** Date of the information, as written (for example "2025-06" or "2025-06-30"). */
+  date?: string;
+  type?: "primary" | "press" | "analyst" | "academic" | "community" | "vendor" | "other";
+}
+
+/** Where a research run is: `plan` waits for the person to start it. */
+export type ResearchPhase = "planning" | "plan" | "researching" | "writing" | "done";
+
+/** A research run of a conversation: a question the agent researches in rounds and reports on. */
+export interface ResearchSummary {
+  question: string;
+  depth: ResearchDepth;
+  /** `active` continues by itself after each turn; `paused` waits for the person; `done` has its report. */
+  status: "active" | "paused" | "done";
+  phase: ResearchPhase;
+  /** The agent made no move on its last turn (or asked something) and waits for the person. */
+  waiting: boolean;
+  /** Distinct web pages the agent and its helpers have opened so far. */
+  visited: number;
+  /** Sources recorded so far; the final report cites these. */
+  sources: ResearchSource[];
+  /** Saved report files, relative to the workspace folder; null until the first draft is saved. */
+  report: { markdown: string; html: string | null } | null;
+}
+
+/** The text of a saved report, for a client that cannot read the workspace (the phone). */
+export interface ResearchReport {
+  markdown: string;
+  html: string | null;
+  /** Paths relative to the workspace folder. */
+  markdownPath: string;
+  htmlPath: string | null;
+}
+
 export interface AgentSnapshot {
   status: AgentStatus;
   messages: ChatMessage[];
@@ -161,6 +214,8 @@ export interface AgentSnapshot {
   yolo: { active: boolean; source: "settings" | "conversation" };
   /** Goal the open conversation is working toward, if any. */
   goal: GoalSummary | null;
+  /** Research run of the open conversation, if any (also after it finished, until cleared). */
+  research: ResearchSummary | null;
   /** Workspace of the open conversation. */
   workspace: WorkspaceSummary | null;
   /** Folder the open conversation works in (its workspace's folder). */
@@ -212,6 +267,8 @@ export type AgentEvent =
   | { type: "question_requested"; request: QuestionRequest }
   /** The questions were answered, skipped, or made obsolete (the run stopped). */
   | { type: "question_resolved"; requestId: string }
+  /** The open conversation's research run changed (a phase, a source, a page opened); null when cleared. */
+  | { type: "research"; research: ResearchSummary | null }
   /** The saved conversation list changed (new, renamed, deleted, or a turn finished). */
   | { type: "sessions_changed" }
   /** The open conversation's context usage changed (a reply finished, or it was compacted). */
@@ -1308,6 +1365,21 @@ export interface AgentCommandMap {
     params: { action: "start"; objective: string } | { action: "pause" | "resume" | "clear" };
     result: void;
   };
+  /**
+   * Research run of the open conversation: `start` begins researching the question at a depth (the
+   * agent plans, asks the person to confirm the plan, then works in rounds until it has saved the
+   * report); `pause`, `resume` and `clear` work as for a goal. Refused while the conversation is
+   * answering (except `pause` and `clear`) or, for `start`, when it already has a research run
+   * or a goal.
+   */
+  set_research: {
+    params:
+      | { action: "start"; question: string; depth: ResearchDepth }
+      | { action: "pause" | "resume" | "clear" };
+    result: void;
+  };
+  /** The saved report of the open conversation's research run; null before the first draft. */
+  get_research_report: { params: NoParams; result: ResearchReport | null };
   /** JSON text of an `AgentExportFile`. */
   export_agent: { params: { id: string }; result: string };
   /** Creates an agent from `AgentExportFile` JSON; a taken name gets a " (2)" suffix. */
@@ -1459,6 +1531,18 @@ export interface WorkspaceEntry {
   /** Last change, epoch milliseconds. */
   modified: number;
 }
+
+/**
+ * Scheme the desktop app serves HTML previews from (`apps/desktop/src/main/artifact-protocol.ts`):
+ * the sandboxed frame page and a few bundled libraries, nothing else.
+ */
+export const ARTIFACT_SCHEME = "pp-artifact";
+/** Page the preview iframe loads; the renderer then posts it the HTML to show. */
+export const ARTIFACT_FRAME_URL = `${ARTIFACT_SCHEME}://frame/`;
+/** Libraries an HTML preview may load; the model is told these addresses. */
+export const ARTIFACT_LIBS = {
+  chartjs: `${ARTIFACT_SCHEME}://lib/chart.js`,
+} as const;
 
 export type FilePreview =
   | { kind: "text"; text: string; truncated: boolean; size: number }
@@ -1973,6 +2057,8 @@ export interface DesktopBridge {
     rename(root: string, path: string, name: string): Promise<string>;
     /** Moves the file or folder to the system trash. */
     remove(root: string, path: string): Promise<void>;
+    /** Saves an HTML preview from the chat as a new file in `artifacts/`; resolves to its path. */
+    saveArtifact(root: string, html: string): Promise<string>;
     /** Watches `root` for changes (replacing the previous watch); null stops watching. */
     watch(root: string | null): Promise<void>;
     onChanged(listener: (root: string) => void): () => void;
@@ -2090,6 +2176,7 @@ export const IPC = {
   workspaceCreate: "workspace:create",
   workspaceRename: "workspace:rename",
   workspaceRemove: "workspace:remove",
+  workspaceSaveArtifact: "workspace:save-artifact",
   workspaceWatch: "workspace:watch",
   workspaceChanged: "workspace:changed",
   browserState: "browser:state",
@@ -2168,7 +2255,15 @@ export type ClientFrame =
 
 export type DaemonFrame =
   | { kind: "challenge"; nonce: string }
-  | { kind: "hello_ok"; protocol: number; appVersion: string; pid: number; proof: string }
+  | {
+      kind: "hello_ok";
+      protocol: number;
+      appVersion: string;
+      pid: number;
+      /** True when an app spawned this daemon (a login-service or terminal one is false). */
+      spawnedByApp?: boolean;
+      proof: string;
+    }
   | { kind: "hello_error"; error: string }
   | { kind: "event"; event: AgentEvent }
   | { kind: "result"; id: number; ok: true; data: unknown }

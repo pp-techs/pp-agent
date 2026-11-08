@@ -586,6 +586,7 @@ export function createWebBridge(): DesktopBridge {
       create: desktopOnly,
       rename: desktopOnly,
       remove: desktopOnly,
+      saveArtifact: desktopOnly,
       watch: async () => undefined,
       onChanged: noop,
     },

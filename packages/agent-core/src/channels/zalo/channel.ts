@@ -1,9 +1,25 @@
-import type { Attachment, ChannelState, ZaloChatSettings } from "@workspace/shared";
-import type { ChannelGateway, ChannelInput, ChatOption, TurnResult } from "../types.ts";
+import {
+  MAX_RESEARCH_QUESTION_LENGTH,
+  type Attachment,
+  type ChannelState,
+  type QuestionAnswer,
+  type QuestionRequest,
+  type ResearchDepth,
+  type ZaloChatSettings,
+} from "@workspace/shared";
+import type {
+  ChannelGateway,
+  ChannelInput,
+  ChatOption,
+  ResearchResult,
+  TurnHooks,
+  TurnResult,
+} from "../types.ts";
 import { findOption } from "../shared/options.ts";
 import type { PairingGuard } from "../shared/pairing.ts";
 import { abortableSleep } from "../shared/sleep.ts";
 import { splitText } from "../shared/split.ts";
+import { parseResearchArgument } from "../shared/research.ts";
 import {
   MAX_DOWNLOAD_BYTES,
   ZaloApiError,
@@ -42,6 +58,7 @@ const COMMANDS = new Set([
   "effort",
   "sessions",
   "resume",
+  "research",
 ]);
 
 type ChoiceKind = "agent" | "workspace" | "model" | "thinking";
@@ -320,6 +337,9 @@ export class ZaloChannel {
       case "resume":
         await this.resumeSession(chatId, command.argument);
         return;
+      case "research":
+        await this.research(chatId, from, command.argument, message.chat.chat_type === "PRIVATE");
+        return;
     }
 
     // The turn in progress waits for this reply (an approval or a question); queued, it would wait
@@ -588,6 +608,98 @@ export class ZaloChannel {
     else await this.reply(chatId, "fileFailed", { error: (error as Error).message });
   }
 
+  /**
+   * `/research [quick|standard|deep] <question>`: only the owner, in their own private chat. The
+   * run queues like a turn, so later messages wait for it.
+   */
+  private async research(
+    chatId: string,
+    from: ZaloUser,
+    argument: string,
+    isPrivate: boolean,
+  ): Promise<void> {
+    if (from.id !== this.deps.owner()?.id || !isPrivate) {
+      await this.reply(chatId, "researchOwnerOnly");
+      return;
+    }
+    const { depth, question } = parseResearchArgument(argument);
+    if (!question) {
+      await this.reply(chatId, "researchUsage");
+      return;
+    }
+    if (question.length > MAX_RESEARCH_QUESTION_LENGTH) {
+      await this.reply(chatId, "researchTooLong", { max: MAX_RESEARCH_QUESTION_LENGTH });
+      return;
+    }
+    const queue = this.queue(chatId);
+    if (queue.running || queue.waiting.length > 0) {
+      await this.reply(chatId, "researchBusy");
+      return;
+    }
+    queue.waiting.push(() =>
+      this.runResearch(chatId, {
+        question,
+        depth,
+        sender: { id: from.id, name: displayName(from), owner: true },
+      }),
+    );
+    await this.reply(chatId, "researchStarted");
+    void this.drain(queue);
+  }
+
+  /** Runs the research and sends the summary plus where the report files were saved. */
+  private async runResearch(
+    chatId: string,
+    request: {
+      question: string;
+      depth: ResearchDepth;
+      sender: NonNullable<ChannelInput["sender"]>;
+    },
+  ): Promise<void> {
+    const typing = () => void this.api.sendChatAction(chatId).catch(() => {});
+    typing();
+    const timer = setInterval(typing, TYPING_INTERVAL_MS);
+    let result: ResearchResult;
+    try {
+      result = await this.deps.gateway.runResearch(`zalo:${chatId}`, request, this.hooks(chatId));
+    } catch (error) {
+      await this.reply(chatId, "turnFailed", { error: (error as Error).message });
+      return;
+    } finally {
+      clearInterval(timer);
+    }
+    await this.sendPlain(chatId, result.text);
+    if (result.status === "error")
+      await this.reply(chatId, "turnFailed", {
+        error: result.error?.trim() || this.deps.t("channels.zalo.unknownError"),
+      });
+    if (result.report) {
+      const files = [result.report.markdownName, result.report.htmlName]
+        .filter((name): name is string => Boolean(name))
+        .join(", ");
+      await this.reply(chatId, "researchReportSaved", { files });
+    }
+  }
+
+  /** The plan is sent first as its own message(s), so the person reads it before answering. */
+  private async askInChat(
+    chatId: string,
+    request: QuestionRequest,
+  ): Promise<QuestionAnswer[] | null> {
+    if (request.plan?.trim()) await this.sendPlain(chatId, request.plan);
+    return this.prompts.askQuestions(chatId, request);
+  }
+
+  /** Hooks of one turn: approvals and questions come back through this chat's text prompts. */
+  private hooks(chatId: string): TurnHooks {
+    return {
+      onText: () => {},
+      onTool: () => {},
+      askApproval: (request) => this.prompts.askApproval(chatId, request),
+      askQuestion: (request) => this.askInChat(chatId, request),
+    };
+  }
+
   private async runTurn(chatId: string, input: ChannelInput): Promise<void> {
     const typing = () => void this.api.sendChatAction(chatId).catch(() => {});
     typing();
@@ -601,7 +713,7 @@ export class ZaloChannel {
         },
         onTool: () => {},
         askApproval: (request) => this.prompts.askApproval(chatId, request),
-        askQuestion: (request) => this.prompts.askQuestions(chatId, request),
+        askQuestion: (request) => this.askInChat(chatId, request),
       });
     } catch (error) {
       await this.reply(chatId, "turnFailed", { error: (error as Error).message });

@@ -205,6 +205,42 @@ export async function createEntry(
   return workspacePath(await realpath(root), target);
 }
 
+/** Folder of the workspace that previews saved from the chat go to. */
+const ARTIFACTS_DIR = "artifacts";
+
+/** `preview-2026-11-08-142305.html` for a local date; `-2`, `-3`… are added when it is taken. */
+function artifactName(now: Date, attempt: number): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  return `preview-${stamp}${attempt > 1 ? `-${attempt}` : ""}.html`;
+}
+
+/**
+ * Saves an HTML preview from the chat as a new file in the workspace's `artifacts` folder (created
+ * when missing); returns its path relative to the workspace. At most what the panel previews, so
+ * the saved file opens whole. Never replaces a file.
+ */
+export async function saveArtifact(root: string, html: unknown, now = new Date()): Promise<string> {
+  const t = translator();
+  if (typeof html !== "string" || !html.trim()) throw new Error(t("panel.files.invalidArtifact"));
+  if (Buffer.byteLength(html) > TEXT_PREVIEW_BYTES)
+    throw new Error(t("panel.files.artifactTooLarge"));
+  const realRoot = await realpath(root);
+  await mkdir(join(realRoot, ARTIFACTS_DIR), { recursive: true });
+  // A link named "artifacts" must not lead out of the workspace.
+  const folder = await resolveInside(root, ARTIFACTS_DIR);
+  if (!(await stat(folder)).isDirectory()) throw new Error(t("panel.files.notFound"));
+  for (let attempt = 1; ; attempt++) {
+    const target = join(folder, artifactName(now, attempt));
+    try {
+      await writeFile(target, html, { flag: "wx" });
+      return workspacePath(realRoot, target);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST" || attempt >= 100) throw error;
+    }
+  }
+}
+
 /** Renames an entry within its folder; returns its new path relative to the workspace. */
 export async function renameEntry(root: string, path: string, name: unknown): Promise<string> {
   const entryName = checkName(name);

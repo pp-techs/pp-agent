@@ -22,7 +22,7 @@ afterEach(async () => {
   if (home) await rm(home, { recursive: true, force: true });
 });
 
-async function setup(authenticated: boolean) {
+async function setup(authenticated: boolean, extra: { spawnedByApp?: boolean } = {}) {
   home = await mkdtemp(join(tmpdir(), "pp-client-"));
   const paths = resolveDaemonPaths({ PP_AGENT_HOME: home });
   const token = randomBytes(32).toString("hex");
@@ -46,6 +46,7 @@ async function setup(authenticated: boolean) {
             protocol: DAEMON_PROTOCOL,
             appVersion: "1.0.0",
             pid: process.pid,
+            spawnedByApp: extra.spawnedByApp === true,
             proof: proof(
               authenticated ? token : "attacker",
               "daemon",
@@ -98,4 +99,23 @@ it("rejects an impostor before adopting or delivering buffered frames", async ()
   await expect(client["establish"]()).rejects.toThrow(/authentication proof is invalid/);
   expect(client["conn"]).toBeNull();
   expect(onOpenUrl).not.toHaveBeenCalled();
+});
+
+it("stops a daemon an earlier app started on quit, even though this app did not spawn it", async () => {
+  // A daemon left behind by a crashed app: reused here, and stopped when this app quits.
+  const { client, received } = await setup(true, { spawnedByApp: true });
+  await client["establish"]();
+  client.dispose();
+  await vi.waitFor(() =>
+    expect(received.some((frame) => (frame as ClientFrame).kind === "shutdown")).toBe(true),
+  );
+});
+
+it("leaves a login-service daemon running on quit", async () => {
+  const { client, received } = await setup(true, { spawnedByApp: false });
+  await client["establish"]();
+  client.dispose();
+  // Give a stray shutdown frame the chance to arrive, then prove none did.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(received.some((frame) => (frame as ClientFrame).kind === "shutdown")).toBe(false);
 });
