@@ -1,5 +1,11 @@
 # @workspace/web
 
+## 0.27.0
+
+### Minor Changes
+
+- 913c4b5: The desktop app can open another computer's PP Agent in its own window, from Settings › Remote access › Work on another computer. It pairs like a phone: type the address, or paste the link from that computer's QR code.
+
 ## 0.26.2
 
 No changes in this release.
