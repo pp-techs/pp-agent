@@ -15,7 +15,8 @@
     "folderMissing": "Thư mục đó không tồn tại.",
     "locationCannotShow": "Không thể hiển thị vị trí đó.",
     "agentCannotExport": "Không thể xuất Agent.",
-    "conversationCannotExport": "Không thể xuất cuộc trò chuyện."
+    "conversationCannotExport": "Không thể xuất cuộc trò chuyện.",
+    "configCannotExport": "Không xuất được cấu hình."
   },
   "client": {
     "badAddress": "Đó không phải địa chỉ máy tính. Hãy gõ địa chỉ như 192.168.1.20:47830, hoặc dán liên kết từ mã QR của máy đó.",
@@ -253,7 +254,11 @@
     "markdownFiles": "Tài liệu Markdown",
     "htmlFiles": "Trang web (để in)",
     "exportDiagnosticsTitle": "Xuất thông tin chẩn đoán",
-    "logFiles": "Tệp nhật ký"
+    "logFiles": "Tệp nhật ký",
+    "configFiles": "Tệp cấu hình",
+    "importConfigTitle": "Nhập gói cấu hình",
+    "configTooLarge": "Tệp này quá lớn để là một gói cấu hình.",
+    "exportConfigTitle": "Xuất cấu hình"
   },
   "updates": {
     "checkFailed": "Không thể kiểm tra cập nhật. Hãy kiểm tra kết nối internet và thử lại.",
@@ -551,5 +556,10 @@
     "gatewayKeyAgain": "Để đổi địa chỉ của cổng kết nối này từ điện thoại, hãy nhập lại khóa API. Khóa đã lưu chỉ được gửi đến địa chỉ nó được lưu cho.",
     "tooManyUploads": "Thiết bị này đang tải lên quá nhiều tệp. Hãy đợi chúng xong rồi thử lại.",
     "wrongHost": "Hãy mở truy cập từ xa bằng địa chỉ của máy tính này hiển thị trong PP Agent › Cài đặt › Truy cập từ xa."
+  },
+  "config": {
+    "notJson": "Không đọc được tệp này dạng JSON.",
+    "notBundle": "Tệp này không phải gói cấu hình PP Agent.",
+    "dropFailed": "Không áp dụng được settings.import.json: {{error}}. Tệp được giữ lại thành settings.import.json.failed."
   }
 }

@@ -19,11 +19,13 @@ import { DaemonClient } from "./daemon-client.ts";
 import {
   isInside,
   openAgentFile,
+  openConfigFile,
   openFolder,
   pickFiles,
   pickFolder,
   pickSkill,
   saveAgentFile,
+  saveConfigFile,
   saveDiagnosticsFile,
   saveExportFile,
 } from "./files.ts";
@@ -386,6 +388,12 @@ ipc.handle(IPC.filesSaveAgent, (_event, suggestedName: unknown, json: unknown) =
   if (typeof suggestedName !== "string" || typeof json !== "string")
     throw new Error(translator()("app.agentCannotExport"));
   return saveAgentFile(window, suggestedName, json);
+});
+ipc.handle(IPC.filesOpenConfig, () => openConfigFile(window));
+ipc.handle(IPC.filesSaveConfig, (_event, suggestedName: unknown, json: unknown) => {
+  if (typeof suggestedName !== "string" || typeof json !== "string")
+    throw new Error(translator()("app.configCannotExport"));
+  return saveConfigFile(window, suggestedName, json);
 });
 ipc.handle(
   IPC.filesSaveExport,

@@ -38,6 +38,7 @@ import {
   type AgentPaths,
   type AgentProfile,
   type AgentSnapshot,
+  type ConfigImportReport,
   type ContextUsage,
   type AgentStatus,
   type AppSettings,
@@ -218,6 +219,12 @@ import {
   summarizeModel,
   syncGateways,
 } from "./providers.ts";
+import {
+  applyDroppedConfig,
+  exportConfigBundle,
+  mergeConfigBundle,
+  parseConfigBundle,
+} from "./config-bundle.ts";
 import { SettingsStore } from "./settings-store.ts";
 import { newTaskId, runTitle, validateTaskInput } from "./scheduled-tasks.ts";
 import { nextRun, Scheduler, schedulableOf } from "./scheduler.ts";
@@ -755,6 +762,11 @@ export class AgentHost {
       });
       for (const name of builtIn) skills.builtIn.add(name);
       const settings = new SettingsStore(paths.settingsFile);
+      const mcpConfig = new McpConfigFile(join(paths.agentDir, "mcp.json"));
+      // A setup script or MDM may drop settings.import.json here to configure the app unattended.
+      applyDroppedConfig(settings, mcpConfig, dirname(paths.settingsFile), (message) =>
+        emit({ type: "error", message }),
+      );
       const memory = new MemoryStore(() =>
         memoryPlaces(paths.agentDir, paths.workspaceDir, settings.get().workspaces),
       );
@@ -783,7 +795,6 @@ export class AgentHost {
         refreshOnCreate: false,
       });
       this.mcpAuth = await VaultMcpAuthStore.open(this.credentials, paths.agentDir);
-      const mcpConfig = new McpConfigFile(join(paths.agentDir, "mcp.json"));
       const services: Services = {
         paths,
         runtime,
@@ -1015,6 +1026,11 @@ export class AgentHost {
         return exportAgent(this.requireAgent(command.id));
       case "import_agent":
         return this.importAgent(command.json);
+
+      case "export_config":
+        return exportConfigBundle(services.settings.get(), services.mcpConfig.servers());
+      case "import_config":
+        return this.importConfig(command.json);
 
       case "list_workspaces":
         return sortWorkspaces(services.settings.get().workspaces);
@@ -3978,6 +3994,57 @@ export class AgentHost {
     });
     this.changed(["agents"], {});
     return agent;
+  }
+
+  /**
+   * Merges a configuration bundle into settings.json and mcp.json: fields the bundle carries win,
+   * everything else stays. The shell and yolo mode may come on — the bundle is handed over in person
+   * or dropped on the computer itself, and remote access may never run this command.
+   */
+  private async importConfig(json: string): Promise<ConfigImportReport> {
+    const { runtime, settings, mcpConfig } = this.requireServices();
+    const bundle = parseConfigBundle(json);
+    const before = settings.get();
+    let report!: ConfigImportReport;
+    const after = settings.update((draft) => {
+      report = mergeConfigBundle(draft, bundle);
+    });
+    report.mcpServers = mcpConfig.mergeServers(bundle.mcpServers);
+    const scopes: SettingsScope[] = ["settings"];
+    const apply: Partial<PendingChanges> = {};
+    if (report.gateways > 0) {
+      this.gatewayIds = await syncGateways(runtime, after.gateways, this.gatewayIds);
+      scopes.push("providers", "models");
+      apply.model = true;
+    }
+    if (report.toolPolicies > 0) {
+      scopes.push("tools");
+      apply.tools = true;
+    }
+    if (after.shellEnabled !== before.shellEnabled || after.yoloMode !== before.yoloMode) {
+      scopes.push("tools");
+      apply.tools = true;
+    }
+    if (report.agents > 0) {
+      scopes.push("agents");
+      apply.reload = true;
+    }
+    if (report.mcpServers > 0) {
+      scopes.push("mcp");
+      apply.mcp = true;
+    }
+    if (report.disabledSkills > 0) {
+      scopes.push("skills");
+      apply.reload = true;
+    }
+    if (report.trustedSkillFolders > 0) scopes.push("skills");
+    if (after.language !== before.language) {
+      configureLanguage(after.language);
+      // Provider sign-in sources and untitled-chat names are worded by the agent process.
+      scopes.push("providers", "sessions");
+    }
+    this.changed(scopes, apply);
+    return report;
   }
 
   // -------------------------------------------------------------------------------------------

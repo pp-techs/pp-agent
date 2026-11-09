@@ -4,12 +4,14 @@ import {
   DEFAULT_AGENT_ID,
   DEFAULT_SHORTCUT,
   GATEWAY_APIS,
+  type GatewayConfig,
   isValidAccelerator,
   LANGUAGE_SETTINGS,
   type SettingsFile,
   THINKING_LEVELS,
   type ThinkingLevel,
   TOOL_POLICIES,
+  type ToolPolicy,
 } from "@workspace/shared";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
@@ -41,6 +43,27 @@ const GatewaySchema = Type.Object({
   ),
 });
 const PolicySchema = Type.Union(TOOL_POLICIES.map((policy) => Type.Literal(policy)));
+
+/**
+ * Gateways read from settings.json or a configuration bundle. Entries that do not fit are dropped
+ * one by one; files from before keyless gateways have no flag and those gateways need a key.
+ */
+export function readGateways(raw: unknown): GatewayConfig[] {
+  return (Array.isArray(raw) ? raw : [])
+    .filter((gateway) => Value.Check(GatewaySchema, gateway))
+    .map((gateway) => ({ ...gateway, requiresApiKey: gateway.requiresApiKey !== false }));
+}
+
+/** Tool name → policy from settings.json or a configuration bundle; entries that do not fit are dropped. */
+export function readToolPolicies(raw: unknown): Record<string, ToolPolicy> {
+  const policies: Record<string, ToolPolicy> = {};
+  if (typeof raw === "object" && raw !== null) {
+    for (const [name, policy] of Object.entries(raw)) {
+      if (Value.Check(PolicySchema, policy)) policies[name] = policy;
+    }
+  }
+  return policies;
+}
 
 /**
  * Reads a settings file field by field, so one malformed value (say, a hand-edited gateway) falls
@@ -87,18 +110,10 @@ function parse(raw: unknown): SettingsFile {
   if (typeof value.shortcut === "string" && isValidAccelerator(value.shortcut))
     settings.shortcut = value.shortcut;
   settings.language = LANGUAGE_SETTINGS.find((language) => language === value.language) ?? "system";
-  if (typeof value.toolPolicies === "object" && value.toolPolicies !== null) {
-    for (const [name, policy] of Object.entries(value.toolPolicies)) {
-      if (Value.Check(PolicySchema, policy)) settings.toolPolicies[name] = policy;
-    }
-  }
+  settings.toolPolicies = readToolPolicies(value.toolPolicies);
   if (Array.isArray(value.disabledSkills))
     settings.disabledSkills = value.disabledSkills.filter((name) => typeof name === "string");
-  if (Array.isArray(value.gateways))
-    settings.gateways = value.gateways
-      .filter((gateway) => Value.Check(GatewaySchema, gateway))
-      // Files from before keyless gateways have no flag: those gateways need a key.
-      .map((gateway) => ({ ...gateway, requiresApiKey: gateway.requiresApiKey !== false }));
+  settings.gateways = readGateways(value.gateways);
   settings.agents = readAgents(value.agents);
   // Files from before workspaces carry each agent's folder; they become workspaces here.
   settings.workspaces = readWorkspaces(value.workspaces, settings.agents, value.agents);

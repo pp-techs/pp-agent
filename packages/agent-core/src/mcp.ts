@@ -123,6 +123,23 @@ export class McpConfigFile {
   }
 
   /**
+   * Merges raw entries from a configuration bundle: same-named servers are replaced where they
+   * stand, new ones are added after them, and the file's other keys and servers are kept. Entries
+   * that are not server objects are skipped; returns how many the merge took.
+   */
+  mergeServers(entries: Record<string, unknown> | undefined): number {
+    const items = Object.entries(entries ?? {}).filter((entry): entry is [string, JsonObject] =>
+      Boolean(asObject(entry[1])),
+    );
+    if (items.length === 0) return 0;
+    const file = this.read();
+    const servers = { ...(asObject(file.mcpServers) ?? {}) };
+    for (const [name, raw] of items) servers[name] = raw;
+    this.write({ ...file, mcpServers: servers });
+    return items.length;
+  }
+
+  /**
    * Saves pasted JSON. Accepts a full config (`{ "mcpServers": { … } }`) or just the server map that
    * some clients show (`{ "name": { "command": … } }`).
    */

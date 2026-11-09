@@ -152,6 +152,23 @@ export function validateAgentInput(input: SaveAgentInput): PortableAgent {
 }
 
 /**
+ * Agents read from a configuration bundle: entries that do not fit are dropped one by one, so one
+ * broken entry never loses the rest. Names stay as the bundle wrote them (the merge matches them
+ * case-insensitively).
+ */
+export function readPortableAgents(raw: unknown): PortableAgent[] {
+  return (Array.isArray(raw) ? raw : []).flatMap((entry) => {
+    const value = asLoose(entry);
+    if (!value) return [];
+    try {
+      return [portableAgent(value, false)];
+    } catch {
+      return [];
+    }
+  });
+}
+
+/**
  * Agents read from settings.json. Entries that do not fit are dropped one by one, duplicate ids
  * keep the first, and the default agent is added when missing.
  */

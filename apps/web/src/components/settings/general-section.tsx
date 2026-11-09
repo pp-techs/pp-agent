@@ -35,6 +35,7 @@ import { SectionHeading } from "@/components/settings/section-heading";
 import { isWebApp } from "@/lib/bridge";
 import { DesktopGroup } from "@/components/settings/desktop-group";
 import { DiagnosticsGroup } from "@/components/settings/diagnostics-group";
+import { ConfigBundleGroup } from "@/components/settings/config-bundle-group";
 import { groupByProvider, modelKey, modelLabeler } from "@/lib/models";
 import { modelsQuery, settingsQuery, useUpdateSettings } from "@/lib/queries";
 import { describeUpdate, updateAction } from "@/components/update-actions";
@@ -258,6 +259,7 @@ export function GeneralSection({ bridge }: { bridge: DesktopBridge }) {
             <DesktopGroup bridge={bridge} />
             <UpdatesField bridge={bridge} />
             <DiagnosticsGroup bridge={bridge} />
+            <ConfigBundleGroup bridge={bridge} />
           </>
         )}
       </FieldGroup>
