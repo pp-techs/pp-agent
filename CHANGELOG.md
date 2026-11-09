@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.28.0] — 2026-11-09
+
+Configuration bundles: export the setup of this computer — gateways and default models, agents, MCP servers, tool policies, skill lists — as one file to give other people's copies the same setup, or import one in Settings › General. A file dropped into the app folder as `settings.import.json` is applied at the next start, so a setup script or MDM can configure the app without anyone at the keyboard. Keys and tokens are never in the bundle: each computer keeps its own.
+
 ## [0.27.0] — 2026-11-09
 
 The desktop app can open another computer's PP Agent in its own window, from Settings › Remote access › Work on another computer. It pairs like a phone: type the address, or paste the link from that computer's QR code.
