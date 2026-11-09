@@ -55,7 +55,7 @@ export default defineConfig(({ mode }) => ({
     port: 47821,
     strictPort: true,
     // Opened in a plain browser (`vp dev --host` for a phone), the app talks to the daemon's web
-    // API: turn on Settings › Phone access in the desktop app first.
+    // API: turn on Settings › Remote access in the desktop app first.
     proxy: {
       "/api": { target: `http://127.0.0.1:${REMOTE_DEFAULT_PORT}` },
     },

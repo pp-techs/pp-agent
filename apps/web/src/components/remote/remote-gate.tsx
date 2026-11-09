@@ -11,7 +11,7 @@ import {
 import { Input } from "@workspace/ui/components/input";
 import { Spinner } from "@workspace/ui/components/spinner";
 import { Separator } from "@workspace/ui/components/separator";
-import { REMOTE_DEFAULT_PORT } from "@workspace/shared";
+import { REMOTE_DEFAULT_PORT, parseServerAddress } from "@workspace/shared";
 import { MonitorSmartphoneIcon, QrCodeIcon, RefreshCwIcon, WifiOffIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -25,7 +25,6 @@ import {
   pairDevice,
   useWebSession,
 } from "@/lib/web-bridge";
-import { parseServerAddress } from "@/lib/server-address";
 
 /** `#pair=CODE` from the QR code on the computer; removed from the address once read. */
 function takeCodeFromAddress(): string | null {

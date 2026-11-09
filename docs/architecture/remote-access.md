@@ -1,6 +1,6 @@
-# Phone access (web app on the local network)
+# Remote access (web app on the local network)
 
-Settings › Phone access lets a phone, or another computer on the same network, use PP Agent in its web browser. The daemon serves the same React app the window shows (`apps/web/dist`) over HTTP, and a small API replaces the preload bridge. It is off by default.
+Settings › Remote access lets a phone, or another computer on the same network, use PP Agent in its web browser. The daemon serves the same React app the window shows (`apps/web/dist`) over HTTP, and a small API replaces the preload bridge. It is off by default.
 
 ```mermaid
 flowchart LR
@@ -16,14 +16,15 @@ flowchart LR
 
 ## Pieces
 
-| Piece                   | Where                                                        | Role                                                                                                                                                                                                                                        |
-| ----------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `RemoteServer`          | `apps/daemon/src/remote/server.ts`                           | The HTTP listener (`0.0.0.0:<port>`, default 47830), static files, the API, pairing (`PairingGuard` from agent-core), event streams, uploads. Implements `RemoteAccessControl`, which `AgentHost` calls for the four phone access commands. |
-| `RemoteStore`           | `apps/daemon/src/remote/store.ts`                            | `<home>/remote.json` (mode 0600): on/off, port, and paired devices. A device's secret is stored only as a SHA-256 hash.                                                                                                                     |
-| `findWebDir`            | `apps/daemon/src/remote/web-dir.ts`                          | Finds the built web app: `PP_AGENT_WEB_DIR`, else `<PP_AGENT_RESOURCES>/renderer` (packaged), else `apps/web/dist` beside the daemon's bundle or source. Looked up each time the server starts listening.                                   |
-| Web bridge              | `apps/web/src/lib/web-bridge.ts`                             | A `DesktopBridge` with `kind: "web"`: commands over `fetch`, events over a streamed SSE response, attachments through `files.upload`. Desktop-only methods (side panel, Finder, updates, computer use) reject or do nothing.                |
-| `RemoteGate`            | `apps/web/src/components/remote/remote-gate.tsx`             | Checks `/api/session`; shows the pairing screen (reads `#pair=CODE` from the QR code), an "unreachable" screen, and a reconnect banner.                                                                                                     |
-| Settings › Phone access | `apps/web/src/components/settings/remote-access-section.tsx` | On the computer: switch, port, warning, QR code and addresses, pairing code, paired devices. In the web app: "This device" with Unpair.                                                                                                     |
+| Piece                    | Where                                                        | Role                                                                                                                                                                                                                                         |
+| ------------------------ | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RemoteServer`           | `apps/daemon/src/remote/server.ts`                           | The HTTP listener (`0.0.0.0:<port>`, default 47830), static files, the API, pairing (`PairingGuard` from agent-core), event streams, uploads. Implements `RemoteAccessControl`, which `AgentHost` calls for the four remote access commands. |
+| `RemoteStore`            | `apps/daemon/src/remote/store.ts`                            | `<home>/remote.json` (mode 0600): on/off, port, and paired devices. A device's secret is stored only as a SHA-256 hash.                                                                                                                      |
+| `findWebDir`             | `apps/daemon/src/remote/web-dir.ts`                          | Finds the built web app: `PP_AGENT_WEB_DIR`, else `<PP_AGENT_RESOURCES>/renderer` (packaged), else `apps/web/dist` beside the daemon's bundle or source. Looked up each time the server starts listening.                                    |
+| Web bridge               | `apps/web/src/lib/web-bridge.ts`                             | A `DesktopBridge` with `kind: "web"`: commands over `fetch`, events over a streamed SSE response, attachments through `files.upload`. Desktop-only methods (side panel, Finder, updates, computer use) reject or do nothing.                 |
+| `RemoteGate`             | `apps/web/src/components/remote/remote-gate.tsx`             | Checks `/api/session`; shows the pairing screen (reads `#pair=CODE` from the QR code), an "unreachable" screen, and a reconnect banner.                                                                                                      |
+| `openClientWindow`       | `apps/desktop/src/main/client-window.ts`                     | The desktop app as a client of another computer: reads the address or QR link, checks it with `GET /api/session`, and opens that computer's web app in a preload-free window of its own.                                                     |
+| Settings › Remote access | `apps/web/src/components/settings/remote-access-section.tsx` | On the computer: switch, port, warning, QR code and addresses, pairing code, paired devices, and "Work on another computer". In the web app: "This device" with Unpair.                                                                      |
 
 `apps/web/src/lib/bridge.ts` uses the preload bridge when it exists, else the web bridge when the page is served over http(s); `isWebApp` gates the UI.
 
@@ -43,15 +44,21 @@ All JSON. Requests from outside the local network (`isLocalNetworkAddress`, see 
 
 "token" means `Authorization: Bearer <deviceId>.<secret>`; 401 otherwise, and the web app returns to the pairing screen.
 
+## Desktop app as a client
+
+Settings › Remote access also works the other way: **Work on another computer** opens another computer's web app in a window of the desktop app, just as the phone app does. Type its address (`192.168.1.20:47830`) or paste the link from its QR code, whose one-time code pairs in the same step; Remote access must be on there.
+
+The window has no preload, so the page runs the web bridge against the other computer's origin and pairs like a phone. Its storage — the device token and anything the page keeps — lives in the `persist:pp-agent-client` partition, apart from this computer's own page, and the local daemon and its window keep running without being used by it. `openClientWindow` checks the address with `GET /api/session` before opening the window, so a wrong address or a computer with Remote access off gives a sentence instead of Chromium's error page, and plain HTTP is allowed only on the person's own network (`allowsPlainHttp` in `packages/shared`, as in the phone app). The client window's permissions are the app window's (audio and clipboard writes, nothing else); links open in the browser and the window never navigates away from the other computer's origin.
+
 ## Security rules
 
-- **Off by default**, switched on only from the computer (the phone access commands are in `REMOTE_LOCAL_ONLY_COMMANDS`).
+- **Off by default**, switched on only from the computer (the remote access commands are in `REMOTE_LOCAL_ONLY_COMMANDS`).
 - **Local network only** (`isLocalNetworkAddress`): private IPv4, link-local, IPv6 unique-local and link-local source addresses. Carrier-grade NAT (`100.64.0.0/10`, Tailscale) counts only while one of the computer's own interfaces has such an address, since some ISPs and hotspots give those addresses to other customers. Loopback is answered only when `Host` is a loopback name (`localhost`, `127.x`, `[::1]`: a browser or `vp dev` proxy on the computer). A tunnel or reverse proxy on the computer (`tailscale funnel` or `serve`, `cloudflared`, `ngrok`) arrives on loopback with its public name and gets 403; such setups are not supported.
 - **`Host` allowlist** (`isOwnHost`): the computer's own addresses, its host name (with or without `.local`), `localhost`, and `*.ts.net` while the computer is on a tailnet. Anything else gets 421, so a website that rebinds its own name to the computer's address (DNS rebinding) cannot reach the pairing endpoint.
 - **Pairing**: an 8-character one-time code, valid ten minutes, one use; five wrong codes from anyone lock pairing for fifteen minutes, and three wrong codes from one source address lock that address for fifteen minutes (`AddressLockout`), so one client cannot lock everyone out. Starting a new pairing on the computer lifts both (same `PairingGuard` as Telegram and Zalo). The QR code carries the code in the URL fragment, which never reaches the server or its logs; the page removes it from the address bar.
 - **Device token in a header, not a cookie**: kept in the page's `localStorage` (scoped to scheme, host and port, unlike cookies) and sent as `Authorization`. Nothing is ambient, so a page on another site cannot use it (no CSRF), and the event stream is read with `fetch` so the token never appears in a URL. A device unused for 30 days (`DEVICE_IDLE_MS`, from `lastSeenAt`) is signed out: its token stops working at once and the hourly sweep removes it.
 - **Refused from a device** (`remoteMayRun` and `REMOTE_LOCAL_ONLY_COMMANDS` in `packages/shared`, 403):
-  - phone access itself: `get_remote_access`, `set_remote_access`, `start_remote_pairing`, `forget_remote_device`;
+  - remote access itself: `get_remote_access`, `set_remote_access`, `start_remote_pairing`, `forget_remote_device`;
   - what lets the computer run programs without someone approving each one: `save_mcp_server`, `save_mcp_json`, `set_tool_policy`, `get_mcp_json` (plain-text keys), `import_skill` (a path only the computer's file picker supplies), always allowing an app for computer use (`set_computer_app_access` with `allowed`, or `respond_approval` with `remember: "always"`; answering with `conversation` or no `remember` works), taking an app off the blocked list (`set_computer_app_access` with `null` for a blocked app; checked by `RemoteServer` against `list_computer_apps`), turning on yolo mode (`set_conversation_yolo` with `active: true`, `update_settings` with `yoloMode: true`) and the shell (`shellEnabled: true`);
   - Telegram and Zalo set-up: `save_telegram`, `start_telegram_pairing`, `forget_telegram`, `save_zalo`, `start_zalo_pairing`, `forget_zalo`. Whoever pairs a bot talks to the agent from anywhere and keeps doing so after the device is forgotten. `get_telegram_status` and `get_zalo_status` work, with `pairingCode` and `pairingExpiresAt` blanked;
   - creating a workspace (`save_workspace` without `id`): it creates a folder anywhere, and an `AGENTS.md` written there is read by every agent working below it. Editing an existing workspace (its folder never changes) and its `AGENTS.md` works, since every workspace folder was chosen on the computer. Trusting a workspace's own skills (`set_workspace_skills_trust` with `trusted: true`) is refused too; withdrawing trust works;
@@ -79,4 +86,4 @@ All JSON. Requests from outside the local network (`isLocalNetworkAddress`, see 
 
 ## Development
 
-`vp dev` in `apps/web` proxies `/api` to `127.0.0.1:47830`. Turn on phone access (default port) in a running app, then open `http://localhost:47821` in a browser, or `vp dev --host` and the computer's address on a phone.
+`vp dev` in `apps/web` proxies `/api` to `127.0.0.1:47830`. Turn on remote access (default port) in a running app, then open `http://localhost:47821` in a browser, or `vp dev --host` and the computer's address on a phone.

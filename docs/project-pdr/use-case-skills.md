@@ -24,5 +24,5 @@ The app ships two skills in `apps/desktop/resources/skills/` and copies them int
 ## Trust a workspace's skills
 
 - A downloaded folder can carry skills that steer the agent, so a workspace's own skills stay unloaded until the person turns on **Use the skills this folder carries** in the workspace editor. The trusted folders are saved as `settings.json › trustedSkillFolders` (absolute paths); commands `get_workspace_skills_trust` and `set_workspace_skills_trust { id, trusted }`.
-- Trust can only be turned on at the computer: the switch is disabled in the web app, and phone access refuses `set_workspace_skills_trust` with `trusted: true` (turning it off is allowed).
+- Trust can only be turned on at the computer: the switch is disabled in the web app, and remote access refuses `set_workspace_skills_trust` with `trusted: true` (turning it off is allowed).
 - The skill lists in Settings and the `/` suggestions show only skills that actually load.

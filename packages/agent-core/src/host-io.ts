@@ -60,7 +60,7 @@ export interface ComputerBridge {
 
 /** Everything the host needs from the process that runs it. */
 /**
- * The web app the daemon serves on the local network (Settings › Phone access). The daemon owns
+ * The web app the daemon serves on the local network (Settings › Remote access). The daemon owns
  * the listener, the pairing code and the paired devices; the host only relays the commands.
  */
 export interface RemoteAccessControl {

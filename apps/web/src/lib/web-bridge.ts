@@ -1,20 +1,20 @@
-import type {
-  AgentCommand,
-  AgentEvent,
-  AgentSnapshot,
-  Attachment,
-  DesktopBridge,
-  ExportFormat,
-  SettingsScope,
+import {
+  allowsPlainHttp,
+  type AgentCommand,
+  type AgentEvent,
+  type AgentSnapshot,
+  type Attachment,
+  type DesktopBridge,
+  type ExportFormat,
+  type SettingsScope,
 } from "@workspace/shared";
 import { create } from "zustand";
 
 import { i18n } from "@/lib/i18n";
 import { isNativeApp, shareTextFile } from "@/lib/native";
-import { allowsPlainHttp } from "@/lib/server-address";
 
 /**
- * The bridge of the web app the daemon serves on the local network (Settings › Phone access).
+ * The bridge of the web app the daemon serves on the local network (Settings › Remote access).
  * Commands are POSTed to `/api/command`, events arrive as Server-Sent Events from `/api/events`
  * (read with `fetch`, so the device token travels in a header and never in a URL or a cookie),
  * and attachments are uploaded to the computer first. What only the desktop window can do (the
@@ -194,7 +194,7 @@ export async function checkSession(): Promise<void> {
 }
 
 /**
- * Points the phone app at a computer, after checking that its Phone access answers; then pairs at
+ * Points the phone app at a computer, after checking that its Remote access answers; then pairs at
  * once when the scanned link carried a code. Throws a message for the person when it cannot.
  */
 export async function connectToServer(server: string, code: string | null): Promise<void> {

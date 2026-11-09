@@ -152,7 +152,7 @@ async function serve(): Promise<number> {
     });
     server.attach(host);
     // A port another program took must not keep the agent from starting.
-    remote.start().catch((error: unknown) => log(`Phone access: ${describe(error)}`));
+    remote.start().catch((error: unknown) => log(`Remote access: ${describe(error)}`));
     // A client that connects while the host is starting waits on it, as the window always did.
     host.init(paths.agent, Intl.DateTimeFormat().resolvedOptions().locale).then(
       () => log("Agent ready."),

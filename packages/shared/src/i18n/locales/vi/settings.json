@@ -20,7 +20,7 @@
       "background": "Chạy nền",
       "browser": "Trình duyệt",
       "computer": "Điều khiển máy tính",
-      "remote": "Truy cập từ điện thoại"
+      "remote": "Truy cập từ xa"
     },
     "back": "Quay lại"
   },
@@ -596,8 +596,8 @@
     "loadError": "Không tải được danh sách ứng dụng"
   },
   "remote": {
-    "title": "Truy cập từ điện thoại",
-    "description": "Dùng PP Agent từ điện thoại, hoặc máy tính khác trong cùng mạng, ngay trên trình duyệt.",
+    "title": "Truy cập từ xa",
+    "description": "Dùng PP Agent từ điện thoại hoặc máy tính khác, và mở PP Agent của máy tính khác trong cửa sổ riêng.",
     "loadError": "Không tải được trang này",
     "enable": {
       "title": "Mở PP Agent trong mạng nội bộ",
@@ -647,10 +647,19 @@
     },
     "thisDevice": {
       "title": "Thiết bị này",
-      "description": "Đã ghép nối với tên {{name}}. Bật hoặc tắt truy cập từ điện thoại, ghép nối và hủy ghép nối thiết bị trong PP Agent trên máy tính.",
+      "description": "Đã ghép nối với tên {{name}}. Bật hoặc tắt truy cập từ xa, ghép nối và hủy ghép nối thiết bị trong PP Agent trên máy tính.",
       "unpair": "Hủy ghép nối thiết bị này",
       "unpairTitle": "Hủy ghép nối thiết bị này?",
       "unpairDescription": "Bạn sẽ cần mã ghép nối mới từ máy tính để dùng lại PP Agent tại đây."
+    },
+    "client": {
+      "title": "Làm việc trên máy tính khác",
+      "description": "Mở PP Agent của máy tính khác trong cửa sổ riêng và ghép nối như điện thoại. Hãy bật Truy cập từ xa trên máy đó trước.",
+      "label": "Địa chỉ máy tính",
+      "placeholder": "192.168.1.20:47830 hoặc liên kết ghép nối",
+      "hint": "Dán liên kết từ mã QR của máy đó để ghép nối luôn trong một bước.",
+      "open": "Mở",
+      "opened": "Đã mở máy tính kia trong cửa sổ mới."
     },
     "computerOnly": {
       "title": "Chỉ bật được trên máy tính",
