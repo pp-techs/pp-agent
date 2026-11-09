@@ -701,7 +701,7 @@ export class AgentHost {
   private readonly browser: BrowserBridge | undefined;
   /** The window's cua-driver, for the agent's computer tool. */
   private readonly computer: ComputerBridge | undefined;
-  /** The web app on the local network; the phone access commands call it. */
+  /** The web app on the local network; the remote access commands call it. */
   private readonly remote: RemoteAccessControl | undefined;
   /** App names the computer tool has seen, so its approvals name the app. */
   private readonly computerAppNames: ComputerAppNames = new Map();

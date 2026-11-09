@@ -14,6 +14,7 @@ import {
 import { app, BrowserWindow, session, shell } from "electron";
 import { handleArtifactScheme, registerArtifactScheme } from "./artifact-protocol.ts";
 import { AuditLog, buildReport } from "./audit-log.ts";
+import { openClientWindow } from "./client-window.ts";
 import { DaemonClient } from "./daemon-client.ts";
 import {
   isInside,
@@ -404,6 +405,10 @@ ipc.handle(IPC.filesReveal, (_event, path: unknown) => {
 ipc.handle(IPC.openExternal, (_event, url: unknown) => {
   if (typeof url !== "string") throw new Error(translator()("app.onlyWebLinks"));
   return openExternal(url);
+});
+ipc.handle(IPC.clientOpen, (_event, address: unknown) => {
+  if (typeof address !== "string") throw new Error(translator()("client.badAddress"));
+  return openClientWindow(address, WINDOW_ICON);
 });
 
 ipc.handle(IPC.shellTakePendingFocus, () => {

@@ -4,6 +4,7 @@
  */
 
 export * from "./accelerator.ts";
+export * from "./server-address.ts";
 
 /** Approval tier of a tool, modelled on omp: reads run freely, writes and execution need a person. */
 export type ToolTier = "read" | "write" | "exec";
@@ -830,7 +831,7 @@ export interface RemoteDevice {
 
 export type RemoteAccessState = "off" | "listening" | "error";
 
-/** Settings › Phone access: whether the web app is served on the local network, and to whom. */
+/** Settings › Remote access: whether the web app is served on the local network, and to whom. */
 export interface RemoteAccessStatus {
   enabled: boolean;
   port: number;
@@ -846,7 +847,7 @@ export interface RemoteAccessStatus {
 }
 
 /**
- * Commands only the computer itself may send; the web app is refused them. Besides phone access
+ * Commands only the computer itself may send; the web app is refused them. Besides remote access
  * itself, these are the settings that let the computer run programs without anyone approving each
  * one (MCP servers start commands, tool policies can skip approvals), a path on the computer that
  * only its own file picker can supply, the Telegram and Zalo set-up (whoever pairs there talks to
@@ -881,7 +882,7 @@ export const REMOTE_LOCAL_ONLY_COMMANDS = [
  * off is fine from a phone; turning them on is not. A device may also not create a workspace
  * (its folder is created anywhere, and the AGENTS.md written there is read by every agent working
  * below it); editing an existing one keeps its folder. Unblocking an app depends on the current
- * lists, so the phone access server checks that itself.
+ * lists, so the remote access server checks that itself.
  */
 export function remoteMayRun(command: AgentCommand): boolean {
   if ((REMOTE_LOCAL_ONLY_COMMANDS as readonly string[]).includes(command.type)) return false;
@@ -2011,6 +2012,13 @@ export interface DesktopBridge {
   };
   /** Opens an http(s) URL in the default browser. */
   openExternal(url: string): Promise<void>;
+  /**
+   * Desktop only: this app as a client of another computer (Settings › Remote access). Opens that
+   * computer's web app in its own window, pairing when the address carries a pairing code.
+   */
+  client?: {
+    open(address: string): Promise<void>;
+  };
   shell: {
     /** The global shortcut fired: the window is in front, focus the message box. */
     onFocusComposer(listener: () => void): () => void;
@@ -2149,6 +2157,7 @@ export const IPC = {
   filesSaveAgent: "files:save-agent",
   filesSaveExport: "files:save-export",
   openExternal: "shell:open-external",
+  clientOpen: "client:open",
   updatesState: "updates:state",
   updatesCheck: "updates:check",
   updatesDownload: "updates:download",

@@ -1,7 +1,8 @@
 /**
- * Reads what the person scanned or typed in the phone app: the pairing link from the computer's QR
- * code (`http://192.168.1.20:47830/#pair=CODE`), a bare address (`192.168.1.20:47830`, the port
- * defaulting to Phone access's own), or a name such as a Tailscale one. Null when it is no address.
+ * Reads what the person scanned or typed to reach another computer — in the phone app, or in the
+ * desktop app's client window: the pairing link from the computer's QR code
+ * (`http://192.168.1.20:47830/#pair=CODE`), a bare address (`192.168.1.20:47830`, the port
+ * defaulting to Remote access's own), or a name such as a Tailscale one. Null when it is no address.
  */
 export function parseServerAddress(
   text: string,

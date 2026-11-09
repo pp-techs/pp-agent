@@ -71,7 +71,7 @@ export interface RemoteServerOptions {
   webDir(): string | null;
   /** Runs a command on the agent host, as a desktop client's command would. */
   handle(command: AgentCommand): Promise<unknown>;
-  /** Tells every client (the desktop window too) that Settings › Phone access changed. */
+  /** Tells every client (the desktop window too) that Settings › Remote access changed. */
   emit(event: AgentEvent): void;
   appVersion: string;
   /** Interface to listen on; every one by default, so phones on the network can reach it. */
@@ -214,7 +214,7 @@ export class RemoteServer implements RemoteAccessControl {
     return this.options.now?.() ?? Date.now();
   }
 
-  /** Loads `remote.json` and starts listening when phone access was left on. */
+  /** Loads `remote.json` and starts listening when remote access was left on. */
   async start(): Promise<void> {
     await this.store.load();
     await this.sweep();
@@ -326,7 +326,7 @@ export class RemoteServer implements RemoteAccessControl {
     if (!webDir) {
       this.state = "error";
       this.error = t("remote.webMissing");
-      this.options.log?.("Phone access: the web app is not built.");
+      this.options.log?.("Remote access: the web app is not built.");
       return;
     }
     const server = createServer((req, res) => void this.onRequest(req, res, webDir));
@@ -347,14 +347,14 @@ export class RemoteServer implements RemoteAccessControl {
         code === "EADDRINUSE"
           ? t("remote.portInUse", { port })
           : t("remote.listenFailed", { error: errorMessage(error) });
-      this.options.log?.(`Phone access could not listen on port ${port}: ${errorMessage(error)}`);
+      this.options.log?.(`Remote access could not listen on port ${port}: ${errorMessage(error)}`);
       return;
     }
-    server.on("error", (error) => this.options.log?.(`Phone access: ${error.message}`));
+    server.on("error", (error) => this.options.log?.(`Remote access: ${error.message}`));
     this.server = server;
     this.state = "listening";
     this.error = null;
-    this.options.log?.(`Phone access on port ${this.listeningPort ?? port}.`);
+    this.options.log?.(`Remote access on port ${this.listeningPort ?? port}.`);
   }
 
   private async stopListening(): Promise<void> {
@@ -383,7 +383,7 @@ export class RemoteServer implements RemoteAccessControl {
     const { res } = stream;
     if (res.destroyed || !res.writable) return;
     if (res.writableLength > MAX_STREAM_BACKLOG) {
-      this.options.log?.("Phone access: dropping a device that does not read.");
+      this.options.log?.("Remote access: dropping a device that does not read.");
       res.destroy();
       return;
     }
@@ -424,7 +424,7 @@ export class RemoteServer implements RemoteAccessControl {
         sendJson(res, error.status, { error: error.message });
         return;
       }
-      this.options.log?.(`Phone access: ${errorMessage(error)}`);
+      this.options.log?.(`Remote access: ${errorMessage(error)}`);
       sendJson(res, 500, { error: errorMessage(error) });
     }
   }
@@ -500,7 +500,7 @@ export class RemoteServer implements RemoteAccessControl {
         const name = typeof body.name === "string" ? body.name : "";
         const { device, token, evicted } = await this.store.addDevice(name, this.now());
         this.signedOut(evicted);
-        this.options.log?.("Phone access: a device paired.");
+        this.options.log?.("Remote access: a device paired.");
         this.changed();
         sendJson(res, 200, { token, deviceName: device.name || t("remote.defaultDeviceName") });
         return;
@@ -706,12 +706,12 @@ export class RemoteServer implements RemoteAccessControl {
     try {
       const idle = await this.store.removeIdle(this.now());
       if (idle.length > 0) {
-        this.options.log?.("Phone access: signed out devices unused for 30 days.");
+        this.options.log?.("Remote access: signed out devices unused for 30 days.");
         this.signedOut(idle);
         this.changed();
       }
     } catch (error) {
-      this.options.log?.(`Phone access: ${errorMessage(error)}`);
+      this.options.log?.(`Remote access: ${errorMessage(error)}`);
     }
     await this.sweepUploads();
   }

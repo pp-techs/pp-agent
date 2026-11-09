@@ -20,7 +20,7 @@
       "background": "Background",
       "browser": "Browser",
       "computer": "Computer use",
-      "remote": "Phone access"
+      "remote": "Remote access"
     },
     "back": "Back"
   },
@@ -608,8 +608,8 @@
     "loadError": "Could not load the app lists"
   },
   "remote": {
-    "title": "Phone access",
-    "description": "Use PP Agent from your phone, or another computer on the same network, in its web browser.",
+    "title": "Remote access",
+    "description": "Use PP Agent from your phone or another computer, and open another computer's PP Agent in a window of its own.",
     "loadError": "Couldn't load this page",
     "enable": {
       "title": "Open PP Agent on the local network",
@@ -659,10 +659,19 @@
     },
     "thisDevice": {
       "title": "This device",
-      "description": "Paired as {{name}}. Turn phone access on or off, pair and unpair devices in PP Agent on the computer.",
+      "description": "Paired as {{name}}. Turn Remote access on or off, pair and unpair devices in PP Agent on the computer.",
       "unpair": "Unpair this device",
       "unpairTitle": "Unpair this device?",
       "unpairDescription": "You will need a new pairing code from the computer to use PP Agent here again."
+    },
+    "client": {
+      "title": "Work on another computer",
+      "description": "Open another computer's PP Agent in its own window and pair it like a phone. Turn on Remote access there first.",
+      "label": "Computer address",
+      "placeholder": "192.168.1.20:47830 or the pairing link",
+      "hint": "Paste the link from that computer's QR code to pair in the same step.",
+      "open": "Open",
+      "opened": "Opened the other computer in a new window."
     },
     "computerOnly": {
       "title": "Turned on only at the computer",

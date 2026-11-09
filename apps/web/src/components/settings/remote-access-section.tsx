@@ -323,6 +323,100 @@ function DevicesCard({ bridge, status }: { bridge: DesktopBridge; status: Remote
   );
 }
 
+/** Remembers the other computer's address; its pairing token lives in the client window itself. */
+const CLIENT_ADDRESS_KEY = "pp-agent.client-address";
+
+function readClientAddress(): string {
+  try {
+    return localStorage.getItem(CLIENT_ADDRESS_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function rememberClientAddress(address: string): void {
+  try {
+    localStorage.setItem(CLIENT_ADDRESS_KEY, address);
+  } catch {
+    // Without storage the address is simply not offered next time.
+  }
+}
+
+/**
+ * Desktop only: open another computer's PP Agent in its own window and pair it like a phone.
+ * Remote access must be on there; the link from its QR code pairs in the same step.
+ */
+function ClientCard({ client }: { client: NonNullable<DesktopBridge["client"]> }) {
+  const { t } = useTranslation("settings");
+  const [address, setAddress] = React.useState(readClientAddress);
+  const [error, setError] = React.useState<string | null>(null);
+  const [pending, setPending] = React.useState(false);
+
+  const open = async () => {
+    setPending(true);
+    setError(null);
+    try {
+      await client.open(address);
+      rememberClientAddress(address.trim());
+      toast.success(t("remote.client.opened"));
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <Item variant="outline" className="flex-col items-stretch gap-3">
+      <ItemContent>
+        <ItemTitle>{t("remote.client.title")}</ItemTitle>
+        <ItemDescription className="line-clamp-none">
+          {t("remote.client.description")}
+        </ItemDescription>
+      </ItemContent>
+      <form
+        className="flex flex-col gap-2 sm:flex-row sm:items-start"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void open();
+        }}
+      >
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <label htmlFor="client-address" className="text-sm font-medium">
+            {t("remote.client.label")}
+          </label>
+          <Input
+            id="client-address"
+            value={address}
+            inputMode="url"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            placeholder={t("remote.client.placeholder")}
+            aria-invalid={error !== null}
+            aria-describedby={error ? "client-address-error" : "client-address-hint"}
+            className="font-mono"
+            onChange={(event) => setAddress(event.target.value)}
+          />
+          {error ? (
+            <p id="client-address-error" role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          ) : (
+            <p id="client-address-hint" className="text-xs text-muted-foreground">
+              {t("remote.client.hint")}
+            </p>
+          )}
+        </div>
+        <Button type="submit" variant="outline" disabled={pending || address.trim() === ""}>
+          {pending && <Spinner data-icon="inline-start" />}
+          {t("remote.client.open")}
+        </Button>
+      </form>
+    </Item>
+  );
+}
+
 function ComputerView({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("settings");
   const query = useQuery(remoteAccessQuery(bridge));
@@ -358,6 +452,7 @@ function ComputerView({ bridge }: { bridge: DesktopBridge }) {
           )}
         </>
       )}
+      {bridge.client && <ClientCard client={bridge.client} />}
     </>
   );
 }
@@ -406,7 +501,7 @@ function DeviceView() {
   );
 }
 
-/** Settings › Phone access: serve the app on the local network, pair and unpair devices. */
+/** Settings › Remote access: serve the app on the local network, pair and unpair devices. */
 export function RemoteAccessSection({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("settings");
   return (

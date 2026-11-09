@@ -566,7 +566,7 @@ export function useDeleteWorkspace(bridge: DesktopBridge) {
   });
 }
 
-/** Settings › Phone access: whether the web app is served, its addresses, the pairing, devices. */
+/** Settings › Remote access: whether the web app is served, its addresses, the pairing, devices. */
 export const remoteAccessQuery = (bridge: DesktopBridge) =>
   queryOptions({
     queryKey: queryKeys.remoteAccess,

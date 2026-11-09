@@ -69,6 +69,9 @@ const bridge: DesktopBridge = {
     },
   },
   openExternal: (url) => invoke(IPC.openExternal, url),
+  client: {
+    open: (address) => invoke(IPC.clientOpen, address),
+  },
   shell: {
     onFocusComposer(listener) {
       const handler = () => listener();

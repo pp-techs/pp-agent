@@ -2,7 +2,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 
 /**
  * The phone app is the web app (built by `vp run @workspace/web#build:mobile` into `www/`) in a
- * native shell. It talks to the computer's Phone access server, which answers plain HTTP on the
+ * native shell. It talks to the computer's Remote access server, which answers plain HTTP on the
  * local network or a Tailscale address, so both platforms allow cleartext requests to it.
  */
 const config: CapacitorConfig = {

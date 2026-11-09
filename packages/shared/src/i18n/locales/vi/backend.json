@@ -17,6 +17,12 @@
     "agentCannotExport": "Không thể xuất Agent.",
     "conversationCannotExport": "Không thể xuất cuộc trò chuyện."
   },
+  "client": {
+    "badAddress": "Đó không phải địa chỉ máy tính. Hãy gõ địa chỉ như 192.168.1.20:47830, hoặc dán liên kết từ mã QR của máy đó.",
+    "httpsRequired": "Hãy dùng https:// cho máy tính ngoài mạng của bạn, để mã ghép nối không bị gửi đi mà không được bảo vệ.",
+    "unreachable": "Không kết nối được tới {{server}}. Hãy kiểm tra đã bật Truy cập từ xa trên máy đó và hai máy cùng mạng.",
+    "notPpAgent": "{{server}} có phản hồi, nhưng đó không phải PP Agent."
+  },
   "limits": {
     "nameTooLong": "Tên chỉ được dài tối đa {{max}} ký tự.",
     "descriptionTooLong": "Mô tả chỉ được dài tối đa {{max}} ký tự.",
@@ -522,17 +528,17 @@
     "saveFailed": "{{name}} chỉ được cho phép trong cuộc trò chuyện này: không lưu được thành luôn cho phép ({{error}})."
   },
   "remote": {
-    "unavailable": "Truy cập từ điện thoại không khả dụng ở đây.",
+    "unavailable": "Truy cập từ xa không khả dụng ở đây.",
     "invalidPort": "Hãy chọn cổng từ 1024 đến 65535.",
     "portInUse": "Cổng {{port}} đang được chương trình khác dùng. Hãy chọn cổng khác.",
-    "listenFailed": "Không thể bật truy cập từ điện thoại: {{error}}",
-    "webMissing": "Không tìm thấy tệp của ứng dụng web nên không có gì để hiển thị trên điện thoại. Hãy dựng chúng bằng `vp run @workspace/web#build` rồi bật lại truy cập từ điện thoại.",
-    "notOn": "Hãy bật truy cập từ điện thoại trước.",
+    "listenFailed": "Không thể bật truy cập từ xa: {{error}}",
+    "webMissing": "Không tìm thấy tệp của ứng dụng web nên không có gì để hiển thị trên điện thoại. Hãy dựng chúng bằng `vp run @workspace/web#build` rồi bật lại truy cập từ xa.",
+    "notOn": "Hãy bật truy cập từ xa trước.",
     "localOnly": "Chỉ có thể thay đổi mục này trong PP Agent trên máy tính.",
     "notPaired": "Thiết bị này chưa được ghép nối. Hãy ghép nối lại trong PP Agent trên máy tính.",
     "deviceUnknown": "Thiết bị đó chưa được ghép nối.",
     "pairInvalid": "Mã không đúng hoặc đã hết hạn.",
-    "pairClosed": "Chưa mở ghép nối. Trong PP Agent trên máy tính, mở Cài đặt › Truy cập từ điện thoại và bấm Ghép nối thiết bị.",
+    "pairClosed": "Chưa mở ghép nối. Trong PP Agent trên máy tính, mở Cài đặt › Truy cập từ xa và bấm Ghép nối thiết bị.",
     "pairLocked": "Nhập sai mã quá nhiều lần. Ghép nối bị khóa 15 phút, hoặc đến khi bắt đầu ghép nối mới trên máy tính.",
     "attachmentNotUploaded": "{{name}} chưa được tải lên từ thiết bị này.",
     "uploadTooLarge": "{{name}} lớn hơn {{limit}} MB.",
@@ -544,6 +550,6 @@
     "attachmentExpired": "{{name}} không còn trên máy tính. Hãy đính kèm lại.",
     "gatewayKeyAgain": "Để đổi địa chỉ của cổng kết nối này từ điện thoại, hãy nhập lại khóa API. Khóa đã lưu chỉ được gửi đến địa chỉ nó được lưu cho.",
     "tooManyUploads": "Thiết bị này đang tải lên quá nhiều tệp. Hãy đợi chúng xong rồi thử lại.",
-    "wrongHost": "Hãy mở truy cập từ điện thoại bằng địa chỉ của máy tính này hiển thị trong PP Agent › Cài đặt › Truy cập từ điện thoại."
+    "wrongHost": "Hãy mở truy cập từ xa bằng địa chỉ của máy tính này hiển thị trong PP Agent › Cài đặt › Truy cập từ xa."
   }
 }

@@ -94,7 +94,7 @@ Details:
 - Endpoint: `<home>/run/agentd.sock` (a Unix socket, mode 0600, in a directory owned by the current user and tightened to mode 0700 without changing home permissions); when that path is longer than 100 characters, `/tmp/pp-agent-<uid>/agentd-<12 hex of sha1(home)>.sock`. On Windows a named pipe `\\.\pipe\pp-agentd-<12 hex of sha1(home)>`. Restart existing Unix daemons after upgrading from the former `<home>/agentd.sock` or `/tmp/pp-agent-<uid>/agentd.sock` endpoints.
 - Authentication (protocol 2): the daemon sends a fresh challenge, and the client replies with `hello` containing a fresh nonce and an HMAC proof over both nonces and its version fields. The daemon replies with its own HMAC over both nonces, version fields and pid; main verifies it before adopting the connection. The shared secret in `<home>/agentd.token` (64 hex characters, mode 0600) is never sent. Invalid proofs or no `hello` within 5 s close the connection. The frame protocol is in [IPC and message flow](ipc-and-messages.md).
 - A client that stops reading (more than twice the 64 MiB frame limit queued) is dropped rather than waited for.
-- Clients of this socket are the desktop window and local tools. The only network listener is the optional web app for phones (Settings › Phone access, off by default), with its own pairing and device tokens; see [Phone access](phone-access.md).
+- Clients of this socket are the desktop window and local tools. The only network listener is the optional web app for phones (Settings › Remote access, off by default), with its own pairing and device tokens; see [Remote access](remote-access.md).
 
 ## Agent status
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { allowsPlainHttp, parseServerAddress } from "./server-address";
+import { allowsPlainHttp, parseServerAddress } from "./server-address.ts";
 
 describe("parseServerAddress", () => {
   it("reads the pairing link from the computer's QR code", () => {
@@ -10,7 +10,7 @@ describe("parseServerAddress", () => {
     });
   });
 
-  it("takes a bare address, adding the scheme and Phone access's port", () => {
+  it("takes a bare address, adding the scheme and Remote access's port", () => {
     expect(parseServerAddress("  192.168.1.20:47831 ", 47830)).toEqual({
       server: "http://192.168.1.20:47831",
       code: null,

@@ -17,6 +17,12 @@
     "agentCannotExport": "The agent could not be exported.",
     "conversationCannotExport": "The conversation could not be exported."
   },
+  "client": {
+    "badAddress": "That is not a computer address. Type one like 192.168.1.20:47830, or paste the link from that computer's QR code.",
+    "httpsRequired": "Use https:// for a computer outside your network, so the pairing token is not sent unprotected.",
+    "unreachable": "Could not reach {{server}}. Check that Remote access is turned on there, and that both computers are on the same network.",
+    "notPpAgent": "{{server}} answered, but it is not PP Agent."
+  },
   "limits": {
     "nameTooLong": "The name can be at most {{max}} characters.",
     "descriptionTooLong": "The description can be at most {{max}} characters.",
@@ -522,17 +528,17 @@
     "saveFailed": "{{name}} stays allowed for this chat only: it could not be saved as always allowed ({{error}})."
   },
   "remote": {
-    "unavailable": "Phone access is not available here.",
+    "unavailable": "Remote access is not available here.",
     "invalidPort": "Choose a port between 1024 and 65535.",
     "portInUse": "Port {{port}} is already used by another program. Choose another port.",
-    "listenFailed": "Phone access could not start: {{error}}",
-    "webMissing": "The web app files were not found, so there is nothing to show on a phone. Build them with `vp run @workspace/web#build` and turn phone access on again.",
-    "notOn": "Turn on phone access first.",
+    "listenFailed": "Remote access could not start: {{error}}",
+    "webMissing": "The web app files were not found, so there is nothing to show on a phone. Build them with `vp run @workspace/web#build` and turn Remote access on again.",
+    "notOn": "Turn on Remote access first.",
     "localOnly": "This can only be changed in PP Agent on the computer.",
     "notPaired": "This device is not paired. Pair it again in PP Agent on the computer.",
     "deviceUnknown": "That device is not paired.",
     "pairInvalid": "That code is wrong or has expired.",
-    "pairClosed": "No pairing is open. In PP Agent on the computer, open Settings › Phone access and press Pair a device.",
+    "pairClosed": "No pairing is open. In PP Agent on the computer, open Settings › Remote access and press Pair a device.",
     "pairLocked": "Too many wrong codes. Pairing is locked for 15 minutes, or until a new pairing is started on the computer.",
     "attachmentNotUploaded": "{{name}} was not uploaded from this device.",
     "uploadTooLarge": "{{name}} is larger than {{limit}} MB.",
@@ -544,6 +550,6 @@
     "attachmentExpired": "{{name}} is no longer on the computer. Attach it again.",
     "gatewayKeyAgain": "To change this gateway's address from a phone, enter its API key again. The saved key is only sent to the address it was saved for.",
     "tooManyUploads": "Too many files are uploading from this device. Wait for them to finish and try again.",
-    "wrongHost": "Open phone access with this computer's address shown in PP Agent › Settings › Phone access."
+    "wrongHost": "Open Remote access with this computer's address shown in PP Agent › Settings › Remote access."
   }
 }
