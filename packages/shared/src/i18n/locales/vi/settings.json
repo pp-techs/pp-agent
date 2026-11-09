@@ -89,6 +89,14 @@
         "hint": "Phím bổ trợ và một phím, ví dụ CommandOrControl+Shift+Space.",
         "invalid": "Phím tắt không hợp lệ. Dùng phím bổ trợ và một phím, ví dụ CommandOrControl+Shift+Space."
       }
+    },
+    "configGroup": {
+      "legend": "Gói cấu hình",
+      "description": "Xuất thiết lập của máy này — gateway và mô hình mặc định, agent, máy chủ MCP, chính sách công cụ, danh sách skill — thành một tệp để cài cho máy khác giống nhau, hoặc nhập tệp ai đó gửi cho bạn. Khóa và token không nằm trong gói: mỗi máy tự giữ trong vault của mình. Để cài không cần thao tác, đặt tệp vào thư mục ứng dụng với tên settings.import.json; cấu hình sẽ được áp dụng khi khởi động lần sau.",
+      "export": "Xuất cấu hình",
+      "import": "Nhập cấu hình",
+      "exported": "Đã lưu gói cấu hình.",
+      "imported": "Đã áp dụng: {{gateways}} gateway, {{agents}} agent, {{servers}} máy chủ MCP."
     }
   },
   "voice": {

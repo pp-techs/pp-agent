@@ -596,6 +596,55 @@ export interface AgentExportFile {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Configuration bundles (bulk setup: one file an admin hands out to many people)
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * A configuration bundle file: the app setup an admin hands out to many people, or drops into the
+ * app folder (`settings.import.json`) for unattended setup. Secrets (gateway keys, channel tokens)
+ * are never in it; each machine keeps its own in the vault, under the ids the bundle references.
+ */
+export interface ConfigBundleFile {
+  ppAgentConfig: 1;
+  config: ConfigBundle;
+}
+
+/** The settings a bundle carries. Fields it leaves out stay as they are where it is applied. */
+export interface ConfigBundle {
+  /** Gateway definitions (models); each one's API key is a vault entry under `gateway.id`. */
+  gateways?: GatewayConfig[];
+  /** Models chosen by default; null clears the choice. */
+  defaultModel?: ModelRef | null;
+  fastModel?: ModelRef | null;
+  thinkingLevel?: ThinkingLevel;
+  /** Agents merged by name (names are unique, case-insensitive); ids are machine-specific. */
+  agents?: Omit<AgentProfile, "id">[];
+  /** MCP servers in the `mcpServers` shape of mcp.json, merged by name. */
+  mcpServers?: Record<string, unknown>;
+  /** Tool name → policy, merged per tool. */
+  toolPolicies?: Record<string, ToolPolicy>;
+  shellEnabled?: boolean;
+  yoloMode?: boolean;
+  language?: LanguageSetting;
+  /** Skills the agent must not see; the full list when the bundle carries it. */
+  disabledSkills?: string[];
+  /** Trusted skill folders (absolute paths); the full list when the bundle carries it. */
+  trustedSkillFolders?: string[];
+}
+
+/** How much an applied bundle changed, per area; areas it left out count 0. */
+export interface ConfigImportReport {
+  gateways: number;
+  agents: number;
+  mcpServers: number;
+  toolPolicies: number;
+  /** General fields: the two models, thinking level, shell, yolo, language. */
+  settings: number;
+  disabledSkills: number;
+  trustedSkillFolders: number;
+}
+
+// ---------------------------------------------------------------------------------------------
 // Workspaces (a folder plus the defaults and rules for conversations started in it)
 // ---------------------------------------------------------------------------------------------
 
@@ -865,6 +914,9 @@ export const REMOTE_LOCAL_ONLY_COMMANDS = [
   // mcp.json holds the servers' keys and tokens in plain text.
   "get_mcp_json",
   "import_skill",
+  // A bundle carries mcp.json's plain-text keys and can turn the shell and yolo mode on.
+  "export_config",
+  "import_config",
   "save_telegram",
   "start_telegram_pairing",
   "forget_telegram",
@@ -1385,6 +1437,11 @@ export interface AgentCommandMap {
   export_agent: { params: { id: string }; result: string };
   /** Creates an agent from `AgentExportFile` JSON; a taken name gets a " (2)" suffix. */
   import_agent: { params: { json: string }; result: AgentProfile };
+
+  /** JSON text of a `ConfigBundleFile` of this computer's setup; secrets are not in it. */
+  export_config: { params: NoParams; result: string };
+  /** Merges a `ConfigBundleFile` JSON into settings.json and mcp.json; fields it leaves out stay. */
+  import_config: { params: { json: string }; result: ConfigImportReport };
 
   /** Default workspace first, then by name. */
   list_workspaces: { params: NoParams; result: WorkspaceProfile[] };
@@ -1997,6 +2054,10 @@ export interface DesktopBridge {
     openAgentFile(): Promise<string | null>;
     /** Asks where to save an exported agent; false when cancelled. */
     saveAgentFile(suggestedName: string, json: string): Promise<boolean>;
+    /** Picks a configuration bundle and returns its text; null when cancelled. */
+    openConfigFile(): Promise<string | null>;
+    /** Asks where to save a configuration bundle; false when cancelled. */
+    saveConfigFile(suggestedName: string, json: string): Promise<boolean>;
     /** Asks where to save an exported conversation; false when cancelled. */
     saveExport(suggestedName: string, format: ExportFormat, content: string): Promise<boolean>;
   };
@@ -2155,6 +2216,8 @@ export const IPC = {
   filesPickFolder: "files:pick-folder",
   filesOpenAgent: "files:open-agent",
   filesSaveAgent: "files:save-agent",
+  filesOpenConfig: "files:open-config",
+  filesSaveConfig: "files:save-config",
   filesSaveExport: "files:save-export",
   openExternal: "shell:open-external",
   clientOpen: "client:open",

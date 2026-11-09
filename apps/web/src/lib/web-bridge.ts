@@ -542,6 +542,11 @@ export function createWebBridge(): DesktopBridge {
         return file ? file.text() : null;
       },
       saveAgentFile: (suggestedName, json) => download(suggestedName, json, "application/json"),
+      openConfigFile: async () => {
+        const [file] = await pickFiles({ multiple: false, accept: ".json,application/json" });
+        return file ? file.text() : null;
+      },
+      saveConfigFile: (suggestedName, json) => download(suggestedName, json, "application/json"),
       saveExport: (suggestedName, format, content) =>
         download(suggestedName, content, EXPORT_TYPES[format]),
     },

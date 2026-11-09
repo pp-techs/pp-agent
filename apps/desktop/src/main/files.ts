@@ -146,6 +146,54 @@ export async function saveAgentFile(
   return true;
 }
 
+function configFiles(): Electron.FileFilter {
+  return { name: translator()("files.configFiles"), extensions: ["json"] };
+}
+
+/** Configuration bundles carry gateways, agents and MCP servers; anything bigger is not one. */
+const MAX_CONFIG_FILE_BYTES = 1024 * 1024;
+
+/** Picks a configuration bundle and returns its text. */
+export async function openConfigFile(window: BrowserWindow | null): Promise<string | null> {
+  const t = translator();
+  const options: Electron.OpenDialogOptions = {
+    title: t("files.importConfigTitle"),
+    buttonLabel: t("files.importButton"),
+    properties: ["openFile"],
+    filters: [configFiles()],
+  };
+  const result = window
+    ? await dialog.showOpenDialog(window, options)
+    : await dialog.showOpenDialog(options);
+  const path = result.canceled ? undefined : result.filePaths[0];
+  if (!path) return null;
+  if ((await stat(path)).size > MAX_CONFIG_FILE_BYTES) throw new Error(t("files.configTooLarge"));
+  return readFile(path, "utf8");
+}
+
+/** Asks where to save a configuration bundle and writes it; false when cancelled. */
+export async function saveConfigFile(
+  window: BrowserWindow | null,
+  suggestedName: string,
+  json: string,
+): Promise<boolean> {
+  // Characters that are not allowed in file names on some systems are replaced.
+  const name = suggestedName.replace(/[\\/:*?"<>|]/g, "-").trim() || "pp-agent-config";
+  const t = translator();
+  const options: Electron.SaveDialogOptions = {
+    title: t("files.exportConfigTitle"),
+    buttonLabel: t("files.exportButton"),
+    defaultPath: `${name}.json`,
+    filters: [configFiles()],
+  };
+  const result = window
+    ? await dialog.showSaveDialog(window, options)
+    : await dialog.showSaveDialog(options);
+  if (result.canceled || !result.filePath) return false;
+  await writeFile(result.filePath, json, "utf8");
+  return true;
+}
+
 /** Exported conversations are text; this is far beyond any real chat and stops a runaway payload. */
 const MAX_EXPORT_CHARS = 50 * 1024 * 1024;
 

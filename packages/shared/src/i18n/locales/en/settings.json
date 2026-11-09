@@ -89,6 +89,14 @@
         "hint": "Modifiers and one key, for example CommandOrControl+Shift+Space.",
         "invalid": "Not a valid shortcut. Use modifiers and one key, for example CommandOrControl+Shift+Space."
       }
+    },
+    "configGroup": {
+      "legend": "Configuration bundle",
+      "description": "Export the setup of this computer — gateways and default models, agents, MCP servers, tool policies, skill lists — as one file to set up other people's copies the same way, or import a file someone sent you. Keys and tokens are never in the bundle: each computer keeps its own. For setup without anyone at the keyboard, drop the file into the app folder as settings.import.json and it is applied at the next start.",
+      "export": "Export configuration",
+      "import": "Import configuration",
+      "exported": "The configuration bundle was saved.",
+      "imported": "Applied: {{gateways}} gateways, {{agents}} agents, {{servers}} MCP servers."
     }
   },
   "voice": {

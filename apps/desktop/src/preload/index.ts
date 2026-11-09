@@ -51,6 +51,8 @@ const bridge: DesktopBridge = {
     pickFolder: () => invoke(IPC.filesPickFolder),
     openAgentFile: () => invoke(IPC.filesOpenAgent),
     saveAgentFile: (suggestedName, json) => invoke(IPC.filesSaveAgent, suggestedName, json),
+    openConfigFile: () => invoke(IPC.filesOpenConfig),
+    saveConfigFile: (suggestedName, json) => invoke(IPC.filesSaveConfig, suggestedName, json),
     saveExport: (suggestedName, format, content) =>
       invoke(IPC.filesSaveExport, suggestedName, format, content),
     reveal: (path) => invoke(IPC.filesReveal, path),

@@ -15,7 +15,8 @@
     "folderMissing": "That folder does not exist.",
     "locationCannotShow": "That location cannot be shown.",
     "agentCannotExport": "The agent could not be exported.",
-    "conversationCannotExport": "The conversation could not be exported."
+    "conversationCannotExport": "The conversation could not be exported.",
+    "configCannotExport": "The configuration could not be exported."
   },
   "client": {
     "badAddress": "That is not a computer address. Type one like 192.168.1.20:47830, or paste the link from that computer's QR code.",
@@ -253,7 +254,11 @@
     "markdownFiles": "Markdown document",
     "htmlFiles": "Web page (printable)",
     "exportDiagnosticsTitle": "Export diagnostics",
-    "logFiles": "Log file"
+    "logFiles": "Log file",
+    "configFiles": "Configuration files",
+    "importConfigTitle": "Import a configuration bundle",
+    "configTooLarge": "This file is too large to be a configuration bundle.",
+    "exportConfigTitle": "Export configuration"
   },
   "updates": {
     "checkFailed": "Could not check for updates. Check your internet connection and try again.",
@@ -551,5 +556,10 @@
     "gatewayKeyAgain": "To change this gateway's address from a phone, enter its API key again. The saved key is only sent to the address it was saved for.",
     "tooManyUploads": "Too many files are uploading from this device. Wait for them to finish and try again.",
     "wrongHost": "Open Remote access with this computer's address shown in PP Agent › Settings › Remote access."
+  },
+  "config": {
+    "notJson": "This file could not be read as JSON.",
+    "notBundle": "This file is not a PP Agent configuration bundle.",
+    "dropFailed": "settings.import.json could not be applied: {{error}}. It was kept as settings.import.json.failed."
   }
 }
