@@ -14,8 +14,18 @@ const shared: PackUserConfig = {
   outDir: "dist",
   sourcemap: true,
   // Electron is provided by the runtime; pi stays in node_modules (it loads assets and wasm at runtime),
-  // and so do the keyring and the terminal (native addons).
-  deps: { neverBundle: ["electron", "@napi-rs/keyring", "node-pty"] },
+  // and so do the keyring and the terminal (native addons), and the mail libraries, which load
+  // their own parts and ship as production dependencies of the app.
+  deps: {
+    neverBundle: [
+      "electron",
+      "@napi-rs/keyring",
+      "node-pty",
+      "imapflow",
+      "mailparser",
+      "nodemailer",
+    ],
+  },
 };
 
 export default defineConfig({

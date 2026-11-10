@@ -19,6 +19,7 @@ const SCOPE_KEYS: Record<SettingsScope, QueryKey[]> = {
   // Prefix of every ["skill", name] query.
   skills: [queryKeys.skills, ["skill"]],
   mcp: [queryKeys.mcp, queryKeys.mcpJson],
+  email: [queryKeys.email],
   agents: [queryKeys.agents, queryKeys.agentToolOptions],
   workspaces: [queryKeys.workspaces, queryKeys.agents],
   sessions: [queryKeys.sessions],

@@ -221,7 +221,13 @@
       "scroll": "Cuộn trong {{app}}",
       "drag": "Kéo thả trong {{app}}",
       "menu": "Dùng menu của {{app}}"
-    }
+    },
+    "sendEmail": "Gửi email tới {{to}}",
+    "replyEmail": "Trả lời “{{subject}}”",
+    "moveMail_other": "Chuyển {{count}} thư tới {{folder}}",
+    "markMail_other": "Đánh dấu {{count}} thư",
+    "saveAttachment": "Lưu tệp đính kèm",
+    "someone": "một người"
   },
   "webSearch": {
     "unknownProvider": "Nhà cung cấp tìm kiếm không xác định.",
@@ -561,5 +567,30 @@
     "notJson": "Không đọc được tệp này dạng JSON.",
     "notBundle": "Tệp này không phải gói cấu hình PP Agent.",
     "dropFailed": "Không áp dụng được settings.import.json: {{error}}. Tệp được giữ lại thành settings.import.json.failed."
+  },
+  "email": {
+    "noAccounts": "Chưa có hộp thư nào. Hãy thêm ở Cài đặt › Kết nối › Email.",
+    "noFolders": "“{{name}}” không có thư mục nào.",
+    "accountUnknown": "Không có hộp thư tên {{name}}. Đang có: {{names}}.",
+    "chooseAccount": "Có nhiều hộp thư ({{names}}). Hãy nói rõ dùng hộp thư nào trong `account`.",
+    "passwordMissing": "Thiếu mật khẩu của “{{name}}”. Hãy nhập lại ở Cài đặt › Kết nối › Email.",
+    "noMatches": "Không có thư nào trong {{folder}} khớp tìm kiếm.",
+    "sent": "Đã gửi tới {{to}}: “{{subject}}” (từ {{name}}).",
+    "noSender": "Thư {{uid}} không có người gửi để trả lời.",
+    "markNothing": "Hãy cho biết cần đánh dấu đã đọc (seen) hay gắn cờ (flagged).",
+    "marked": "Đã cập nhật {{count}} thư trong {{folder}}.",
+    "moved": "Đã chuyển {{count}} thư tới {{to}}.",
+    "saved": "Đã lưu “{{name}}” vào {{path}}.",
+    "attachmentOutside": "{{path}} nằm ngoài thư mục làm việc. Chỉ lưu và gửi tệp bên trong thư mục đó.",
+    "attachmentsTooLarge": "Tổng dung lượng tệp đính kèm vượt 20 MB.",
+    "nameFormat": "Tên hộp thư chỉ dùng chữ cái, chữ số, dấu gạch ngang và gạch dưới.",
+    "addressInvalid": "Hãy nhập địa chỉ email của hộp thư này.",
+    "accountNotFound": "Không có hộp thư tên {{name}}.",
+    "nameTaken": "Đã có hộp thư tên {{name}}.",
+    "hostRequired": "Hãy nhập địa chỉ máy chủ (ví dụ imap.zoho.com).",
+    "badPort": "Cổng phải là số từ 1 đến 65535.",
+    "fileInvalid": "email.json không hợp lệ. Hãy sửa hoặc xóa tệp trong thư mục dữ liệu của ứng dụng.",
+    "imapRefused": "{{host}} từ chối đăng nhập ({{reason}}). Hãy kiểm tra địa chỉ và mật khẩu ứng dụng.",
+    "smtpRefused": "{{host}} từ chối đăng nhập ({{reason}}). Hãy kiểm tra địa chỉ và mật khẩu ứng dụng."
   }
 }

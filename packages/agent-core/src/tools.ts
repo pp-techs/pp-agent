@@ -31,6 +31,15 @@ import {
   RESEARCH_TOOLS,
 } from "./research.ts";
 import { OFFICE_EDIT_TOOL, OFFICE_READ_TOOL } from "./office/names.ts";
+import {
+  EMAIL_ATTACHMENT_TOOL,
+  EMAIL_MARK_TOOL,
+  EMAIL_MOVE_TOOL,
+  EMAIL_REPLY_TOOL,
+  EMAIL_SEND_TOOL,
+  EMAIL_TOOLS,
+  emailToolTier,
+} from "./email/names.ts";
 import { ASK_TOOL } from "./ask.ts";
 import { SCHEDULE_TOOL } from "./schedule-tool.ts";
 import { SESSIONS_TOOL } from "./sessions-tool.ts";
@@ -89,6 +98,7 @@ const MANAGED_TOOLS = [
   SCHEDULE_TOOL,
   OFFICE_READ_TOOL,
   OFFICE_EDIT_TOOL,
+  ...EMAIL_TOOLS,
 ];
 
 /** Tools an agent can be limited to, in the order its editor lists them. */
@@ -111,6 +121,7 @@ export const AGENT_TOOLS = [
   SCHEDULE_TOOL,
   OFFICE_READ_TOOL,
   OFFICE_EDIT_TOOL,
+  ...EMAIL_TOOLS,
   "write",
   "edit",
   SHELL_TOOL,
@@ -132,6 +143,7 @@ const TIERS: Record<string, ToolTier> = {
   read_document: "read",
   [OFFICE_READ_TOOL]: "read",
   [OFFICE_EDIT_TOOL]: "write",
+  ...Object.fromEntries(EMAIL_TOOLS.map((name) => [name, emailToolTier(name)])),
   [currentDateTimeTool.name]: "read",
   [WEB_SEARCH_TOOL]: "read",
   [WEB_FETCH_TOOL]: "read",
@@ -417,6 +429,35 @@ export function describeToolCall(
     };
   }
   if (toolName === COMPUTER_TOOL) return describeComputerCall(input);
+  if (toolName === EMAIL_SEND_TOOL || toolName === EMAIL_REPLY_TOOL) {
+    const to = Array.isArray(input.to)
+      ? input.to.join(", ")
+      : typeof input.to === "string"
+        ? input.to
+        : "";
+    const subject = typeof input.subject === "string" ? input.subject : "";
+    const body = typeof input.body === "string" ? input.body : "";
+    return {
+      title:
+        toolName === EMAIL_REPLY_TOOL
+          ? t("approvals.replyEmail", { subject })
+          : t("approvals.sendEmail", { to: to || t("approvals.someone") }),
+      detail: [subject, body].filter(Boolean).join("\n\n"),
+    };
+  }
+  if (toolName === EMAIL_MOVE_TOOL) {
+    const count = Array.isArray(input.uids) ? input.uids.length : 0;
+    const to = typeof input.to === "string" ? input.to : "";
+    return { title: t("approvals.moveMail", { count, folder: to }), detail: "" };
+  }
+  if (toolName === EMAIL_MARK_TOOL) {
+    const count = Array.isArray(input.uids) ? input.uids.length : 0;
+    return { title: t("approvals.markMail", { count }), detail: "" };
+  }
+  if (toolName === EMAIL_ATTACHMENT_TOOL) {
+    const path = typeof input.path === "string" ? input.path : "";
+    return { title: t("approvals.saveAttachment"), detail: path };
+  }
   const mcp = parseMcpToolName(toolName);
   if (mcp) {
     return {

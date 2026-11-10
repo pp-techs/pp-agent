@@ -41,6 +41,7 @@ export const queryKeys = {
   skills: ["skills"] as const,
   skill: (name: string) => ["skill", name] as const,
   mcp: ["mcp"] as const,
+  email: ["email"] as const,
   mcpJson: ["mcp-json"] as const,
   sessions: ["sessions"] as const,
   agents: ["agents"] as const,

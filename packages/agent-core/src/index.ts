@@ -69,6 +69,8 @@ import {
   type GatewayModel,
   type GatewayView,
   type StoredCredential,
+  type EmailAccountSettings,
+  type EmailAccountView,
   type McpServerSettings,
   type MemoryChange,
   type MemoryEntry,
@@ -206,6 +208,10 @@ import type {
 } from "./host-io.ts";
 import { configureOutput, emit, errorMessage, openUrl } from "./ipc.ts";
 import { buildOverview, McpCommands, McpConfigFile, McpRegistrations } from "./mcp.ts";
+import { testMailAccount } from "./email/client.ts";
+import { EmailConfigFile } from "./email/config.ts";
+import { emailSecretId } from "./email/names.ts";
+import { createEmailTools } from "./email/tools.ts";
 import { VaultMcpAuthStore } from "./mcp-auth.ts";
 import {
   authInteraction,
@@ -394,6 +400,8 @@ interface Services {
   skills: SkillLibrary;
   webSearch: WebSearchService;
   mcpConfig: McpConfigFile;
+  /** Mailboxes the agent may read and send from (`email.json`); their passwords are in the vault. */
+  emailConfig: EmailConfigFile;
   /** Long-term notes: a MEMORY.md for every workspace and one per workspace folder. */
   memory: MemoryStore;
   /** Speech to text for the message box. */
@@ -764,6 +772,7 @@ export class AgentHost {
       for (const name of builtIn) skills.builtIn.add(name);
       const settings = new SettingsStore(paths.settingsFile);
       const mcpConfig = new McpConfigFile(join(paths.agentDir, "mcp.json"));
+      const emailConfig = new EmailConfigFile(join(paths.agentDir, "email.json"));
       // A setup script or MDM may drop settings.import.json here to configure the app unattended.
       applyDroppedConfig(settings, mcpConfig, dirname(paths.settingsFile), (message) =>
         emit({ type: "error", message }),
@@ -803,6 +812,7 @@ export class AgentHost {
         skills,
         webSearch: new WebSearchService(settings, this.credentials),
         mcpConfig,
+        emailConfig,
         voice: new VoiceService(runtime, settings, join(dirname(paths.settingsFile), "models")),
         memory,
         chatSessions: new ChatSessionMap(join(dirname(paths.settingsFile), "channels.json")),
@@ -1008,6 +1018,15 @@ export class AgentHost {
       case "save_mcp_json":
         services.mcpConfig.saveText(command.text);
         return this.changed(["mcp"], { mcp: true });
+
+      case "list_email_accounts":
+        return this.emailAccounts();
+      case "save_email_account":
+        return this.saveEmailAccount(command.originalName, command.account, command.password);
+      case "delete_email_account":
+        return this.deleteEmailAccount(command.name);
+      case "test_email_account":
+        return this.testEmailAccount(command.name);
 
       case "list_agents":
         return sortAgents(services.settings.get().agents);
@@ -2401,6 +2420,11 @@ export class AgentHost {
       ...createOfficeTools({
         workspaceDir: cwd,
         homeDir: join(paths.agentDir, "officecli"),
+      }),
+      ...createEmailTools({
+        accounts: () => this.requireServices().emailConfig.accounts(),
+        password: (name) => this.emailPassword(name),
+        workspaceDir: cwd,
       }),
     ];
     const settingsManager = SettingsManager.inMemory({
@@ -3899,6 +3923,92 @@ export class AgentHost {
     const imported = await skills.import(path, settings.get().disabledSkills);
     this.changed(["skills"], { reload: true });
     return imported;
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Email (IMAP and SMTP)
+  // -------------------------------------------------------------------------------------------
+
+  /**
+   * The password kept in the vault for an account; null when there is none or the vault cannot
+   * read it (the account then shows as needing its password again).
+   */
+  private async emailPassword(name: string): Promise<string | null> {
+    try {
+      const credential = await this.credentials.read(emailSecretId(name));
+      const key = credential?.type === "api_key" ? credential.key : undefined;
+      return typeof key === "string" && key !== "" ? key : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Last sign-in failure of each account, from `test_email_account`, until the next save. */
+  private readonly emailErrors = new Map<string, string>();
+
+  private async emailAccounts(): Promise<EmailAccountView[]> {
+    const { emailConfig } = this.requireServices();
+    return Promise.all(
+      emailConfig.accounts().map(async (settings) => {
+        const error = this.emailErrors.get(settings.name);
+        return {
+          settings,
+          hasPassword: (await this.emailPassword(settings.name)) !== null,
+          ...(error ? { error } : {}),
+        };
+      }),
+    );
+  }
+
+  private async saveEmailAccount(
+    originalName: string | undefined,
+    account: EmailAccountSettings,
+    password: string | undefined,
+  ): Promise<void> {
+    const { emailConfig } = this.requireServices();
+    emailConfig.saveAccount(originalName, account);
+    const name = account.name.trim();
+    // A rename moves the password with the account, so the old entry does not linger.
+    if (originalName !== undefined && originalName !== name)
+      await this.credentials.delete(emailSecretId(originalName));
+    if (password !== undefined && password !== "")
+      await this.credentials.modify(emailSecretId(name), async () => ({
+        type: "api_key",
+        key: password,
+      }));
+    this.emailErrors.delete(name);
+    if (originalName !== undefined) this.emailErrors.delete(originalName);
+    emit({ type: "settings_changed", scopes: ["email"] });
+  }
+
+  private async deleteEmailAccount(name: string): Promise<void> {
+    const { emailConfig } = this.requireServices();
+    emailConfig.deleteAccount(name);
+    await this.credentials.delete(emailSecretId(name));
+    this.emailErrors.delete(name);
+    emit({ type: "settings_changed", scopes: ["email"] });
+  }
+
+  /** Signs in to both servers of an account and keeps the failure for the account card. */
+  private async testEmailAccount(name: string): Promise<{ ok: boolean; error?: string }> {
+    const { emailConfig } = this.requireServices();
+    const account = emailConfig.get(name);
+    if (!account) throw new Error(t("email.accountNotFound", { name }));
+    const password = await this.emailPassword(name);
+    if (!password) {
+      const error = t("email.passwordMissing", { name: account.label ?? account.address });
+      this.emailErrors.set(name, error);
+      throw new Error(error);
+    }
+    try {
+      await testMailAccount(account, password);
+      this.emailErrors.delete(name);
+      return { ok: true };
+    } catch (error) {
+      const reason = errorMessage(error);
+      this.emailErrors.set(name, reason);
+      return { ok: false, error: reason };
+    }
   }
 
   private saveMcpServer(originalName: string | undefined, server: McpServerSettings): void {

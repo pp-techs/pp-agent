@@ -1,6 +1,7 @@
 import type { Credential, CredentialInfo, CredentialStore } from "@earendil-works/pi-ai";
 import type { StoredCredential } from "@workspace/shared";
 import { CHANNEL_KEY_PREFIX } from "./channels/names.ts";
+import { EMAIL_KEY_PREFIX } from "./email/names.ts";
 import type { VaultBackend } from "./host-io.ts";
 import { t } from "./i18n.ts";
 import { errorMessage } from "./ipc.ts";
@@ -54,7 +55,8 @@ export class VaultCredentialStore implements CredentialStore {
       if (
         providerId.startsWith(WEB_KEY_PREFIX) ||
         providerId.startsWith(MCP_AUTH_KEY_PREFIX) ||
-        providerId.startsWith(CHANNEL_KEY_PREFIX)
+        providerId.startsWith(CHANNEL_KEY_PREFIX) ||
+        providerId.startsWith(EMAIL_KEY_PREFIX)
       )
         continue;
       const credential = await this.load(providerId);

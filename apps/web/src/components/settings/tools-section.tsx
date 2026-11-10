@@ -119,6 +119,15 @@ const BUILT_IN_TOOL_NAMES = [
   "schedule_manage",
   "office_read",
   "office_edit",
+  "email_accounts",
+  "email_folders",
+  "email_search",
+  "email_read",
+  "email_send",
+  "email_reply",
+  "email_mark",
+  "email_move",
+  "email_save_attachment",
   "codemode",
   "tool_search",
   "list_mcp_resources",
@@ -157,7 +166,15 @@ function lockedReason(tool: ToolSummary, t: T) {
 }
 
 /** The kinds of built-in tools the page groups by. */
-type ToolGroupKind = "files" | "documents" | "web" | "memory" | "shell" | "tasks" | "other";
+type ToolGroupKind =
+  | "files"
+  | "documents"
+  | "email"
+  | "web"
+  | "memory"
+  | "shell"
+  | "tasks"
+  | "other";
 
 /** What the built-in tools are for; a tool not listed here falls into the "other" group. */
 const BUILT_IN_GROUPS: Record<string, ToolGroupKind> = {
@@ -170,6 +187,15 @@ const BUILT_IN_GROUPS: Record<string, ToolGroupKind> = {
   read_document: "documents",
   office_read: "documents",
   office_edit: "documents",
+  email_accounts: "email",
+  email_folders: "email",
+  email_search: "email",
+  email_read: "email",
+  email_send: "email",
+  email_reply: "email",
+  email_mark: "email",
+  email_move: "email",
+  email_save_attachment: "email",
   web_search: "web",
   web_fetch: "web",
   browser: "web",
@@ -187,7 +213,7 @@ const BUILT_IN_GROUPS: Record<string, ToolGroupKind> = {
 };
 
 /** Built-in group kinds in the order the page lists them; MCP servers follow, A–Z. */
-const GROUP_ORDER = ["files", "documents", "web", "memory", "shell", "tasks", "other"];
+const GROUP_ORDER = ["files", "documents", "email", "web", "memory", "shell", "tasks", "other"];
 
 interface ToolGroupData {
   /** Stable id for the open/closed state. */

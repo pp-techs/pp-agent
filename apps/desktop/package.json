@@ -25,7 +25,10 @@
     "electron-updater": "^6.8.11",
     "fflate": "catalog:",
     "i18next": "catalog:",
+    "imapflow": "catalog:",
+    "mailparser": "catalog:",
     "node-pty": "catalog:",
+    "nodemailer": "catalog:",
     "officeparser": "catalog:",
     "typebox": "catalog:",
     "yaml": "catalog:"

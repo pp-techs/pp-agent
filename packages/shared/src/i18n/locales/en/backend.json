@@ -221,7 +221,15 @@
       "scroll": "Scroll in {{app}}",
       "drag": "Drag in {{app}}",
       "menu": "Use the menu of {{app}}"
-    }
+    },
+    "sendEmail": "Send an email to {{to}}",
+    "replyEmail": "Reply to “{{subject}}”",
+    "moveMail_one": "Move {{count}} message to {{folder}}",
+    "moveMail_other": "Move {{count}} messages to {{folder}}",
+    "markMail_one": "Mark {{count}} message",
+    "markMail_other": "Mark {{count}} messages",
+    "saveAttachment": "Save an email attachment",
+    "someone": "someone"
   },
   "webSearch": {
     "unknownProvider": "Unknown search provider.",
@@ -561,5 +569,30 @@
     "notJson": "This file could not be read as JSON.",
     "notBundle": "This file is not a PP Agent configuration bundle.",
     "dropFailed": "settings.import.json could not be applied: {{error}}. It was kept as settings.import.json.failed."
+  },
+  "email": {
+    "noAccounts": "No mailbox is set up yet. Add one in Settings › Connectors › Email.",
+    "noFolders": "“{{name}}” has no folders.",
+    "accountUnknown": "There is no mailbox named {{name}}. Set up: {{names}}.",
+    "chooseAccount": "More than one mailbox is set up ({{names}}). Say which one in `account`.",
+    "passwordMissing": "The password for “{{name}}” is missing. Enter it again in Settings › Connectors › Email.",
+    "noMatches": "Nothing in {{folder}} matches that search.",
+    "sent": "Sent to {{to}}: “{{subject}}” (from {{name}}).",
+    "noSender": "Message {{uid}} has no sender to reply to.",
+    "markNothing": "Say whether to mark the messages read (seen) or flagged.",
+    "marked": "Updated {{count}} message(s) in {{folder}}.",
+    "moved": "Moved {{count}} message(s) to {{to}}.",
+    "saved": "Saved “{{name}}” to {{path}}.",
+    "attachmentOutside": "{{path}} is outside the workspace folder. Save and send only files inside it.",
+    "attachmentsTooLarge": "Those attachments are over 20 MB together.",
+    "nameFormat": "Use letters, digits, hyphens, and underscores for the mailbox name.",
+    "addressInvalid": "Enter the email address of this mailbox.",
+    "accountNotFound": "There is no mailbox named {{name}}.",
+    "nameTaken": "A mailbox named {{name}} already exists.",
+    "hostRequired": "Enter the server address (for example imap.zoho.com).",
+    "badPort": "The port must be a number between 1 and 65535.",
+    "fileInvalid": "email.json is not valid. Fix or delete it in the app's data folder.",
+    "imapRefused": "{{host}} refused the sign-in ({{reason}}). Check the address and the app password.",
+    "smtpRefused": "{{host}} refused the sign-in ({{reason}}). Check the address and the app password."
   }
 }

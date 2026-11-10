@@ -1,5 +1,6 @@
 import type {
   DesktopBridge,
+  EmailAccountSettings,
   McpServerSettings,
   RemoteAccessStatus,
   SaveAgentInput,
@@ -244,6 +245,49 @@ export const mcpQuery = (bridge: DesktopBridge) =>
     queryFn: () => bridge.agent.command({ type: "list_mcp_servers" }),
     retry: false,
   });
+
+/** Mailboxes the agent may use (Connectors › Email); passwords stay on the computer. */
+export const emailQuery = (bridge: DesktopBridge) =>
+  queryOptions({
+    queryKey: queryKeys.email,
+    queryFn: () => bridge.agent.command({ type: "list_email_accounts" }),
+    retry: false,
+  });
+
+function useInvalidateEmail() {
+  const queryClient = useQueryClient();
+  return () => queryClient.invalidateQueries({ queryKey: queryKeys.email });
+}
+
+export function useSaveEmailAccount(bridge: DesktopBridge) {
+  const invalidate = useInvalidateEmail();
+  return useMutation({
+    mutationFn: (input: {
+      originalName?: string;
+      account: EmailAccountSettings;
+      password?: string;
+    }) => bridge.agent.command({ type: "save_email_account", ...input }),
+    onError: showError,
+    onSettled: invalidate,
+  });
+}
+
+export function useDeleteEmailAccount(bridge: DesktopBridge) {
+  const invalidate = useInvalidateEmail();
+  return useMutation({
+    mutationFn: (name: string) => bridge.agent.command({ type: "delete_email_account", name }),
+    onError: showError,
+    onSettled: invalidate,
+  });
+}
+
+export function useTestEmailAccount(bridge: DesktopBridge) {
+  const invalidate = useInvalidateEmail();
+  return useMutation({
+    mutationFn: (name: string) => bridge.agent.command({ type: "test_email_account", name }),
+    onSettled: invalidate,
+  });
+}
 
 export const mcpJsonQuery = (bridge: DesktopBridge) =>
   queryOptions({

@@ -246,6 +246,8 @@ export type SettingsScope =
   | "tools"
   | "skills"
   | "mcp"
+  /** Mailboxes the agent may read and send from (Connectors › Email). */
+  | "email"
   | "agents"
   | "workspaces"
   | "sessions"
@@ -910,6 +912,10 @@ export const REMOTE_LOCAL_ONLY_COMMANDS = [
   "forget_remote_device",
   "save_mcp_server",
   "save_mcp_json",
+  // Email passwords live on the computer; a phone may start a conversation, not change one.
+  "save_email_account",
+  "delete_email_account",
+  "test_email_account",
   "set_tool_policy",
   // mcp.json holds the servers' keys and tokens in plain text.
   "get_mcp_json",
@@ -1272,6 +1278,100 @@ export interface McpServerView {
   usesOAuth: boolean;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Email (IMAP and SMTP)
+// ---------------------------------------------------------------------------------------------
+
+/** One mail server of an account. `secure` = TLS from the start (993/465), else STARTTLS (143/587). */
+export interface EmailServerSettings {
+  host: string;
+  port: number;
+  secure: boolean;
+  /** Sign-in name; the account's address when empty. */
+  user?: string;
+}
+
+/**
+ * A mailbox the agent may read and send from, as edited in Settings. The password is not here: it
+ * lives in the vault (`email:<name>`), never in `email.json`.
+ */
+export interface EmailAccountSettings {
+  /** Letters, digits, `_` and `-`; the tool calls name it when the account is not the only one. */
+  name: string;
+  /** Shown in Settings and to the agent ("Work", "Personal"); the address when empty. */
+  label?: string;
+  address: string;
+  displayName?: string;
+  imap: EmailServerSettings;
+  smtp: EmailServerSettings;
+}
+
+export interface EmailAccountView {
+  settings: EmailAccountSettings;
+  /** False when the password is missing or the vault cannot be read: the account cannot connect. */
+  hasPassword: boolean;
+  /** The sign-in failed the last time this app tried it, with the message the server gave. */
+  error?: string;
+}
+
+/** A mail provider whose server names and ports are known, so the person only types a password. */
+export interface EmailProviderPreset {
+  id: string;
+  name: string;
+  imap: { host: string; port: number; secure: boolean };
+  smtp: { host: string; port: number; secure: boolean };
+  /** Where the person creates an app password, when the provider requires one. */
+  passwordHelpUrl?: string;
+}
+
+/**
+ * Presets offered by the email form. Most providers refuse the account password over IMAP/SMTP
+ * and require an app password (with two-step verification on); the form says so and links to it.
+ */
+export const EMAIL_PROVIDERS: readonly EmailProviderPreset[] = [
+  {
+    id: "zoho",
+    name: "Zoho Mail",
+    imap: { host: "imap.zoho.com", port: 993, secure: true },
+    smtp: { host: "smtp.zoho.com", port: 465, secure: true },
+    passwordHelpUrl: "https://accounts.zoho.com/home#security/app_password",
+  },
+  {
+    id: "gmail",
+    name: "Gmail",
+    imap: { host: "imap.gmail.com", port: 993, secure: true },
+    smtp: { host: "smtp.gmail.com", port: 465, secure: true },
+    passwordHelpUrl: "https://myaccount.google.com/apppasswords",
+  },
+  {
+    id: "outlook",
+    name: "Outlook / Microsoft 365",
+    imap: { host: "outlook.office365.com", port: 993, secure: true },
+    smtp: { host: "smtp-mail.outlook.com", port: 587, secure: false },
+    passwordHelpUrl: "https://account.microsoft.com/security",
+  },
+  {
+    id: "yahoo",
+    name: "Yahoo Mail",
+    imap: { host: "imap.mail.yahoo.com", port: 993, secure: true },
+    smtp: { host: "smtp.mail.yahoo.com", port: 465, secure: true },
+    passwordHelpUrl: "https://login.yahoo.com/account/security",
+  },
+  {
+    id: "icloud",
+    name: "iCloud Mail",
+    imap: { host: "imap.mail.me.com", port: 993, secure: true },
+    smtp: { host: "smtp.mail.me.com", port: 587, secure: false },
+    passwordHelpUrl: "https://account.apple.com/account/manage",
+  },
+  {
+    id: "custom",
+    name: "Other (IMAP and SMTP)",
+    imap: { host: "", port: 993, secure: true },
+    smtp: { host: "", port: 465, secure: true },
+  },
+];
+
 /** The settings a person can change with `update_settings`. */
 export type SettingsPatch = Partial<
   Pick<
@@ -1412,6 +1512,17 @@ export interface AgentCommandMap {
   /** Raw mcp.json, for pasting a config from Claude Desktop, Cursor, and similar clients. */
   get_mcp_json: { params: NoParams; result: string };
   save_mcp_json: { params: { text: string }; result: void };
+
+  /** Mailboxes the agent may read and send from; the passwords stay in the vault. */
+  list_email_accounts: { params: NoParams; result: EmailAccountView[] };
+  /** The password is stored in the vault under the server's name; omitted keeps the saved one. */
+  save_email_account: {
+    params: { originalName?: string; account: EmailAccountSettings; password?: string };
+    result: void;
+  };
+  delete_email_account: { params: { name: string }; result: void };
+  /** Signs in to IMAP and sends nothing; resolves with the server's message when it fails. */
+  test_email_account: { params: { name: string }; result: { ok: boolean; error?: string } };
 
   /** Default agent first, then by name. */
   list_agents: { params: NoParams; result: AgentProfile[] };

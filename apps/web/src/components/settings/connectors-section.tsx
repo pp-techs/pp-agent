@@ -1,16 +1,41 @@
 import * as React from "react";
-import type { DesktopBridge, McpServerSettings, McpServerView } from "@workspace/shared";
+import type {
+  DesktopBridge,
+  EmailAccountView,
+  McpServerSettings,
+  McpServerView,
+} from "@workspace/shared";
 import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert";
 import { Button } from "@workspace/ui/components/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu";
 import { Item, ItemDescription, ItemTitle } from "@workspace/ui/components/item";
 import { Spinner } from "@workspace/ui/components/spinner";
 import { useQuery } from "@tanstack/react-query";
-import { FolderOpenIcon, LogInIcon, PlugIcon, PlusIcon, TriangleAlertIcon } from "lucide-react";
+import {
+  FolderOpenIcon,
+  LogInIcon,
+  MailIcon,
+  MoreHorizontalIcon,
+  PencilIcon,
+  PlugIcon,
+  PlusIcon,
+  RefreshCwIcon,
+  Trash2Icon,
+  TriangleAlertIcon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { PromptModal } from "@/components/modals/prompt-modal";
 import { ComputerOnlyNotice } from "@/components/settings/computer-only-notice";
+import { EmailAccountForm } from "@/components/settings/email-account-form";
 import {
   McpServerMenu,
   StatusLabel,
@@ -19,7 +44,14 @@ import {
 } from "@/components/settings/mcp-server-actions";
 import { McpServerForm } from "@/components/settings/mcp-server-form";
 import { isWebApp } from "@/lib/bridge";
-import { mcpQuery, useMcpSignIn, useSaveMcpServer } from "@/lib/extension-queries";
+import {
+  emailQuery,
+  mcpQuery,
+  useDeleteEmailAccount,
+  useMcpSignIn,
+  useSaveMcpServer,
+  useTestEmailAccount,
+} from "@/lib/extension-queries";
 import { GOOGLE_CLIENT } from "@/lib/google-oauth";
 import {
   availablePresets,
@@ -29,7 +61,7 @@ import {
   type McpPreset,
 } from "@/lib/mcp-catalog";
 
-type View = { kind: "list" } | { kind: "form"; name?: string };
+type View = { kind: "list" } | { kind: "form"; name?: string } | { kind: "email"; name?: string };
 
 /** A logo on a white tile, so dark marks (Notion) stay readable in the dark theme too. */
 function Logo({ src, fallback }: { src: string | null; fallback: React.ReactNode }) {
@@ -128,6 +160,93 @@ function ServerRow({
   );
 }
 
+/** A mailbox the person added: its sign-in state, and what they can do with it. */
+function EmailRow({
+  bridge,
+  account,
+  onEdit,
+}: {
+  bridge: DesktopBridge;
+  account: EmailAccountView;
+  onEdit: () => void;
+}) {
+  const { t } = useTranslation(["extensions", "common"]);
+  const remove = useDeleteEmailAccount(bridge);
+  const test = useTestEmailAccount(bridge);
+  const name = account.settings.label ?? account.settings.address;
+  const busy = remove.isPending || test.isPending;
+  const state = !account.hasPassword ? "noPassword" : account.error ? "failed" : "ready";
+
+  async function onDelete() {
+    const confirmed = await ConfirmModal.show({
+      title: t("email.removeConfirm.title"),
+      description: t("email.removeConfirm.description", { name }),
+      confirmLabel: t("common:actions.remove"),
+    });
+    if (!confirmed) return;
+    remove.mutate(account.settings.name);
+  }
+
+  return (
+    <div className={`flex flex-col gap-1 ${account.hasPassword ? "" : "opacity-70"}`}>
+      <div className="flex min-w-0 items-center gap-2 rounded-xl bg-muted/50 py-1.5 pr-1.5 pl-3">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-sm font-medium">{name}</span>
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span
+              aria-hidden
+              className={`size-2 shrink-0 rounded-full ${
+                state === "ready"
+                  ? "bg-emerald-500"
+                  : state === "failed"
+                    ? "bg-destructive"
+                    : "bg-amber-500"
+              }`}
+            />
+            {t(`email.state.${state}`)}
+            {account.settings.label ? ` · ${account.settings.address}` : ""}
+          </span>
+        </div>
+        {busy && <Spinner />}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button variant="ghost" size="icon-sm" aria-label={t("email.actions", { name })} />
+            }
+          >
+            <MoreHorizontalIcon />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem disabled={busy} onClick={() => test.mutate(account.settings.name)}>
+              <RefreshCwIcon />
+              {t("email.test")}
+            </DropdownMenuItem>
+            {!isWebApp && (
+              <DropdownMenuItem onClick={onEdit}>
+                <PencilIcon />
+                {t("common:actions.edit")}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={() => void onDelete()}>
+              <Trash2Icon />
+              {t("common:actions.remove")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      {account.error && (
+        <p
+          title={account.error}
+          className="line-clamp-6 px-3 text-xs break-words text-destructive [overflow-wrap:anywhere]"
+        >
+          {summarizeServerError(account.error)}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** What tells a service's servers apart: the account's label, or the folder. */
 function rowLabel(
   preset: McpPreset,
@@ -143,6 +262,7 @@ function rowLabel(
 export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation(["extensions", "common"]);
   const overview = useQuery(mcpQuery(bridge));
+  const email = useQuery(emailQuery(bridge));
   const save = useSaveMcpServer(bridge);
   const signIn = useMcpSignIn(bridge);
   const [view, setView] = React.useState<View>({ kind: "list" });
@@ -150,6 +270,19 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
 
   const servers = overview.data?.servers ?? [];
   const back = () => setView({ kind: "list" });
+
+  if (view.kind === "email") {
+    const editing = email.data?.find((account) => account.settings.name === view.name)?.settings;
+    return (
+      <EmailAccountForm
+        key={view.name ?? ""}
+        bridge={bridge}
+        account={editing}
+        existingNames={(email.data ?? []).map((account) => account.settings.name)}
+        onDone={back}
+      />
+    );
+  }
 
   if (view.kind === "form") {
     const editing = servers.find((server) => server.settings.name === view.name)?.settings;
@@ -173,6 +306,37 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
   const connected = groups.filter((group) => group.servers.length > 0);
   const available = groups.filter((group) => group.servers.length === 0);
   const ready = overview.isSuccess && !isWebApp && connecting === null;
+
+  const mailboxes = email.data ?? [];
+  const emailCard = (
+    <CardShell
+      key="email"
+      logo={<Logo src={null} fallback={<MailIcon />} />}
+      title={t("email.cardTitle")}
+      description={t("email.cardDescription")}
+      footer={
+        !isWebApp && (
+          <Button
+            size="sm"
+            variant={mailboxes.length === 0 ? "outline" : "ghost"}
+            onClick={() => setView({ kind: "email" })}
+          >
+            <PlusIcon />
+            {t("email.add")}
+          </Button>
+        )
+      }
+    >
+      {mailboxes.map((account) => (
+        <EmailRow
+          key={account.settings.name}
+          bridge={bridge}
+          account={account}
+          onEdit={() => setView({ kind: "email", name: account.settings.name })}
+        />
+      ))}
+    </CardShell>
+  );
   const edit = (server: McpServerView) => () =>
     setView({ kind: "form", name: server.settings.name });
 
@@ -296,10 +460,11 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
         </Alert>
       )}
 
-      {connected.length + custom.length > 0 && (
+      {connected.length + custom.length + (mailboxes.length > 0 ? 1 : 0) > 0 && (
         <section className="flex flex-col gap-3">
           <h3 className="text-sm font-medium">{t("connectors.sections.connected")}</h3>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {mailboxes.length > 0 && emailCard}
             {connected.map(presetCard)}
             {custom.map((server) => (
               <CardShell
@@ -317,10 +482,13 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
 
       {available.length > 0 && (
         <section className="flex flex-col gap-3">
-          {connected.length + custom.length > 0 && (
+          {(connected.length > 0 || custom.length > 0 || mailboxes.length > 0) && (
             <h3 className="text-sm font-medium">{t("connectors.sections.available")}</h3>
           )}
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{available.map(presetCard)}</div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {mailboxes.length === 0 && emailCard}
+            {available.map(presetCard)}
+          </div>
         </section>
       )}
     </div>

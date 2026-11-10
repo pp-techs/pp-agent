@@ -59,7 +59,16 @@
       "sessions": "See other conversations",
       "schedule_manage": "Scheduled tasks",
       "office_read": "Inspect Word, Excel, PowerPoint files",
-      "office_edit": "Create and edit Word, Excel, PowerPoint files"
+      "office_edit": "Create and edit Word, Excel, PowerPoint files",
+      "email_accounts": "Mailboxes",
+      "email_folders": "Mail folders",
+      "email_search": "Search mail",
+      "email_read": "Read mail",
+      "email_send": "Send mail",
+      "email_reply": "Reply to mail",
+      "email_mark": "Mark mail",
+      "email_move": "Move mail",
+      "email_save_attachment": "Save attachment"
     },
     "shell": {
       "description": "Lets the agent run commands on your computer (Terminal on Mac, PowerShell on Windows).",
@@ -99,7 +108,8 @@
       "memory": "Memory",
       "shell": "Shell commands",
       "tasks": "Tasks and conversations",
-      "other": "Other"
+      "other": "Other",
+      "email": "Email"
     },
     "groupCount_one": "{{count}} tool",
     "groupCount_other": "{{count}} tools"
@@ -303,6 +313,77 @@
     },
     "custom": {
       "action": "Add custom connector"
+    }
+  },
+  "email": {
+    "cardTitle": "Email",
+    "cardDescription": "Read, search, send and file email in your own mailbox over IMAP and SMTP. The password is kept in secure storage on this computer.",
+    "add": "Add mailbox",
+    "addTitle": "Add a mailbox",
+    "editTitle": "Edit {{name}}",
+    "intro": "Your password for this mailbox. Most providers need an app password instead of your account password.",
+    "back": "Back",
+    "actions": "Actions for {{name}}",
+    "test": "Test connection",
+    "state": {
+      "ready": "Ready",
+      "failed": "Last sign-in failed",
+      "noPassword": "Needs its password"
+    },
+    "toast": {
+      "saved": "“{{name}}” saved",
+      "connected": "Connected to the mail servers"
+    },
+    "fields": {
+      "provider": {
+        "label": "Provider"
+      },
+      "address": {
+        "label": "Email address",
+        "hint": "The address mail is read from and sent as."
+      },
+      "label": {
+        "label": "Name (optional)",
+        "placeholder": "Work, Support, Personal",
+        "hint": "Shown in this list and to the agent, when the mailbox is not the only one."
+      },
+      "displayName": {
+        "label": "Display name (optional)",
+        "placeholder": "Nhật Bùi",
+        "hint": "The name recipients see on your messages."
+      },
+      "password": {
+        "label": "Password or app password",
+        "create": "Create app password",
+        "keep": "Leave empty to keep the saved password",
+        "hint": "Kept in the computer's secure storage, never in a settings file."
+      },
+      "imap": {
+        "label": "IMAP server (incoming)"
+      },
+      "smtp": {
+        "label": "SMTP server (outgoing)"
+      },
+      "port": "Port",
+      "secure": {
+        "imap": "Encrypted from the start",
+        "imapHint": "On for port 993; off for 143, which upgrades with STARTTLS.",
+        "smtp": "Encrypted from the start",
+        "smtpHint": "On for port 465; off for 587, which upgrades with STARTTLS."
+      }
+    },
+    "servers": {
+      "legend": "Servers",
+      "description": "Filled in from the provider; change them only if your company runs its own mail server.",
+      "note": "Use the servers your mail administrator gave you. The sign-in name is the address unless the server needs another."
+    },
+    "validation": {
+      "address": "Enter the email address of this mailbox.",
+      "port": "The ports must be numbers between 1 and 65535."
+    },
+    "removeConfirm": {
+      "title": "Remove this mailbox?",
+      "description": "“{{name}}” and its saved password will be removed. The agent can no longer read or send from it."
     }
   },
   "mcpJson": {

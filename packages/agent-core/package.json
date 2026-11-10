@@ -12,6 +12,9 @@
     "@workspace/shared": "workspace:*",
     "fflate": "catalog:",
     "i18next": "catalog:",
+    "imapflow": "catalog:",
+    "mailparser": "catalog:",
+    "nodemailer": "catalog:",
     "officeparser": "catalog:",
     "typebox": "catalog:",
     "yaml": "catalog:"

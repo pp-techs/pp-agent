@@ -59,7 +59,16 @@
       "sessions": "Xem các cuộc trò chuyện khác",
       "schedule_manage": "Tác vụ theo lịch",
       "office_read": "Xem tệp Word, Excel, PowerPoint",
-      "office_edit": "Tạo và chỉnh sửa tệp Word, Excel, PowerPoint"
+      "office_edit": "Tạo và chỉnh sửa tệp Word, Excel, PowerPoint",
+      "email_accounts": "Hộp thư",
+      "email_folders": "Thư mục thư",
+      "email_search": "Tìm thư",
+      "email_read": "Đọc thư",
+      "email_send": "Gửi thư",
+      "email_reply": "Trả lời thư",
+      "email_mark": "Đánh dấu thư",
+      "email_move": "Chuyển thư",
+      "email_save_attachment": "Lưu tệp đính kèm"
     },
     "shell": {
       "description": "Cho phép Agent chạy lệnh trên máy tính của bạn (Terminal trên Mac, PowerShell trên Windows).",
@@ -99,7 +108,8 @@
       "memory": "Bộ nhớ",
       "shell": "Lệnh shell",
       "tasks": "Tác vụ và hội thoại",
-      "other": "Khác"
+      "other": "Khác",
+      "email": "Email"
     },
     "groupCount_other": "{{count}} công cụ"
   },
@@ -304,6 +314,77 @@
     },
     "custom": {
       "action": "Thêm kết nối tùy chỉnh"
+    }
+  },
+  "email": {
+    "cardTitle": "Email",
+    "cardDescription": "Đọc, tìm, gửi và sắp xếp thư trong hộp thư của bạn qua IMAP và SMTP. Mật khẩu được lưu trong kho bảo mật trên máy tính này.",
+    "add": "Thêm hộp thư",
+    "addTitle": "Thêm hộp thư",
+    "editTitle": "Chỉnh sửa {{name}}",
+    "intro": "Mật khẩu của hộp thư này. Phần lớn nhà cung cấp yêu cầu mật khẩu ứng dụng thay cho mật khẩu tài khoản.",
+    "back": "Quay lại",
+    "actions": "Thao tác cho {{name}}",
+    "test": "Kiểm tra kết nối",
+    "state": {
+      "ready": "Sẵn sàng",
+      "failed": "Lần đăng nhập trước thất bại",
+      "noPassword": "Cần mật khẩu"
+    },
+    "toast": {
+      "saved": "Đã lưu “{{name}}”",
+      "connected": "Đã kết nối tới máy chủ thư"
+    },
+    "fields": {
+      "provider": {
+        "label": "Nhà cung cấp"
+      },
+      "address": {
+        "label": "Địa chỉ email",
+        "hint": "Địa chỉ dùng để đọc và gửi thư."
+      },
+      "label": {
+        "label": "Tên (không bắt buộc)",
+        "placeholder": "Công việc, Hỗ trợ, Cá nhân",
+        "hint": "Hiện trong danh sách này và với Agent, khi có nhiều hộp thư."
+      },
+      "displayName": {
+        "label": "Tên hiển thị (không bắt buộc)",
+        "placeholder": "Nhật Bùi",
+        "hint": "Tên người nhận thấy trên thư của bạn."
+      },
+      "password": {
+        "label": "Mật khẩu hoặc mật khẩu ứng dụng",
+        "create": "Tạo mật khẩu ứng dụng",
+        "keep": "Để trống để giữ mật khẩu đã lưu",
+        "hint": "Lưu trong kho bảo mật của máy tính, không ghi vào tệp cài đặt."
+      },
+      "imap": {
+        "label": "Máy chủ IMAP (nhận thư)"
+      },
+      "smtp": {
+        "label": "Máy chủ SMTP (gửi thư)"
+      },
+      "port": "Cổng",
+      "secure": {
+        "imap": "Mã hóa ngay từ đầu",
+        "imapHint": "Bật cho cổng 993; tắt cho 143 vì cổng này nâng cấp bằng STARTTLS.",
+        "smtp": "Mã hóa ngay từ đầu",
+        "smtpHint": "Bật cho cổng 465; tắt cho 587 vì cổng này nâng cấp bằng STARTTLS."
+      }
+    },
+    "servers": {
+      "legend": "Máy chủ",
+      "description": "Đã điền theo nhà cung cấp; chỉ đổi khi công ty bạn tự chạy máy chủ thư.",
+      "note": "Dùng máy chủ do quản trị viên thư của bạn cung cấp. Tên đăng nhập là địa chỉ email, trừ khi máy chủ yêu cầu khác."
+    },
+    "validation": {
+      "address": "Hãy nhập địa chỉ email của hộp thư này.",
+      "port": "Cổng phải là số từ 1 đến 65535."
+    },
+    "removeConfirm": {
+      "title": "Xóa hộp thư này?",
+      "description": "“{{name}}” và mật khẩu đã lưu sẽ bị xóa. Agent sẽ không đọc hay gửi thư từ đó được nữa."
     }
   },
   "mcpJson": {

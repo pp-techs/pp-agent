@@ -369,6 +369,7 @@ const ALL_SCOPES = Object.keys({
   tools: true,
   skills: true,
   mcp: true,
+  email: true,
   agents: true,
   workspaces: true,
   sessions: true,
