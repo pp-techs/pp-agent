@@ -1,5 +1,12 @@
+import { resolve } from "node:path";
 import { defineConfig } from "vite-plus";
 import type { PackUserConfig } from "vite-plus/pack";
+
+/**
+ * Data folder of `dev:isolated`: its own settings, vault and sessions, so the daemon it starts
+ * listens on its own socket instead of the one the app on this computer already uses.
+ */
+const ISOLATED_HOME = resolve(import.meta.dirname, "../../tmp/pp-agent-dev");
 
 const shared: PackUserConfig = {
   platform: "node",
@@ -36,6 +43,14 @@ export default defineConfig({
       // Never cached: cache tracking injects a file-access hook into child processes, which
       // crashes Electron's sandboxed renderer (blank window).
       dev: { command: "vp pack && electron .", cache: false },
+      // A second app beside the one on this computer: its daemon gets its own socket, vault and
+      // sessions. Start the renderer first (`vp dev` in apps/web). Leave Background and the chat
+      // channels off here: the login service is single per person, and a second poller with the
+      // same bot token fights the real daemon for it.
+      "dev:isolated": {
+        command: `vp pack && electron . --user-data-dir="${ISOLATED_HOME}"`,
+        cache: false,
+      },
     },
   },
 });

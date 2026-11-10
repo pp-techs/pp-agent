@@ -60,6 +60,13 @@ export default defineConfig(({ mode }) => ({
       "/api": { target: `http://127.0.0.1:${REMOTE_DEFAULT_PORT}` },
     },
   },
+  // The renderer half of the root `dev:isolated` script: same server, run beside an app whose data
+  // and daemon live in tmp/ (see the task of that name in apps/desktop).
+  run: {
+    tasks: {
+      "dev:isolated": { command: "vp dev", cache: false },
+    },
+  },
   build: {
     rolldownOptions: {
       output: {

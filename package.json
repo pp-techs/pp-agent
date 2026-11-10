@@ -15,6 +15,7 @@
   "type": "module",
   "scripts": {
     "dev": "vp run --parallel --filter @workspace/web --filter @workspace/desktop dev",
+    "dev:isolated": "vp run --parallel --filter @workspace/web --filter @workspace/desktop dev:isolated",
     "build": "vp run -r build",
     "dist": "vp run @workspace/web#build && vp run @workspace/desktop#dist",
     "ready": "vp check && vp run -r build",
