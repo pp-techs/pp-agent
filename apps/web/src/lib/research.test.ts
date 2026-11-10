@@ -79,6 +79,6 @@ it("links only web pages, and shortens an address to its site", () => {
 });
 
 it("names a report file by the last part of its path", () => {
-  expect(reportFileName("research/solar-2026-11-08.md")).toBe("solar-2026-11-08.md");
+  expect(reportFileName("research/solar-2026-11-08/report.md")).toBe("report.md");
   expect(reportFileName("solar.md")).toBe("solar.md");
 });
