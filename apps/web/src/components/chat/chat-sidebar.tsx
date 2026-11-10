@@ -58,6 +58,7 @@ import {
   SearchIcon,
   SettingsIcon,
   SquarePenIcon,
+  FolderIcon,
   Trash2Icon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -72,7 +73,8 @@ import { SettingsModal } from "@/components/modals/settings-modal";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useExportSession } from "@/hooks/use-export-session";
 import { IS_MAC } from "@/hooks/use-panel-shortcut";
-import { maySend } from "@/lib/bridge";
+import type { Page } from "@/lib/pages";
+import { isWebApp, maySend } from "@/lib/bridge";
 import { useDeleteWorkspace } from "@/lib/extension-queries";
 import { confirmLeaveTemporary } from "@/lib/confirm-leave-temporary";
 import { i18n } from "@/lib/i18n";
@@ -217,8 +219,8 @@ export function ChatSidebar({
   onNavigate,
 }: {
   bridge: DesktopBridge;
-  page: "chat" | "schedules";
-  onNavigate: (page: "chat" | "schedules") => void;
+  page: Page;
+  onNavigate: (page: Page) => void;
 }) {
   const { setOpenMobile, toggleSidebar } = useSidebar();
   const labels = useUiLabels();
@@ -266,7 +268,7 @@ export function ChatSidebar({
   const { t } = useTranslation(["chat", "common"]);
   const onError = (error: Error) => toast.error(error.message);
 
-  function navigate(nextPage: "chat" | "schedules") {
+  function navigate(nextPage: Page) {
     onNavigate(nextPage);
     setOpenMobile(false);
   }
@@ -623,6 +625,18 @@ export function ChatSidebar({
       <SidebarFooter className="shrink-0">
         <UpdateNotice bridge={bridge} />
         <SidebarMenu>
+          {isWebApp && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={page === "files"}
+                aria-current={page === "files" ? "page" : undefined}
+                onClick={() => navigate("files")}
+              >
+                <FolderIcon />
+                <span>{t("sidebar.files")}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
           <SidebarMenuItem>
             <SidebarMenuButton
               isActive={page === "schedules"}

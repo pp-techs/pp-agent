@@ -18,9 +18,8 @@ import { toast } from "sonner";
 import { Markdown } from "@/components/markdown";
 import { isWebUrl, researchDepthKey, researchPhaseKey, sourceHost } from "@/lib/research";
 import { researchReportQuery, useResearchPending, useSetResearch } from "@/lib/queries";
+import { openFile } from "@/lib/workbench-actions";
 import { useChatStore } from "@/stores/chat-store";
-import { useFileTabsStore } from "@/stores/file-tabs-store";
-import { usePanelStore } from "@/stores/panel-store";
 
 /**
  * The open conversation's research run above the message box: where it stands, how many pages it
@@ -50,8 +49,7 @@ export function ResearchBanner({ bridge }: { bridge: DesktopBridge }) {
     const path = run?.report?.markdown;
     if (!path) return;
     if (bridge.kind === "desktop" && root) {
-      useFileTabsStore.getState().open(root, path);
-      usePanelStore.getState().show("files");
+      openFile(root, path);
     } else {
       setOpen(true);
     }

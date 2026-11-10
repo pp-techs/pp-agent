@@ -64,6 +64,9 @@ export const queryKeys = {
   /** Prefix of every file preview of one workspace. */
   filePreviews: (root: string) => ["file-preview", root] as const,
   filePreview: (root: string, path: string) => ["file-preview", root, path] as const,
+  /** A workspace folder read over the remote connection (the app on a phone). */
+  remoteFolder: (workspaceId: string, dir: string) => ["remote-files", workspaceId, dir] as const,
+  remoteFile: (workspaceId: string, path: string) => ["remote-file", workspaceId, path] as const,
   /** The saved report text of the open conversation's research run, keyed by its path. */
   researchReport: (path: string) => ["research-report", path] as const,
 };

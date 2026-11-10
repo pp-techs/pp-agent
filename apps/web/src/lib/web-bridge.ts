@@ -568,6 +568,7 @@ export function createWebBridge(): DesktopBridge {
       onFocusComposer: noop,
       takePendingFocus: async () => false,
       onTogglePanel: noop,
+      onNewTab: noop,
       onCloseTab: noop,
       closeWindow: async () => undefined,
     },

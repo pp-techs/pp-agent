@@ -11,20 +11,20 @@ Before planning or implementing, read this `docs/SUMMARY.md` file first. Load on
 
 System design, component interactions, data flows, deployment, and external integrations.
 
-| File                                                                            | Description                                                                                                                               |
-| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| [process-model.md](architecture/process-model.md)                               | Main, daemon, preload bridge, renderer: responsibilities, startup, crash and quit rules, socket, hardening                                |
-| [ipc-and-messages.md](architecture/ipc-and-messages.md)                         | Renderer↔main channels, main↔daemon NDJSON frames, command ids, credentials, event handling                                               |
-| [data-storage.md](architecture/data-storage.md)                                 | Home folder files and owners (vault, token, socket, channels, logs), workspaces, legacy migration                                         |
-| [conversation-flows.md](architecture/conversation-flows.md)                     | Prompt with attachments and streaming; approval gate, tiers, policies, codemode; Telegram chat turns                                      |
-| [agents-and-live-settings.md](architecture/agents-and-live-settings.md)         | Deferred live-apply of settings and switching agents mid-conversation                                                                     |
-| [model-and-thinking-selection.md](architecture/model-and-thinking-selection.md) | How a conversation's model and thinking level are chosen and kept                                                                         |
-| [providers-and-mcp.md](architecture/providers-and-mcp.md)                       | Provider sign-in with auth prompts, gateways, per-agent MCP registration, `/mcp` status                                                   |
-| [build-and-packaging.md](architecture/build-and-packaging.md)                   | `vp pack` bundles, renderer build and CSP, electron-builder, dev flow on port 47821                                                       |
-| [side-panel.md](architecture/side-panel.md)                                     | Right side panel: terminal (node-pty), workspace files, browser tabs with profiles, cookie import, `BrowserDriver` seam                   |
-| [computer-use.md](architecture/computer-use.md)                                 | The agent's `computer` tool: cua-driver as a child of main, macOS grants, per-app approvals, protected apps                               |
-| [remote-access.md](architecture/remote-access.md)                               | Web app on the local network served by the daemon: pairing, device tokens, API, refused commands, mobile behaviour, desktop client window |
-| [mobile-app.md](architecture/mobile-app.md)                                     | iOS and Android app (Capacitor around apps/web): connecting to a computer, CORS, QR scanning, share sheet, building                       |
+| File                                                                            | Description                                                                                                                                            |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [process-model.md](architecture/process-model.md)                               | Main, daemon, preload bridge, renderer: responsibilities, startup, crash and quit rules, socket, hardening                                             |
+| [ipc-and-messages.md](architecture/ipc-and-messages.md)                         | Renderer↔main channels, main↔daemon NDJSON frames, command ids, credentials, event handling                                                            |
+| [data-storage.md](architecture/data-storage.md)                                 | Home folder files and owners (vault, token, socket, channels, logs), workspaces, legacy migration                                                      |
+| [conversation-flows.md](architecture/conversation-flows.md)                     | Prompt with attachments and streaming; approval gate, tiers, policies, codemode; Telegram chat turns                                                   |
+| [agents-and-live-settings.md](architecture/agents-and-live-settings.md)         | Deferred live-apply of settings and switching agents mid-conversation                                                                                  |
+| [model-and-thinking-selection.md](architecture/model-and-thinking-selection.md) | How a conversation's model and thinking level are chosen and kept                                                                                      |
+| [providers-and-mcp.md](architecture/providers-and-mcp.md)                       | Provider sign-in with auth prompts, gateways, per-agent MCP registration, `/mcp` status                                                                |
+| [build-and-packaging.md](architecture/build-and-packaging.md)                   | `vp pack` bundles, renderer build and CSP, electron-builder, dev flow on port 47821                                                                    |
+| [side-panel.md](architecture/side-panel.md)                                     | Right side panel (file tree) and main-area tabs: terminal (node-pty), workspace files, browser tabs with profiles, cookie import, `BrowserDriver` seam |
+| [computer-use.md](architecture/computer-use.md)                                 | The agent's `computer` tool: cua-driver as a child of main, macOS grants, per-app approvals, protected apps                                            |
+| [remote-access.md](architecture/remote-access.md)                               | Web app on the local network served by the daemon: pairing, device tokens, API, refused commands, mobile behaviour, desktop client window              |
+| [mobile-app.md](architecture/mobile-app.md)                                     | iOS and Android app (Capacitor around apps/web): connecting to a computer, CORS, QR scanning, share sheet, building                                    |
 
 ## Codebase
 

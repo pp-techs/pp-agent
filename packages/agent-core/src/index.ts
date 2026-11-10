@@ -164,6 +164,7 @@ import {
 } from "./attachments.ts";
 import { BROWSER_TOOL, browserActionTier, createBrowserTool } from "./browser-tool.ts";
 import { isInside } from "./office/files.ts";
+import { listWorkspaceFolder, previewWorkspaceFile } from "./workspace-files.ts";
 import { deniedFolders, pathAccess, type PathRules } from "./path-access.ts";
 import {
   COMPUTER_TOOL,
@@ -1034,6 +1035,18 @@ export class AgentHost {
 
       case "list_workspaces":
         return sortWorkspaces(services.settings.get().workspaces);
+      case "list_workspace_files":
+        return listWorkspaceFolder(
+          this.filesRoot(command.workspaceId),
+          command.dir,
+          this.pathRules().denied,
+        );
+      case "preview_workspace_file":
+        return previewWorkspaceFile(
+          this.filesRoot(command.workspaceId),
+          command.path,
+          this.pathRules().denied,
+        );
       case "save_workspace":
         return this.saveWorkspace(command.workspace);
       case "read_workspace_instructions":
@@ -3108,6 +3121,14 @@ export class AgentHost {
         return undefined;
       });
     };
+  }
+
+  /** Folder of the workspace whose files a phone reads; the open conversation's when no id. */
+  private filesRoot(workspaceId: string | undefined): string {
+    const services = this.services;
+    if (!services) throw new Error(t("panel.notWorkspace"));
+    const workspace = workspaceId ? this.requireWorkspace(workspaceId) : this.currentWorkspace();
+    return workspaceFolder(workspace, services.paths.workspaceDir);
   }
 
   /**

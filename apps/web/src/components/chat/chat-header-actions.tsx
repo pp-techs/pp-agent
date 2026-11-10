@@ -14,10 +14,8 @@ import {
 import {
   DownloadIcon,
   FileTextIcon,
-  FolderOpenIcon,
   GlobeIcon,
   MessageSquareDashedIcon,
-  PanelRightIcon,
   RabbitIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -33,9 +31,7 @@ import {
   useSetConversationYolo,
   usageQuery,
 } from "@/lib/queries";
-import { IS_MAC } from "@/hooks/use-panel-shortcut";
 import { useChatStore } from "@/stores/chat-store";
-import { usePanelStore } from "@/stores/panel-store";
 import { cn } from "@workspace/ui/lib/utils";
 
 const RING_SIZE = 18;
@@ -215,35 +211,6 @@ function ContextButton({ bridge }: { bridge: DesktopBridge }) {
   );
 }
 
-/** Opens the folder the open conversation works in (its workspace's folder). */
-function OpenFolderButton({ bridge }: { bridge: DesktopBridge }) {
-  const workspaceDir = useChatStore((state) => state.workspaceDir);
-  const { t } = useTranslation("chat");
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={t("header.openFolder")}
-            disabled={!workspaceDir}
-            onClick={() => {
-              if (workspaceDir)
-                bridge.files
-                  .openWorkspace(workspaceDir)
-                  .catch((error: Error) => toast.error(error.message));
-            }}
-          />
-        }
-      >
-        <FolderOpenIcon />
-      </TooltipTrigger>
-      <TooltipContent>{t("header.openFolder")}</TooltipContent>
-    </Tooltip>
-  );
-}
-
 /** Exports the open conversation, once it has been saved (it has a reply). */
 function ExportButton({ bridge }: { bridge: DesktopBridge }) {
   const sessionPath = useChatStore((state) => state.sessionPath);
@@ -289,35 +256,6 @@ function ExportButton({ bridge }: { bridge: DesktopBridge }) {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-/** Opens and closes the side panel (terminal, files, browser). */
-function SidePanelButton() {
-  const open = usePanelStore((state) => state.open);
-  const toggle = usePanelStore((state) => state.toggle);
-  const { t } = useTranslation("chat");
-  const label = open ? t("panel.close") : t("panel.open");
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="max-md:hidden"
-            aria-label={label}
-            aria-pressed={open}
-            onClick={toggle}
-          />
-        }
-      >
-        <PanelRightIcon />
-      </TooltipTrigger>
-      <TooltipContent>
-        {t("panel.toggleWithShortcut", { label, shortcut: IS_MAC ? "⌘J" : "Ctrl+J" })}
-      </TooltipContent>
-    </Tooltip>
   );
 }
 
@@ -417,7 +355,7 @@ function TemporaryToggle({ bridge }: { bridge: DesktopBridge }) {
   );
 }
 
-/** Right end of the chat's top bar: context window, export, the workspace folder, the panel. */
+/** Right end of the chat's top bar: conversation mode, context window and export. */
 export function ChatHeaderActions({ bridge }: { bridge: DesktopBridge }) {
   return (
     <div className="ml-auto flex items-center gap-0.5">
@@ -425,13 +363,6 @@ export function ChatHeaderActions({ bridge }: { bridge: DesktopBridge }) {
       <YoloButton bridge={bridge} />
       <ContextButton bridge={bridge} />
       <ExportButton bridge={bridge} />
-      {/* The folder and the side panel live on the computer, not in the web app. */}
-      {bridge.kind === "desktop" && (
-        <>
-          <OpenFolderButton bridge={bridge} />
-          <SidePanelButton />
-        </>
-      )}
     </div>
   );
 }

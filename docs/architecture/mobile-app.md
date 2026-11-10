@@ -33,6 +33,10 @@ flowchart LR
 - **No backups.** Android sets `allowBackup="false"` and `data_extraction_rules.xml` excludes everything from cloud backups and device transfers (Android 12+), so a device token never reaches another phone; a new phone pairs again.
 - **Storage.** The token and the computer's address live in the WebView's `localStorage`, like the browser web app. If the system clears it, the app asks to connect again.
 
+## Files
+
+The workspace's files are read on the computer: the sidebar's **Files** page asks the agent with `list_workspace_files` and `preview_workspace_file`, which the daemon answers from the workspace folder (`packages/agent-core/src/workspace-files.ts`). Folders open in place, the breadcrumb above them jumps back to any folder, and a folder of more than six entries gets a name filter. A file opens whole screen: Markdown rendered (with its text a switch away), code highlighted and copyable, an image, or the reason there is nothing to show (text is cut at 256 KiB, images at 10 MiB). The preview is the same `FileContent` the desktop side panel draws, so a file looks the same in both; an HTML page shows as text on a phone, as it runs in a sandboxed frame only in the desktop window. A path is resolved with `realpath` and must stay inside the workspace folder, and the app's own data folder (keys, tokens) is refused even when it is a workspace, as it is for the agent's file tools. Sending a file to the agent still happens on the computer: the desktop window's Files panel attaches it.
+
 ## Building
 
 Requirements: Xcode with an iOS simulator, or Android Studio with an SDK (JDK 21).

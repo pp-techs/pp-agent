@@ -7,7 +7,8 @@ import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query
 import { toast } from "sonner";
 
 import { queryKeys } from "@/lib/queries";
-import { useFileTabsStore } from "@/stores/file-tabs-store";
+import { openFile } from "@/lib/workbench-actions";
+import { useFileTreeStore } from "@/stores/file-tree-store";
 
 function showError(error: Error) {
   toast.error(error.message);
@@ -56,13 +57,13 @@ export const filePreviewQuery = (bridge: DesktopBridge, root: string, path: stri
 export function useWorkspaceFileCommands(bridge: DesktopBridge, root: string) {
   const queryClient = useQueryClient();
   const refresh = () => queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFiles(root) });
-  const tabs = useFileTabsStore.getState;
+  const tree = useFileTreeStore.getState;
   const create = useMutation({
     mutationFn: (input: { dir: string; name: string; kind: "file" | "folder" }) =>
       bridge.workspace.create(root, input.dir, input.name, input.kind),
     onSuccess: (path, input) => {
       void refresh();
-      if (input.kind === "file") tabs().open(root, path);
+      if (input.kind === "file") openFile(root, path);
     },
     onError: showError,
   });
@@ -70,7 +71,7 @@ export function useWorkspaceFileCommands(bridge: DesktopBridge, root: string) {
     mutationFn: (input: { path: string; name: string }) =>
       bridge.workspace.rename(root, input.path, input.name),
     onSuccess: (renamed, input) => {
-      tabs().rename(root, input.path, renamed);
+      tree().rename(root, input.path, renamed);
       void refresh();
       void queryClient.invalidateQueries({ queryKey: queryKeys.filePreviews(root) });
     },
@@ -79,7 +80,7 @@ export function useWorkspaceFileCommands(bridge: DesktopBridge, root: string) {
   const remove = useMutation({
     mutationFn: (path: string) => bridge.workspace.remove(root, path),
     onSuccess: (_result, path) => {
-      tabs().forget(root, path);
+      tree().forget(root, path);
       void refresh();
     },
     onError: showError,

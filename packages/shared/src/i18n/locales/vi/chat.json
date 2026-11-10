@@ -127,7 +127,8 @@
       "deleteTitle": "Xóa cuộc trò chuyện này?",
       "deleteDescription": "“{{title}}” sẽ bị xóa khỏi lịch sử của bạn. Các tệp nó đã lưu vẫn nằm trong không gian làm việc của bạn."
     },
-    "scheduledTasks": "Tác vụ theo lịch"
+    "scheduledTasks": "Tác vụ theo lịch",
+    "files": "Tệp"
   },
   "composer": {
     "placeholder": "Hỏi Agent, hoặc gõ / để xem thêm",
@@ -551,36 +552,24 @@
     }
   },
   "panel": {
-    "label": "Bảng bên",
-    "open": "Mở bảng bên",
-    "close": "Đóng bảng bên",
-    "closeWithShortcut": "Đóng bảng bên ({{shortcut}})",
+    "label": "Trình duyệt tệp",
+    "open": "Mở trình duyệt tệp",
+    "close": "Đóng trình duyệt tệp",
     "toggleWithShortcut": "{{label}} ({{shortcut}})",
-    "resize": "Đổi độ rộng bảng bên",
-    "tools": {
-      "terminal": "Terminal",
-      "files": "Tệp",
-      "browser": "Trình duyệt"
-    },
+    "resize": "Đổi độ rộng trình duyệt tệp",
     "terminal": {
       "new": "Terminal mới",
-      "close": "Đóng terminal",
-      "tab": "{{name}} {{number}}",
-      "ended": "(đã kết thúc)",
-      "emptyTitle": "Chưa mở terminal nào",
-      "emptyDescription": "Mở một terminal trong thư mục của không gian làm việc này để tự chạy lệnh."
+      "ended": "(đã kết thúc)"
     },
     "files": {
       "attach": "Đính kèm vào tin nhắn",
       "attached": "Đã đính kèm {{name}} vào tin nhắn của bạn.",
       "reveal": "Hiện trong thư mục",
       "refresh": "Làm mới",
-      "openFolder": "Mở thư mục không gian làm việc",
       "emptyFolder": "Thư mục trống",
       "truncated": "Chỉ hiển thị phần đầu. Tệp có dung lượng {{size}}.",
       "noPreviewTitle": "Không có bản xem trước",
       "noPreview": "Không thể hiển thị tệp này ({{size}}) ở đây. Dùng “Hiện trong thư mục” để mở.",
-      "closeTab": "Đóng {{name}}",
       "showSource": "Xem mã nguồn",
       "showPreview": "Xem bản xem trước",
       "newFile": "Tệp mới",
@@ -591,7 +580,6 @@
     },
     "browser": {
       "newTab": "Tab mới",
-      "closeTab": "Đóng {{name}}",
       "back": "Quay lại",
       "forward": "Tiến tới",
       "reload": "Tải lại",
@@ -603,10 +591,18 @@
       "newTabIn": "Tab mới trong hồ sơ",
       "manageProfiles": "Quản lý hồ sơ…",
       "emptyTitle": "Duyệt web",
-      "emptyDescription": "Nhập địa chỉ ở trên. Trang sẽ mở với thông tin đăng nhập của hồ sơ đã chọn."
-    },
-    "expand": "Mở rộng che khung chat",
-    "restore": "Hiện bên cạnh khung chat"
+      "emptyDescription": "Nhập địa chỉ ở trên. Trang mở thành tab ở khu vực chính, với thông tin đăng nhập của hồ sơ đã chọn."
+    }
+  },
+  "workbench": {
+    "chat": "Chat",
+    "new": "Mở terminal, tab trình duyệt hoặc tệp",
+    "openFiles": "Duyệt tệp",
+    "closeTab": "Đóng {{name}}",
+    "splitRight": "Chia đôi: chuyển tab này sang nhóm thứ hai",
+    "moveRight": "Chuyển tab này sang nhóm bên phải",
+    "moveLeft": "Chuyển tab này sang nhóm bên trái",
+    "resize": "Đổi kích thước các nhóm"
   },
   "research": {
     "pause": "Tạm dừng nghiên cứu",
@@ -635,5 +631,14 @@
     },
     "noSources": "Chưa ghi nguồn nào.",
     "loadingReport": "Đang tải báo cáo…"
+  },
+  "files": {
+    "up": "Lên một thư mục",
+    "path": "Đường dẫn thư mục",
+    "filter": "Lọc trong thư mục này",
+    "noMatch": "Không có tên nào khớp",
+    "copy": "Sao chép nội dung",
+    "copied": "Đã sao chép",
+    "close": "Đóng"
   }
 }

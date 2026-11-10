@@ -1,59 +1,35 @@
-import * as React from "react";
 import type { DesktopBridge } from "@workspace/shared";
-import { Button } from "@workspace/ui/components/button";
 import { Spinner } from "@workspace/ui/components/spinner";
-import { ToggleGroup, ToggleGroupItem } from "@workspace/ui/components/toggle-group";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
-import {
-  FolderTreeIcon,
-  GlobeIcon,
-  Maximize2Icon,
-  Minimize2Icon,
-  SquareTerminalIcon,
-  XIcon,
-  type LucideIcon,
-} from "lucide-react";
+import * as React from "react";
 import { useTranslation } from "react-i18next";
 
-import { IS_MAC } from "@/hooks/use-panel-shortcut";
-import { clampWidth, type PanelTool, PANEL_TOOLS, usePanelStore } from "@/stores/panel-store";
+import { clampWidth, usePanelStore } from "@/stores/panel-store";
 
-// Loaded when the panel first shows them: the terminal alone (xterm.js) is a few hundred KB.
-const TerminalPanel = React.lazy(() =>
-  import("@/components/panel/terminal-panel").then((module) => ({ default: module.TerminalPanel })),
-);
+// Loaded when the panel first opens: the file views are a sizeable chunk.
 const FilesPanel = React.lazy(() =>
   import("@/components/panel/files-panel").then((module) => ({ default: module.FilesPanel })),
 );
-const BrowserPanel = React.lazy(() =>
-  import("@/components/panel/browser-panel").then((module) => ({ default: module.BrowserPanel })),
-);
 
-const TOOL_ICONS: Record<PanelTool, LucideIcon> = {
-  terminal: SquareTerminalIcon,
-  files: FolderTreeIcon,
-  browser: GlobeIcon,
-};
-
-/** The chat keeps at least this much room when the panel is dragged wider. */
-const MIN_CHAT_WIDTH = 420;
+/** The chat area keeps at least this much room when the panel is dragged wider. */
+const MIN_MAIN_WIDTH = 420;
 
 /** Drag handle on the panel's left edge. */
-function ResizeHandle({ onResizing }: { onResizing: (resizing: boolean) => void }) {
+function ResizeHandle() {
   const { t } = useTranslation("chat");
   const setWidth = usePanelStore((state) => state.setWidth);
   const dragWidth = usePanelStore((state) => state.dragWidth);
+  const setResizing = usePanelStore((state) => state.setResizing);
   const width = usePanelStore((state) => state.width);
   const drag = React.useRef<{ x: number; width: number } | null>(null);
 
   const fit = (next: number) =>
-    Math.min(clampWidth(next), Math.max(window.innerWidth - MIN_CHAT_WIDTH, 320));
+    Math.min(clampWidth(next), Math.max(window.innerWidth - MIN_MAIN_WIDTH, 280));
   // The width is saved once the drag ends, not on every move.
   const endDrag = () => {
     if (!drag.current) return;
     drag.current = null;
     setWidth(usePanelStore.getState().width);
-    onResizing(false);
+    setResizing(false);
   };
 
   return (
@@ -66,7 +42,7 @@ function ResizeHandle({ onResizing }: { onResizing: (resizing: boolean) => void 
       onPointerDown={(event) => {
         event.currentTarget.setPointerCapture(event.pointerId);
         drag.current = { x: event.clientX, width };
-        onResizing(true);
+        setResizing(true);
       }}
       onPointerMove={(event) => {
         if (drag.current) dragWidth(fit(drag.current.width + drag.current.x - event.clientX));
@@ -81,90 +57,25 @@ function ResizeHandle({ onResizing }: { onResizing: (resizing: boolean) => void 
   );
 }
 
-/** The right side panel beside the chat: a terminal, the workspace's files, and a browser. */
+/**
+ * The right side panel beside the main area: the open workspace's file tree. Files open as tabs of
+ * the main area; terminals and browser tabs have no place here.
+ */
 export function SidePanel({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("chat");
   const open = usePanelStore((state) => state.open);
-  const tool = usePanelStore((state) => state.tool);
   const width = usePanelStore((state) => state.width);
-  const show = usePanelStore((state) => state.show);
-  const setOpen = usePanelStore((state) => state.setOpen);
-  const expanded = usePanelStore((state) => state.expanded);
-  const setExpanded = usePanelStore((state) => state.setExpanded);
-  // A browser page is a native view on top of the window and would swallow the drag.
-  const [resizing, setResizing] = React.useState(false);
   if (!open) return null;
 
-  const shortcut = IS_MAC ? "⌘J" : "Ctrl+J";
   return (
     <aside
       aria-label={t("panel.label")}
-      // A width saved on a larger screen must not squeeze the chat out of a smaller window.
-      style={expanded ? undefined : { width, maxWidth: `calc(100vw - ${MIN_CHAT_WIDTH}px)` }}
-      className={`@container/panel relative hidden min-w-0 flex-col bg-background md:my-2 md:mr-2 md:flex md:h-[calc(100svh-(--spacing(4)))] md:rounded-2xl md:shadow-sm ${expanded ? "flex-1" : "shrink-0"}`}
+      // A width saved on a larger screen must not squeeze the main area out of a smaller window.
+      style={{ width, maxWidth: `calc(100vw - ${MIN_MAIN_WIDTH}px)` }}
+      className="relative hidden min-w-0 shrink-0 flex-col bg-background md:my-2 md:mr-2 md:flex md:h-[calc(100svh-(--spacing(4)))] md:rounded-2xl md:shadow-sm"
     >
-      {!expanded && <ResizeHandle onResizing={setResizing} />}
-      <header className="flex h-12 shrink-0 items-center gap-2 px-2">
-        <ToggleGroup
-          spacing={0}
-          value={[tool]}
-          onValueChange={(value) => {
-            const next = PANEL_TOOLS.find((candidate) => candidate === value[0]);
-            if (next) show(next);
-          }}
-        >
-          {PANEL_TOOLS.map((id) => {
-            const Icon = TOOL_ICONS[id];
-            return (
-              <Tooltip key={id}>
-                <TooltipTrigger
-                  render={
-                    <ToggleGroupItem value={id} size="sm" aria-label={t(`panel.tools.${id}`)} />
-                  }
-                >
-                  <Icon />
-                  {/* A narrow panel keeps the icons only. */}
-                  <span className="@max-sm/panel:hidden">{t(`panel.tools.${id}`)}</span>
-                </TooltipTrigger>
-                <TooltipContent>{t(`panel.tools.${id}`)}</TooltipContent>
-              </Tooltip>
-            );
-          })}
-        </ToggleGroup>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="ml-auto"
-                aria-label={expanded ? t("panel.restore") : t("panel.expand")}
-                aria-pressed={expanded}
-                onClick={() => setExpanded(!expanded)}
-              />
-            }
-          >
-            {expanded ? <Minimize2Icon /> : <Maximize2Icon />}
-          </TooltipTrigger>
-          <TooltipContent>{expanded ? t("panel.restore") : t("panel.expand")}</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t("panel.close")}
-                onClick={() => setOpen(false)}
-              />
-            }
-          >
-            <XIcon />
-          </TooltipTrigger>
-          <TooltipContent>{t("panel.closeWithShortcut", { shortcut })}</TooltipContent>
-        </Tooltip>
-      </header>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-2xl">
+      <ResizeHandle />
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl">
         <React.Suspense
           fallback={
             <div className="flex flex-1 items-center justify-center">
@@ -172,9 +83,7 @@ export function SidePanel({ bridge }: { bridge: DesktopBridge }) {
             </div>
           }
         >
-          {tool === "terminal" && <TerminalPanel bridge={bridge} />}
-          {tool === "files" && <FilesPanel bridge={bridge} />}
-          {tool === "browser" && <BrowserPanel bridge={bridge} hidden={resizing} />}
+          <FilesPanel bridge={bridge} />
         </React.Suspense>
       </div>
     </aside>

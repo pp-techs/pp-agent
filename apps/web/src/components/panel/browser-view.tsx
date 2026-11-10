@@ -1,7 +1,6 @@
 import * as React from "react";
 import {
   type BrowserProfile,
-  type BrowserState,
   type BrowserTab,
   DEFAULT_BROWSER_PROFILE_ID,
   type DesktopBridge,
@@ -40,7 +39,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { SettingsModal } from "@/components/modals/settings-modal";
-import { NewTabButton, PanelTab, PanelTabs } from "@/components/panel/panel-tabs";
+import { takeAddressFocus } from "@/lib/browser-tabs";
 import { browserProfilesQuery } from "@/lib/panel-queries";
 
 /** Popups, menus and dialogs of the app: the page, a native view, would hide them. */
@@ -50,27 +49,18 @@ function showError(error: unknown) {
   toast.error(error instanceof Error ? error.message : String(error));
 }
 
-/** Tabs and the active tab, kept in sync with the main process. */
-function useBrowserState(bridge: DesktopBridge): BrowserState | null {
-  const [state, setState] = React.useState<BrowserState | null>(null);
-  React.useEffect(() => {
-    const unsubscribe = bridge.browser.onState(setState);
-    bridge.browser.state().then(setState).catch(showError);
-    return unsubscribe;
-  }, [bridge]);
-  return state;
-}
-
 /**
- * Keeps the native page where `element` is, and hides it while the element is hidden or an app
+ * Keeps a tab's native page where `element` is, and hides it while the element is hidden or an app
  * popup is open (it would be drawn over the popup).
  */
-function usePageBounds(bridge: DesktopBridge, element: HTMLElement | null, visible: boolean) {
+function usePageBounds(
+  bridge: DesktopBridge,
+  tabId: string | null,
+  element: HTMLElement | null,
+  visible: boolean,
+) {
   React.useEffect(() => {
-    if (!element || !visible) {
-      bridge.browser.setBounds(null);
-      return;
-    }
+    if (!tabId || !element || !visible) return;
     // The open popups, kept from the mutation records: searching the whole document on every
     // change would cost more the longer the chat gets, and a streamed reply changes it often.
     const overlays = new Set(document.querySelectorAll(OVERLAY_SELECTOR));
@@ -81,6 +71,7 @@ function usePageBounds(bridge: DesktopBridge, element: HTMLElement | null, visib
       frame = requestAnimationFrame(() => {
         const rect = element.getBoundingClientRect();
         bridge.browser.setBounds(
+          tabId,
           overlay || rect.width === 0 || rect.height === 0
             ? null
             : { x: rect.left, y: rect.top, width: rect.width, height: rect.height },
@@ -113,58 +104,9 @@ function usePageBounds(bridge: DesktopBridge, element: HTMLElement | null, visib
       resize.disconnect();
       popups.disconnect();
       window.removeEventListener("resize", send);
-      bridge.browser.setBounds(null);
+      bridge.browser.setBounds(tabId, null);
     };
-  }, [bridge, element, visible]);
-}
-
-function tabLabel(tab: BrowserTab, fallback: string): string {
-  if (tab.title) return tab.title;
-  if (URL.canParse(tab.url)) return new URL(tab.url).hostname;
-  return fallback;
-}
-
-function TabStrip({
-  bridge,
-  state,
-  profiles,
-  onNewTab,
-}: {
-  bridge: DesktopBridge;
-  state: BrowserState;
-  profiles: Map<string, BrowserProfile>;
-  onNewTab: () => void;
-}) {
-  const { t } = useTranslation("chat");
-  return (
-    <PanelTabs>
-      {state.tabs.map((tab) => {
-        const profile =
-          tab.profileId === DEFAULT_BROWSER_PROFILE_ID ? null : profiles.get(tab.profileId);
-        const label = tabLabel(tab, t("panel.browser.newTab"));
-        return (
-          <PanelTab
-            key={tab.id}
-            active={tab.id === state.activeId}
-            icon={<GlobeIcon className={tab.loading ? "animate-pulse" : undefined} />}
-            label={label}
-            title={profile ? `${label} · ${profile.name}` : label}
-            badge={
-              profile && (
-                <span className="shrink-0 rounded-sm bg-background px-1 text-[10px] text-muted-foreground">
-                  {profile.name}
-                </span>
-              )
-            }
-            closeLabel={t("panel.browser.closeTab", { name: label })}
-            onSelect={() => bridge.browser.activate(tab.id).catch(showError)}
-            onClose={() => bridge.browser.close(tab.id).catch(showError)}
-          />
-        );
-      })}
-      <NewTabButton label={t("panel.browser.newTab")} onClick={onNewTab} />
-    </PanelTabs>
-  );
+  }, [bridge, tabId, element, visible]);
 }
 
 /** The profile of the active tab, and new tabs in any profile. */
@@ -227,38 +169,44 @@ function ProfileMenu({
   );
 }
 
-/** Tabbed web browser with separate sign-in profiles. */
-export function BrowserPanel({ bridge, hidden }: { bridge: DesktopBridge; hidden: boolean }) {
+/**
+ * One browser tab's toolbar (back, forward, reload, address, profile) and its page. With no tab
+ * (`tab` null) typing an address opens one. `onOpen` opens a tab in a profile, in the view's own
+ * place (the side panel or the main area).
+ */
+export function BrowserView({
+  bridge,
+  tab,
+  hidden,
+  onOpen,
+}: {
+  bridge: DesktopBridge;
+  tab: BrowserTab | null;
+  /** Hides the page for a moment (while a drag would pass over it). */
+  hidden: boolean;
+  onOpen: (profileId: string, url?: string) => void;
+}) {
   const { t } = useTranslation("chat");
-  const state = useBrowserState(bridge);
   const profilesQuery = useQuery(browserProfilesQuery(bridge));
   const profileList = React.useMemo(() => profilesQuery.data ?? [], [profilesQuery.data]);
   const profiles = React.useMemo(
     () => new Map(profileList.map((profile) => [profile.id, profile])),
     [profileList],
   );
-  const active = state?.tabs.find((tab) => tab.id === state.activeId) ?? null;
   const [page, setPage] = React.useState<HTMLDivElement | null>(null);
   // What the person is typing in the address bar; null shows the page's address.
   const [draft, setDraft] = React.useState<string | null>(null);
   const addressInput = React.useRef<HTMLInputElement>(null);
-  usePageBounds(bridge, page, !hidden && active !== null);
+  const tabId = tab?.id ?? null;
+  // A tab the person just opened with no address starts with the keyboard in the address bar.
+  React.useEffect(() => {
+    if (tabId && takeAddressFocus(tabId)) addressInput.current?.focus();
+  }, [tabId]);
+  usePageBounds(bridge, tab?.id ?? null, page, !hidden && tab !== null);
 
-  const shownUrl = active?.url ?? "";
+  const shownUrl = tab?.url ?? "";
   const address = draft ?? shownUrl;
-
-  const profileId = active?.profileId ?? DEFAULT_BROWSER_PROFILE_ID;
-  const open = React.useCallback(
-    (inProfile: string, url?: string) => {
-      bridge.browser
-        .open(inProfile, url)
-        .then(() => {
-          if (!url) requestAnimationFrame(() => addressInput.current?.focus());
-        })
-        .catch(showError);
-    },
-    [bridge],
-  );
+  const profileId = tab?.profileId ?? DEFAULT_BROWSER_PROFILE_ID;
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -266,29 +214,20 @@ export function BrowserPanel({ bridge, hidden }: { bridge: DesktopBridge; hidden
     if (!input) return;
     setDraft(null);
     addressInput.current?.blur();
-    if (active) bridge.browser.navigate(active.id, input).catch(showError);
-    else open(profileId, input);
+    if (tab) bridge.browser.navigate(tab.id, input).catch(showError);
+    else onOpen(profileId, input);
   }
 
-  if (state === null) return null;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {state.tabs.length > 0 && (
-        <TabStrip
-          bridge={bridge}
-          state={state}
-          profiles={profiles}
-          onNewTab={() => open(profileId)}
-        />
-      )}
       <form className="flex shrink-0 items-center gap-0.5 px-2 pb-2" onSubmit={submit}>
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
           aria-label={t("panel.browser.back")}
-          disabled={!active?.canGoBack}
-          onClick={() => active && bridge.browser.go(active.id, "back").catch(showError)}
+          disabled={!tab?.canGoBack}
+          onClick={() => tab && bridge.browser.go(tab.id, "back").catch(showError)}
         >
           <ArrowLeftIcon />
         </Button>
@@ -297,8 +236,8 @@ export function BrowserPanel({ bridge, hidden }: { bridge: DesktopBridge; hidden
           variant="ghost"
           size="icon-sm"
           aria-label={t("panel.browser.forward")}
-          disabled={!active?.canGoForward}
-          onClick={() => active && bridge.browser.go(active.id, "forward").catch(showError)}
+          disabled={!tab?.canGoForward}
+          onClick={() => tab && bridge.browser.go(tab.id, "forward").catch(showError)}
         >
           <ArrowRightIcon />
         </Button>
@@ -306,14 +245,13 @@ export function BrowserPanel({ bridge, hidden }: { bridge: DesktopBridge; hidden
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label={active?.loading ? t("panel.browser.stop") : t("panel.browser.reload")}
-          disabled={!active}
+          aria-label={tab?.loading ? t("panel.browser.stop") : t("panel.browser.reload")}
+          disabled={!tab}
           onClick={() =>
-            active &&
-            bridge.browser.go(active.id, active.loading ? "stop" : "reload").catch(showError)
+            tab && bridge.browser.go(tab.id, tab.loading ? "stop" : "reload").catch(showError)
           }
         >
-          {active?.loading ? <XIcon /> : <RotateCwIcon />}
+          {tab?.loading ? <XIcon /> : <RotateCwIcon />}
         </Button>
         <Input
           ref={addressInput}
@@ -336,10 +274,10 @@ export function BrowserPanel({ bridge, hidden }: { bridge: DesktopBridge; hidden
           bridge={bridge}
           current={profiles.get(profileId)}
           profiles={profileList}
-          onOpen={(id) => open(id)}
+          onOpen={(id) => onOpen(id)}
         />
       </form>
-      {active ? (
+      {tab ? (
         <div ref={setPage} className="min-h-0 flex-1 bg-white" />
       ) : (
         <Empty className="flex-1">

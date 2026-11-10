@@ -28,16 +28,23 @@ import { EmptyChat } from "@/components/chat/empty-chat";
 import { PromptComposer } from "@/components/chat/prompt-composer";
 import { SidePanel } from "@/components/panel/side-panel";
 import { SettingsModal } from "@/components/modals/settings-modal";
+import { Workbench } from "@/components/workbench/workbench";
 import { ConnectionBanner, RemoteGate } from "@/components/remote/remote-gate";
 import { useAgentConnection } from "@/hooks/use-agent-connection";
 import { useCloseTabShortcut, usePanelShortcut } from "@/hooks/use-panel-shortcut";
 import { bridge, isWebApp } from "@/lib/bridge";
+import type { Page } from "@/lib/pages";
 import { useChatStore } from "@/stores/chat-store";
-import { usePanelStore } from "@/stores/panel-store";
 import { toAttachments, useComposerStore } from "@/stores/composer-store";
 import { connectUpdates } from "@/stores/update-store";
 
 // Opened from the sidebar only; kept out of the bundle the app starts with.
+const RemoteFilesPage = React.lazy(() =>
+  import("@/components/files/remote-files-page").then((module) => ({
+    default: module.RemoteFilesPage,
+  })),
+);
+
 const ScheduledTasksSection = React.lazy(() =>
   import("@/components/settings/scheduled-tasks-section").then((module) => ({
     default: module.ScheduledTasksSection,
@@ -55,7 +62,7 @@ function HiddenSidebarTrigger() {
 function Header({ bridge }: { bridge: DesktopBridge }) {
   const status = useChatStore((state) => state.status);
   return (
-    <header className="flex h-12 shrink-0 items-center gap-1 px-3">
+    <header className="flex h-11 shrink-0 items-center gap-1 px-2.5">
       <HiddenSidebarTrigger />
       <AgentPicker bridge={bridge} disabled={status === "starting"} />
       <ChatHeaderActions bridge={bridge} />
@@ -164,9 +171,7 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
   useAgentConnection(bridge);
   const status = useChatStore((state) => state.status);
   const ready = status === "idle" || status === "running";
-  const [page, setPage] = React.useState<"chat" | "schedules">("chat");
-  // An expanded side panel takes the page's place; the page stays mounted, only hidden.
-  const panelCovers = usePanelStore((state) => state.open && state.expanded);
+  const [page, setPage] = React.useState<Page>("chat");
 
   async function onDrop(event: React.DragEvent) {
     event.preventDefault();
@@ -180,6 +185,52 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
     }
   }
 
+  // What the chat tab shows: the conversation, the scheduled tasks page, or (on a phone) the
+  // workspace's files.
+  const chatPage =
+    page === "files" ? (
+      <React.Suspense
+        fallback={
+          <div className="flex flex-1 items-center justify-center">
+            <Spinner />
+          </div>
+        }
+      >
+        <RemoteFilesPage bridge={bridge} />
+      </React.Suspense>
+    ) : page === "schedules" ? (
+      <>
+        <header className="flex h-11 shrink-0 items-center gap-1 px-2.5">
+          <HiddenSidebarTrigger />
+          <Button variant="ghost" size="sm" onClick={() => setPage("chat")}>
+            <ArrowLeftIcon />
+            {t("app.backToChat")}
+          </Button>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-5xl p-4 md:p-6">
+            <React.Suspense
+              fallback={
+                <div className="flex justify-center p-6">
+                  <Spinner />
+                </div>
+              }
+            >
+              <ScheduledTasksSection bridge={bridge} />
+            </React.Suspense>
+          </div>
+        </div>
+      </>
+    ) : (
+      <>
+        <Header bridge={bridge} />
+        <div className="min-h-0 flex-1">
+          <ChatBody bridge={bridge} />
+        </div>
+        <PromptComposer bridge={bridge} disabled={!ready} />
+      </>
+    );
+
   return (
     <SidebarProvider>
       {!isWebApp && <DesktopShortcuts bridge={bridge} />}
@@ -187,43 +238,12 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
       <SidebarInset
         // Inset leaves an 0.5rem gutter around the chat panel on desktop; keep it within the window.
         // dvh follows a phone's browser bars and on-screen keyboard; svh would leave a gap.
-        className={`relative h-dvh overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] md:h-[calc(100svh-(--spacing(4)))] md:pt-0 ${panelCovers ? "md:hidden" : ""}`}
+        className="relative h-dvh overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] md:h-[calc(100svh-(--spacing(4)))] md:pt-0"
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => void onDrop(event)}
       >
         {isWebApp && <ConnectionBanner />}
-        {page === "schedules" ? (
-          <>
-            <header className="flex h-12 shrink-0 items-center gap-1 px-3">
-              <HiddenSidebarTrigger />
-              <Button variant="ghost" size="sm" onClick={() => setPage("chat")}>
-                <ArrowLeftIcon />
-                {t("app.backToChat")}
-              </Button>
-            </header>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <div className="mx-auto w-full max-w-5xl p-4 md:p-6">
-                <React.Suspense
-                  fallback={
-                    <div className="flex justify-center p-6">
-                      <Spinner />
-                    </div>
-                  }
-                >
-                  <ScheduledTasksSection bridge={bridge} />
-                </React.Suspense>
-              </div>
-            </div>
-          </>
-        ) : (
-          <>
-            <Header bridge={bridge} />
-            <div className="min-h-0 flex-1">
-              <ChatBody bridge={bridge} />
-            </div>
-            <PromptComposer bridge={bridge} disabled={!ready} />
-          </>
-        )}
+        {isWebApp ? chatPage : <Workbench bridge={bridge} chat={chatPage} />}
         <DropOverlay active={page === "chat" && ready} />
       </SidebarInset>
       {/* On every page, so the agent's browser shows without leaving (and losing) a schedule draft. */}
