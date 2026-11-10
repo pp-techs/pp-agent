@@ -17,6 +17,7 @@ import {
   EmptyTitle,
 } from "@workspace/ui/components/empty";
 import { Skeleton } from "@workspace/ui/components/skeleton";
+import { cn } from "@workspace/ui/lib/utils";
 import { FileIcon, TriangleAlertIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -168,15 +169,14 @@ export function FileContent({
   }
   const showsHtml = allowHtml && isHtmlFile(path) && !preview.truncated && !showSource;
   return (
-    <div className={className}>
+    // An HTML page fills the space it is given, so the root is the flex column that passes it down.
+    <div className={cn(showsHtml && "flex min-h-0 flex-1 flex-col", className)}>
       {isMarkdownFile(path) && !showSource ? (
         <div className="px-4 py-2 text-sm">
           <Markdown>{preview.text}</Markdown>
         </div>
       ) : showsHtml ? (
-        <div className="flex min-h-0 flex-1 flex-col">
-          <HtmlPreview key={preview.text} html={preview.text} fill />
-        </div>
+        <HtmlPreview key={preview.text} html={preview.text} fill />
       ) : (
         <TextPreview path={path} text={preview.text} />
       )}
