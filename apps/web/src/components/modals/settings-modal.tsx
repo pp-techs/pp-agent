@@ -22,15 +22,13 @@ import {
 import { useIsMobile } from "@workspace/ui/hooks/use-mobile";
 import {
   ArrowLeftIcon,
-  BlocksIcon,
   BookOpenIcon,
   BotIcon,
   ChevronRightIcon,
   BrainIcon,
+  CogIcon,
   FolderKanbanIcon,
-  GlobeIcon,
   MessagesSquareIcon,
-  MicIcon,
   MonitorIcon,
   MoonStarIcon,
   SlidersHorizontalIcon,
@@ -59,10 +57,6 @@ const GeneralSection = lazySection(
   () => import("@/components/settings/general-section"),
   (module) => module.GeneralSection,
 );
-const VoiceSection = lazySection(
-  () => import("@/components/settings/voice-section"),
-  (module) => module.VoiceSection,
-);
 const ModelsSection = lazySection(
   () => import("@/components/settings/models-section"),
   (module) => module.ModelsSection,
@@ -79,10 +73,6 @@ const ToolsSection = lazySection(
   () => import("@/components/settings/tools-section"),
   (module) => module.ToolsSection,
 );
-const McpSection = lazySection(
-  () => import("@/components/settings/mcp-section"),
-  (module) => module.McpSection,
-);
 const SkillsSection = lazySection(
   () => import("@/components/settings/skills-section"),
   (module) => module.SkillsSection,
@@ -95,13 +85,9 @@ const ChannelsSection = lazySection(
   () => import("@/components/settings/channels-section"),
   (module) => module.ChannelsSection,
 );
-const BrowserSection = lazySection(
-  () => import("@/components/settings/browser-section"),
-  (module) => module.BrowserSection,
-);
-const ComputerSection = lazySection(
-  () => import("@/components/settings/computer-section"),
-  (module) => module.ComputerSection,
+const ThisComputerSection = lazySection(
+  () => import("@/components/settings/this-computer-section"),
+  (module) => module.ThisComputerSection,
 );
 const BackgroundSection = lazySection(
   () => import("@/components/settings/background-section"),
@@ -110,6 +96,10 @@ const BackgroundSection = lazySection(
 const RemoteAccessSection = lazySection(
   () => import("@/components/settings/remote-access-section"),
   (module) => module.RemoteAccessSection,
+);
+const AdvancedSection = lazySection(
+  () => import("@/components/settings/advanced-section"),
+  (module) => module.AdvancedSection,
 );
 
 /** Shown while a section's code loads. */
@@ -123,44 +113,43 @@ function SectionFallback() {
 
 export type SettingsSection =
   | "general"
-  | "voice"
   | "models"
-  | "workspaces"
   | "agents"
+  | "workspaces"
   | "tools"
-  | "mcp"
   | "skills"
   | "memory"
   | "channels"
-  | "browser"
-  | "computer"
+  | "remote"
   | "background"
-  | "remote";
+  | "computer"
+  | "advanced";
 
 const ALL_SECTIONS: {
   id: SettingsSection;
   icon: LucideIcon;
   Component: SectionComponent;
-  /** Set where only the app window can show it (its browser, its access to this computer). */
+  /** Set where the app window is needed: its browser, this computer's apps, its local files. */
   desktopOnly?: true;
 }[] = [
   { id: "general", icon: SlidersHorizontalIcon, Component: GeneralSection },
-  { id: "voice", icon: MicIcon, Component: VoiceSection },
   { id: "models", icon: SparklesIcon, Component: ModelsSection },
-  { id: "workspaces", icon: FolderKanbanIcon, Component: WorkspacesSection },
   { id: "agents", icon: BotIcon, Component: AgentsSection },
+  { id: "workspaces", icon: FolderKanbanIcon, Component: WorkspacesSection },
   { id: "tools", icon: WrenchIcon, Component: ToolsSection },
-  { id: "mcp", icon: BlocksIcon, Component: McpSection },
   { id: "skills", icon: BookOpenIcon, Component: SkillsSection },
   { id: "memory", icon: BrainIcon, Component: MemorySection },
   { id: "channels", icon: MessagesSquareIcon, Component: ChannelsSection },
-  { id: "browser", icon: GlobeIcon, Component: BrowserSection, desktopOnly: true },
-  { id: "computer", icon: MonitorIcon, Component: ComputerSection, desktopOnly: true },
-  { id: "background", icon: MoonStarIcon, Component: BackgroundSection },
   { id: "remote", icon: SmartphoneIcon, Component: RemoteAccessSection },
+  { id: "background", icon: MoonStarIcon, Component: BackgroundSection },
+  { id: "computer", icon: MonitorIcon, Component: ThisComputerSection, desktopOnly: true },
+  { id: "advanced", icon: CogIcon, Component: AdvancedSection, desktopOnly: true },
 ];
 
 const SECTIONS = isWebApp ? ALL_SECTIONS.filter((section) => !section.desktopOnly) : ALL_SECTIONS;
+
+/** Where a desktop opens when Settings is shown without a section (the sidebar's gear). */
+const DEFAULT_SECTION: SettingsSection = "general";
 
 type SettingsModalProps = {
   bridge: DesktopBridge;
@@ -236,7 +225,7 @@ function SettingsPanes({
   const { t } = useTranslation(["settings", "common"]);
   const isMobile = useIsMobile();
   const [active, setActive] = React.useState<SettingsSection | null>(
-    initialSection ?? (isMobile ? null : "general"),
+    initialSection ?? (isMobile ? null : DEFAULT_SECTION),
   );
   const [subPage, setSubPage] = React.useState<string | null>(null);
   // Bumped by the breadcrumb to remount the section, which returns it to its list.
@@ -312,7 +301,8 @@ function SettingsPanes({
     );
   }
 
-  const shown = current ?? SECTIONS[0];
+  const shown =
+    current ?? SECTIONS.find((section) => section.id === DEFAULT_SECTION) ?? SECTIONS[0];
   const Component = shown.Component;
   return (
     <SidebarProvider

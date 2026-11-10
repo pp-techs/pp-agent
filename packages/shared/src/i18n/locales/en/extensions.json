@@ -85,7 +85,7 @@
     "loadError": "Couldn't load the tools",
     "empty": {
       "title": "No tools yet",
-      "description": "Tools appear here once the agent has started. Connect business systems under MCP servers."
+      "description": "Tools appear here once the agent has started. Connect business systems in MCP servers."
     },
     "search": {
       "placeholder": "Search tools",
@@ -234,6 +234,11 @@
       "paste": "Paste a configuration"
     },
     "savedIn": "Saved in",
+    "summary_one": "{{count}} server · {{on}} on",
+    "summary_other": "{{count}} servers · {{on}} on",
+    "summaryEmpty": "Not set up yet",
+    "manage": "Manage",
+    "setUp": "Set up",
     "row": {
       "signIn": "Sign in",
       "signOut": "Sign out",

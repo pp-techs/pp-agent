@@ -27,7 +27,7 @@ import { TriangleAlertIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import { SectionHeading } from "@/components/settings/section-heading";
+import { OptionGroup } from "@/components/settings/option-group";
 import { useInstallVoiceModel, useSaveVoice, voiceQuery } from "@/lib/extension-queries";
 
 /** Select value for "no provider chosen"; real provider ids never equal it. */
@@ -247,13 +247,12 @@ function VoiceForm({ bridge }: { bridge: DesktopBridge }) {
   );
 }
 
-/** "Voice input" group of Settings › General: which service turns recordings into text. */
-export function VoiceSection({ bridge }: { bridge: DesktopBridge }) {
+/** "Speech to text" group of Settings › Models: which service turns recordings into text. */
+export function VoiceSettings({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("settings");
   return (
-    <div className="flex flex-col gap-6">
-      <SectionHeading title={t("voice.title")} description={t("voice.description")} />
+    <OptionGroup legend={t("voice.title")} description={t("voice.description")}>
       <VoiceForm bridge={bridge} />
-    </div>
+    </OptionGroup>
   );
 }

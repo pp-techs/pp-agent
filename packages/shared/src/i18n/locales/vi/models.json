@@ -1,7 +1,7 @@
 {
   "section": {
     "title": "Mô hình",
-    "description": "Kết nối các nhà cung cấp AI bằng khóa API, hoặc thêm Gateway riêng của nhóm bạn.",
+    "description": "Kết nối các nhà cung cấp AI bằng khóa API, thêm Gateway riêng của nhóm bạn, và chọn mô hình cho ứng dụng và phần nhập bằng giọng nói.",
     "connected": {
       "heading": "Đã kết nối",
       "emptyTitle": "Chưa kết nối nhà cung cấp nào",

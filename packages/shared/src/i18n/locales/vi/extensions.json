@@ -232,6 +232,10 @@
       "paste": "Dán cấu hình"
     },
     "savedIn": "Đã lưu tại",
+    "summary_other": "{{count}} máy chủ · {{on}} đang bật",
+    "summaryEmpty": "Chưa thiết lập",
+    "manage": "Quản lý",
+    "setUp": "Thiết lập",
     "row": {
       "signIn": "Đăng nhập",
       "signOut": "Đăng xuất",

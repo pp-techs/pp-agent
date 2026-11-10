@@ -49,7 +49,7 @@ import { toast } from "sonner";
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { McpJsonEditor } from "@/components/settings/mcp-json-editor";
 import { McpServerForm } from "@/components/settings/mcp-server-form";
-import { SectionHeading } from "@/components/settings/section-heading";
+import { useSettingsSubPage } from "@/components/settings/settings-subpage";
 import { ComputerOnlyNotice } from "@/components/settings/computer-only-notice";
 import { isWebApp } from "@/lib/bridge";
 import {
@@ -260,6 +260,7 @@ function ServersSkeleton() {
 
 export function McpSection({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation(["extensions", "common"]);
+  useSettingsSubPage(t("mcp.heading.title"));
   const overview = useQuery(mcpQuery(bridge));
   const [view, setView] = React.useState<View>({ kind: "list" });
 
@@ -284,7 +285,10 @@ export function McpSection({ bridge }: { bridge: DesktopBridge }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <SectionHeading title={t("mcp.heading.title")} description={t("mcp.heading.description")}>
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+          {t("mcp.heading.description")}
+        </p>
         <Tooltip>
           <TooltipTrigger
             render={
@@ -313,7 +317,7 @@ export function McpSection({ bridge }: { bridge: DesktopBridge }) {
             </Button>
           </>
         )}
-      </SectionHeading>
+      </div>
 
       {isWebApp && <ComputerOnlyNotice />}
 

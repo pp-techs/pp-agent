@@ -38,15 +38,23 @@ import { cn } from "@workspace/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
 import { Trans, useTranslation } from "react-i18next";
-import { ChevronRightIcon, SearchIcon, TriangleAlertIcon, WrenchIcon } from "lucide-react";
+import {
+  ChevronRightIcon,
+  PlugIcon,
+  SearchIcon,
+  TriangleAlertIcon,
+  WrenchIcon,
+} from "lucide-react";
 
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { SwitchRow } from "@/components/settings/option-group";
 import { SectionHeading } from "@/components/settings/section-heading";
 import { ComputerOnlyNotice } from "@/components/settings/computer-only-notice";
+import { McpSection } from "@/components/settings/mcp-section";
 import { isWebApp } from "@/lib/bridge";
 import { WebSearchPage } from "@/components/settings/web-search-page";
 import {
+  mcpQuery,
   toolsQuery,
   useSetShellEnabled,
   useSetToolPolicy,
@@ -385,6 +393,39 @@ function WebSearchRow({ bridge, onOpen }: { bridge: DesktopBridge; onOpen: () =>
   );
 }
 
+/** Compact stand-in for the MCP server list, which opens as its own page. */
+function McpRow({ bridge, onOpen }: { bridge: DesktopBridge; onOpen: () => void }) {
+  const { t } = useTranslation("extensions");
+  const query = useQuery(mcpQuery(bridge));
+  const servers = query.data?.servers ?? [];
+  const enabled = servers.filter((server) => server.settings.enabled).length;
+
+  return (
+    <Item variant="outline">
+      <ItemMedia variant="icon">
+        <PlugIcon />
+      </ItemMedia>
+      <ItemContent>
+        <ItemTitle>{t("mcp.heading.title")}</ItemTitle>
+        <ItemDescription>
+          {query.isPending ? (
+            <Skeleton className="h-4 w-40" />
+          ) : servers.length > 0 ? (
+            t("mcp.summary", { count: servers.length, on: enabled })
+          ) : (
+            t("mcp.summaryEmpty")
+          )}
+        </ItemDescription>
+      </ItemContent>
+      <ItemActions>
+        <Button variant="outline" size="sm" disabled={query.isPending} onClick={onOpen}>
+          {servers.length > 0 ? t("mcp.manage") : t("mcp.setUp")}
+        </Button>
+      </ItemActions>
+    </Item>
+  );
+}
+
 function PolicyControl({ bridge, tool }: { bridge: DesktopBridge; tool: ToolSummary }) {
   const { t } = useTranslation("extensions");
   const setPolicy = useSetToolPolicy(bridge);
@@ -485,8 +526,8 @@ function ToolsSkeleton() {
   );
 }
 
-/** The web search configuration opens as its own page, like a Channels setup page. */
-type View = { kind: "list" } | { kind: "webSearch" };
+/** The web search and MCP server configuration open as their own pages, like a channel's setup. */
+type View = { kind: "list" } | { kind: "webSearch" } | { kind: "mcp" };
 
 export function ToolsSection({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("extensions");
@@ -497,6 +538,7 @@ export function ToolsSection({ bridge }: { bridge: DesktopBridge }) {
   const [view, setView] = React.useState<View>({ kind: "list" });
 
   if (view.kind === "webSearch") return <WebSearchPage bridge={bridge} />;
+  if (view.kind === "mcp") return <McpSection bridge={bridge} />;
 
   const all = tools.data ?? [];
   const query = search.trim().toLowerCase();
@@ -531,6 +573,10 @@ export function ToolsSection({ bridge }: { bridge: DesktopBridge }) {
       {isWebApp && <ComputerOnlyNotice />}
 
       <YoloModeSettings bridge={bridge} />
+
+      <ItemGroup>
+        <McpRow bridge={bridge} onOpen={() => setView({ kind: "mcp" })} />
+      </ItemGroup>
 
       {tools.isPending ? (
         <ToolsSkeleton />

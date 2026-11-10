@@ -7,26 +7,23 @@
     "breadcrumbRoot": "Cài đặt",
     "sections": {
       "general": "Chung",
-      "voice": "Nhập bằng giọng nói",
       "models": "Mô hình",
-      "workspaces": "Không gian làm việc",
       "agents": "Agent",
+      "workspaces": "Không gian làm việc",
       "tools": "Công cụ",
-      "mcp": "Máy chủ MCP",
       "skills": "Kỹ năng",
       "memory": "Bộ nhớ",
-      "scheduledTasks": "Tác vụ định kỳ",
       "channels": "Kênh chat",
+      "remote": "Truy cập từ xa",
       "background": "Chạy nền",
-      "browser": "Trình duyệt",
-      "computer": "Điều khiển máy tính",
-      "remote": "Truy cập từ xa"
+      "computer": "Máy tính này",
+      "advanced": "Nâng cao"
     },
     "back": "Quay lại"
   },
   "general": {
     "title": "Chung",
-    "description": "Ngôn ngữ, không gian làm việc, giao diện, mô hình mặc định và cập nhật.",
+    "description": "Ngôn ngữ, không gian làm việc, giao diện và mô hình mặc định của bạn.",
     "language": {
       "title": "Ngôn ngữ",
       "description": "Ngôn ngữ được dùng trong toàn bộ ứng dụng.",
@@ -56,20 +53,6 @@
       "emptyHint": "Hãy kết nối một nhà cung cấp trong mục Mô hình để chọn mô hình mặc định.",
       "hint": "Dùng cho các cuộc trò chuyện mới. Bạn có thể đổi mô hình trong bất kỳ cuộc trò chuyện nào ở bên dưới ô nhập tin nhắn."
     },
-    "updates": {
-      "title": "Cập nhật",
-      "check": "Kiểm tra cập nhật"
-    },
-    "diagnostics": {
-      "legend": "Chẩn đoán",
-      "description": "PP Agent lưu nhật ký lỗi trên máy, gồm cả nội dung nhà cung cấp mô hình trả về khi lỗi. Hãy gửi tệp đã xuất cho người hỗ trợ bạn. Nhật ký không chứa nội dung cuộc trò chuyện; khóa và token được ẩn đi.",
-      "size": "Dung lượng nhật ký: {{size}}",
-      "export": "Xuất thông tin chẩn đoán",
-      "exported": "Đã lưu thông tin chẩn đoán.",
-      "reveal": "Mở thư mục nhật ký",
-      "clear": "Xóa nhật ký",
-      "cleared": "Đã xóa nhật ký."
-    },
     "desktop": {
       "legend": "Máy tính",
       "description": "Cách PP Agent hoạt động cạnh các ứng dụng khác của bạn.",
@@ -89,6 +72,14 @@
         "hint": "Phím bổ trợ và một phím, ví dụ CommandOrControl+Shift+Space.",
         "invalid": "Phím tắt không hợp lệ. Dùng phím bổ trợ và một phím, ví dụ CommandOrControl+Shift+Space."
       }
+    }
+  },
+  "advanced": {
+    "title": "Nâng cao",
+    "description": "Cập nhật, thiết lập của máy này thành một tệp, và nhật ký để gửi khi có sự cố.",
+    "updates": {
+      "title": "Cập nhật",
+      "check": "Kiểm tra cập nhật"
     },
     "configGroup": {
       "legend": "Gói cấu hình",
@@ -97,6 +88,16 @@
       "import": "Nhập cấu hình",
       "exported": "Đã lưu gói cấu hình.",
       "imported": "Đã áp dụng: {{gateways}} gateway, {{agents}} agent, {{servers}} máy chủ MCP."
+    },
+    "diagnostics": {
+      "legend": "Chẩn đoán",
+      "description": "PP Agent lưu nhật ký lỗi trên máy, gồm cả nội dung nhà cung cấp mô hình trả về khi lỗi. Hãy gửi tệp đã xuất cho người hỗ trợ bạn. Nhật ký không chứa nội dung cuộc trò chuyện; khóa và token được ẩn đi.",
+      "size": "Dung lượng nhật ký: {{size}}",
+      "export": "Xuất thông tin chẩn đoán",
+      "exported": "Đã lưu thông tin chẩn đoán.",
+      "reveal": "Mở thư mục nhật ký",
+      "clear": "Xóa nhật ký",
+      "cleared": "Đã xóa nhật ký."
     }
   },
   "voice": {
@@ -521,7 +522,6 @@
     }
   },
   "browserSection": {
-    "title": "Hồ sơ trình duyệt",
     "description": "Trình duyệt trong bảng bên lưu thông tin đăng nhập theo từng hồ sơ. Nhập cookie từ một trình duyệt trên máy này để vẫn đăng nhập vào cùng các trang web.",
     "newProfile": "Hồ sơ mới",
     "newTitle": "Hồ sơ trình duyệt mới",
@@ -563,8 +563,13 @@
     }
   },
   "computerSection": {
-    "title": "Điều khiển máy tính",
-    "description": "Cho phép agent dùng các ứng dụng trên máy này: agent đọc nội dung cửa sổ, rồi bấm, gõ chữ và dùng menu, thường là không chiếm màn hình của bạn.",
+    "title": "Máy tính này",
+    "tabs": {
+      "browser": "Trình duyệt",
+      "apps": "Điều khiển máy tính"
+    },
+    "description": "Trình duyệt mà bảng bên dùng để lưu thông tin đăng nhập, và những ứng dụng agent được phép dùng trên máy này.",
+    "appsDescription": "Cho phép agent dùng các ứng dụng trên máy này: agent đọc nội dung cửa sổ, rồi bấm, gõ chữ và dùng menu, thường là không chiếm màn hình của bạn.",
     "risk": "Agent có thể làm trong một ứng dụng bất cứ điều gì bạn làm được ở đó. Nội dung agent đọc trong ứng dụng (một email, một tin nhắn) có thể tìm cách đánh lừa nó, nên hãy giữ chế độ “hỏi trước khi thao tác” trừ khi bạn tin tưởng tác vụ. Agent không bao giờ được dùng chính PP Agent, các terminal hay trình soạn code có terminal, Task Manager, hay phần cài đặt mật khẩu và quyền riêng tư. Cho phép Finder hoặc File Explorer gần như là cho phép agent chạy chương trình, vì mở một script ở đó sẽ chạy nó.",
     "enable": {
       "title": "Cho phép agent dùng ứng dụng",

@@ -65,6 +65,7 @@ import { useTranslation } from "react-i18next";
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { OptionGroup, SubOptions, SwitchRow } from "@/components/settings/option-group";
 import { SectionHeading } from "@/components/settings/section-heading";
+import { VoiceSettings } from "@/components/settings/voice-settings";
 import { groupByProvider, modelKey, modelLabel, modelLabeler } from "@/lib/models";
 import {
   gatewaysQuery,
@@ -906,6 +907,8 @@ export function ModelsSection({ bridge }: { bridge: DesktopBridge }) {
         <GroupHeading title={t("fastModel.label")} />
         <FastModelField bridge={bridge} />
       </section>
+
+      <VoiceSettings bridge={bridge} />
 
       <section className="flex flex-col gap-2">
         <GroupHeading title={t("section.gateways.heading")}>

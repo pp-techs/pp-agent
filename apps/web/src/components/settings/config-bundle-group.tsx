@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 import { OptionGroup } from "@/components/settings/option-group";
 
-/** Exports the app setup as one file — or applies one — so many people's copies get set up alike. */
+/** Settings › Advanced: export the app setup as one file, or apply one, so copies get set up alike. */
 export function ConfigBundleGroup({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("settings");
   const onError = (error: Error) => toast.error(error.message);
@@ -17,7 +17,7 @@ export function ConfigBundleGroup({ bridge }: { bridge: DesktopBridge }) {
       return bridge.files.saveConfigFile("pp-agent-config", json);
     },
     onSuccess: (saved) => {
-      if (saved) toast.success(t("general.configGroup.exported"));
+      if (saved) toast.success(t("advanced.configGroup.exported"));
     },
     onError,
   });
@@ -29,7 +29,7 @@ export function ConfigBundleGroup({ bridge }: { bridge: DesktopBridge }) {
     onSuccess: (report) => {
       if (!report) return;
       toast.success(
-        t("general.configGroup.imported", {
+        t("advanced.configGroup.imported", {
           gateways: report.gateways,
           agents: report.agents,
           servers: report.mcpServers,
@@ -41,8 +41,8 @@ export function ConfigBundleGroup({ bridge }: { bridge: DesktopBridge }) {
 
   return (
     <OptionGroup
-      legend={t("general.configGroup.legend")}
-      description={t("general.configGroup.description")}
+      legend={t("advanced.configGroup.legend")}
+      description={t("advanced.configGroup.description")}
     >
       <div className="flex flex-wrap items-center gap-2">
         <Button
@@ -50,14 +50,14 @@ export function ConfigBundleGroup({ bridge }: { bridge: DesktopBridge }) {
           disabled={exportConfig.isPending}
           onClick={() => exportConfig.mutate()}
         >
-          {t("general.configGroup.export")}
+          {t("advanced.configGroup.export")}
         </Button>
         <Button
           variant="outline"
           disabled={importConfig.isPending}
           onClick={() => importConfig.mutate()}
         >
-          {t("general.configGroup.import")}
+          {t("advanced.configGroup.import")}
         </Button>
       </div>
     </OptionGroup>

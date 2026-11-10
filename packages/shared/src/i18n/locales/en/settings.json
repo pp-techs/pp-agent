@@ -7,26 +7,23 @@
     "breadcrumbRoot": "Settings",
     "sections": {
       "general": "General",
-      "voice": "Voice input",
       "models": "Models",
-      "workspaces": "Workspaces",
       "agents": "Agents",
+      "workspaces": "Workspaces",
       "tools": "Tools",
-      "mcp": "MCP servers",
       "skills": "Skills",
       "memory": "Memory",
-      "scheduledTasks": "Scheduled tasks",
       "channels": "Channels",
+      "remote": "Remote access",
       "background": "Background",
-      "browser": "Browser",
-      "computer": "Computer use",
-      "remote": "Remote access"
+      "computer": "This computer",
+      "advanced": "Advanced"
     },
     "back": "Back"
   },
   "general": {
     "title": "General",
-    "description": "Your language, workspace, appearance, default model, and updates.",
+    "description": "Your language, workspace, appearance, and default model.",
     "language": {
       "title": "Language",
       "description": "The language used across the app.",
@@ -56,20 +53,6 @@
       "emptyHint": "Connect a provider in Models to choose a default.",
       "hint": "Used for new chats. You can switch models in any chat from below the message box."
     },
-    "updates": {
-      "title": "Updates",
-      "check": "Check for updates"
-    },
-    "diagnostics": {
-      "legend": "Diagnostics",
-      "description": "PP Agent keeps a local log of errors, including what the model's provider said when it failed. Send the exported file to whoever helps you. It never contains your conversations; keys and tokens are hidden.",
-      "size": "Log size: {{size}}",
-      "export": "Export diagnostics",
-      "exported": "Diagnostics saved.",
-      "reveal": "Show log folder",
-      "clear": "Clear log",
-      "cleared": "Log cleared."
-    },
     "desktop": {
       "legend": "Desktop",
       "description": "How PP Agent behaves next to your other apps.",
@@ -89,6 +72,14 @@
         "hint": "Modifiers and one key, for example CommandOrControl+Shift+Space.",
         "invalid": "Not a valid shortcut. Use modifiers and one key, for example CommandOrControl+Shift+Space."
       }
+    }
+  },
+  "advanced": {
+    "title": "Advanced",
+    "description": "Updates, the setup of this computer as one file, and the log to send when something goes wrong.",
+    "updates": {
+      "title": "Updates",
+      "check": "Check for updates"
     },
     "configGroup": {
       "legend": "Configuration bundle",
@@ -97,6 +88,16 @@
       "import": "Import configuration",
       "exported": "The configuration bundle was saved.",
       "imported": "Applied: {{gateways}} gateways, {{agents}} agents, {{servers}} MCP servers."
+    },
+    "diagnostics": {
+      "legend": "Diagnostics",
+      "description": "PP Agent keeps a local log of errors, including what the model's provider said when it failed. Send the exported file to whoever helps you. It never contains your conversations; keys and tokens are hidden.",
+      "size": "Log size: {{size}}",
+      "export": "Export diagnostics",
+      "exported": "Diagnostics saved.",
+      "reveal": "Show log folder",
+      "clear": "Clear log",
+      "cleared": "Log cleared."
     }
   },
   "voice": {
@@ -527,7 +528,6 @@
     }
   },
   "browserSection": {
-    "title": "Browser profiles",
     "description": "The browser in the side panel keeps sign-ins per profile. Import cookies from a browser on this computer to stay signed in to the same sites.",
     "newProfile": "New profile",
     "newTitle": "New browser profile",
@@ -575,8 +575,13 @@
     }
   },
   "computerSection": {
-    "title": "Computer use",
-    "description": "Lets the agent use apps on this computer: it reads what a window shows, then clicks, types and uses menus, usually without taking over your screen.",
+    "title": "This computer",
+    "tabs": {
+      "browser": "Browser",
+      "apps": "Computer use"
+    },
+    "description": "The browser the side panel keeps your sign-ins in, and the apps the agent may use on this computer.",
+    "appsDescription": "Lets the agent use apps on this computer: it reads what a window shows, then clicks, types and uses menus, usually without taking over your screen.",
     "risk": "The agent can do in an app whatever you could do there. Text it reads in an app (an email, a chat) could try to trick it, so keep “acting asks first” unless you trust the task. The agent can never use PP Agent itself, terminals or code editors with a terminal, Task Manager, or password and privacy settings. Allowing Finder or File Explorer is close to allowing it to run programs, since opening a script there runs it.",
     "enable": {
       "title": "Let the agent use apps",
