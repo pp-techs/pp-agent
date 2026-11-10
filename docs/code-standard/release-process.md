@@ -45,13 +45,13 @@ git restore . && git clean -fd .changeset
 
 The installed app checks GitHub Releases ten seconds after start, every six hours, and when someone presses **Check for updates** (Settings → General). Implementation: `apps/desktop/src/main/updates.ts`.
 
-| Platform               | Behaviour                                                                                                                                                                                                                                                                                              |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Windows                | Signed builds (`ppCodeSigned`): `electron-updater` downloads the installer and restarts into it, reading `latest.yml`, which electron-builder writes next to the installers and `publish` uploads with the release. Unsigned builds compare versions (GitHub Releases API) and open the release page.  |
-| macOS                  | Developer ID signed builds (`ppCodeSigned`): `electron-updater` downloads the `.zip` and restarts into it. It reads `latest-mac.yml`, which `publish` builds by merging the arm64 and x64 feeds. Ad-hoc signed builds open the release page.                                                           |
-| Linux AppImage, `.deb` | The app only compares versions (GitHub Releases API) and opens the release page: AppImages are unsigned, so an update that replaced itself would be checked only against the hash in the same release's feed, and `.deb` belongs to the system package manager. `latest-linux.yml` is still published. |
+| Platform               | Behaviour                                                                                                                                                                                                                                                                     |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows                | `electron-updater` downloads the installer and restarts into it, but only after the app verified `latest.yml`'s Ed25519 signature and the installer's SHA-512 against the signed feed ([Update feed signing](#update-feed-signing)). No code-signing certificate is involved. |
+| macOS                  | Developer ID signed builds (`ppCodeSigned`): `electron-updater` downloads the `.zip` and restarts into it. It reads `latest-mac.yml`, which `publish` builds by merging the arm64 and x64 feeds. Ad-hoc signed builds open the release page.                                  |
+| Linux AppImage, `.deb` | The app only compares versions (GitHub Releases API) and opens the release page: `.deb` belongs to the system package manager, and AppImage updates are not signed. `latest-linux.yml` is still published.                                                                    |
 
-The `publish` job fails when `latest.yml`, `latest-linux.yml`, or `latest-mac.yml` is missing. Each macOS `package` job renames its feed to `latest-mac-<arch>.yml`; `publish` merges them with `yq` into one `latest-mac.yml` listing both architectures.
+The `publish` job fails when `latest.yml`, `latest-linux.yml`, or `latest-mac.yml` is missing. Each macOS `package` job renames its feed to `latest-mac-<arch>.yml`; `publish` merges them with `yq` into one `latest-mac.yml` listing both architectures, signs all three feeds, and uploads the `.sig` files beside them.
 
 Development runs (`app.isPackaged` false) never check.
 
@@ -59,6 +59,7 @@ Development runs (`app.isPackaged` false) never check.
 
 - **Actions → General → Workflow permissions:** "Allow GitHub Actions to create and approve pull requests" (for the Version Packages PR).
 - **Environments → `release`:** add required reviewers here for a manual gate before publishing.
+- **Secret `UPDATE_SIGNING_KEY`:** the Ed25519 key that signs the update feeds ([Update feed signing](#update-feed-signing)). `publish` fails without it, because installed apps refuse a feed they cannot verify.
 - Because the Version Packages PR is opened with `GITHUB_TOKEN`, CI does not run on it; `verify` re-checks the merged commit.
 
 ## Code signing
@@ -74,6 +75,27 @@ Signing is optional and driven by repository secrets (Settings → Secrets and v
 | `APPLE_TEAM_ID`               | 10-character Team ID (developer.apple.com → Membership details)                           | Notarizes signed macOS builds (all three required) |
 | `WIN_CSC_LINK`                | Windows code-signing certificate (`.pfx`/`.p12`) as base64 (or a URL)                     | Signs the Windows installer                        |
 | `WIN_CSC_KEY_PASSWORD`        | Password of that certificate                                                              | Unlocks `WIN_CSC_LINK`                             |
+
+### Update feed signing
+
+An update that installs itself proves it came from this project with a key this project controls, not
+with a CA certificate, so Windows needs no code-signing certificate: `publish` signs every feed with
+`UPDATE_SIGNING_KEY` (Ed25519), and `apps/desktop/src/main/update-feed.ts` verifies that signature
+before electron-updater runs, then compares the downloaded installer's SHA-512 with the value in the
+signed feed. Anyone who can publish to the repository can replace the installer and the feed beside
+it; they cannot produce the signature.
+
+Create the key once and keep it somewhere you can restore it from:
+
+```bash
+node -e 'const { generateKeyPairSync } = require("node:crypto"); const { privateKey, publicKey } = generateKeyPairSync("ed25519"); require("node:fs").writeFileSync("update-signing.pem", privateKey.export({ format: "pem", type: "pkcs8" }), { mode: 0o600 }); console.log(publicKey.export({ format: "der", type: "spki" }).toString("base64"))'
+base64 < update-signing.pem | tr -d '\n' | gh secret set UPDATE_SIGNING_KEY
+```
+
+- Put the printed public key in `FEED_PUBLIC_KEYS` (`apps/desktop/src/main/update-feed.ts`) in the same change.
+- The first build that carries a key has to be installed by hand once; from then on it updates itself.
+- Rotation: add the new public key to `FEED_PUBLIC_KEYS`, ship a release signed with the old key, switch `UPDATE_SIGNING_KEY` to the new key, ship again, and only then remove the old public key — an install that knows only the old key refuses a feed signed with the new one.
+- If the private key is lost, generate a new pair, put its public key in the app, and have that release installed by hand once; nothing else in the release flow depends on the key.
 
 ### macOS
 
@@ -91,7 +113,7 @@ Signing is optional and driven by repository secrets (Settings → Secrets and v
 
 ### Windows
 
-`WIN_CSC_LINK` + `WIN_CSC_KEY_PASSWORD` sign the NSIS installer, and the build gets `ppCodeSigned: true` stamped into its `package.json`, so installed copies update in the app (electron-updater then also checks the update's publisher). Without `WIN_CSC_LINK` the workflow unsets the macOS `CSC_*` variables for the Windows job, disables identity discovery and prints a warning: the installer stays unsigned, and installed copies offer new versions through the release page instead of installing them, since an unsigned update would be checked only against the hash in the same release's feed. A new certificate without SmartScreen reputation (standard, non-EV) can still show a warning until it builds reputation.
+`WIN_CSC_LINK` + `WIN_CSC_KEY_PASSWORD` sign the NSIS installer, which only affects the SmartScreen warning when someone downloads it: updates are protected by the signed feed ([Update feed signing](#update-feed-signing)), not by the certificate. Without `WIN_CSC_LINK` the workflow unsets the macOS `CSC_*` variables for the Windows job, disables identity discovery and prints a warning; the installer stays unsigned. A new certificate without SmartScreen reputation (standard, non-EV) can still show a warning until it builds reputation.
 
 ### Linux
 

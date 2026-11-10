@@ -225,7 +225,7 @@
     "checkAgain": "Check connections again",
     "editJson": "Edit mcp.json",
     "addServer": "Add server",
-    "backToServers": "Back to MCP servers",
+    "backToServers": "Back",
     "configErrors": "Some servers in mcp.json couldn't be loaded",
     "loadError": "Couldn't load your MCP servers",
     "empty": {
@@ -262,6 +262,47 @@
     "removeConfirm": {
       "title": "Remove this server?",
       "description": "“{{name}}” and its tools will no longer be available to the agent."
+    }
+  },
+  "connectors": {
+    "description": "Connect the agent to the apps you work in, so it can look things up and make changes there for you.",
+    "connect": "Connect",
+    "chooseFolder": "Choose folder…",
+    "addFolder": "Add folder",
+    "mainAccount": "Main account",
+    "googleRefused": "Google refused access. In the app's Google Cloud project, enable both the product's API (for example Gmail API) and its MCP API (Gmail MCP API), and check that this account is a test user.",
+    "sections": {
+      "connected": "Connected",
+      "available": "Available"
+    },
+    "addAccount": {
+      "action": "Add account",
+      "title": "Add another {{name}} account",
+      "description": "Give it a short name so you and the agent can tell your accounts apart.",
+      "label": "Account name",
+      "placeholder": "Work, Personal, name@example.com"
+    },
+    "items": {
+      "gmail": { "description": "Search and read your email, and write drafts for you to send." },
+      "calendar": { "description": "See your events and when you are free." },
+      "drive": { "description": "Find and read files in Google Drive, and save new ones." },
+      "docs": { "description": "Read and edit documents in Google Docs." },
+      "sheets": { "description": "Read and edit spreadsheets in Google Sheets." },
+      "notion": { "description": "Search and edit pages and databases in your Notion workspace." },
+      "linear": { "description": "Find, create and update Linear issues, projects and comments." },
+      "atlassian": { "description": "Work with Jira issues and Confluence pages." },
+      "sentry": { "description": "Look into errors and performance problems in Sentry." },
+      "stripe": {
+        "description": "Look up customers, payments, invoices and subscriptions in Stripe."
+      },
+      "supabase": { "description": "Query and manage your Supabase projects and databases." },
+      "context7": {
+        "description": "Up-to-date documentation and code examples for programming libraries."
+      },
+      "filesystem": { "description": "Read and change files inside one folder on this computer." }
+    },
+    "custom": {
+      "action": "Add custom connector"
     }
   },
   "mcpJson": {

@@ -152,7 +152,7 @@ function normalizeUrl(value: unknown): string {
   }
 }
 
-/** Values of MCP `env` and `headers` (API keys, tokens) never leave the computer. */
+/** Values of MCP `env`, `headers` and an OAuth client's secret (API keys, tokens) never leave the computer. */
 const HIDDEN_VALUE = "••••••";
 
 function hideValues(values: Record<string, string> | undefined) {
@@ -178,6 +178,9 @@ function remoteView(command: AgentCommand, data: unknown): unknown {
         ...server.settings,
         env: hideValues(server.settings.env),
         headers: hideValues(server.settings.headers),
+        ...(server.settings.oauth?.clientSecret !== undefined
+          ? { oauth: { ...server.settings.oauth, clientSecret: HIDDEN_VALUE } }
+          : {}),
       },
     })),
   };

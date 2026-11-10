@@ -301,3 +301,54 @@ describe("McpConfigFile.mergeServers", () => {
     expect(config.mergeServers(undefined)).toBe(0);
   });
 });
+
+describe("McpConfigFile.saveServer", () => {
+  const gmail = {
+    name: "gmail-work",
+    enabled: true,
+    exposure: "codemode" as const,
+    transport: "http" as const,
+    url: "https://gmailmcp.googleapis.com/mcp/v1",
+    account: "Work",
+    oauth: { clientId: "id", clientSecret: "secret", scope: "a b" },
+  };
+
+  it("writes a signed-in service's client and account, and reads them back", () => {
+    const config = mcpConfig();
+    config.saveServer(undefined, gmail);
+    expect(JSON.parse(readFileSync(config.path, "utf8")).mcpServers["gmail-work"]).toMatchObject({
+      url: gmail.url,
+      account: "Work",
+      oauth: { clientId: "id", clientSecret: "secret", scope: "a b" },
+    });
+    expect(config.servers()[0]?.settings).toMatchObject({
+      account: "Work",
+      oauth: { clientId: "id", clientSecret: "secret", scope: "a b" },
+    });
+  });
+
+  it("keeps the client's other keys and the account when Settings saves without them", () => {
+    const config = mcpConfig();
+    mkdirSync(join(dir, "agent"), { recursive: true });
+    writeFileSync(
+      config.path,
+      JSON.stringify({
+        mcpServers: {
+          "gmail-work": {
+            url: gmail.url,
+            account: "Work",
+            oauth: { clientId: "id", callbackPort: 8765 },
+          },
+        },
+      }),
+    );
+    const { account: _account, oauth: _oauth, ...edited } = gmail;
+    config.saveServer("gmail-work", { ...edited, enabled: false });
+    expect(JSON.parse(readFileSync(config.path, "utf8")).mcpServers["gmail-work"]).toEqual({
+      url: gmail.url,
+      enabled: false,
+      account: "Work",
+      oauth: { clientId: "id", callbackPort: 8765 },
+    });
+  });
+});

@@ -109,3 +109,12 @@ Pi's MCP extension exposes status, reconnect and sign-in only through its `/mcp`
 - `save_mcp_json` accepts a full `{ "mcpServers": { … } }` config or a bare server map (as other MCP clients show it).
 - A broken `mcp.json` connects nothing; the overview reports the error.
 - Every edit emits `settings_changed ["mcp"]` and sets the `mcp` pending flag (see [Agents and live settings](agents-and-live-settings.md)).
+
+### Connectors (Settings › Connectors)
+
+A card grid over the same servers, for people who should not have to know what an MCP server is (`apps/web/src/components/settings/connectors-section.tsx`, catalog in `apps/web/src/lib/mcp-catalog.ts`).
+
+- A **preset** is a known server (address or command, how it signs in) with a bundled logo from [theSVG](https://thesvg.org) (`apps/web/src/assets/connectors/`; the renderer's CSP blocks remote images). Connect saves it with `save_mcp_server` and, for `oauth` presets, runs `mcp_sign_in` right away. A `folder` preset opens the system folder dialog first; its folder is the last argument.
+- A configured server belongs to a preset when it has the same URL (or command and arguments), whatever its name. Servers that match none show as custom cards.
+- **Several accounts.** Pi keys OAuth state by server name and URL, so each account is its own `mcp.json` entry: `gmail`, `gmail-work`. Pressing **Add account** on a connected service asks for a label, saves it as `account` and in the server name (`serverName`, accents folded: “Công việc” → `gmail-cong-viec`), which is also how the agent tells the tools apart (`mcp__gmail-work__…`). The description sent with the server names the account. A folder preset repeats the same way (**Add folder**).
+- **Google** (Gmail, Calendar, Drive, Docs, Sheets) uses Google's remote Workspace MCP servers (Developer Preview). Google registers no OAuth clients on the fly, so these entries carry `oauth: { clientId, clientSecret, scope, callbackUrl }` (read by Pi's MCP extension) with the app's own client from `apps/web/src/lib/google-oauth.ts`. The client is a Google “Web application” client, whose redirect URIs are registered one by one, so `callbackUrl` is the fixed `http://127.0.0.1:8976/callback` instead of Pi's random loopback port; two Google sign-ins cannot run at once. Without a client id the Google cards are not offered. `McpServerSettings.oauth` and `.account` are written only by Connectors and kept as they are on every other save; a remote device never receives `oauth.clientSecret`.

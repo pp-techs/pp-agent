@@ -31,6 +31,7 @@ import {
   MessagesSquareIcon,
   MonitorIcon,
   MoonStarIcon,
+  PlugZapIcon,
   ServerIcon,
   SlidersHorizontalIcon,
   SparklesIcon,
@@ -68,6 +69,10 @@ const WorkspacesSection = lazySection(
 const AgentsSection = lazySection(
   () => import("@/components/settings/agents-section"),
   (module) => module.AgentsSection,
+);
+const ConnectorsSection = lazySection(
+  () => import("@/components/settings/connectors-section"),
+  (module) => module.ConnectorsSection,
 );
 const ToolsSection = lazySection(
   () => import("@/components/settings/tools-section"),
@@ -116,6 +121,7 @@ export type SettingsSection =
   | "models"
   | "agents"
   | "workspaces"
+  | "connectors"
   | "tools"
   | "skills"
   | "memory"
@@ -136,6 +142,7 @@ const ALL_SECTIONS: {
   { id: "models", icon: SparklesIcon, Component: ModelsSection },
   { id: "agents", icon: BotIcon, Component: AgentsSection },
   { id: "workspaces", icon: FolderKanbanIcon, Component: WorkspacesSection },
+  { id: "connectors", icon: PlugZapIcon, Component: ConnectorsSection },
   { id: "tools", icon: WrenchIcon, Component: ToolsSection },
   { id: "skills", icon: BookOpenIcon, Component: SkillsSection },
   { id: "memory", icon: BrainIcon, Component: MemorySection },

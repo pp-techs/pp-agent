@@ -1215,6 +1215,19 @@ export interface SaveSkillInput {
 export const MCP_EXPOSURES = ["codemode", "deferred", "direct", "hidden"] as const;
 export type McpExposure = (typeof MCP_EXPOSURES)[number];
 
+/** The OAuth client an HTTP server signs in with, when it does not register clients itself (Google). */
+export interface McpOAuthClient {
+  clientId: string;
+  clientSecret?: string;
+  /** Scopes to ask for, separated by spaces. */
+  scope?: string;
+  /**
+   * Where the browser returns after sign-in: an `http://127.0.0.1:<port>/callback` address. Needed
+   * when the client's redirect URIs are registered one by one (a Google “Web application” client).
+   */
+  callbackUrl?: string;
+}
+
 /** One `mcpServers` entry of mcp.json, as edited in Settings. Unknown keys are preserved on save. */
 export interface McpServerSettings {
   name: string;
@@ -1235,6 +1248,10 @@ export interface McpServerSettings {
   cwd?: string;
   url?: string;
   headers?: Record<string, string>;
+  /** Written by Connectors, kept as it is on every other save. */
+  oauth?: McpOAuthClient;
+  /** Which account of a service this server is signed in to (“Work”), for telling servers of one service apart. */
+  account?: string;
 }
 
 export type McpServerState =
@@ -2012,8 +2029,8 @@ export interface ComputerStatus {
 
 /**
  * Where the app stands with updates. `in-app` updates download and install from inside the app
- * (Windows, Linux AppImage); `download-page` ones open the release page (macOS builds are not
- * Developer ID signed, so macOS cannot replace itself, and `.deb` installs belong to the system).
+ * (Windows, and macOS builds signed with a Developer ID certificate); `download-page` ones open the
+ * release page (macOS builds that are not signed, and `.deb` installs, which belong to the system).
  */
 export type UpdateState = { currentVersion: string } &
   /** Development runs and unpackaged builds never check. */

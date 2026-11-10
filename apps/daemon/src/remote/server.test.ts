@@ -72,6 +72,16 @@ function makeServer(): RemoteServer {
               toolCount: 2,
               usesOAuth: false,
             },
+            {
+              settings: {
+                name: "gmail",
+                url: "https://gmail.example",
+                oauth: { clientId: "client-id", clientSecret: "cl13nt-s3cret" },
+              },
+              state: "connected",
+              toolCount: 3,
+              usesOAuth: true,
+            },
           ],
           configErrors: [],
           configPath: "/x/mcp.json",
@@ -495,6 +505,8 @@ describe("RemoteServer", () => {
     const text = await response.text();
     expect(text).not.toContain("s3cret");
     expect(text).not.toContain("k3y");
+    expect(text).not.toContain("cl13nt-s3cret");
+    expect(text).toContain("client-id");
     expect(text).toContain("Authorization");
     expect(text).toContain("API_KEY");
     expect((await command(base, token, { type: "get_mcp_json" })).status).toBe(403);

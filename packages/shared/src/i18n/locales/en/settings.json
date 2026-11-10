@@ -10,6 +10,7 @@
       "models": "Models",
       "agents": "Agents",
       "workspaces": "Workspaces",
+      "connectors": "Connectors",
       "tools": "Tools",
       "skills": "Skills",
       "memory": "Memory",

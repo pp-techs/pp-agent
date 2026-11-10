@@ -2,13 +2,20 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { app } from "electron";
 import electronUpdater from "electron-updater";
-import type { UpdateInfo } from "electron-updater";
+import type { UpdateDownloadedEvent, UpdateInfo } from "electron-updater";
 import type { UpdateState } from "@workspace/shared";
 import { translator } from "./i18n.ts";
+import {
+  fetchSignedFeed,
+  installerSha512,
+  isNewer,
+  REPO,
+  sha512File,
+  type Feed,
+} from "./update-feed.ts";
 
 const { autoUpdater } = electronUpdater;
 
-const REPO = "pp-techs/pp-agent";
 const FIRST_CHECK_DELAY_MS = 10_000;
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1_000;
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -19,8 +26,9 @@ type Install = Available["install"];
 const releaseUrl = (version: string) => `https://github.com/${REPO}/releases/tag/v${version}`;
 
 /**
- * The release workflow stamps `ppCodeSigned` into package.json of builds signed with the project's
- * certificate (Developer ID on macOS, WIN_CSC_LINK on Windows).
+ * The release workflow stamps `ppCodeSigned` into package.json of macOS builds signed with the
+ * project's Developer ID certificate. Windows installers do not need it: they update in the app
+ * against a signed feed (see `update-feed.ts`).
  */
 function isCodeSigned(): boolean {
   try {
@@ -39,27 +47,15 @@ function isCodeSigned(): boolean {
 }
 
 /**
- * Signed Windows and macOS builds replace themselves. Anything else (unsigned builds, Linux
- * AppImages, which are never signed, and `.deb` installs, which belong to the package manager)
- * sends the person to the release page: an update that installs itself is checked only against
- * the hash in the feed of the same release, so a compromised release would reach every user.
+ * Windows replaces itself: the feed is signed, so a release that was replaced on GitHub cannot
+ * install here, with or without a code-signing certificate. macOS only does when the build is
+ * Developer ID signed (Squirrel installs only a signed bundle). Linux and `.deb` installs open the
+ * release page: AppImage updates are not signed, and the `.deb` belongs to the package manager.
  */
 function installMode(): Install {
-  if (process.platform === "win32" || process.platform === "darwin")
-    return isCodeSigned() ? "in-app" : "download-page";
+  if (process.platform === "win32") return "in-app";
+  if (process.platform === "darwin") return isCodeSigned() ? "in-app" : "download-page";
   return "download-page";
-}
-
-/** Compares plain `x.y.z` versions; anything else counts as not newer. */
-function isNewer(candidate: string, current: string): boolean {
-  const parse = (version: string) => version.split("-")[0]!.split(".").map(Number);
-  const [a, b] = [parse(candidate), parse(current)];
-  for (let i = 0; i < 3; i++) {
-    const [x, y] = [a[i] ?? Number.NaN, b[i] ?? Number.NaN];
-    if (Number.isNaN(x) || Number.isNaN(y)) return false;
-    if (x !== y) return x > y;
-  }
-  return false;
 }
 
 /** Latest published (non-prerelease) version, from the GitHub Releases API. */
@@ -99,6 +95,9 @@ export function createUpdater(onState: (state: UpdateState) => void): Updater {
   /** What a quiet failure falls back to. */
   let settled: UpdateState = state;
   let manualCheck = false;
+  /** The feed this check verified; only the installer hash from it may install. */
+  let signedFeed: Feed | null = null;
+  let expectedInstallerSha512: string | null = null;
 
   function set(next: UpdateState): void {
     state = next;
@@ -128,7 +127,19 @@ export function createUpdater(onState: (state: UpdateState) => void): Updater {
   if (enabled && mode === "in-app") {
     autoUpdater.autoDownload = false;
     autoUpdater.allowPrerelease = false;
-    autoUpdater.on("update-available", (info: UpdateInfo) => offer(info.version));
+    autoUpdater.on("update-available", (info: UpdateInfo) => {
+      // The updater reads the release over its own connection. A version other than the one this
+      // check verified was not signed, so it must not be offered.
+      if (signedFeed !== null && info.version !== signedFeed.version) {
+        fail(
+          new Error(
+            `The updater offered ${info.version}, the signed feed has ${signedFeed.version}`,
+          ),
+        );
+        return;
+      }
+      offer(info.version);
+    });
     autoUpdater.on("update-not-available", () => set({ currentVersion, status: "up-to-date" }));
     autoUpdater.on("download-progress", (progress) => {
       const version = state.status === "downloading" ? state.version : "";
@@ -139,11 +150,10 @@ export function createUpdater(onState: (state: UpdateState) => void): Updater {
         percent: Math.round(progress.percent),
       });
     });
-    autoUpdater.on("update-downloaded", (info: UpdateInfo) =>
-      set({ currentVersion, status: "ready", version: info.version }),
-    );
+    autoUpdater.on("update-downloaded", (info: UpdateDownloadedEvent) => void downloaded(info));
     // Without a listener an updater error would be thrown as an uncaught exception.
     autoUpdater.on("error", (error) => {
+      if (state.status === "error") return;
       if (state.status === "downloading") {
         console.error("[updates]", error);
         set({
@@ -157,14 +167,52 @@ export function createUpdater(onState: (state: UpdateState) => void): Updater {
     });
   }
 
+  /** Compares the bytes that are about to install with the feed whose signature was verified. */
+  async function downloaded(info: UpdateDownloadedEvent): Promise<void> {
+    const version = signedFeed?.version ?? info.version;
+    if (expectedInstallerSha512 !== null) {
+      let actual: string;
+      try {
+        actual = await sha512File(info.downloadedFile);
+      } catch (error) {
+        fail(error);
+        return;
+      }
+      if (actual !== expectedInstallerSha512) {
+        console.error("[updates] the downloaded installer does not match the signed feed");
+        set({ currentVersion, status: "error", message: translator()("updates.downloadFailed") });
+        return;
+      }
+    }
+    set({ currentVersion, status: "ready", version });
+  }
+
   async function check(manual: boolean): Promise<void> {
     if (!enabled) return;
     if (state.status === "checking" || state.status === "downloading" || state.status === "ready")
       return;
     manualCheck = manual;
+    signedFeed = null;
+    expectedInstallerSha512 = null;
     set({ currentVersion, status: "checking" });
     try {
       if (mode === "in-app") {
+        if (process.platform === "win32") {
+          // The updater trusts whatever feed it reads; verify the signature here before it runs.
+          let feed: Feed;
+          try {
+            feed = await fetchSignedFeed(`PP-Agent/${currentVersion}`);
+            if (!isNewer(feed.version, currentVersion)) {
+              set({ currentVersion, status: "up-to-date" });
+              return;
+            }
+            signedFeed = feed;
+            expectedInstallerSha512 = installerSha512(feed, ".exe");
+          } catch (error) {
+            fail(error);
+            return;
+          }
+        }
         await autoUpdater.checkForUpdates();
       } else {
         const latest = await fetchLatestVersion();

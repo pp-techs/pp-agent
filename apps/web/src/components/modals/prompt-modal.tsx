@@ -5,6 +5,7 @@ import { Button } from "@workspace/ui/components/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -16,6 +17,9 @@ type PromptModalProps = {
   label: string;
   initialValue: string;
   confirmLabel: string;
+  /** Explains what to type, under the title. */
+  description?: string;
+  placeholder?: string;
 };
 
 function PromptForm({
@@ -23,6 +27,8 @@ function PromptForm({
   label,
   initialValue,
   confirmLabel,
+  description,
+  placeholder,
   onDone,
 }: PromptModalProps & { onDone: (value: string | null) => void }) {
   const { t } = useTranslation("common");
@@ -37,11 +43,13 @@ function PromptForm({
     >
       <DialogHeader>
         <DialogTitle>{title}</DialogTitle>
+        {description && <DialogDescription>{description}</DialogDescription>}
       </DialogHeader>
       <Input
         aria-label={label}
         value={value}
         onChange={(event) => setValue(event.target.value)}
+        placeholder={placeholder}
         autoFocus
       />
       <DialogFooter>

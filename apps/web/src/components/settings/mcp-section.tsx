@@ -1,14 +1,7 @@
 import * as React from "react";
-import type { DesktopBridge, McpServerState, McpServerView } from "@workspace/shared";
+import type { DesktopBridge, McpServerView } from "@workspace/shared";
 import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert";
 import { Button } from "@workspace/ui/components/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@workspace/ui/components/dropdown-menu";
 import {
   Empty,
   EmptyContent,
@@ -35,57 +28,27 @@ import {
   BracesIcon,
   FolderOpenIcon,
   LogInIcon,
-  LogOutIcon,
-  MoreHorizontalIcon,
-  PencilIcon,
   PlugIcon,
   PlusIcon,
   RefreshCwIcon,
-  Trash2Icon,
   TriangleAlertIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { McpJsonEditor } from "@/components/settings/mcp-json-editor";
+import {
+  McpServerMenu,
+  StatusLabel,
+  summarizeServerError,
+  useMcpServerActions,
+} from "@/components/settings/mcp-server-actions";
 import { McpServerForm } from "@/components/settings/mcp-server-form";
 import { useSettingsSubPage } from "@/components/settings/settings-subpage";
 import { ComputerOnlyNotice } from "@/components/settings/computer-only-notice";
 import { isWebApp } from "@/lib/bridge";
-import {
-  mcpQuery,
-  useDeleteMcpServer,
-  useMcpSignIn,
-  useMcpSignOut,
-  useReconnectMcpServer,
-  useSaveMcpServer,
-} from "@/lib/extension-queries";
+import { mcpQuery } from "@/lib/extension-queries";
 
 type View = { kind: "list" } | { kind: "form"; name?: string } | { kind: "json" };
-
-const STATE_STYLE = {
-  connected: { dot: "bg-emerald-500", label: "mcp.states.connected" },
-  starting: { dot: "bg-amber-500 animate-pulse", label: "mcp.states.connecting" },
-  connecting: { dot: "bg-amber-500 animate-pulse", label: "mcp.states.connecting" },
-  failed: { dot: "bg-destructive", label: "mcp.states.failed" },
-  "needs-auth": { dot: "bg-amber-500", label: "mcp.states.needsAuth" },
-  disabled: { dot: "bg-muted-foreground/40", label: "mcp.states.disabled" },
-  disconnected: { dot: "bg-muted-foreground/40", label: "mcp.states.disconnected" },
-} as const satisfies Record<McpServerState, { dot: string; label: string }>;
-
-function StatusLabel({ server }: { server: McpServerView }) {
-  const { t } = useTranslation(["extensions", "common"]);
-  const style = STATE_STYLE[server.state];
-  const tools =
-    server.state === "connected" ? ` · ${t("mcp.toolCount", { count: server.toolCount })}` : "";
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
-      <span aria-hidden className={`size-2 shrink-0 rounded-full ${style.dot}`} />
-      {t(style.label)}
-      {tools}
-    </span>
-  );
-}
 
 function ServerRow({
   bridge,
@@ -98,59 +61,8 @@ function ServerRow({
 }) {
   const { t } = useTranslation(["extensions", "common"]);
   const { settings } = server;
-  const save = useSaveMcpServer(bridge);
-  const remove = useDeleteMcpServer(bridge);
-  const reconnect = useReconnectMcpServer(bridge);
-  const signIn = useMcpSignIn(bridge);
-  const signOut = useMcpSignOut(bridge);
-  const busy =
-    save.isPending ||
-    remove.isPending ||
-    reconnect.isPending ||
-    signIn.isPending ||
-    signOut.isPending;
-  const enabled = save.isPending ? save.variables.server.enabled : settings.enabled;
-
-  function onToggle(value: boolean) {
-    save.mutate({ originalName: settings.name, server: { ...settings, enabled: value } });
-  }
-
-  function onReconnect() {
-    reconnect.mutate(settings.name, {
-      onSuccess: () => toast.success(t("mcp.toast.reconnected", { name: settings.name })),
-    });
-  }
-
-  function onSignIn() {
-    signIn.mutate(settings.name, {
-      onSuccess: () => toast.success(t("mcp.toast.signedIn", { name: settings.name })),
-    });
-  }
-
-  async function onSignOut() {
-    const confirmed = await ConfirmModal.show({
-      title: t("mcp.signOutConfirm.title", { name: settings.name }),
-      description: t("mcp.signOutConfirm.description"),
-      confirmLabel: t("mcp.row.signOut"),
-    });
-    if (!confirmed) return;
-    signOut.mutate(settings.name, {
-      onSuccess: () => toast.success(t("mcp.toast.signedOut", { name: settings.name })),
-    });
-  }
-
-  async function onDelete() {
-    const confirmed = await ConfirmModal.show({
-      title: t("mcp.removeConfirm.title"),
-      description: t("mcp.removeConfirm.description", { name: settings.name }),
-      confirmLabel: t("common:actions.remove"),
-    });
-    if (!confirmed) return;
-    remove.mutate(settings.name, {
-      onSuccess: () => toast.success(t("mcp.toast.removed", { name: settings.name })),
-    });
-  }
-
+  const actions = useMcpServerActions(bridge, server);
+  const { busy, enabled } = actions;
   const where = settings.transport === "http" ? settings.url : settings.command;
 
   return (
@@ -165,15 +77,18 @@ function ServerRow({
         )}
         {where && <ItemDescription className="truncate font-mono text-xs">{where}</ItemDescription>}
         {server.state === "failed" && server.error && (
-          <ItemDescription className="line-clamp-3 text-xs text-destructive">
-            {server.error}
+          <ItemDescription
+            title={server.error}
+            className="line-clamp-3 text-xs break-words text-destructive [overflow-wrap:anywhere]"
+          >
+            {summarizeServerError(server.error)}
           </ItemDescription>
         )}
       </ItemContent>
       <ItemActions>
         {busy && <Spinner />}
         {server.state === "needs-auth" && (
-          <Button size="sm" variant="outline" disabled={busy} onClick={onSignIn}>
+          <Button size="sm" variant="outline" disabled={busy} onClick={actions.signIn}>
             <LogInIcon />
             {t("mcp.row.signIn")}
           </Button>
@@ -183,7 +98,7 @@ function ServerRow({
             <Switch
               checked={enabled}
               disabled={busy || isWebApp}
-              onCheckedChange={onToggle}
+              onCheckedChange={actions.toggle}
               aria-label={
                 enabled
                   ? t("mcp.row.turnOffNamed", { name: settings.name })
@@ -193,52 +108,7 @@ function ServerRow({
           </TooltipTrigger>
           <TooltipContent>{enabled ? t("mcp.row.turnOff") : t("mcp.row.turnOn")}</TooltipContent>
         </Tooltip>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t("mcp.row.actionsFor", { name: settings.name })}
-              />
-            }
-          >
-            <MoreHorizontalIcon />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuItem disabled={!enabled || busy} onClick={onReconnect}>
-              <RefreshCwIcon />
-              {t("mcp.row.reconnect")}
-            </DropdownMenuItem>
-            {server.usesOAuth && (
-              <>
-                <DropdownMenuItem disabled={!enabled || busy} onClick={onSignIn}>
-                  <LogInIcon />
-                  {t("mcp.row.signIn")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  variant="destructive"
-                  disabled={busy}
-                  onClick={() => void onSignOut()}
-                >
-                  <LogOutIcon />
-                  {t("mcp.row.signOut")}
-                </DropdownMenuItem>
-              </>
-            )}
-            {!isWebApp && (
-              <DropdownMenuItem onClick={onEdit}>
-                <PencilIcon />
-                {t("common:actions.edit")}
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onClick={() => void onDelete()}>
-              <Trash2Icon />
-              {t("common:actions.remove")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <McpServerMenu server={server} actions={actions} onEdit={onEdit} />
       </ItemActions>
     </Item>
   );

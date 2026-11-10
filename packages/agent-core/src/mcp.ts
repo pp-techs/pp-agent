@@ -211,6 +211,14 @@ function toSettings(name: string, entry: JsonObject): McpServerSettings {
   if (typeof entry.url === "string") settings.url = entry.url;
   const headers = stringRecord(entry.headers);
   if (headers) settings.headers = headers;
+  if (typeof entry.account === "string") settings.account = entry.account;
+  const oauth = asObject(entry.oauth);
+  if (typeof oauth?.clientId === "string") {
+    settings.oauth = { clientId: oauth.clientId };
+    if (typeof oauth.clientSecret === "string") settings.oauth.clientSecret = oauth.clientSecret;
+    if (typeof oauth.scope === "string") settings.oauth.scope = oauth.scope;
+    if (typeof oauth.callbackUrl === "string") settings.oauth.callbackUrl = oauth.callbackUrl;
+  }
   return settings;
 }
 
@@ -234,6 +242,8 @@ function applySettings(existing: JsonObject, server: McpServerSettings): JsonObj
   set("exposure", server.exposure === "codemode" ? undefined : server.exposure);
   set("timeout", server.timeout && server.timeout > 0 ? server.timeout : undefined);
   set("trusted", server.trusted === true ? true : undefined);
+  // Only Connectors sets these; any other save leaves them as they are.
+  if (server.account !== undefined) set("account", text(server.account));
 
   if (server.transport === "stdio") {
     const command = text(server.command);
@@ -254,6 +264,14 @@ function applySettings(existing: JsonObject, server: McpServerSettings): JsonObj
     if (entry.type === "stdio") delete entry.type;
     set("url", url);
     set("headers", map(server.headers));
+    if (server.oauth) {
+      // Keys of the client this app does not know (callback port) stay.
+      const client: JsonObject = { ...asObject(entry.oauth), clientId: server.oauth.clientId };
+      if (server.oauth.clientSecret !== undefined) client.clientSecret = server.oauth.clientSecret;
+      if (server.oauth.scope !== undefined) client.scope = server.oauth.scope;
+      if (server.oauth.callbackUrl !== undefined) client.callbackUrl = server.oauth.callbackUrl;
+      entry.oauth = client;
+    }
   }
   return entry;
 }

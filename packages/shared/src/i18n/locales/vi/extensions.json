@@ -223,7 +223,7 @@
     "checkAgain": "Kiểm tra lại kết nối",
     "editJson": "Chỉnh sửa mcp.json",
     "addServer": "Thêm máy chủ",
-    "backToServers": "Quay lại máy chủ MCP",
+    "backToServers": "Quay lại",
     "configErrors": "Không thể tải một số máy chủ trong mcp.json",
     "loadError": "Không thể tải danh sách máy chủ MCP",
     "empty": {
@@ -259,6 +259,51 @@
     "removeConfirm": {
       "title": "Xóa máy chủ này?",
       "description": "“{{name}}” và các công cụ của máy chủ sẽ không còn khả dụng với Agent."
+    }
+  },
+  "connectors": {
+    "description": "Kết nối Agent với các ứng dụng bạn đang dùng để Agent có thể tra cứu và thay đổi dữ liệu ở đó giúp bạn.",
+    "connect": "Kết nối",
+    "chooseFolder": "Chọn thư mục…",
+    "addFolder": "Thêm thư mục",
+    "mainAccount": "Tài khoản chính",
+    "googleRefused": "Google từ chối truy cập. Trong project Google Cloud của ứng dụng, hãy bật cả API của dịch vụ (ví dụ Gmail API) lẫn MCP API của nó (Gmail MCP API), và kiểm tra tài khoản này là test user.",
+    "sections": {
+      "connected": "Đã kết nối",
+      "available": "Có sẵn"
+    },
+    "addAccount": {
+      "action": "Thêm tài khoản",
+      "title": "Thêm một tài khoản {{name}} khác",
+      "description": "Đặt một tên ngắn để bạn và Agent phân biệt được các tài khoản.",
+      "label": "Tên tài khoản",
+      "placeholder": "Công việc, Cá nhân, ten@example.com"
+    },
+    "items": {
+      "gmail": { "description": "Tìm và đọc email của bạn, và soạn sẵn thư nháp để bạn gửi." },
+      "calendar": { "description": "Xem các sự kiện của bạn và khi nào bạn rảnh." },
+      "drive": { "description": "Tìm và đọc tệp trong Google Drive, và lưu tệp mới." },
+      "docs": { "description": "Đọc và chỉnh sửa tài liệu trong Google Docs." },
+      "sheets": { "description": "Đọc và chỉnh sửa bảng tính trong Google Sheets." },
+      "notion": {
+        "description": "Tìm kiếm và chỉnh sửa trang, cơ sở dữ liệu trong không gian làm việc Notion của bạn."
+      },
+      "linear": { "description": "Tìm, tạo và cập nhật vấn đề, dự án và bình luận trong Linear." },
+      "atlassian": { "description": "Làm việc với vấn đề trong Jira và trang trong Confluence." },
+      "sentry": { "description": "Xem lỗi và các vấn đề về hiệu năng trong Sentry." },
+      "stripe": {
+        "description": "Tra cứu khách hàng, thanh toán, hóa đơn và gói đăng ký trong Stripe."
+      },
+      "supabase": {
+        "description": "Truy vấn và quản lý các dự án và cơ sở dữ liệu Supabase của bạn."
+      },
+      "context7": { "description": "Tài liệu và ví dụ mã mới nhất cho các thư viện lập trình." },
+      "filesystem": {
+        "description": "Đọc và thay đổi tệp bên trong một thư mục trên máy tính này."
+      }
+    },
+    "custom": {
+      "action": "Thêm kết nối tùy chỉnh"
     }
   },
   "mcpJson": {

@@ -18,9 +18,12 @@ name: Release
 #   runtime; with APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID as well it is notarized
 #   (a warning is printed when some of those are missing). Without a certificate the app is
 #   ad-hoc signed and not notarized.
-# - Windows: WIN_CSC_LINK + WIN_CSC_KEY_PASSWORD sign the installer; without them it is unsigned.
-# Signed builds get `ppCodeSigned` in their package.json and update themselves in-app; unsigned
-# ones (and Linux) send people to the release page instead (apps/desktop/src/main/updates.ts).
+# - Windows: WIN_CSC_LINK + WIN_CSC_KEY_PASSWORD sign the installer; without them it is unsigned,
+#   which shows a SmartScreen warning on download but changes nothing about updates.
+# Updates do not depend on a code-signing certificate: `publish` signs every update feed with
+# UPDATE_SIGNING_KEY and the app installs only an installer whose hash appears in a feed it verified
+# (apps/desktop/src/main/update-feed.ts). macOS builds still update in-app only when `ppCodeSigned`
+# is stamped; Linux and `.deb` open the release page (apps/desktop/src/main/updates.ts).
 
 on:
   push:
@@ -285,7 +288,7 @@ jobs:
             if [ -z "${WIN_CSC_LINK:-}" ]; then
               unset CSC_LINK CSC_KEY_PASSWORD
               export CSC_IDENTITY_AUTO_DISCOVERY=false
-              echo "::warning::WIN_CSC_LINK is not set: the Windows installer is unsigned, and installed copies update through the release page."
+              echo "::warning::WIN_CSC_LINK is not set: the Windows installer is unsigned, so SmartScreen warns until the download builds reputation. Updates are not affected (they use the signed feed)."
             else
               args+=(-c.extraMetadata.ppCodeSigned=true)
             fi
@@ -324,7 +327,12 @@ jobs:
     env:
       VERSION: ${{ needs.plan.outputs.version }}
     steps:
-      # No checkout: this job only handles the verified artifacts.
+      # Needed for the feed signing script; nothing else here reads the repository.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: Download installers and notes
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -344,9 +352,21 @@ jobs:
           for feed in latest.yml latest-linux.yml latest-mac.yml; do
             [ -f "$assets/$feed" ] || { echo "::error::Missing update feed $feed"; exit 1; }
           done
-          (cd "$assets" && sha256sum -- * > SHA256SUMS.txt)
-          ls -l "$assets"
           echo "dir=$assets" >> "$GITHUB_OUTPUT"
+
+      # Installed apps refuse a feed they cannot verify, so an unsigned release would reach nobody.
+      - name: Sign update feeds
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+          ASSETS: ${{ steps.assets.outputs.dir }}
+        run: node apps/desktop/scripts/sign-update-feed.mjs "$ASSETS"
+
+      - name: Checksums
+        env:
+          ASSETS: ${{ steps.assets.outputs.dir }}
+        run: |
+          (cd "$ASSETS" && sha256sum -- * > SHA256SUMS.txt)
+          ls -l "$ASSETS"
 
       - name: Create tag and GitHub Release
         env:
