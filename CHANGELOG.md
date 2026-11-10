@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.30.1] — 2026-11-10
+
+An HTML file's preview fills the whole file tab again instead of stopping at the frame's 150px default height.
+
+On a phone: the chat's top bar has a folder button that opens the workspace's files, the arrow above them returns to the chat, and the phone's back gesture leaves the page instead of the app. A Markdown file's YAML frontmatter now shows as the fields it holds rather than as raw `---` lines and a stray heading. HTML previews run in the phone app and in the browser on the local network too — in the same sandbox with no network, charts included — instead of showing as text, and their code is a switch away. Tapping a search or filter field no longer zooms the page (iOS), chat search has a Close button since a phone has no Escape key, and the thinking-level slider is no longer pure black in the light theme. Settings › Remote access has a server icon instead of a phone.
+
 ## [0.30.0] — 2026-11-10
 
 Files, terminals and browser pages open as tabs in the main area, next to the chat, and you switch between them like tabs. This includes the tabs the agent opens and the pages that open from links. Each workspace keeps its own tabs, a "+" starts a terminal or a browser tab (Cmd+T / Ctrl+T opens a browser tab), and a second group splits the main area in two. The right side panel is now the file browser only (Cmd+J / Ctrl+J). The chat keeps running behind the other tabs.
