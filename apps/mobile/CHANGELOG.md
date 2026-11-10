@@ -1,9 +1,5 @@
 # @workspace/mobile
 
-## 0.30.0
-
-No changes in this release.
-
 ## 0.29.0
 
 No changes in this release.
