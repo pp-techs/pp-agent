@@ -26,9 +26,8 @@ import { toast } from "sonner";
 
 import { useHighlightedCode } from "@/hooks/use-highlighted-code";
 import { bridge } from "@/lib/bridge";
+import { openFile } from "@/lib/workbench-actions";
 import { useChatStore } from "@/stores/chat-store";
-import { useFileTabsStore } from "@/stores/file-tabs-store";
-import { usePanelStore } from "@/stores/panel-store";
 
 /** HTML previews need the desktop app's sandboxed frame scheme; the web app shows the code. */
 const canRunHtml = bridge?.kind === "desktop";
@@ -210,8 +209,7 @@ async function openInPanel(html: string, root: string, savedMessage: (path: stri
   if (!bridge) return;
   try {
     const path = await bridge.workspace.saveArtifact(root, html);
-    useFileTabsStore.getState().open(root, path);
-    usePanelStore.getState().show("files");
+    openFile(root, path);
     toast.success(savedMessage(path));
   } catch (error) {
     toast.error(error instanceof Error ? error.message : String(error));

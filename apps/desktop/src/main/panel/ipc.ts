@@ -106,13 +106,14 @@ export function createSidePanel(options: SidePanelOptions) {
     userDataDir: options.userDataDir,
     onState: (state) => send(IPC.browserChanged, state),
     onTogglePanel: () => send(IPC.shellTogglePanel),
+    onNewTab: () => send(IPC.shellNewTab),
     requireProfile: async (profileId) => void (await requireProfile(profileId)),
   });
 
   const automation = new BrowserAutomation({
     host: browser,
     profiles,
-    reveal: () => send(IPC.browserReveal),
+    reveal: (tabId) => send(IPC.browserReveal, tabId),
   });
 
   function requireWorkspace(root: unknown): string {
@@ -209,8 +210,8 @@ export function createSidePanel(options: SidePanelOptions) {
     const known = BROWSER_ACTIONS.find((candidate) => candidate === action);
     if (known) return browser.go(isString(id) ? id : "", known);
   });
-  ipc.on(IPC.browserSetBounds, (_event, bounds: unknown) =>
-    browser.setBounds(isBounds(bounds) ? bounds : null),
+  ipc.on(IPC.browserSetBounds, (_event, id: unknown, bounds: unknown) =>
+    browser.setBounds(isString(id) ? id : "", isBounds(bounds) ? bounds : null),
   );
   ipc.handle(IPC.browserCookieSources, () => listCookieSources());
   ipc.handle(IPC.browserCookieSourceRunning, (_event, source: unknown) => {

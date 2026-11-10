@@ -1445,6 +1445,16 @@ export interface AgentCommandMap {
 
   /** Default workspace first, then by name. */
   list_workspaces: { params: NoParams; result: WorkspaceProfile[] };
+  /**
+   * One folder of a workspace, for a person reading the computer's files from the app on a phone.
+   * `dir` is relative to the workspace folder, `/`-separated ("" for its top).
+   */
+  list_workspace_files: {
+    params: { workspaceId?: string; dir: string };
+    result: WorkspaceEntry[];
+  };
+  /** A file of a workspace as text or an image, confined to the workspace folder. */
+  preview_workspace_file: { params: { workspaceId?: string; path: string }; result: FilePreview };
   save_workspace: { params: { workspace: SaveWorkspaceInput }; result: WorkspaceProfile };
   read_workspace_instructions: { params: { id: string }; result: WorkspaceInstructions };
   /** Writes the folder's AGENTS.md; the open conversation reloads it when it is in that folder. */
@@ -1690,7 +1700,7 @@ export interface CookieImportResult {
   profile: BrowserProfile;
 }
 
-/** One tab of the side panel browser. `id` stays the same for the tab's life. */
+/** One tab of the browser, shown in the side panel or the main area. `id` stays the same for the tab's life. */
 export interface BrowserTab {
   id: string;
   profileId: string;
@@ -2087,6 +2097,8 @@ export interface DesktopBridge {
     takePendingFocus(): Promise<boolean>;
     /** The side panel shortcut was pressed while a browser page had the keyboard. */
     onTogglePanel(listener: () => void): () => void;
+    /** The new tab shortcut (Cmd+T / Ctrl+T) was pressed while a browser page had the keyboard. */
+    onNewTab(listener: () => void): () => void;
     /** Cmd+W / Ctrl+W was pressed in the app window; the app decides whether it closes a tab. */
     onCloseTab(listener: () => void): () => void;
     /** Closes the app window (as Cmd+W / Ctrl+W did before the app handled it). */
@@ -2141,11 +2153,14 @@ export interface DesktopBridge {
     /** Goes to an address, or searches the web for anything that is not one. */
     navigate(id: string, input: string): Promise<void>;
     go(id: string, action: BrowserAction): Promise<void>;
-    /** Where the active page is drawn; null hides it (panel closed, a dialog on top). */
-    setBounds(bounds: BrowserBounds | null): void;
+    /**
+     * Where a tab's page is drawn; null hides it (its view is not showing, a dialog on top).
+     * Several tabs can be shown at once, each in its own area.
+     */
+    setBounds(id: string, bounds: BrowserBounds | null): void;
     onState(listener: (state: BrowserState) => void): () => void;
-    /** The agent is using the browser: show it in the side panel. */
-    onReveal(listener: () => void): () => void;
+    /** The agent is using a tab: show it, in the main area if the tab is there, else in the side panel. */
+    onReveal(listener: (id: string) => void): () => void;
     /** Installed browsers and their profiles whose cookies can be imported. */
     cookieSources(): Promise<CookieSource[]>;
     /**
@@ -2229,6 +2244,7 @@ export const IPC = {
   shellFocusComposer: "shell:focus-composer",
   shellTakePendingFocus: "shell:take-pending-focus",
   shellTogglePanel: "shell:toggle-panel",
+  shellNewTab: "shell:new-tab",
   shellCloseTab: "shell:close-tab",
   shellCloseWindow: "shell:close-window",
   terminalList: "terminal:list",

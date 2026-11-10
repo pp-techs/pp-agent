@@ -45,8 +45,8 @@ export interface BrowserAutomationOptions {
   /** Whether an address leads to this computer or the local network (a test seam). */
   isPrivate?: (url: string) => Promise<boolean>;
   profiles(): Promise<BrowserProfile[]>;
-  /** Shows the side panel's browser, so the person sees what the agent does. */
-  reveal(): void;
+  /** Shows the tab the agent uses (in the side panel or the main area), so the person sees what it does. */
+  reveal(tabId: string): void;
 }
 
 type KeyModifier = "control" | "shift" | "alt" | "meta";
@@ -180,7 +180,7 @@ export class BrowserAutomation {
         const tab = await host.open(profile.id, request.url, "agent");
         host.drive(tab.id);
         driven.push(tab.id);
-        this.options.reveal();
+        this.options.reveal(tab.id);
         return this.afterChange(tab.id, `Opened tab ${tab.id} in profile ${profile.name}.`);
       }
       case "select": {
@@ -337,7 +337,7 @@ export class BrowserAutomation {
   private async show(tabId: string): Promise<void> {
     const { host } = this.options;
     if (host.state().activeId !== tabId) await host.activate(tabId);
-    this.options.reveal();
+    this.options.reveal(tabId);
   }
 
   private requireRef(request: BrowserRequest): string {

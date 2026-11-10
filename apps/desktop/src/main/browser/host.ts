@@ -41,16 +41,25 @@ export function partitionOf(profileId: string): string {
   return `persist:${PARTITION_PREFIX}${profileId}`;
 }
 
-/** Cmd+J (macOS) or Ctrl+J: the side panel shortcut, also while a page has the keyboard. */
-export function isTogglePanelInput(input: Input): boolean {
+function isShortcutInput(input: Input, key: string): boolean {
   const modifier = process.platform === "darwin" ? input.meta : input.control;
   return (
     input.type === "keyDown" &&
-    input.key.toLowerCase() === "j" &&
+    input.key.toLowerCase() === key &&
     modifier &&
     !input.alt &&
     !input.shift
   );
+}
+
+/** Cmd+J (macOS) or Ctrl+J: the side panel shortcut, also while a page has the keyboard. */
+export function isTogglePanelInput(input: Input): boolean {
+  return isShortcutInput(input, "j");
+}
+
+/** Cmd+T (macOS) or Ctrl+T: the new tab shortcut, also while a page has the keyboard. */
+export function isNewTabInput(input: Input): boolean {
+  return isShortcutInput(input, "t");
 }
 
 interface Tab {
@@ -64,19 +73,21 @@ export interface BrowserHostOptions {
   userDataDir: string;
   onState(state: BrowserState): void;
   onTogglePanel(): void;
+  onNewTab(): void;
   /** Throws a message for the person when the profile no longer exists. */
   requireProfile(profileId: string): Promise<void>;
 }
 
 /**
- * The side panel browser: one `WebContentsView` per tab, laid over the window where the renderer
- * says the page area is. Each profile is its own persistent session (cookies, storage, cache).
+ * The browser: one `WebContentsView` per tab, laid over the window where the renderer says each
+ * shown tab's page area is (the side panel, or a tab of the main area). Each profile is its own persistent session (cookies, storage, cache).
  */
 export class BrowserHost implements BrowserDriver {
   private readonly tabs = new Map<string, Tab>();
   private readonly configured = new WeakSet<Session>();
   private activeId: string | null = null;
-  private bounds: BrowserBounds | null = null;
+  /** Where each shown tab's page is drawn; a tab without an entry is hidden. */
+  private readonly bounds = new Map<string, BrowserBounds>();
   /** Where pages were last drawn, kept while they are hidden; new tabs start at this size. */
   private lastBounds: BrowserBounds = UNSHOWN_BOUNDS;
   private window: BrowserWindow | null = null;
@@ -104,7 +115,7 @@ export class BrowserHost implements BrowserDriver {
     }
     this.tabs.clear();
     this.activeId = null;
-    this.bounds = null;
+    this.bounds.clear();
     this.window = null;
   }
 
@@ -128,6 +139,7 @@ export class BrowserHost implements BrowserDriver {
     this.window?.contentView.removeChildView(tab.view);
     if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close();
     this.tabs.delete(tabId);
+    this.bounds.delete(tabId);
     this.driving.delete(tabId);
     if (this.activeId === tabId) this.activeId = order[index + 1] ?? order[index - 1] ?? null;
     this.layout();
@@ -213,10 +225,15 @@ export class BrowserHost implements BrowserDriver {
     return { written, refused };
   }
 
-  /** Where the active page is drawn; null hides every page. */
-  setBounds(bounds: BrowserBounds | null): void {
-    this.bounds = bounds;
-    if (bounds) this.lastBounds = bounds;
+  /** Where a tab's page is drawn; null hides it. A tab that is gone is ignored. */
+  setBounds(tabId: string, bounds: BrowserBounds | null): void {
+    if (!this.tabs.has(tabId)) return;
+    if (bounds) {
+      this.bounds.set(tabId, bounds);
+      this.lastBounds = bounds;
+    } else {
+      this.bounds.delete(tabId);
+    }
     this.layout();
   }
 
@@ -331,9 +348,11 @@ export class BrowserHost implements BrowserDriver {
       contents.on(name as "did-start-loading", () => this.emit());
     }
     contents.on("before-input-event", (event, input) => {
-      if (!isTogglePanelInput(input)) return;
+      const togglePanel = isTogglePanelInput(input);
+      if (!togglePanel && !isNewTabInput(input)) return;
       event.preventDefault();
-      this.options.onTogglePanel();
+      if (togglePanel) this.options.onTogglePanel();
+      else this.options.onNewTab();
     });
     contents.on("context-menu", (_event, params) => {
       Menu.buildFromTemplate(this.contextMenu(tab, params)).popup({
@@ -388,9 +407,10 @@ export class BrowserHost implements BrowserDriver {
 
   private layout(): void {
     for (const tab of this.tabs.values()) {
-      const visible = tab.id === this.activeId && this.bounds !== null;
-      if (visible && this.bounds) {
-        tab.view.setBounds(this.pixelBounds(this.bounds));
+      const bounds = this.bounds.get(tab.id);
+      const visible = bounds !== undefined;
+      if (bounds) {
+        tab.view.setBounds(this.pixelBounds(bounds));
       } else if (tab.view.webContents.isFocused()) {
         // The keyboard would stay with a page nobody sees.
         this.window?.webContents.focus();
