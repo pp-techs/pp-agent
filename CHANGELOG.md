@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.32.0] — 2026-11-10
+
+Settings › Connectors has an **Email** card: add a mailbox (Zoho Mail, Gmail, Outlook/Microsoft 365, Yahoo Mail, iCloud Mail, or any IMAP/SMTP server) with an app password, and the agent can search, read, send, reply, flag and file mail in it. Reading runs on its own; sending, replying, moving and saving attachments ask first, with the recipient and subject on the approval card. The password stays in the computer's secure storage, never in a settings file; the form checks the sign-in right after saving and the card shows what failed. Several mailboxes are told apart by the name you give each one.
+
+Settings › Advanced has a **Restart agent** button: it stops the background agent and starts one from this version, for when the agent does not know a command the app just sent (an older daemon that answered on the same version). It asks first, since conversations answering now stop and scheduled tasks and bots pause for a few seconds.
+
 ## [0.31.0] — 2026-11-10
 
 Settings has a new Connectors page: a grid of cards with each service's logo — Notion, Atlassian, Linear, Stripe, Supabase, Sentry, Context7 and a folder on this computer. Press Connect and the address and settings are filled in; services that ask for a sign-in open your browser right away. Connected services come first, each showing its accounts with their status and a menu to reconnect, turn off or remove them. **Add account** signs in a second account of the same service under a name you give it ("Work", "Personal"), and the agent sees the name too; **Add folder** does the same for Filesystem. Servers you added yourself appear as cards, and "Add custom connector" at the top adds any other MCP server. Long connection errors are shortened to one line instead of overflowing the card. Tools › MCP servers stays for the raw configuration.
