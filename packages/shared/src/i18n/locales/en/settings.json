@@ -99,6 +99,14 @@
       "reveal": "Show log folder",
       "clear": "Clear log",
       "cleared": "Log cleared."
+    },
+    "agent": {
+      "title": "Agent",
+      "description": "Restart the background agent that runs your conversations, scheduled tasks and bots. Use it when it does not know a command from this version: it stops the running one and starts one from this build. Chats answering now are stopped.",
+      "restart": "Restart agent",
+      "confirmTitle": "Restart the agent?",
+      "confirmDescription": "The agent stops and starts again. Conversations answering now stop, and scheduled tasks and bots pause for a few seconds.",
+      "restarted": "The agent restarted."
     }
   },
   "voice": {

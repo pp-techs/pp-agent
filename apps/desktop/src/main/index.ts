@@ -375,6 +375,7 @@ function createWindow(): void {
 }
 
 ipc.handle(IPC.agentCommand, (_event, command: AgentCommand) => commandAgent(command));
+ipc.handle(IPC.agentRestartDaemon, () => daemon.restartAgent());
 ipc.handle(IPC.filesPick, () => pickFiles(window));
 ipc.handle(IPC.filesPickSkill, () => pickSkill(window));
 ipc.handle(IPC.filesOpenWorkspace, (_event, dir: unknown) => {

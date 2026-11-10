@@ -165,6 +165,29 @@ export class DaemonClient {
     this.rejectPending();
   }
 
+  /**
+   * Stops the running daemon — whatever version it is, and whether this app started it or a login
+   * service did — and resolves once a daemon from this app's build answers. Settings › Advanced
+   * uses it for a daemon the version check accepted but that lacks newer commands.
+   */
+  async restartAgent(): Promise<void> {
+    const previous = this.conn;
+    if (previous) {
+      previous.socket.write(encodeFrame({ kind: "shutdown" } satisfies ClientFrame));
+      await this.closeWithin(previous, REPLACE_TIMEOUT_MS);
+    }
+    // The supervisor notices the closed socket, waits, and spawns a daemon from this build.
+    const deadline = Date.now() + START_TIMEOUT_MS;
+    for (;;) {
+      if (this.quitting) break;
+      const conn = this.conn;
+      if (conn && conn !== previous) return;
+      if (Date.now() > deadline) break;
+      await delay(100);
+    }
+    throw new Error(translator()("app.stoppedUnexpectedly"));
+  }
+
   private async call(build: (id: number) => ClientFrame): Promise<unknown> {
     const conn = await this.waitConnected();
     this.nextId += 1;

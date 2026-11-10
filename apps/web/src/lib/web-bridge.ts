@@ -529,6 +529,10 @@ export function createWebBridge(): DesktopBridge {
     agent: {
       command,
       onEvent: (listener) => feed.subscribe(listener),
+      // The daemon runs on the computer, and restarting it stops every conversation there.
+      restartDaemon: async () => {
+        throw new Error("Only the computer can restart the agent.");
+      },
     },
     files: {
       pick: async () => Promise.all((await pickFiles({ multiple: true })).map(upload)),

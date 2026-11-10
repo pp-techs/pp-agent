@@ -2172,6 +2172,12 @@ export interface DesktopBridge {
   agent: {
     command<C extends AgentCommand>(command: C): Promise<AgentCommandResult<C["type"]>>;
     onEvent(listener: (event: AgentEvent) => void): () => void;
+    /**
+     * Stops the running agent daemon and starts one from this app's build, so a daemon left by an
+     * earlier version is dropped even when its version string matched. Resolves once the new one
+     * answers. Desktop only; a phone's request is refused.
+     */
+    restartDaemon(): Promise<void>;
   };
   files: {
     /** Opens the system file picker. */
@@ -2351,6 +2357,7 @@ export interface RendererReport {
 
 export const IPC = {
   agentCommand: "agent:command",
+  agentRestartDaemon: "agent:restart-daemon",
   agentEvent: "agent:event",
   filesPick: "files:pick",
   filesPickSkill: "files:pick-skill",

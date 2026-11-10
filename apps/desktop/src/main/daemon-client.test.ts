@@ -39,6 +39,11 @@ async function setup(authenticated: boolean, extra: { spawnedByApp?: boolean } =
     socket.on("data", (data) => {
       for (const frame of decoder.push(data) as ClientFrame[]) {
         received.push(frame);
+        // A real daemon stops on `shutdown`; a restart test needs it to drop the socket.
+        if (frame.kind === "shutdown") {
+          socket.end();
+          continue;
+        }
         if (frame.kind !== "hello") continue;
         socket.write(
           encodeFrame({
@@ -118,4 +123,16 @@ it("leaves a login-service daemon running on quit", async () => {
   // Give a stray shutdown frame the chance to arrive, then prove none did.
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(received.some((frame) => (frame as ClientFrame).kind === "shutdown")).toBe(false);
+});
+
+it("restarts the daemon on request and resolves once the new one answers", async () => {
+  const { client, received } = await setup(true, { spawnedByApp: false });
+  client.start();
+  await vi.waitFor(() => expect(client["conn"]).not.toBeNull());
+  const first = client["conn"];
+  await client.restartAgent();
+  expect(received.some((frame) => (frame as ClientFrame).kind === "shutdown")).toBe(true);
+  expect(client["conn"]).not.toBeNull();
+  expect(client["conn"]).not.toBe(first);
+  client.dispose();
 });

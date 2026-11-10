@@ -34,6 +34,7 @@ const bridge: DesktopBridge = {
   kind: "desktop",
   agent: {
     command: (command) => invoke(IPC.agentCommand, command),
+    restartDaemon: () => invoke(IPC.agentRestartDaemon),
     onEvent(listener) {
       const handler = (_event: IpcRendererEvent, payload: AgentEvent) => listener(payload);
       ipcRenderer.on(IPC.agentEvent, handler);

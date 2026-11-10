@@ -99,6 +99,14 @@
       "reveal": "Mở thư mục nhật ký",
       "clear": "Xóa nhật ký",
       "cleared": "Đã xóa nhật ký."
+    },
+    "agent": {
+      "title": "Agent",
+      "description": "Khởi động lại agent chạy nền — nơi chạy hội thoại, tác vụ định kỳ và các bot. Dùng khi agent không biết một lệnh của bản này: nó dừng tiến trình đang chạy và khởi động bản của ứng dụng này. Các cuộc trò chuyện đang trả lời sẽ dừng.",
+      "restart": "Khởi động lại agent",
+      "confirmTitle": "Khởi động lại agent?",
+      "confirmDescription": "Agent sẽ dừng rồi chạy lại. Cuộc trò chuyện đang trả lời sẽ dừng, tác vụ định kỳ và bot tạm ngưng vài giây.",
+      "restarted": "Đã khởi động lại agent."
     }
   },
   "voice": {
