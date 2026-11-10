@@ -1,7 +1,7 @@
 {
   "section": {
     "title": "Models",
-    "description": "Connect AI providers with an API key, or add your team's own gateway.",
+    "description": "Connect AI providers with an API key, add your team's own gateway, and choose the models the app and its voice input use.",
     "connected": {
       "heading": "Connected",
       "emptyTitle": "No providers connected",

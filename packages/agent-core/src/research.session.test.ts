@@ -4,7 +4,7 @@
  * exist only while a run is active, and the report is written inside `research/` without approval.
  */
 import { readFileSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -233,7 +233,7 @@ test("a run plans, confirms the plan, researches, records sources and saves the 
   // The report is saved inside research/, without approval (no approval was ever requested).
   const saved = (await snapshot()).research;
   const savedPath = saved?.report?.markdown ?? "";
-  expect(savedPath.startsWith("research/")).toBe(true);
+  expect(savedPath).toMatch(/^research\/[^/]+\/report\.md$/);
   expect(readFileSync(join(workspaceDir, savedPath), "utf8")).toContain("24%");
   // The duplicate source got one number; three entries but two URLs → sources numbered 1 and 2.
   const done = saved;
@@ -314,29 +314,29 @@ test("a run refuses to overlap a goal or another run, and needs a question", asy
   await expect(host.handle({ type: "set_research", action: "resume" })).rejects.toThrow();
 });
 
-test("a report save never overwrites a file the run did not create", async () => {
-  const folder = join(workspaceDir, "research");
-  await (await import("node:fs/promises")).mkdir(folder, { recursive: true });
-  await writeFile(join(folder, "report.md"), "someone else's file");
+test("a report save takes a free folder and never overwrites another run's report", async () => {
+  await mkdir(join(workspaceDir, "research"), { recursive: true });
   script.push(
-    {
-      tool: "research_report",
-      args: { markdown: "# Mine", final: true },
-    },
+    { tool: "research_report", args: { markdown: "# First", final: true } },
     { text: "Done." },
   );
-  await host.handle({
-    type: "set_research",
-    action: "start",
-    question: "report",
-    depth: "quick",
-  });
+  await host.handle({ type: "set_research", action: "start", question: "report", depth: "quick" });
   await settled();
-  // The existing report.md is untouched; the run took a free name.
-  expect(readFileSync(join(folder, "report.md"), "utf8")).toBe("someone else's file");
-  const run = (await snapshot()).research;
-  expect(run?.report?.markdown).not.toBe("research/report.md");
-  expect(run?.report?.markdown).toMatch(/^research\/report-\d{4}-\d{2}-\d{2}(-\d+)?\.md$/);
+  const first = (await snapshot()).research?.report?.markdown ?? "";
+  expect(first).toMatch(/^research\/report-\d{4}-\d{2}-\d{2}(-\d+)?\/report\.md$/);
+
+  // A second run of the same question gets its own folder, and the first report stays intact.
+  await host.handle({ type: "set_research", action: "clear" });
+  script.push(
+    { tool: "research_report", args: { markdown: "# Second", final: true } },
+    { text: "Done." },
+  );
+  await host.handle({ type: "set_research", action: "start", question: "report", depth: "quick" });
+  await settled();
+  const second = (await snapshot()).research?.report?.markdown ?? "";
+  expect(second).not.toBe(first);
+  expect(readFileSync(join(workspaceDir, first), "utf8")).toBe("# First");
+  expect(readFileSync(join(workspaceDir, second), "utf8")).toBe("# Second");
 });
 
 test("a clarifying question that reuses an id does not mispair the depth answer", async () => {

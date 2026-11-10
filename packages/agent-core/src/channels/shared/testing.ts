@@ -73,10 +73,10 @@ export class FakeGateway implements ChannelGateway {
       text: "Summary of the findings.",
       status: "done",
       report: {
-        markdownPath: "/work/research/topic-2026-11-08.md",
-        htmlPath: "/work/research/topic-2026-11-08.html",
-        markdownName: "research/topic-2026-11-08.md",
-        htmlName: "research/topic-2026-11-08.html",
+        markdownPath: "/work/research/topic-2026-11-08/report.md",
+        htmlPath: "/work/research/topic-2026-11-08/report.html",
+        markdownName: "research/topic-2026-11-08/report.md",
+        htmlName: "research/topic-2026-11-08/report.html",
       },
     });
 

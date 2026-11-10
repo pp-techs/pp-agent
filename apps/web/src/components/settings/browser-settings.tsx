@@ -32,7 +32,6 @@ import { toast } from "sonner";
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { ImportCookiesModal } from "@/components/modals/import-cookies-modal";
 import { PromptModal } from "@/components/modals/prompt-modal";
-import { SectionHeading } from "@/components/settings/section-heading";
 import { browserProfilesQuery, useBrowserProfileCommands } from "@/lib/panel-queries";
 
 function ProfileRow({ bridge, profile }: { bridge: DesktopBridge; profile: BrowserProfile }) {
@@ -119,8 +118,8 @@ function ProfileRow({ bridge, profile }: { bridge: DesktopBridge; profile: Brows
   );
 }
 
-/** Settings › Browser: the side panel browser's sign-in profiles. */
-export function BrowserSection({ bridge }: { bridge: DesktopBridge }) {
+/** Settings › This computer › Browser: the side panel browser's sign-in profiles. */
+export function BrowserSettings({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation(["settings", "common"]);
   const profiles = useQuery(browserProfilesQuery(bridge));
   const { save } = useBrowserProfileCommands(bridge);
@@ -137,15 +136,15 @@ export function BrowserSection({ bridge }: { bridge: DesktopBridge }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <SectionHeading
-        title={t("browserSection.title")}
-        description={t("browserSection.description")}
-      >
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+          {t("browserSection.description")}
+        </p>
         <Button onClick={() => void onCreate()}>
           <PlusIcon />
           {t("browserSection.newProfile")}
         </Button>
-      </SectionHeading>
+      </div>
 
       {profiles.isPending ? (
         <div className="flex flex-col gap-2.5">

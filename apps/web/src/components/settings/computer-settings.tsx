@@ -25,7 +25,6 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { OptionGroup, SwitchRow } from "@/components/settings/option-group";
-import { SectionHeading } from "@/components/settings/section-heading";
 import {
   computerAppsQuery,
   computerStatusQuery,
@@ -170,8 +169,8 @@ function AppList({
   );
 }
 
-/** Settings › Computer use: macOS access, the tool's switch, and the apps the agent may use. */
-export function ComputerSection({ bridge }: { bridge: DesktopBridge }) {
+/** Settings › This computer › Computer use: access, the tool's switch, and the apps it may use. */
+export function ComputerSettings({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("settings");
   const tools = useQuery(toolsQuery(bridge));
   const apps = useQuery(computerAppsQuery(bridge));
@@ -182,10 +181,7 @@ export function ComputerSection({ bridge }: { bridge: DesktopBridge }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <SectionHeading
-        title={t("computerSection.title")}
-        description={t("computerSection.description")}
-      />
+      <p className="text-sm text-muted-foreground">{t("computerSection.appsDescription")}</p>
 
       <OptionGroup legend={t("computerSection.status.title")}>
         <AccessStatus bridge={bridge} />

@@ -8,7 +8,7 @@ Run `vp check` (format, lint, type check) and `vp test`. `vp run ready` checks a
 
 Practice used for UI changes (no script is committed for it):
 
-1. Start Electron with `--remote-debugging-port=<port>` and `--user-data-dir=<copy>`, where `<copy>` is a copy of a user-data folder under `tmp/`.
+1. Start Electron with `--remote-debugging-port=<port>` and `--user-data-dir=<copy>`, where `<copy>` is a copy of a user-data folder under `tmp/`. `vp run dev:isolated` at the repository root does this: the renderer for `apps/web` plus Electron using `tmp/pp-agent-dev`. To add the debugging port for step 2, run the app half alone: `vp run @workspace/desktop#dev:isolated --remote-debugging-port=<port>` (with the renderer already running).
 2. Drive the window from a throwaway script with `playwright-core`'s `chromium.connectOverCDP("http://127.0.0.1:<port>")`.
 3. Never point a test at the real `<user-data>` (`~/Library/Application Support/PP Agent`, `%APPDATA%\PP Agent`) or the real workspace: they hold the person's conversations and keys.
 4. The app starts its own daemon for the copy (its home is the `--user-data-dir` folder) and stops it on quit, so a test never touches the real daemon's socket. Do not switch on **Run in background** or Telegram in a test run: the login service has one fixed name per user, so installing it from the test would replace the real one, and a second poller with the same bot token fights the real daemon's (Telegram answers one `getUpdates` caller at a time).

@@ -31,7 +31,7 @@ vp run dev      # renderer dev server + Electron
    vp run -r build     # renderer + desktop bundles
    ```
 
-5. Exercise the change in the running app (`vp run dev`). For agent behaviour, use a copy of your user data (`--user-data-dir`), never your real profile.
+5. Exercise the change in the running app (`vp run dev`). For agent behaviour, use a copy of your user data (`--user-data-dir`), never your real profile: `vp run dev:isolated` runs the same thing beside the app already on this computer, with its data and daemon in `tmp/pp-agent-dev`.
 6. Add a changeset if people using the app will notice the change:
 
    ```bash

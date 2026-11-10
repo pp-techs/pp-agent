@@ -34,13 +34,9 @@ import { useTheme } from "@/components/theme-provider";
 import { SectionHeading } from "@/components/settings/section-heading";
 import { isWebApp } from "@/lib/bridge";
 import { DesktopGroup } from "@/components/settings/desktop-group";
-import { DiagnosticsGroup } from "@/components/settings/diagnostics-group";
-import { ConfigBundleGroup } from "@/components/settings/config-bundle-group";
 import { groupByProvider, modelKey, modelLabeler } from "@/lib/models";
 import { modelsQuery, settingsQuery, useUpdateSettings } from "@/lib/queries";
-import { describeUpdate, updateAction } from "@/components/update-actions";
 import { useChatStore } from "@/stores/chat-store";
-import { useUpdateStore } from "@/stores/update-store";
 
 const THEMES = [
   { value: "system", icon: MonitorIcon },
@@ -171,29 +167,6 @@ function DefaultModelField({ bridge }: { bridge: DesktopBridge }) {
   );
 }
 
-function UpdatesField({ bridge }: { bridge: DesktopBridge }) {
-  const { t } = useTranslation("settings");
-  const update = useUpdateStore((state) => state.update);
-  if (!update) return null;
-  const action = updateAction(bridge, update);
-  const busy = update.status === "checking" || update.status === "downloading";
-
-  return (
-    <Field orientation="horizontal">
-      <FieldContent>
-        <FieldTitle>{t("general.updates.title")}</FieldTitle>
-        <FieldDescription>{describeUpdate(update)}</FieldDescription>
-      </FieldContent>
-      {update.status !== "disabled" && (
-        <Button variant="outline" disabled={busy || !action} onClick={() => action?.run()}>
-          {busy && <Spinner data-icon="inline-start" />}
-          {action?.label ?? t("general.updates.check")}
-        </Button>
-      )}
-    </Field>
-  );
-}
-
 export function GeneralSection({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("settings");
   const workspaceDir = useChatStore((state) => state.workspaceDir);
@@ -253,15 +226,8 @@ export function GeneralSection({ bridge }: { bridge: DesktopBridge }) {
           </ToggleGroup>
         </Field>
         <DefaultModelField bridge={bridge} />
-        {/* The window, its updates and its logs belong to the computer. */}
-        {!isWebApp && (
-          <>
-            <DesktopGroup bridge={bridge} />
-            <UpdatesField bridge={bridge} />
-            <DiagnosticsGroup bridge={bridge} />
-            <ConfigBundleGroup bridge={bridge} />
-          </>
-        )}
+        {/* The window belongs to the computer; its updates and log live in Settings › Advanced. */}
+        {!isWebApp && <DesktopGroup bridge={bridge} />}
       </FieldGroup>
     </div>
   );

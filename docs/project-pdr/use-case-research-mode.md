@@ -28,7 +28,7 @@ A conversation can run a **research** run: the person gives a question and a dep
 
 ## Files and approvals
 
-- The report is written by the app, not by the model's `write` tool, so it **asks no approval**. It goes only to `research/<topic>-<YYYY-MM-DD>.md` (and `.html`) inside the workspace folder, as new files: later saves of the same run replace those files only, and a name that belongs to something else gets `-2`, `-3`… The path is resolved with `realpath` and refused through a link that leads out of the workspace. Markdown at most 300 KB, HTML at most 256 KB.
+- The report is written by the app, not by the model's `write` tool, so it **asks no approval**. It goes only to `research/<topic>-<YYYY-MM-DD>/report.md` (and `report.html`) inside the workspace folder, in a folder per run: later saves of the same run replace those files only, and a folder that belongs to something else gets `-2`, `-3`… The path is resolved with `realpath` and refused through a link that leads out of the workspace. Markdown at most 300 KB, HTML at most 256 KB.
 - The four research tools (`research_plan`, `research_sources`, `research_report`, `research_guide`) are read tier with a locked `allow` policy, exist only while a run is active, and cannot be switched off in Settings. Helpers keep their read-only tools; nothing else changes data.
 
 ## State

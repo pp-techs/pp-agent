@@ -218,7 +218,7 @@ function ProfileMenu({
           ))}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => void SettingsModal.show({ bridge, section: "browser" })}>
+        <DropdownMenuItem onClick={() => void SettingsModal.show({ bridge, section: "computer" })}>
           <SettingsIcon />
           {t("panel.browser.manageProfiles")}
         </DropdownMenuItem>

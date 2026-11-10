@@ -118,7 +118,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
     const view = voice.data ?? (await voice.refetch()).data;
     if (!view?.ready) {
       toast.info(t("composer.voice.notConfigured"));
-      void SettingsModal.show({ bridge, section: "voice" });
+      void SettingsModal.show({ bridge, section: "models" });
       return;
     }
     void recorder.start();
