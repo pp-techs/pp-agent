@@ -1,5 +1,12 @@
 # @workspace/desktop
 
+## 0.30.0
+
+### Minor Changes
+
+- 5ef2727: Files, terminals and browser pages open as tabs in the main area, next to the chat, and you switch between them like tabs. This includes the tabs the agent opens and the pages that open from links. Each workspace keeps its own tabs, a "+" starts a terminal or a browser tab (Cmd+T / Ctrl+T opens a browser tab), and a second group splits the main area in two. The right side panel is now the file browser only (Cmd+J / Ctrl+J). The chat keeps running behind the other tabs.
+- 5ef2727: The app on a phone can now browse the computer's workspace files: a **Files** page in the sidebar opens folders and shows a file as text or an image: Markdown rendered, code highlighted and copyable, a breadcrumb back to any folder and a filter for long folders. It reads them over the remote connection, only inside the workspace folder, and never from the app's own data folder.
+
 ## 0.29.0
 
 ### Minor Changes
