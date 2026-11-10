@@ -66,6 +66,6 @@ xcodebuild -exportArchive -archivePath build/PPAgent.xcarchive \
   -authenticationKeyPath <AuthKey_XXXX.p8> -authenticationKeyID <key id> -authenticationKeyIssuerID <issuer id>
 ```
 
-Each upload needs a new build number, which comes from the version (`sync-version.ts`), so upload once per release. An Android debug APK needs JDK 21 and the Android SDK (`ANDROID_HOME`): `cd android && ./gradlew assembleDebug` writes `app/build/outputs/apk/debug/app-debug.apk`.
+Each upload needs a new build number, which comes from the version (`sync-version.ts`), so upload once per release. `-exportOptionsPlist` takes `method: app-store-connect`, `destination: upload`, `teamID: LWB84PK83H`, `signingStyle: automatic`; without an account signed in to Xcode, authenticate the export with the App Store Connect API key instead: `-authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_<id>.p8 -authenticationKeyID <id> -authenticationKeyIssuerID <issuer id>`. The upload lands in App Store Connect as _processing_; once it is VALID the internal group **Internal** has it (internal groups receive every build, so the API refuses to add one: `Builds cannot be assigned to this internal group`). An Android debug APK needs JDK 21 and the Android SDK (`ANDROID_HOME`): `cd android && ./gradlew assembleDebug` writes `app/build/outputs/apk/debug/app-debug.apk`.
 
 Not yet automated: store signing and uploads in CI, a release-signed Android build (needs a keystore), push notifications (they need a relay service the app does not have), and a CI build of the native projects.
