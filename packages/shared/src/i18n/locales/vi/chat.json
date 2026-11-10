@@ -99,7 +99,8 @@
       "searching": "Đang tìm…",
       "noResults": "Không có cuộc trò chuyện nào khớp với “{{query}}”.",
       "failed": "Tìm kiếm không thành công. Hãy thử lại.",
-      "tooShort": "Nhập ít nhất {{count}} ký tự."
+      "tooShort": "Nhập ít nhất {{count}} ký tự.",
+      "close": "Đóng"
     },
     "workspace": {
       "newChat": "Cuộc trò chuyện mới trong {{name}}",
@@ -633,7 +634,7 @@
     "loadingReport": "Đang tải báo cáo…"
   },
   "files": {
-    "up": "Lên một thư mục",
+    "back": "Quay lại trò chuyện",
     "path": "Đường dẫn thư mục",
     "filter": "Lọc trong thư mục này",
     "noMatch": "Không có tên nào khớp",

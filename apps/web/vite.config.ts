@@ -1,4 +1,6 @@
+import { createReadStream, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { ARTIFACT_SCHEME, REMOTE_DEFAULT_PORT } from "@workspace/shared";
@@ -22,8 +24,9 @@ function contentSecurityPolicy(mode: string) {
     "font-src 'self' data:",
     mode === "mobile" ? "connect-src 'self' http: https:" : "connect-src 'self'",
     "object-src 'none'",
-    // HTML previews: sandboxed iframes of the desktop app's own scheme.
-    `frame-src ${ARTIFACT_SCHEME}:`,
+    // HTML previews: the desktop app's sandboxed frame scheme, or (a browser and the phone) the
+    // frame page bundled beside the app, which carries the stricter policy of its own.
+    `frame-src 'self' ${ARTIFACT_SCHEME}:`,
     "base-uri 'none'",
   ].join("; ");
 }
@@ -42,10 +45,43 @@ function contentSecurityPolicyTag(mode: string): Plugin {
   };
 }
 
+/**
+ * Libraries an HTML preview may load, at `artifact-libs/<name>` beside the frame page. The desktop
+ * app serves the same files from its scheme; here they are copied from `node_modules` at build and
+ * streamed by the dev server, so a phone has the chart library offline.
+ */
+const ARTIFACT_LIBRARIES: Record<string, string> = {
+  "chart.js": "chart.js/dist/chart.umd.min.js",
+};
+
+function artifactLibraries(): Plugin {
+  const file = (name: string) =>
+    fileURLToPath(new URL(`./node_modules/${ARTIFACT_LIBRARIES[name]}`, import.meta.url));
+  return {
+    name: "pp-agent:artifact-libraries",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const name = /^\/artifact-libs\/([^/?#]+)$/.exec(req.url ?? "")?.[1];
+        if (!name || !Object.hasOwn(ARTIFACT_LIBRARIES, name)) return next();
+        res.setHeader("Content-Type", "text/javascript; charset=utf-8");
+        createReadStream(file(name)).pipe(res);
+      });
+    },
+    generateBundle() {
+      for (const name of Object.keys(ARTIFACT_LIBRARIES))
+        this.emitFile({
+          type: "asset",
+          fileName: `artifact-libs/${name}`,
+          source: readFileSync(file(name)),
+        });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => ({
   // Relative asset URLs so the packaged desktop app can load dist/index.html over file://.
   base: "./",
-  plugins: [react(), tailwindcss(), contentSecurityPolicyTag(mode)],
+  plugins: [react(), tailwindcss(), contentSecurityPolicyTag(mode), artifactLibraries()],
   resolve: {
     alias: {
       "@": resolve(import.meta.dirname, "./src"),

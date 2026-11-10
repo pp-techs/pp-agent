@@ -574,6 +574,9 @@ importers:
       '@workspace/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      chart.js:
+        specifier: 'catalog:'
+        version: 4.6.1
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

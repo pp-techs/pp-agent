@@ -28,13 +28,15 @@ Status: implemented. Paths are under `packages/agent-core/src/` unless noted.
 - An `svg` fence renders as `<img src="data:image/svg+xml,…">`: an SVG loaded as an image runs no script and loads nothing.
 - Each block has a Preview / Code switch and Copy.
 
-## HTML artifacts (desktop only)
+## HTML artifacts
 
 - `apps/desktop/src/main/artifact-protocol.ts` registers the `pp-artifact` scheme (`standard`, `secure`; never `bypassCSP` or `corsEnabled`), handled in the default session only. It serves `ARTIFACT_FRAME_URL` (the frame page) and `ARTIFACT_LIBS` (Chart.js, copied by electron-builder to `resources/artifact-libs/`); everything else is a 404. Both carry `ARTIFACT_CSP`: `default-src 'none'; script-src 'unsafe-inline' pp-artifact:; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'`.
-- The renderer CSP gains `frame-src pp-artifact:`.
+- The renderer CSP gains `frame-src 'self' pp-artifact:`.
+- Outside the desktop app (a browser on the local network, and the phone) the same frame is a page of the app's own origin, `apps/web/public/artifact-frame.html`, loaded instead of the scheme: a same-origin frame inherits nothing of the app page's policy, so the page carries the same rules in its own `<meta>` tag (with `'self'` added to `script-src` for its libraries). Its frame URL and the library rewrite live in `apps/web/src/lib/artifact-frame.ts`.
 - The iframe is `sandbox="allow-scripts"` (opaque origin: no app storage, no `parent` access). The preload runs only in the main frame and `TrustedIpc` refuses subframes.
 - Main's `will-frame-navigate` keeps subframes on the frame page; a link or `location` change inside an artifact ends on a blank error page (Run again restores it). The dev-only `did-fail-load` retry reloads the app only for main-frame failures.
 - The renderer posts `{ type: "render", html }` once the frame says `ready`; the frame writes it into its own document (its CSP stays) and reports the root element's rounded-up box height, which the renderer accepts only from that iframe and caps at 640 px.
+- The preview libraries are bundled for that page too: the `pp-agent:artifact-libraries` plugin in `apps/web/vite.config.ts` emits `artifact-libs/<name>` from `node_modules` (and streams it in dev), and the renderer rewrites the `pp-artifact://lib/…` addresses an HTML page names to those copies. The phone therefore draws charts offline.
 - **Save to workspace and open in the panel** (`workspace.saveArtifact`, IPC `workspace:save-artifact`) writes a new `artifacts/preview-<date>-<time>.html` (≤ 256 KiB, never over a file, folder resolved inside the workspace) and opens it as a Files tab. The Files panel previews whole `.html` files the same way; a file cut at 256 KiB shows its text only.
 
 ## Prompt (`tools.ts`)

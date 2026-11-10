@@ -1,5 +1,4 @@
 import * as React from "react";
-import { ARTIFACT_FRAME_URL } from "@workspace/shared";
 import { Button } from "@workspace/ui/components/button";
 import {
   CodeBlock,
@@ -25,16 +24,18 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { useHighlightedCode } from "@/hooks/use-highlighted-code";
+import { artifactFrameUrl, withLocalLibraries } from "@/lib/artifact-frame";
 import { bridge } from "@/lib/bridge";
 import { openFile } from "@/lib/workbench-actions";
 import { useChatStore } from "@/stores/chat-store";
 
-/** HTML previews need the desktop app's sandboxed frame scheme; the web app shows the code. */
-const canRunHtml = bridge?.kind === "desktop";
+/** The sandboxed frame: the desktop app's scheme, or the page bundled beside the app. */
+const KIND = bridge?.kind ?? "web";
+const FRAME_URL = artifactFrameUrl(KIND, document.baseURI);
 
-/** Code block languages drawn instead of shown. HTML runs only in the desktop window. */
+/** Code block languages drawn instead of shown: diagrams, pictures, and HTML after Run. */
 export function isVisualLanguage(language: string): boolean {
-  return language === "mermaid" || language === "svg" || (language === "html" && canRunHtml);
+  return language === "mermaid" || language === "svg" || language === "html";
 }
 
 /** Height of a chat preview: grows with its content up to this, then scrolls inside. */
@@ -124,10 +125,11 @@ interface FrameMessage {
 }
 
 /**
- * An HTML page in a sandboxed iframe of the desktop app's preview scheme: its own origin-less
- * document with no network, no navigation and no bridge (see main/artifact-protocol.ts). It runs
- * only after the person presses Run. `fill` makes it take the whole height of its parent (the Files
- * panel); otherwise it grows with its content within `FRAME_HEIGHT`.
+ * An HTML page in a sandboxed iframe: its own origin-less document with no network, no navigation
+ * and no bridge (see main/artifact-protocol.ts for the desktop app's frame, and public/ for the
+ * page a browser and the phone load). It runs only after the person presses Run. `fill` makes it
+ * take the whole height of its parent (the Files panel); otherwise it grows with its content
+ * within `FRAME_HEIGHT`.
  */
 export function HtmlPreview({ html, fill = false }: { html: string; fill?: boolean }) {
   const { t } = useTranslation("chat");
@@ -146,7 +148,10 @@ export function HtmlPreview({ html, fill = false }: { html: string; fill?: boole
       if (data.type === "ready" && !sent) {
         sent = true;
         // The frame's origin is opaque, so "*" is the only target that reaches it.
-        target.postMessage({ type: "render", html }, "*");
+        target.postMessage(
+          { type: "render", html: withLocalLibraries(html, KIND, document.baseURI) },
+          "*",
+        );
       } else if (data.type === "height" && typeof data.height === "number") {
         const next = Number.isFinite(data.height) ? data.height : FRAME_HEIGHT.min;
         setHeight(Math.min(FRAME_HEIGHT.max, Math.max(FRAME_HEIGHT.min, Math.ceil(next))));
@@ -180,7 +185,7 @@ export function HtmlPreview({ html, fill = false }: { html: string; fill?: boole
       <iframe
         key={run}
         ref={frame}
-        src={ARTIFACT_FRAME_URL}
+        src={FRAME_URL}
         sandbox="allow-scripts"
         referrerPolicy="no-referrer"
         title={t("visual.htmlTitle")}
@@ -240,7 +245,8 @@ export function VisualCodeBlock({ code, language }: { code: string; language: st
       <CodeBlockHeader>
         <CodeBlockTitle>{language}</CodeBlockTitle>
         <CodeBlockActions>
-          {language === "html" && root && (
+          {/* The panel is the desktop window's; a phone has nowhere to open the saved file. */}
+          {language === "html" && root && bridge?.kind === "desktop" && (
             <Tooltip>
               <TooltipTrigger
                 render={

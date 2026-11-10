@@ -30,13 +30,13 @@ function Slider({
               it (the `before` and `after`); it and the thumb glide between steps. */}
           <SliderPrimitive.Indicator
             data-slot="slider-indicator"
-            className="bg-foreground/25 transition-[width] duration-200 ease-out before:absolute before:inset-y-0 before:right-full before:w-1 before:bg-foreground/25 after:absolute after:inset-y-0 after:left-full after:w-4 after:rounded-r-[1rem] after:bg-foreground/25 motion-reduce:transition-none"
+            className="bg-primary/30 transition-[width] duration-200 ease-out before:absolute before:inset-y-0 before:right-full before:w-1 before:bg-primary/30 after:absolute after:inset-y-0 after:left-full after:w-4 after:rounded-r-[1rem] after:bg-primary/30 motion-reduce:transition-none"
           />
           {children}
           <SliderPrimitive.Thumb
             data-slot="slider-thumb"
             aria-label={ariaLabel}
-            className="size-6 rounded-full bg-foreground shadow-md transition-[inset-inline-start] duration-200 ease-out outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none"
+            className="size-6 rounded-full bg-primary shadow-md transition-[inset-inline-start] duration-200 ease-out outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none"
           />
         </SliderPrimitive.Track>
       </SliderPrimitive.Control>

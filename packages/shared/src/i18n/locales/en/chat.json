@@ -99,7 +99,8 @@
       "searching": "Searching…",
       "noResults": "No chats match “{{query}}”.",
       "failed": "Search failed. Try again.",
-      "tooShort": "Type at least {{count}} characters."
+      "tooShort": "Type at least {{count}} characters.",
+      "close": "Close"
     },
     "workspace": {
       "newChat": "New chat in {{name}}",
@@ -633,7 +634,7 @@
     "loadingReport": "Loading the report…"
   },
   "files": {
-    "up": "Up one folder",
+    "back": "Back to chat",
     "path": "Folder path",
     "filter": "Filter this folder",
     "noMatch": "Nothing matches that name",

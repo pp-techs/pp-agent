@@ -1,3 +1,4 @@
+import * as React from "react";
 import type { FilePreview } from "@workspace/shared";
 import { Alert, AlertDescription } from "@workspace/ui/components/alert";
 import {
@@ -24,6 +25,7 @@ import { useTranslation } from "react-i18next";
 import { Markdown } from "@/components/markdown";
 import { HtmlPreview } from "@/components/visual-preview";
 import { useHighlightedCode } from "@/hooks/use-highlighted-code";
+import { splitFrontmatter, type FrontmatterField } from "@/lib/frontmatter";
 
 /** File extensions the highlighter knows by another name. */
 const LANGUAGES: Record<string, string> = {
@@ -104,6 +106,24 @@ function TextPreview({ path, text }: { path: string; text: string }) {
 }
 
 /**
+ * A Markdown file's frontmatter, drawn as the fields it holds: as the file is, the `---` lines
+ * draw a rule and the keys turn into a heading. Nothing for a file without frontmatter.
+ */
+function Metadata({ fields }: { fields: FrontmatterField[] }) {
+  if (fields.length === 0) return null;
+  return (
+    <dl className="mt-1 mb-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-xl bg-muted/60 px-3 py-2 text-xs">
+      {fields.map((field, index) => (
+        <React.Fragment key={`${field.key}:${index}`}>
+          <dt className="font-medium text-muted-foreground">{field.key}</dt>
+          <dd className="min-w-0 break-words">{field.value}</dd>
+        </React.Fragment>
+      ))}
+    </dl>
+  );
+}
+
+/**
  * A file's content as the app shows it: Markdown rendered (mermaid drawn), code highlighted, an
  * image, or the reason there is nothing to show. Shared by the desktop side panel and the files
  * page of the app on a phone, so both show a file the same way.
@@ -122,7 +142,7 @@ export function FileContent({
   error?: Error | null;
   /** Markdown and HTML show their text instead of their rendered form. */
   showSource: boolean;
-  /** Whether an HTML page may run here (the desktop window's sandboxed frame). */
+  /** Whether an HTML page may run here, in the app's sandboxed preview frame. */
   allowHtml: boolean;
   className?: string;
 }) {
@@ -168,12 +188,14 @@ export function FileContent({
     );
   }
   const showsHtml = allowHtml && isHtmlFile(path) && !preview.truncated && !showSource;
+  const metadata = isMarkdownFile(path) && !showSource ? splitFrontmatter(preview.text) : null;
   return (
     // An HTML page fills the space it is given, so the root is the flex column that passes it down.
     <div className={cn(showsHtml && "flex min-h-0 flex-1 flex-col", className)}>
-      {isMarkdownFile(path) && !showSource ? (
+      {metadata ? (
         <div className="px-4 py-2 text-sm">
-          <Markdown>{preview.text}</Markdown>
+          <Metadata fields={metadata.fields} />
+          <Markdown>{metadata.body}</Markdown>
         </div>
       ) : showsHtml ? (
         <HtmlPreview key={preview.text} html={preview.text} fill />

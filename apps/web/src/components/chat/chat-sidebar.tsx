@@ -208,6 +208,12 @@ function ChatSearchDialog({
             </CommandGroup>
           )}
         </CommandList>
+        {/* A touch screen has no Escape key, so the search carries a way out of its own. */}
+        <div className="hidden shrink-0 border-t p-1 pointer-coarse:block">
+          <Button variant="ghost" size="sm" className="w-full" onClick={() => onOpenChange(false)}>
+            {t("sidebar.search.close")}
+          </Button>
+        </div>
       </Command>
     </CommandDialog>
   );

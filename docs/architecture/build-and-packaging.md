@@ -33,7 +33,7 @@ The other runtime `dependencies` of `apps/desktop` (`fflate`, `officeparser`, `t
 `apps/web/vite.config.ts`:
 
 - `base: "./"` so the built `index.html` loads its assets over `file://`.
-- React and Tailwind plugins, plus `pp-agent:csp`, which injects the Content-Security-Policy meta tag in builds only. Images are limited to `'self' data: blob:`, so a reply cannot load a remote image (see the Markdown rule in [electron-security.md](../code-standard/electron-security.md)); frames only from `pp-artifact:` (HTML previews).
+- React and Tailwind plugins, plus `pp-agent:csp`, which injects the Content-Security-Policy meta tag in builds only. Images are limited to `'self' data: blob:`, so a reply cannot load a remote image (see the Markdown rule in [electron-security.md](../code-standard/electron-security.md)); frames only from `pp-artifact:` and the app's own `artifact-frame.html` (HTML previews). `pp-agent:artifact-libraries` emits `artifact-libs/<name>` from `node_modules` (Chart.js, ~200 KB) for the frame page a browser and the phone load, which the desktop app serves from its scheme instead.
 - `@` aliases `apps/web/src`.
 - `build.rolldownOptions.output.codeSplitting` puts React and Streamdown in their own chunks. Settings sections and Schedules load with `React.lazy`, like the side-panel tools, and Pele (the mermaid renderer, `pele/lazy`, about 50 KB) is imported only when a reply holds a diagram, then loads each diagram type on demand, so the startup bundle stays small; the default chunk-size warning stays on to flag regressions.
 

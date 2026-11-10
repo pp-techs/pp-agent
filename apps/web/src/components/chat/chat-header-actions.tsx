@@ -14,6 +14,7 @@ import {
 import {
   DownloadIcon,
   FileTextIcon,
+  FolderIcon,
   GlobeIcon,
   MessageSquareDashedIcon,
   RabbitIcon,
@@ -22,6 +23,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { ConfirmModal } from "@/components/modals/confirm-modal";
+import { isWebApp } from "@/lib/bridge";
 import { confirmLeaveTemporary } from "@/lib/confirm-leave-temporary";
 import { useExportSession } from "@/hooks/use-export-session";
 import {
@@ -356,9 +358,28 @@ function TemporaryToggle({ bridge }: { bridge: DesktopBridge }) {
 }
 
 /** Right end of the chat's top bar: conversation mode, context window and export. */
-export function ChatHeaderActions({ bridge }: { bridge: DesktopBridge }) {
+export function ChatHeaderActions({
+  bridge,
+  onOpenFiles,
+}: {
+  bridge: DesktopBridge;
+  /** Opens the workspace's files; the phone shows it here, where the sidebar is a sheet away. */
+  onOpenFiles: () => void;
+}) {
+  const { t } = useTranslation("chat");
   return (
     <div className="ml-auto flex items-center gap-0.5">
+      {isWebApp && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="md:hidden"
+          aria-label={t("sidebar.files")}
+          onClick={onOpenFiles}
+        >
+          <FolderIcon />
+        </Button>
+      )}
       <TemporaryToggle bridge={bridge} />
       <YoloButton bridge={bridge} />
       <ContextButton bridge={bridge} />

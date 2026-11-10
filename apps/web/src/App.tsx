@@ -59,13 +59,13 @@ function HiddenSidebarTrigger() {
 }
 
 /** Top bar: the sidebar toggle and the agent on the left; context window and folder on the right. */
-function Header({ bridge }: { bridge: DesktopBridge }) {
+function Header({ bridge, onOpenFiles }: { bridge: DesktopBridge; onOpenFiles: () => void }) {
   const status = useChatStore((state) => state.status);
   return (
     <header className="flex h-11 shrink-0 items-center gap-1 px-2.5">
       <HiddenSidebarTrigger />
       <AgentPicker bridge={bridge} disabled={status === "starting"} />
-      <ChatHeaderActions bridge={bridge} />
+      <ChatHeaderActions bridge={bridge} onOpenFiles={onOpenFiles} />
     </header>
   );
 }
@@ -172,6 +172,31 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
   const status = useChatStore((state) => state.status);
   const ready = status === "idle" || status === "running";
   const [page, setPage] = React.useState<Page>("chat");
+  // A page opened from the sidebar keeps a history entry of its own, so the phone's back gesture
+  // and button (and a browser's back) return to the chat before they leave the app.
+  React.useEffect(() => {
+    function onPopState() {
+      setPage("chat");
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  function navigate(next: Page) {
+    const opened = page !== "chat";
+    if (next === "chat") {
+      // Leave through the entry the page pushed, so back from the chat is not swallowed here.
+      if (opened && window.history.state?.ppPage) {
+        window.history.back();
+        return;
+      }
+      setPage("chat");
+      return;
+    }
+    if (opened) window.history.replaceState({ ppPage: next }, "");
+    else window.history.pushState({ ppPage: next }, "");
+    setPage(next);
+  }
 
   async function onDrop(event: React.DragEvent) {
     event.preventDefault();
@@ -196,13 +221,13 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
           </div>
         }
       >
-        <RemoteFilesPage bridge={bridge} />
+        <RemoteFilesPage bridge={bridge} onBack={() => navigate("chat")} />
       </React.Suspense>
     ) : page === "schedules" ? (
       <>
         <header className="flex h-11 shrink-0 items-center gap-1 px-2.5">
           <HiddenSidebarTrigger />
-          <Button variant="ghost" size="sm" onClick={() => setPage("chat")}>
+          <Button variant="ghost" size="sm" onClick={() => navigate("chat")}>
             <ArrowLeftIcon />
             {t("app.backToChat")}
           </Button>
@@ -223,7 +248,7 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
       </>
     ) : (
       <>
-        <Header bridge={bridge} />
+        <Header bridge={bridge} onOpenFiles={() => navigate("files")} />
         <div className="min-h-0 flex-1">
           <ChatBody bridge={bridge} />
         </div>
@@ -234,7 +259,7 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
   return (
     <SidebarProvider>
       {!isWebApp && <DesktopShortcuts bridge={bridge} />}
-      <ChatSidebar bridge={bridge} page={page} onNavigate={setPage} />
+      <ChatSidebar bridge={bridge} page={page} onNavigate={navigate} />
       <SidebarInset
         // Inset leaves an 0.5rem gutter around the chat panel on desktop; keep it within the window.
         // dvh follows a phone's browser bars and on-screen keyboard; svh would leave a gap.

@@ -63,6 +63,19 @@
 }
 
 /*
+ * iOS zooms the page into a field whose text is under 16px and leaves it zoomed after the field
+ * loses focus: every tap into the search box or the files filter magnified the app. Touch screens
+ * get 16px fields whatever size class the field carries; a mouse never zooms.
+ */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/*
  * The bottom safe area (the home indicator), which the composer pads above. The phone app sets
  * `data-keyboard="open"` while the keyboard shows: the composer then sits right on the keyboard.
  */

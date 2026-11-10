@@ -19,7 +19,7 @@ import { Input } from "@workspace/ui/components/input";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import {
-  ChevronLeftIcon,
+  ArrowLeftIcon,
   ChevronRightIcon,
   EyeIcon,
   FileCodeIcon,
@@ -31,7 +31,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import { FileContent, fileName, formatSize, isMarkdownFile } from "@/components/files/file-content";
+import { canPreviewFile, FileContent, fileName, formatSize } from "@/components/files/file-content";
 import { FileTypeIcon } from "@/components/panel/file-icon";
 import { remoteFileQuery, remoteFolderQuery } from "@/lib/remote-files";
 import { useChatStore } from "@/stores/chat-store";
@@ -64,7 +64,7 @@ function SheetBody({
   const { t, i18n } = useTranslation("chat");
   const [showSource, setShowSource] = React.useState(false);
   const preview = useQuery(remoteFileQuery(bridge, workspaceId, file.path));
-  const markdown = isMarkdownFile(file.path);
+  const canPreview = canPreviewFile(file.path, preview.data);
 
   async function copy() {
     if (preview.data?.kind !== "text") return;
@@ -86,7 +86,7 @@ function SheetBody({
             {file.path} · {formatSize(file.size, i18n.language)}
           </DialogDescription>
         </div>
-        {markdown && (
+        {canPreview && (
           <Button
             variant="ghost"
             size="icon-sm"
@@ -116,7 +116,7 @@ function SheetBody({
           preview={preview.data}
           error={preview.error}
           showSource={showSource}
-          allowHtml={false}
+          allowHtml
           className="min-h-0"
         />
       </div>
@@ -134,8 +134,7 @@ function SheetBody({
 
 /**
  * A file of the workspace, whole screen over the list. It shows its rendered form (Markdown
- * drawn, code highlighted) with a switch to its text for Markdown; the page is the phone's, so an
- * HTML page shows as text (it runs in the desktop window only).
+ * drawn, code highlighted, an HTML page after Run) with a switch to its text for Markdown.
  */
 function FileSheet({
   bridge,
@@ -200,23 +199,27 @@ function Row({
 
 /**
  * The open conversation's workspace files, browsed from the app on a phone: folders open in
- * place, a file opens over the page, and the way back is the breadcrumb at the top. The files are
- * read on the computer over the remote connection; the desktop window browses them in the side
- * panel instead.
+ * place, a file opens over the page, and the back arrow above the list returns to the chat. The
+ * files are read on the computer over the remote connection; the desktop window browses them in
+ * the side panel instead.
  */
-export function RemoteFilesPage({ bridge }: { bridge: DesktopBridge }) {
+export function RemoteFilesPage({ bridge, onBack }: { bridge: DesktopBridge; onBack: () => void }) {
   const workspace = useChatStore((state) => state.workspace);
   if (!workspace) return null;
   // Another workspace has other files: its own top folder and no open file.
-  return <WorkspaceFiles key={workspace.id} bridge={bridge} workspace={workspace} />;
+  return (
+    <WorkspaceFiles key={workspace.id} bridge={bridge} workspace={workspace} onBack={onBack} />
+  );
 }
 
 function WorkspaceFiles({
   bridge,
   workspace,
+  onBack,
 }: {
   bridge: DesktopBridge;
   workspace: WorkspaceSummary;
+  onBack: () => void;
 }) {
   const { t } = useTranslation("chat");
   const [dir, setDir] = React.useState("");
@@ -239,16 +242,11 @@ function WorkspaceFiles({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex h-11 shrink-0 items-center gap-1 px-2.5">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={t("files.up")}
-          disabled={dir === ""}
-          onClick={() => go(segments.slice(0, -1).join("/"))}
-        >
-          <ChevronLeftIcon />
+        {/* Back to the chat; a folder is left by tapping the breadcrumb above it. */}
+        <Button variant="ghost" size="icon-sm" aria-label={t("files.back")} onClick={onBack}>
+          <ArrowLeftIcon />
         </Button>
-        {/* The breadcrumb is the way back, and skips to any folder above. */}
+        {/* The breadcrumb is the way back up, and skips to any folder above. */}
         <nav aria-label={t("files.path")} className="flex min-w-0 flex-1 items-center gap-0.5">
           <button
             type="button"
