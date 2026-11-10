@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.29.0] — 2026-11-10
+
+A research run now saves its report in a folder of its own: `research/<question>-<date>/report.md` and `report.html`, instead of loose files directly in `research/`. Each run gets its own folder (`-2`, `-3`… when the name is taken), so reports no longer mix.
+
+Settings has one place per job. Voice input is a group of Models ("Speech to text"), MCP servers are a page under Tools, and the browser's sign-in profiles and computer use share a "This computer" section with two tabs. The remaining sections are listed in the order the app is set up, and updates, the configuration bundle and the diagnostics log moved out of General into a new Advanced section.
+
 ## [0.28.0] — 2026-11-09
 
 Configuration bundles: export the setup of this computer — gateways and default models, agents, MCP servers, tool policies, skill lists — as one file to give other people's copies the same setup, or import one in Settings › General. A file dropped into the app folder as `settings.import.json` is applied at the next start, so a setup script or MDM can configure the app without anyone at the keyboard. Keys and tokens are never in the bundle: each computer keeps its own.

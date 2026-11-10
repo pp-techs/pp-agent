@@ -1,5 +1,15 @@
 # @workspace/desktop
 
+## 0.29.0
+
+### Minor Changes
+
+- 2ba4a99: Settings has one place per job. Voice input is a group of Models ("Speech to text"), MCP servers are a page under Tools, and the browser's sign-in profiles and computer use share a "This computer" section with two tabs. The remaining sections are listed in the order the app is set up, and updates, the configuration bundle and the diagnostics log moved out of General into a new Advanced section.
+
+### Patch Changes
+
+- 2ba4a99: A research run now saves its report in a folder of its own: `research/<question>-<date>/report.md` and `report.html`, instead of loose files directly in `research/`. Each run gets its own folder (`-2`, `-3`… when the name is taken), so reports no longer mix.
+
 ## 0.28.0
 
 ### Minor Changes
