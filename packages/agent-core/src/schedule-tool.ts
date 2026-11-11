@@ -39,12 +39,28 @@ export const SCHEDULE_SCHEMA = Type.Union(
   [
     Type.Object({
       kind: Type.Literal("once"),
-      at: Type.Number({ description: "epoch milliseconds" }),
+      at: Type.Optional(
+        Type.Union([Type.Number(), Type.String()], {
+          description:
+            'Epoch milliseconds, or a local time like "2026-11-11T21:00" (no time zone suffix)',
+        }),
+      ),
+      afterMinutes: Type.Optional(
+        Type.Number({ description: "Alternative to `at`: this many minutes from now" }),
+      ),
     }),
     Type.Object({
       kind: Type.Literal("interval"),
-      every: Type.Integer({ minimum: 1, maximum: SCHEDULE_LIMITS.maxMinutes }),
-      unit: Type.Union([Type.Literal("minutes"), Type.Literal("hours")]),
+      every: Type.Integer({
+        minimum: SCHEDULE_LIMITS.minMinutes,
+        maximum: SCHEDULE_LIMITS.maxMinutes,
+      }),
+      unit: Type.Literal("minutes"),
+    }),
+    Type.Object({
+      kind: Type.Literal("interval"),
+      every: Type.Integer({ minimum: 1, maximum: SCHEDULE_LIMITS.maxHours }),
+      unit: Type.Literal("hours"),
     }),
     Type.Object({ kind: Type.Literal("daily"), time: Type.String() }),
     Type.Object({
@@ -55,14 +71,29 @@ export const SCHEDULE_SCHEMA = Type.Union(
   ],
   {
     description:
-      'Schedule object (pass as an object, not a JSON string): { kind: "once", at: epochMs }, ' +
-      '{ kind: "interval", every: N, unit: "minutes"|"hours" }, { kind: "daily", time: "HH:MM" }, ' +
+      'Schedule object (pass as an object, not a JSON string): { kind: "once", at: epochMs | "YYYY-MM-DDTHH:mm" } ' +
+      'or { kind: "once", afterMinutes: N }, ' +
+      `{ kind: "interval", every: N, unit: "minutes" (${SCHEDULE_LIMITS.minMinutes}-${SCHEDULE_LIMITS.maxMinutes}) | "hours" (1-${SCHEDULE_LIMITS.maxHours}) }, ` +
+      '{ kind: "daily", time: "HH:MM" }, ' +
       'or { kind: "weekly", days: [0-6], time: "HH:MM" }',
   },
 );
 
 /** Prepares schedule tool arguments from models that stringify nested objects or numbers. */
-export function prepareScheduleArguments(args: unknown): unknown {
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A time the model wrote as text, as epoch ms in the computer's local time; NaN if unreadable. */
+function parseLocalTime(text: string): number {
+  const trimmed = text.trim();
+  // `Date.parse("2026-11-11")` means midnight UTC; a person means local midnight.
+  if (DATE_ONLY.test(trimmed)) {
+    const [year, month, day] = trimmed.split("-").map(Number);
+    return new Date(year, month - 1, day).getTime();
+  }
+  return Date.parse(trimmed);
+}
+
+export function prepareScheduleArguments(args: unknown, now: number = Date.now()): unknown {
   if (!args || typeof args !== "object" || Array.isArray(args)) return args;
   const raw = { ...(args as Record<string, unknown>) };
 
@@ -90,12 +121,17 @@ export function prepareScheduleArguments(args: unknown): unknown {
         if (Number.isFinite(num)) {
           when.at = num;
         } else {
-          const parsedDate = Date.parse(when.at);
+          const parsedDate = parseLocalTime(when.at);
           if (Number.isFinite(parsedDate)) {
             when.at = parsedDate;
           }
         }
       }
+      if (when.at === undefined && when.afterMinutes !== undefined) {
+        const minutes = Number(when.afterMinutes);
+        if (Number.isFinite(minutes) && minutes >= 0) when.at = now + Math.round(minutes * 60_000);
+      }
+      delete when.afterMinutes;
     } else if (when.kind === "interval") {
       if (typeof when.every === "string") {
         const num = Number(when.every);

@@ -48,6 +48,14 @@ import { agentsQuery, workspacesQuery } from "@/lib/queries";
 
 type View = { kind: "list" } | { kind: "edit"; id?: string };
 
+/** A one-shot that ran, or whose time passed more than a day ago (the scheduler no longer fires it). */
+function isFinishedOnce(task: ScheduledTaskView): boolean {
+  return (
+    task.schedule.kind === "once" &&
+    (task.lastRun !== null || Date.now() - task.schedule.at > 24 * 60 * 60_000)
+  );
+}
+
 function TaskRow({
   bridge,
   task,
@@ -99,7 +107,9 @@ function TaskRow({
         <ItemDescription className="text-xs">
           {task.enabled && task.nextRun !== null
             ? t("scheduledTasks.nextRun", { when: formatWhen(task.nextRun, i18n.language) })
-            : t("scheduledTasks.paused")}
+            : isFinishedOnce(task)
+              ? t("scheduledTasks.finished")
+              : t("scheduledTasks.paused")}
         </ItemDescription>
         <ItemDescription className="text-xs">
           {lastRun === null

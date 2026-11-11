@@ -425,6 +425,8 @@ interface SessionScope {
    * then not offered at all.
    */
   askUser?: AskUser;
+  /** Chats only: the chat key (`telegram:123`), so a task made there can find its way back. */
+  chatKey?: string;
   /** Extra system prompt section: headless runs tell the model nobody is watching, chats where it replies. */
   systemNote?: { section: string; text: string };
   /** The goal of a window conversation; absent elsewhere, where nobody can set one. */
@@ -560,7 +562,19 @@ const NOTHING_TO_COMPACT = /nothing to compact/i;
 const DEFAULT_KEEP_TOKENS = 20_000;
 const MANUAL_KEEP_TOKENS = 2_000;
 /** A scheduled run that takes longer than this is stopped and recorded as failed. */
+/** One line of `deliveries.json`: a message to a chat, recorded before it is sent. */
+interface DeliveryEntry {
+  id: string;
+  peer: string;
+  message: string;
+  sent: boolean;
+  /** The scheduled task whose result this is, so a late delivery can update its last run. */
+  taskId?: string;
+}
+
 const TASK_RUN_LIMIT_MS = 30 * 60_000;
+/** After the limit aborts a run, how long it may take to wind down before it is given up on. */
+const TASK_ABORT_GRACE_MS = 60_000;
 /** Longest a scheduled run or a chat's first turn waits for its MCP servers to connect. */
 const MCP_READY_WAIT_MS = 5_000;
 /** Why a tool call was blocked in a scheduled run; the model sees it as the tool result. */
@@ -575,11 +589,19 @@ function formatSchedule(schedule: TaskSchedule): string {
   return `weekly on [${schedule.days.join(",")}] at ${schedule.time}`;
 }
 
-function scheduledTaskNote(name: string): string {
+/** What a run replies with when there is nothing to report and the task is `silentIfEmpty`. */
+const SILENT_REPLY = "[SILENT]";
+
+function scheduledTaskNote(name: string, silentIfEmpty = false): string {
   return [
     `This is the scheduled task "${name}". It runs automatically without anyone watching, so you cannot ask questions or wait for answers.`,
     "Do the task with what you have and write a complete answer the person reads later.",
     "Tools that need the person's approval are denied in this run. If one is denied, do not retry it; finish without it and say what you could not do.",
+    ...(silentIfEmpty
+      ? [
+          `If there is nothing worth reporting, reply with exactly ${SILENT_REPLY} and nothing else; then nothing is delivered.`,
+        ]
+      : []),
   ].join("\n");
 }
 
@@ -4329,10 +4351,7 @@ export class AgentHost {
     const scheduler = new Scheduler({
       now: () => Date.now(),
       tasks: () => settings.get().scheduledTasks,
-      rearm: (id, at) =>
-        this.updateTask(id, (task) => {
-          task.armedAt = at;
-        }),
+      rearm: (id, at) => this.rearmOrExpire(id, at),
       run: (task) => this.runScheduledTask(task),
       changed: () => emit({ type: "settings_changed", scopes: ["scheduledTasks"] }),
     });
@@ -4349,6 +4368,33 @@ export class AgentHost {
       if (task) change(task);
     });
     return true;
+  }
+
+  /**
+   * A slot missed beyond the catch-up window: counting restarts from `at`. A one-shot has no later
+   * slot, so it ends instead (switched off, or removed when it asked to be removed after firing);
+   * re-arming it would only rewrite settings.json at every tick.
+   */
+  private rearmOrExpire(id: string, at: number): void {
+    const { settings } = this.requireServices();
+    const task = settings.get().scheduledTasks.find((entry) => entry.id === id);
+    if (!task) return;
+    if (task.schedule.kind !== "once") {
+      this.updateTask(id, (draft) => {
+        draft.armedAt = at;
+      });
+      return;
+    }
+    if (task.deleteAfterRun) {
+      settings.update((draft) => {
+        draft.scheduledTasks = draft.scheduledTasks.filter((entry) => entry.id !== id);
+      });
+    } else {
+      this.updateTask(id, (draft) => {
+        draft.enabled = false;
+      });
+    }
+    emit({ type: "settings_changed", scopes: ["scheduledTasks"] });
   }
 
   private taskView(task: ScheduledTask): ScheduledTaskView {
@@ -4442,13 +4488,24 @@ export class AgentHost {
     const target = task.target ?? { mode: "new" as const };
     let denied = 0;
     let timedOut = false;
-    let session: AgentSession | null = null;
-    let mcpServers: McpRegistrations | null = null;
-    let outcome: Pick<TaskRun, "status" | "error"> = { status: "completed" };
+    // Assigned inside `work`, so the casts keep the type from narrowing to `null` here.
+    let session = null as AgentSession | null;
+    let mcpServers = null as McpRegistrations | null;
+    let outcome = { status: "completed" } as Pick<TaskRun, "status" | "error">;
     let runDelivery: string | undefined;
-    let reply: AssistantMessage | undefined;
+    let reply = undefined as AssistantMessage | undefined;
     let limit: NodeJS.Timeout | undefined;
-    try {
+    let hardLimit: NodeJS.Timeout | undefined;
+    // The soft limit aborts the session; a session or tool that ignores the abort must still not
+    // hold the queue (and every other task) forever, so the hard limit gives up on the run.
+    const gaveUp = new Promise<"gave-up">((resolve) => {
+      hardLimit = setTimeout(() => {
+        timedOut = true;
+        void session?.abort().catch(() => undefined);
+        resolve("gave-up");
+      }, TASK_RUN_LIMIT_MS + TASK_ABORT_GRACE_MS);
+    });
+    const work = async (): Promise<void> => {
       const { settings, paths, mcpConfig } = services;
       const agent = findAgent(settings.get().agents, task.agentId);
       const workspace = findWorkspace(settings.get().workspaces, task.workspaceId);
@@ -4512,8 +4569,8 @@ export class AgentHost {
         systemNote: {
           section: "scheduled_task",
           text: originContext
-            ? `${scheduledTaskNote(task.name)}\n\nRecent context from the originating conversation:\n${originContext}`
-            : scheduledTaskNote(task.name),
+            ? `${scheduledTaskNote(task.name, task.silentIfEmpty)}\n\nRecent context from the originating conversation:\n${originContext}`
+            : scheduledTaskNote(task.name, task.silentIfEmpty),
         },
         surface: { kind: "task", label: `the scheduled run "${task.name}"` },
         visibility: "self",
@@ -4540,26 +4597,39 @@ export class AgentHost {
       else if (reply?.stopReason === "aborted")
         outcome = { status: "failed", error: t("scheduler.errors.stopped") };
       else if (!reply) outcome = { status: "failed", error: t("scheduler.errors.noAnswer") };
+    };
+    try {
+      const work$ = work();
+      // After giving up, a late failure of the abandoned work has nobody to tell.
+      work$.catch(() => undefined);
+      const winner = await Promise.race([work$.then(() => "done" as const), gaveUp]);
+      if (winner === "gave-up")
+        outcome = { status: "failed", error: t("scheduler.errors.timedOut") };
     } catch (error) {
       outcome = { status: "failed", error: errorMessage(error) };
     } finally {
       clearTimeout(limit);
+      clearTimeout(hardLimit);
       this.taskSessions.delete(task.id);
     }
     // Deliver the result according to the task's delivery setting. Whatever happens, the session
     // and its MCP servers are released and the run is recorded, so a failed delivery is not
     // retried every minute.
     try {
-      const finalText =
-        reply?.content?.find(
+      const finalText = (reply?.content ?? [])
+        .filter(
           (b): b is { type: "text"; text: string } => (b as { type?: string }).type === "text",
-        )?.text ?? "";
-      const isSilent = task.silentIfEmpty && finalText.trim() === "[SILENT]";
+        )
+        .map((b) => b.text)
+        .join("\n");
+      const isSilent =
+        task.silentIfEmpty === true &&
+        (finalText.trim() === "" || finalText.trim() === SILENT_REPLY);
       if (outcome.status === "completed" && !isSilent) {
         const delivery = task.delivery ?? { to: "session" as const };
         if (delivery.to === "peer") {
           try {
-            await this.deliverToPeer(delivery.peer, task.name, finalText);
+            await this.deliverToPeer(delivery.peer, task.name, finalText, task.id);
             runDelivery = "sent";
           } catch (error) {
             runDelivery = `failed: ${errorMessage(error)}`;
@@ -4599,8 +4669,13 @@ export class AgentHost {
         this.updateTask(task.id, (draft) => {
           draft.lastRun = run;
         });
-        // A one-shot task that asked to be removed after firing is gone now.
-        if (task.deleteAfterRun) {
+        // A one-shot task that asked to be removed after firing is gone now; a failed run stays,
+        // so the person sees why and can run it again.
+        if (
+          task.deleteAfterRun &&
+          task.schedule.kind === "once" &&
+          outcome.status === "completed"
+        ) {
           this.requireServices().settings.update((draft) => {
             draft.scheduledTasks = draft.scheduledTasks.filter((entry) => entry.id !== task.id);
           });
@@ -4690,11 +4765,16 @@ export class AgentHost {
    * else Zalo); a peer key like `telegram:123` goes to that configured chat, and `zalo:<id>` to
    * the paired Zalo owner.
    */
-  private async deliverToPeer(peer: string, taskName: string, text: string): Promise<void> {
+  private async deliverToPeer(
+    peer: string,
+    taskName: string,
+    text: string,
+    taskId: string,
+  ): Promise<void> {
     const message = `⏰ ${taskName}\n\n${text}`;
     // Record the delivery before sending, so a crash can be recovered.
     const deliveryId = randomUUID();
-    this.saveDelivery({ id: deliveryId, peer, message, sent: false });
+    this.saveDelivery({ id: deliveryId, peer, message, sent: false, taskId });
     await this.deliverText(peer, message);
     this.markDeliverySent(deliveryId);
   }
@@ -4704,22 +4784,15 @@ export class AgentHost {
     return join(this.requireServices().paths.agentDir, "deliveries.json");
   }
 
-  private loadDeliveries(): Array<{ id: string; peer: string; message: string; sent: boolean }> {
+  private loadDeliveries(): DeliveryEntry[] {
     try {
-      return JSON.parse(readFileSync(this.deliveryLedgerPath(), "utf8")) as Array<{
-        id: string;
-        peer: string;
-        message: string;
-        sent: boolean;
-      }>;
+      return JSON.parse(readFileSync(this.deliveryLedgerPath(), "utf8")) as DeliveryEntry[];
     } catch {
       return [];
     }
   }
 
-  private saveDeliveries(
-    deliveries: Array<{ id: string; peer: string; message: string; sent: boolean }>,
-  ): void {
+  private saveDeliveries(deliveries: DeliveryEntry[]): void {
     try {
       writeFileSync(this.deliveryLedgerPath(), JSON.stringify(deliveries, null, 2), {
         mode: 0o600,
@@ -4729,7 +4802,7 @@ export class AgentHost {
     }
   }
 
-  private saveDelivery(entry: { id: string; peer: string; message: string; sent: boolean }): void {
+  private saveDelivery(entry: DeliveryEntry): void {
     const deliveries = this.loadDeliveries();
     deliveries.push(entry);
     // Keep only the last 100 entries.
@@ -4751,6 +4824,12 @@ export class AgentHost {
       try {
         await this.deliverText(entry.peer, entry.message);
         this.markDeliverySent(entry.id);
+        // The run said "failed: …" when it gave up; the message did arrive after all.
+        const { taskId } = entry;
+        if (taskId)
+          this.updateTask(taskId, (task) => {
+            if (task.lastRun?.delivery?.startsWith("failed")) task.lastRun.delivery = "sent";
+          });
       } catch {
         // Will retry on next start.
       }
@@ -4797,6 +4876,7 @@ export class AgentHost {
           ...input,
           agentId: scope.agent().id,
           workspaceId: scope.workspace().id,
+          ...(scope.chatKey ? { origin: scope.chatKey } : {}),
         });
         return { name: task.name, nextRun: task.nextRun };
       },
@@ -5038,6 +5118,7 @@ export class AgentHost {
     };
     return {
       agent,
+      chatKey,
       workspace: () => findWorkspace(settings.get().workspaces, chat.workspaceId),
       mcpServers,
       approvalGate: this.gateFor({

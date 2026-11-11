@@ -342,4 +342,30 @@ describe("Scheduler queue", () => {
     expect(log).toEqual(["rearm a", "rearm b"]);
     scheduler.stop();
   });
+
+  test("a one-shot that is overdue by more than a day is handed back once, not re-armed", () => {
+    const now = at(2026, 3, 4, 9, 0);
+    const once = {
+      id: "o",
+      name: "o",
+      prompt: "p",
+      agentId: "default",
+      workspaceId: "default",
+      enabled: true,
+      armedAt: now - 5 * 24 * HOUR,
+      lastRun: null,
+      schedule: { kind: "once" as const, at: now - 3 * 24 * HOUR },
+    };
+    const skipped: string[] = [];
+    const scheduler = new Scheduler({
+      now: () => now,
+      tasks: () => [once],
+      rearm: (id) => skipped.push(id),
+      run: async () => undefined,
+      changed: () => undefined,
+    });
+    scheduler.start();
+    expect(skipped).toEqual(["o"]);
+    scheduler.stop();
+  });
 });
