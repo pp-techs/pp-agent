@@ -1,6 +1,5 @@
 import { extname, isAbsolute, resolve } from "node:path";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import { OfficeParser } from "officeparser";
 import { Type } from "typebox";
 
 /** Formats officeparser understands. Plain text files are better served by the `read` tool. */
@@ -49,6 +48,8 @@ export function createReadDocumentTool(workspaceDir: string) {
           `read_document does not support ${extension || "files without an extension"}; use read for plain text.`,
         );
       }
+      // Loaded on first use: the parser costs about sixty milliseconds at startup.
+      const { OfficeParser } = await import("officeparser");
       const ast = await OfficeParser.parseOffice(path, {
         abortSignal: signal ?? null,
         ignoreComments: true,

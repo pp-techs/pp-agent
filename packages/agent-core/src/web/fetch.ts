@@ -3,7 +3,6 @@ import { BlockList, isIP } from "node:net";
 import http from "node:http";
 import https from "node:https";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
-import { OfficeParser } from "officeparser";
 import { extractWithWebclaw } from "./webclaw.ts";
 
 /** Address ranges a web page must never make the app reach: this computer, the local network, cloud metadata. */
@@ -244,6 +243,7 @@ export async function htmlToText(
 ): Promise<string> {
   const extracted = await extractWithWebclaw(html, { signal, binary });
   if (extracted !== null && extracted.length >= SHORT_EXTRACTION) return extracted;
+  const { OfficeParser } = await import("officeparser");
   const ast = await OfficeParser.parseOffice(Buffer.from(html, "utf8"), {
     fileType: "html" as never,
   });
@@ -268,6 +268,7 @@ export async function fetchPage(input: string, signal?: AbortSignal): Promise<Fe
   const base = { url, contentType: response.contentType, clipped: response.clipped };
   const office = officeType(response);
   if (office) {
+    const { OfficeParser } = await import("officeparser");
     const ast = await OfficeParser.parseOffice(response.body, {
       fileType: office as never,
       ignoreComments: true,
