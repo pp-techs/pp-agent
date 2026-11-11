@@ -1257,11 +1257,19 @@ export class AgentHost {
     emit({ type: "activity", activity: this.activity() });
   }
 
-  private snapshot(): AgentSnapshot {
+  /**
+   * A snapshot for a change of the open conversation's settings: without the messages, which did
+   * not change (they can be megabytes with screenshots), flagged so a listener keeps its own.
+   */
+  private settingsSnapshot(): AgentSnapshot {
+    return { ...this.snapshot({ withMessages: false }), messagesUnchanged: true };
+  }
+
+  private snapshot({ withMessages = true } = {}): AgentSnapshot {
     const open = this.open;
     return {
       status: this.status,
-      messages: open?.transcript.list() ?? [],
+      messages: withMessages ? (open?.transcript.list() ?? []) : [],
       approvals: [...(open?.approvals.values() ?? [])].map((entry) => entry.request),
       questions: [...(open?.questions.values() ?? [])].map((entry) => entry.request),
       model: this.currentModel(),
@@ -1497,7 +1505,7 @@ export class AgentHost {
       this.persistGoal(conversation);
       this.applyActiveTools(conversation.session, this.liveScope(conversation));
     }
-    if (conversation === this.open) emit({ type: "snapshot", snapshot: this.snapshot() });
+    if (conversation === this.open) emit({ type: "snapshot", snapshot: this.settingsSnapshot() });
   }
 
   private persistGoal(conversation: Conversation): void {
@@ -1687,7 +1695,7 @@ export class AgentHost {
         type: "research",
         research: conversation.research ? this.summarizeResearch(conversation.research) : null,
       });
-      emit({ type: "snapshot", snapshot: this.snapshot() });
+      emit({ type: "snapshot", snapshot: this.settingsSnapshot() });
     }
   }
 
@@ -2585,9 +2593,14 @@ export class AgentHost {
     const restoredGoal = readGoal(sessionManager);
     const restoredResearch = readResearch(sessionManager);
     const state: ConversationState = {
-      transcript: new Transcript((message) => {
-        if (this.open === conversation) emit({ type: "message", message });
-      }),
+      transcript: new Transcript(
+        (message) => {
+          if (this.open === conversation) emit({ type: "message", message });
+        },
+        (append) => {
+          if (this.open === conversation) emit(append);
+        },
+      ),
       approvals: new Map(),
       computerApps: new Set(),
       yolo: false,
@@ -2725,7 +2738,8 @@ export class AgentHost {
           transcript.addUser(event.message);
           this.titleFromFirstMessage(conversation, event.message);
           // A goal that was waiting for the person is running again: tell the banner.
-          if (inWindow && conversation.goal) emit({ type: "snapshot", snapshot: this.snapshot() });
+          if (inWindow && conversation.goal)
+            emit({ type: "snapshot", snapshot: this.settingsSnapshot() });
         } else if (event.message.role === "assistant") transcript.startAssistant();
         break;
       case "message_update":
@@ -3659,7 +3673,7 @@ export class AgentHost {
       if (model) {
         await session.setModel(model);
         this.refreshStatus();
-        emit({ type: "snapshot", snapshot: this.snapshot() });
+        emit({ type: "snapshot", snapshot: this.settingsSnapshot() });
       }
     }
     this.changed(scopes, apply);
@@ -3787,7 +3801,7 @@ export class AgentHost {
     }
     await session.setModel(model);
     this.refreshStatus();
-    emit({ type: "snapshot", snapshot: this.snapshot() });
+    emit({ type: "snapshot", snapshot: this.settingsSnapshot() });
   }
 
   /** Thinking of the open conversation; pi clamps the level to what its model offers. */
@@ -3809,7 +3823,7 @@ export class AgentHost {
       });
       this.changed(["settings"], {});
     }
-    emit({ type: "snapshot", snapshot: this.snapshot() });
+    emit({ type: "snapshot", snapshot: this.settingsSnapshot() });
   }
 
   /** Yolo for the open conversation only, unless Settings already forces it on everywhere. */
@@ -3818,7 +3832,7 @@ export class AgentHost {
     const settings = this.requireServices().settings.get();
     if (settings.yoloMode) throw new Error(t("settings.yoloForced"));
     conversation.yolo = active;
-    emit({ type: "snapshot", snapshot: this.snapshot() });
+    emit({ type: "snapshot", snapshot: this.settingsSnapshot() });
   }
 
   // -------------------------------------------------------------------------------------------

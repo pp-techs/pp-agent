@@ -66,6 +66,8 @@ export function createNotifier(options: {
         case "snapshot":
           sessionPath = event.snapshot.sessionPath;
           status = event.snapshot.status;
+          // A snapshot of settings has no messages: the chat, and its title, are as they were.
+          if (event.snapshot.messagesUnchanged) return;
           title = null;
           for (const message of event.snapshot.messages) {
             if (message.role !== "user") continue;

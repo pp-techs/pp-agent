@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { askAuthPrompt, withdrawAuthPrompt } from "@/components/modals/auth-prompt-modal";
 import { i18n } from "@/lib/i18n";
+import { appendGap } from "@/lib/append-text";
 import { queryKeys } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
 import { focusComposer } from "@/lib/slash-commands";
@@ -55,18 +56,43 @@ export function useAgentConnection(bridge: DesktopBridge) {
   React.useEffect(() => {
     const { apply } = useChatStore.getState();
     const invalidate = (queryKey: QueryKey) => void queryClient.invalidateQueries({ queryKey });
+    let resyncing = false;
+    // Text was added to something this window never got: a fresh snapshot puts the chat right,
+    // instead of leaving it as it is until the reply's final update.
+    const resync = () => {
+      if (resyncing) return;
+      resyncing = true;
+      bridge.agent
+        .command({ type: "get_snapshot" })
+        .then((snapshot) => apply({ type: "snapshot", snapshot }))
+        .catch(() => undefined)
+        .finally(() => {
+          resyncing = false;
+        });
+    };
     const unsubscribe = bridge.agent.onEvent((event) => {
       switch (event.type) {
+        case "snapshot":
+          // Settings changed in a chat this window does not have open: get the whole chat.
+          if (
+            event.snapshot.messagesUnchanged &&
+            event.snapshot.sessionPath !== useChatStore.getState().sessionPath
+          ) {
+            resync();
+            return;
+          }
+          invalidate(queryKeys.sessions);
+          // A new session reconnects MCP servers, so the tool list may change.
+          invalidate(queryKeys.tools);
+          break;
+        case "message_append":
+          if (appendGap(useChatStore.getState().messages, event)) resync();
+          break;
         case "error":
           toast.error(event.message);
           break;
         case "sessions_changed":
           invalidate(queryKeys.sessions);
-          break;
-        case "snapshot":
-          invalidate(queryKeys.sessions);
-          // A new session reconnects MCP servers, so the tool list may change.
-          invalidate(queryKeys.tools);
           break;
         case "settings_changed":
           for (const scope of event.scopes) SCOPE_KEYS[scope].forEach(invalidate);
