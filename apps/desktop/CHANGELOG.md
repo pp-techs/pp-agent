@@ -1,5 +1,16 @@
 # @workspace/desktop
 
+## 0.34.0
+
+### Minor Changes
+
+- 628d685: Settings › Connectors has **GitHub**. GitHub registers no OAuth clients, so Connect asks for a personal access token (with a link to where to create one) in a masked field and saves it as the `Authorization` header of GitHub's remote MCP server; a second account is added with its own token. The token stays in `mcp.json` on this computer and is never sent to a phone. Zoho Mail was already covered by the Email card.
+
+### Patch Changes
+
+- 628d685: The app is quicker and lighter. The window's first screen loads about 37% less JavaScript (the Markdown renderer now loads right after the first paint) and is ready about 15 ms sooner (about 30% sooner on a throttled phone). The agent starts about 130 ms faster, because the email and Office document libraries load the first time a mailbox or document is opened. A streaming reply now sends only the text it just added instead of the whole answer at every update, which saves a lot of data for the phone app and Remote access on long answers. Changing a chat's setting (model, thinking level, yolo mode, goal) no longer redraws every message in the chat, and no longer sends the whole conversation, screenshots included, to every connected device. A device that misses part of a streaming reply now fetches the chat again instead of showing stale text. Closing Remote access (or quitting) now finishes saving when each device was last seen, so that write is no longer cut off. The conversation list reads only the new lines of the open chat's file after each message instead of the whole file again.
+- 628d685: Scheduled tasks are sturdier. A one-time task whose moment passed more than a day ago is switched off (or removed, if it was set to be removed) instead of rewriting settings every minute, and shows **Finished** in Settings. A run that hangs is given up on after the time limit so it no longer blocks the other tasks. "Delete after run" only applies to one-time tasks and keeps a task whose run failed. "Stay silent when empty" now tells the model to reply `[SILENT]` and also treats an empty answer as nothing to report. Tasks created from a Telegram or Zalo chat remember that chat. A result that could not be sent at first updates the task's last run once it goes out. The agent can set a one-time task with `afterMinutes` or a local time, and the interval limits in its tool now match the real ones.
+
 ## 0.33.0
 
 ### Minor Changes
