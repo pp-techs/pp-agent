@@ -292,6 +292,13 @@
       "label": "Account name",
       "placeholder": "Work, Personal, name@example.com"
     },
+    "token": {
+      "title": "Connect {{name}}",
+      "description": "{{name}} has no browser sign-in. Create a personal access token at {{url}} and paste it here; it stays on this computer.",
+      "label": "Access token",
+      "placeholder": "••••••••"
+    },
+    "tokenRefused": "The token was refused. Check that it has not expired or been revoked, and that it can reach the repositories you want. You can replace it from the menu › Edit.",
     "addHub": "Add hub",
     "address": {
       "title": "{{name}} address",
@@ -305,6 +312,9 @@
       "less": "Show less"
     },
     "items": {
+      "github": {
+        "description": "Search code, read and update issues and pull requests, and look into repositories on GitHub."
+      },
       "gmail": { "description": "Search and read your email, and write drafts for you to send." },
       "calendar": { "description": "See your events and when you are free." },
       "drive": { "description": "Find and read files in Google Drive, and save new ones." },

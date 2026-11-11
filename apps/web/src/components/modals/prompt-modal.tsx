@@ -20,6 +20,8 @@ type PromptModalProps = {
   /** Explains what to type, under the title. */
   description?: string;
   placeholder?: string;
+  /** Hide what is typed (a token). */
+  secret?: boolean;
 };
 
 function PromptForm({
@@ -29,6 +31,7 @@ function PromptForm({
   confirmLabel,
   description,
   placeholder,
+  secret,
   onDone,
 }: PromptModalProps & { onDone: (value: string | null) => void }) {
   const { t } = useTranslation("common");
@@ -50,6 +53,8 @@ function PromptForm({
         value={value}
         onChange={(event) => setValue(event.target.value)}
         placeholder={placeholder}
+        type={secret ? "password" : "text"}
+        autoComplete="off"
         autoFocus
       />
       <DialogFooter>

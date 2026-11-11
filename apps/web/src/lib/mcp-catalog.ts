@@ -1,6 +1,7 @@
 import type { McpOAuthClient, McpServerSettings } from "@workspace/shared";
 
 import atlassian from "../assets/connectors/atlassian.svg";
+import github from "../assets/connectors/github.svg";
 import gmail from "../assets/connectors/gmail.svg";
 import googleCalendar from "../assets/connectors/google-calendar.svg";
 import googleDocs from "../assets/connectors/google-docs.svg";
@@ -15,12 +16,17 @@ import supabase from "../assets/connectors/supabase.svg";
 import upstash from "../assets/connectors/upstash.svg";
 
 /**
- * What a person does to connect, after pressing Connect. `oauth`, `address` and `folder` can be
- * repeated (a second account, a second hub, a second folder); `open` is one server.
+ * What a person does to connect, after pressing Connect. `oauth`, `token`, `address` and `folder`
+ * can be repeated (a second account, a second hub, a second folder); `open` is one server.
  */
 export type McpPresetSetup =
   /** The server asks for a sign-in in the browser. */
   | "oauth"
+  /**
+   * A personal access token the person creates on the service and pastes. For servers that register
+   * no OAuth clients: it is sent as `Authorization: Bearer <token>`.
+   */
+  | "token"
   /** Nothing: the server is open. */
   | "open"
   /** An address the person types (their company's hub); the preset's path is appended to it. */
@@ -35,6 +41,7 @@ export type McpPresetConnection =
   | { transport: "stdio"; command: string; args: string[] };
 
 export type McpPresetId =
+  | "github"
   | "gmail"
   | "calendar"
   | "drive"
@@ -77,6 +84,8 @@ export interface McpPreset {
    * offline_access` even though the hub's tokens carry no scopes.
    */
   scope?: string;
+  /** `token` presets: the page where the person creates the token, shown when asking for it. */
+  tokenUrl?: string;
 }
 
 const GOOGLE = "https://www.googleapis.com/auth/";
@@ -84,6 +93,16 @@ const google = (...names: string[]) => names.map((name) => `${GOOGLE}${name}`);
 
 /** Logos are from https://thesvg.org (see `assets/connectors/README.md`). */
 export const MCP_PRESETS: readonly McpPreset[] = [
+  {
+    id: "github",
+    name: "GitHub",
+    logo: github,
+    setup: "token",
+    // GitHub's authorization server registers no OAuth clients, so the server is reached with a
+    // personal access token instead of a browser sign-in.
+    connection: { transport: "http", url: "https://api.githubcopilot.com/mcp/" },
+    tokenUrl: "https://github.com/settings/personal-access-tokens/new",
+  },
   {
     id: "gmail",
     name: "Gmail",
@@ -291,13 +310,15 @@ interface PresetServerInput {
   folder?: string;
   /** What an `address` preset asks for: the address as the person typed it. */
   address?: string;
+  /** What a `token` preset asks for: the personal access token. */
+  token?: string;
   /** The app's Google client; required for presets with `googleScopes`. */
   googleClient?: McpOAuthClient | null;
 }
 
 /** The server entry to save. */
 export function presetServer(preset: McpPreset, input: PresetServerInput): McpServerSettings {
-  const { name, description, account, folder = "", address = "", googleClient } = input;
+  const { name, description, account, folder = "", address = "", token, googleClient } = input;
   const base = {
     name,
     description,
@@ -321,6 +342,15 @@ export function presetServer(preset: McpPreset, input: PresetServerInput): McpSe
             ...(preset.scope ? { scope: preset.scope } : {}),
           }
         : undefined;
+    if (preset.setup === "token") {
+      if (!token?.trim()) throw new Error(`${preset.name} needs a token`);
+      return {
+        ...base,
+        transport: "http",
+        url,
+        headers: { Authorization: `Bearer ${token.trim()}` },
+      };
+    }
     return { ...base, transport: "http", url, ...(oauth ? { oauth } : {}) };
   }
   return {
