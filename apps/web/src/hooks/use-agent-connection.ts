@@ -7,6 +7,7 @@ import { askAuthPrompt, withdrawAuthPrompt } from "@/components/modals/auth-prom
 import { i18n } from "@/lib/i18n";
 import { appendGap } from "@/lib/append-text";
 import { queryKeys } from "@/lib/queries";
+import { createSnapshotResync } from "@/lib/snapshot-resync";
 import { useChatStore } from "@/stores/chat-store";
 import { focusComposer } from "@/lib/slash-commands";
 
@@ -56,20 +57,13 @@ export function useAgentConnection(bridge: DesktopBridge) {
   React.useEffect(() => {
     const { apply } = useChatStore.getState();
     const invalidate = (queryKey: QueryKey) => void queryClient.invalidateQueries({ queryKey });
-    let resyncing = false;
     // Text was added to something this window never got: a fresh snapshot puts the chat right,
     // instead of leaving it as it is until the reply's final update.
-    const resync = () => {
-      if (resyncing) return;
-      resyncing = true;
-      bridge.agent
-        .command({ type: "get_snapshot" })
-        .then((snapshot) => apply({ type: "snapshot", snapshot }))
-        .catch(() => undefined)
-        .finally(() => {
-          resyncing = false;
-        });
-    };
+    const snapshotResync = createSnapshotResync(
+      () => bridge.agent.command({ type: "get_snapshot" }),
+      (snapshot) => apply({ type: "snapshot", snapshot }),
+    );
+    const resync = snapshotResync.request;
     const unsubscribe = bridge.agent.onEvent((event) => {
       switch (event.type) {
         case "snapshot":
@@ -81,6 +75,7 @@ export function useAgentConnection(bridge: DesktopBridge) {
             resync();
             return;
           }
+          snapshotResync.received();
           invalidate(queryKeys.sessions);
           // A new session reconnects MCP servers, so the tool list may change.
           invalidate(queryKeys.tools);
