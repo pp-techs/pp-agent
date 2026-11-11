@@ -8,7 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [0.33.0] — 2026-11-11
 
-Settings › Connectors has **PP Hub**: enter your company's hub address (`hub.acme.vn`), and the app saves `<address>/mcp/` and signs in right away. Hubs authorize through Logto, which registers no OAuth clients, so the entry asks the sign-in to name the app with its Client ID Metadata Document, and to ask for `openid offline_access` — Logto always asks for consent and denies a request that names no scope, while the hub's own tokens still carry none. Every hub a person adds is its own server (`pp-hub`, `pp-hub-2`…), grouped on one card by the `connector` written into `mcp.json`; a server added by hand still shows as a custom card.
+Settings › Connectors has **PP Hub**: enter your company's hub address (`hub.acme.vn`), and the app saves `<address>/mcp/` and signs in right away. Hubs authorize through Logto, which registers no OAuth clients, so the entry asks the sign-in to name the app with its Client ID Metadata Document, and to ask for `openid offline_access` — Logto always asks for consent and denies a request that names no scope, while the hub's own tokens still carry none. Every hub a person adds is its own server (`pp-hub`, `pp-hub-2`…), grouped on one card by the `connector` written into `mcp.json`; a server added by hand still shows as a custom card. Connectors cards now list their first
+three accounts with **Show N more**, size to their content, and put the action as a square +
+button beside the name and description.
 
 ## [0.32.0] — 2026-11-10
 
