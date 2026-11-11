@@ -583,6 +583,22 @@ describe("RemoteServer", () => {
     expect((await command(base, token, { type: "get_snapshot" })).status).toBe(401);
   });
 
+  it("finishes saving when a device was last seen before it closes", async () => {
+    clock = Date.now();
+    const server = makeServer();
+    const base = await enabled(server);
+    const token = await pair(server, base);
+    // Far enough on that the request's last-seen time is written to disk, in the background.
+    const later = clock + 5 * 60_000;
+    clock = later;
+    expect((await command(base, token, { type: "get_snapshot" })).status).toBe(200);
+    await server.close();
+    const saved = JSON.parse(await readFile(join(dir, "remote.json"), "utf8")) as {
+      devices: { lastSeenAt: number }[];
+    };
+    expect(saved.devices[0]?.lastSeenAt).toBe(later);
+  });
+
   it("tells the window once remote.json is loaded", async () => {
     const server = makeServer();
     await server.start();

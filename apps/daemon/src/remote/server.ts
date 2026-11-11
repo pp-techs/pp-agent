@@ -232,6 +232,8 @@ export class RemoteServer implements RemoteAccessControl {
     if (this.sweepTimer) clearInterval(this.sweepTimer);
     this.sweepTimer = null;
     await this.serialize(() => this.stopListening());
+    // A device's last-seen time is saved in the background; let that write land before closing.
+    await this.store.settled();
   }
 
   /** Port the server listens on right now (useful when it was started on port 0 in tests). */

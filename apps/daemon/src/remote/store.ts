@@ -193,6 +193,11 @@ export class RemoteStore {
     this.save().catch(() => undefined);
   }
 
+  /** Resolves once every write started so far has finished, so a shutdown does not cut one off. */
+  settled(): Promise<void> {
+    return this.writing;
+  }
+
   /** Writes are queued, each one whole (temporary file, then rename). */
   private save(): Promise<void> {
     const next = this.writing.then(async () => {
