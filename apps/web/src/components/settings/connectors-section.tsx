@@ -284,7 +284,8 @@ function rowLabel(
 ) {
   if (preset.setup === "address") return connectorHost(settings.url);
   if (preset.setup === "folder") return settings.args?.at(-1);
-  if (preset.setup === "oauth") return settings.account ?? (several ? mainAccount : undefined);
+  if (preset.setup === "oauth" || preset.setup === "token")
+    return settings.account ?? (several ? mainAccount : undefined);
   return undefined;
 }
 
@@ -388,6 +389,7 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
     let folder = "";
     let address = "";
     let account: string | undefined;
+    let token: string | undefined;
     if (preset.setup === "folder") {
       const picked = await bridge.files.pickFolder().catch((error: Error) => {
         toast.error(error.message);
@@ -410,7 +412,7 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
         return;
       }
       address = typed;
-    } else if (preset.setup === "oauth" && existing.length > 0) {
+    } else if ((preset.setup === "oauth" || preset.setup === "token") && existing.length > 0) {
       // A second account needs a name, to tell it from the first in the cards and for the agent.
       const label = await PromptModal.show({
         title: t("connectors.addAccount.title", { name: preset.name }),
@@ -422,6 +424,19 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
       });
       if (!label) return;
       account = label;
+    }
+    if (preset.setup === "token") {
+      const typed = await PromptModal.show({
+        title: t("connectors.token.title", { name: preset.name }),
+        description: t("connectors.token.description", { name: preset.name, url: preset.tokenUrl }),
+        label: t("connectors.token.label"),
+        placeholder: t("connectors.token.placeholder"),
+        initialValue: "",
+        confirmLabel: t("connectors.connect"),
+        secret: true,
+      });
+      if (!typed) return;
+      token = typed;
     }
     const about = t(`connectors.items.${preset.id}.description`);
     const name = serverName(
@@ -435,6 +450,7 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
       account,
       folder,
       address,
+      token,
       googleClient: GOOGLE_CLIENT,
     });
     setConnecting(preset.id);
@@ -444,7 +460,7 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
     );
     if (added) {
       toast.success(t("mcpForm.toast.added", { name: preset.name }));
-      if (preset.setup !== "open" && preset.setup !== "folder") {
+      if (preset.setup === "oauth" || preset.setup === "address") {
         // A failed or cancelled sign-in leaves the server with its own Sign in button.
         await signIn.mutateAsync(name).then(
           () => toast.success(t("mcp.toast.signedIn", { name: preset.name })),
@@ -497,7 +513,13 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
             bridge={bridge}
             server={server}
             label={rowLabel(preset, server.settings, own.length > 1, t("connectors.mainAccount"))}
-            hint={preset.googleScopes ? t("connectors.googleRefused") : undefined}
+            hint={
+              preset.googleScopes
+                ? t("connectors.googleRefused")
+                : preset.setup === "token"
+                  ? t("connectors.tokenRefused")
+                  : undefined
+            }
             onEdit={edit(server)}
           />
         ))}

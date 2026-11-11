@@ -221,6 +221,7 @@
       "queued": "Đang chờ"
     },
     "paused": "Đã tạm dừng",
+    "finished": "Đã xong",
     "nextRun": "Lần chạy tiếp theo: {{when}}",
     "lastRun": {
       "never": "Chưa chạy lần nào",

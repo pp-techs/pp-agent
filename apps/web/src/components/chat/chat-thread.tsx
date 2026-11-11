@@ -81,15 +81,19 @@ export function ChatThread({ bridge }: { bridge: DesktopBridge }) {
 
   // A sent message keeps the key of its optimistic copy, and both sit in one list. The scroller
   // would otherwise take the swap for a new row and jump to the first message of the chat.
-  const rows = [
-    ...messages.map((message, index) => ({
-      key: echoKeys[message.id] ?? message.id,
-      message,
-      last: index === messages.length - 1,
-      sending: false,
-    })),
-    ...(pending ? [{ key: pending.id, message: pending, last: false, sending: true }] : []),
-  ];
+  // Rebuilt only when the messages change, not when the thread renders for another reason.
+  const rows = React.useMemo(
+    () => [
+      ...messages.map((message, index) => ({
+        key: echoKeys[message.id] ?? message.id,
+        message,
+        last: index === messages.length - 1,
+        sending: false,
+      })),
+      ...(pending ? [{ key: pending.id, message: pending, last: false, sending: true }] : []),
+    ],
+    [messages, pending, echoKeys],
+  );
 
   return (
     <ChatThreadProvider value={thread}>

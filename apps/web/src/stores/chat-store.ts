@@ -13,6 +13,9 @@ import type {
 } from "@workspace/shared";
 import { create } from "zustand";
 
+import { appendText } from "@/lib/append-text";
+import { reuseMessages } from "@/lib/reuse-messages";
+
 interface ChatState {
   status: AgentStatus;
   messages: ChatMessage[];
@@ -86,8 +89,15 @@ export const useChatStore = create<ChatState>()((set) => ({
           const { snapshot } = event;
           return {
             status: snapshot.status,
-            messages: snapshot.messages,
-            pending: null,
+            // The chat that is already open keeps the messages that did not change, so a snapshot
+            // sent for a setting does not draw the whole thread again.
+            messages: snapshot.messagesUnchanged
+              ? state.messages
+              : snapshot.sessionPath === state.sessionPath
+                ? reuseMessages(state.messages, snapshot.messages)
+                : snapshot.messages,
+            // A snapshot of settings leaves the message just sent where it is.
+            pending: snapshot.messagesUnchanged ? state.pending : null,
             echoKeys: snapshot.sessionPath === state.sessionPath ? state.echoKeys : {},
             approvals: Object.fromEntries(
               snapshot.approvals.map((request) => [request.requestId, request]),
@@ -125,6 +135,10 @@ export const useChatStore = create<ChatState>()((set) => ({
           const messages = state.messages.slice();
           messages[index] = event.message;
           return { messages, ...echo };
+        }
+        case "message_append": {
+          const messages = appendText(state.messages, event);
+          return messages ? { messages } : {};
         }
         case "approval_requested":
           return {

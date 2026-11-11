@@ -1,5 +1,11 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { ChatMessage, ChatPart, HelperProgress, ToolStatus } from "@workspace/shared";
+import type {
+  AgentEvent,
+  ChatMessage,
+  ChatPart,
+  HelperProgress,
+  ToolStatus,
+} from "@workspace/shared";
 import { splitAttachedFiles } from "./attachments.ts";
 import { parseSkillBlocks } from "./skill-chain.ts";
 import { t } from "./i18n.ts";
@@ -16,6 +22,9 @@ interface ToolState {
   /** Sub agent status of `delegate_task`, while it runs. */
   helpers?: HelperProgress[];
 }
+
+/** The `message_append` event: what a streamed reply added since the last update that went out. */
+export type MessageAppend = Extract<AgentEvent, { type: "message_append" }>;
 
 export type TranscriptItem = AgentMessage | { role: "compaction" };
 
@@ -46,7 +55,17 @@ export class Transcript {
   /** Set while rebuilding a saved session; the caller sends one snapshot instead of upserts. */
   private loading = false;
 
-  constructor(private readonly emit: (message: ChatMessage) => void) {}
+  /** Each message as it last went out, to send only what a streamed reply added since. */
+  private readonly sent = new Map<string, ChatMessage>();
+
+  /**
+   * `emit` sends a whole message. With `emitAppend`, a streamed update that only added text to the
+   * end of the last part goes out through it instead, as just the added text.
+   */
+  constructor(
+    private readonly emit: (message: ChatMessage) => void,
+    private readonly emitAppend?: (append: MessageAppend) => void,
+  ) {}
 
   list(): ChatMessage[] {
     return this.messages;
@@ -56,6 +75,7 @@ export class Transcript {
     this.cancelFlush();
     this.messages = [];
     this.byId.clear();
+    this.sent.clear();
     this.tools.clear();
     this.dirty.clear();
     this.currentAssistantId = null;
@@ -199,7 +219,7 @@ export class Transcript {
     if (!this.loading) {
       for (const id of this.dirty) {
         const message = this.byId.get(id);
-        if (message) this.emit(message);
+        if (message) this.send(message);
       }
     }
     this.dirty.clear();
@@ -257,6 +277,18 @@ export class Transcript {
     else this.flushTimer ??= setTimeout(() => this.flush(), FLUSH_INTERVAL_MS);
   }
 
+  /** Sends `message`: whole, or as the text a streamed reply added, or not at all if it is as it was. */
+  private send(message: ChatMessage): void {
+    const before = this.sent.get(message.id);
+    // A copy: `setEntryIds` changes the message in place, and the change must still show against
+    // what went out.
+    this.sent.set(message.id, { ...message });
+    const append = before ? appendedText(before, message) : undefined;
+    if (append === null) return;
+    if (append && this.emitAppend) this.emitAppend(append);
+    else this.emit(message);
+  }
+
   private cancelFlush(): void {
     clearTimeout(this.flushTimer ?? undefined);
     this.flushTimer = null;
@@ -266,6 +298,62 @@ export class Transcript {
     this.nextId += 1;
     return `m${this.nextId}`;
   }
+}
+
+/** Whether two parts are the same message content (reference equality for anything but text). */
+function samePart(a: ChatPart, b: ChatPart): boolean {
+  if (a === b) return true;
+  if (a.type !== b.type) return false;
+  if (a.type === "text" || a.type === "thinking") return a.text === (b as typeof a).text;
+  if (a.type === "tool") {
+    const other = b as typeof a;
+    return (
+      a.toolCallId === other.toolCallId &&
+      a.name === other.name &&
+      a.args === other.args &&
+      a.status === other.status &&
+      a.output === other.output &&
+      a.helpers === other.helpers
+    );
+  }
+  return false;
+}
+
+/**
+ * What `after` adds to `before`, when all it adds is text at the end of its last part: the
+ * `message_append` to send in place of the whole message. `null` when nothing differs (it need not
+ * be sent again), `undefined` when more than that changed.
+ */
+function appendedText(before: ChatMessage, after: ChatMessage): MessageAppend | null | undefined {
+  if (
+    before.role !== after.role ||
+    before.error !== after.error ||
+    before.errorDetail !== after.errorDetail ||
+    before.entryId !== after.entryId ||
+    before.parts.length !== after.parts.length
+  )
+    return undefined;
+  const last = after.parts.length - 1;
+  for (let index = 0; index < last; index += 1) {
+    const [old, current] = [before.parts[index], after.parts[index]];
+    if (!old || !current || !samePart(old, current)) return undefined;
+  }
+  const [old, current] = [before.parts[last], after.parts[last]];
+  if (!old || !current) return before.parts.length === 0 ? null : undefined;
+  if (samePart(old, current)) return null;
+  if (
+    (old.type !== "text" && old.type !== "thinking") ||
+    old.type !== current.type ||
+    !current.text.startsWith(old.text)
+  )
+    return undefined;
+  return {
+    type: "message_append",
+    id: after.id,
+    index: last,
+    offset: old.text.length,
+    text: current.text.slice(old.text.length),
+  };
 }
 
 function truncate(text: string): string {

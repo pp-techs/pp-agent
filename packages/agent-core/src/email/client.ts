@@ -1,9 +1,7 @@
 import type { EmailAccountSettings } from "@workspace/shared";
 import { t } from "../i18n.ts";
-import { ImapFlow } from "imapflow";
+import type { ImapFlow } from "imapflow";
 import type { AddressObject, ParsedMail } from "mailparser";
-import { simpleParser } from "mailparser";
-import { createTransport } from "nodemailer";
 
 /** One address in a `From`, `To` or `Cc` header. */
 export interface MailAddress {
@@ -149,7 +147,38 @@ function usersOf(account: EmailAccountSettings) {
   };
 }
 
-function transportOf(account: EmailAccountSettings, password: string) {
+/**
+ * The mail libraries cost about a hundred milliseconds to load and only mail tools use them, so
+ * they load with the first mailbox that opens, not when the app starts.
+ */
+interface MailLibraries {
+  ImapFlow: typeof ImapFlow;
+  simpleParser: typeof import("mailparser").simpleParser;
+  createTransport: typeof import("nodemailer").createTransport;
+}
+
+let libraries: Promise<MailLibraries> | undefined;
+function loadLibraries(): Promise<MailLibraries> {
+  libraries ??= Promise.all([import("imapflow"), import("mailparser"), import("nodemailer")]).then(
+    ([imap, parser, mailer]) => ({
+      ImapFlow: imap.ImapFlow,
+      simpleParser: parser.simpleParser,
+      createTransport: mailer.createTransport,
+    }),
+    (error: unknown) => {
+      // A failed load must not stick: the next mailbox tries again.
+      libraries = undefined;
+      throw error;
+    },
+  );
+  return libraries;
+}
+
+function transportOf(
+  account: EmailAccountSettings,
+  password: string,
+  { createTransport }: Pick<MailLibraries, "createTransport">,
+) {
   return createTransport({
     host: account.smtp.host,
     port: account.smtp.port,
@@ -173,9 +202,13 @@ class ImapSession implements MailSession {
   private readonly outgoing: ReturnType<typeof transportOf>;
   private readonly from: string;
 
-  constructor(account: EmailAccountSettings, password: string) {
+  constructor(
+    account: EmailAccountSettings,
+    password: string,
+    private readonly libs: MailLibraries,
+  ) {
     const imapUser = usersOf(account).imap;
-    this.client = new ImapFlow({
+    this.client = new libs.ImapFlow({
       host: account.imap.host,
       port: account.imap.port,
       secure: account.imap.secure,
@@ -187,7 +220,7 @@ class ImapSession implements MailSession {
       greetingTimeout: 20_000,
       socketTimeout: 120_000,
     });
-    this.outgoing = transportOf(account, password);
+    this.outgoing = transportOf(account, password, libs);
     this.from = account.displayName
       ? `${account.displayName} <${account.address}>`
       : account.address;
@@ -255,7 +288,7 @@ class ImapSession implements MailSession {
       const fetched = await this.client.fetchOne(String(uid), { source: true }, { uid: true });
       if (fetched === false || !fetched.source)
         throw new Error(`Message ${uid} is no longer in ${folder}.`);
-      return await simpleParser(fetched.source);
+      return await this.libs.simpleParser(fetched.source);
     } finally {
       lock.release();
     }
@@ -364,7 +397,7 @@ export async function openMailSession(
   account: EmailAccountSettings,
   password: string,
 ): Promise<MailSession> {
-  const session = new ImapSession(account, password);
+  const session = new ImapSession(account, password, await loadLibraries());
   try {
     return await session.open();
   } catch (error) {
@@ -381,7 +414,7 @@ export async function testMailAccount(
   account: EmailAccountSettings,
   password: string,
 ): Promise<void> {
-  const transport = transportOf(account, password);
+  const transport = transportOf(account, password, await loadLibraries());
   try {
     await transport.verify();
   } catch (error) {

@@ -5,9 +5,8 @@
  * output included) on each refresh.
  */
 import { createReadStream } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
+import { open, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { createInterface } from "node:readline";
 import { contentText } from "./history.ts";
 
 /** A saved session as the conversation list and the `sessions` tool show it. */
@@ -24,15 +23,40 @@ export interface SavedSession {
   firstMessage: string;
 }
 
+/**
+ * Where a scan of a session file stopped, so the next one can pick up there. Session files are
+ * only ever appended to, and the open conversation's file grows after every message: reading just
+ * the new lines keeps a long chat (screenshots and tool output included) from being read again.
+ */
+interface ScanState {
+  header: Record<string, unknown>;
+  name: string | undefined;
+  messageCount: number;
+  firstMessage: string;
+  lastActivity: number | undefined;
+  /** Bytes consumed, up to and including the last newline. */
+  offset: number;
+  /** The bytes just before `offset`: the file is appended to only if they are still there. */
+  guard: Buffer;
+}
+
+interface ScanResult {
+  info: SavedSession | null;
+  /** Kept for a file that is a session; `null` for anything else. */
+  state: ScanState | null;
+}
+
 interface CachedFile {
   mtimeMs: number;
   size: number;
   /** Shared by concurrent listings, so a changed file is read once. */
-  info: Promise<SavedSession | null>;
+  scan: Promise<ScanResult>;
 }
 
 /** Session files read at the same time. */
 const CONCURRENT_FILES = 6;
+/** Bytes before the resume point that must be unchanged for a scan to continue from it. */
+const GUARD_BYTES = 64;
 
 export class SessionInfoCache {
   readonly #files = new Map<string, CachedFile>();
@@ -62,14 +86,21 @@ export class SessionInfoCache {
     for (const path of this.#files.keys()) if (!present.has(path)) this.#files.delete(path);
     for (let index = 0; index < stale.length; index += CONCURRENT_FILES) {
       const batch = stale.slice(index, index + CONCURRENT_FILES).map((file) => {
-        const info = readSessionInfo(file.path, file.mtimeMs);
-        this.#files.set(file.path, { mtimeMs: file.mtimeMs, size: file.size, info });
-        return info;
+        const previous = this.#files.get(file.path);
+        // A file that grew continues from where the last scan stopped.
+        const scan = (async () => {
+          const prior = previous && file.size >= previous.size ? (await previous.scan).state : null;
+          return scanSession(file.path, file.mtimeMs, prior);
+        })();
+        this.#files.set(file.path, { mtimeMs: file.mtimeMs, size: file.size, scan });
+        return scan;
       });
       await Promise.all(batch);
     }
     const infos = await Promise.all(
-      [...present].map((path) => this.#files.get(path)?.info ?? Promise.resolve(null)),
+      [...present].map(
+        async (path) => (await this.#files.get(path)?.scan.catch(() => null))?.info ?? null,
+      ),
     );
     return infos
       .filter((info) => info !== null)
@@ -90,73 +121,88 @@ function parseObject(line: string): Record<string, unknown> | null {
   }
 }
 
-/**
- * Reads one session file the way Pi's session list does, but parses only the lines it needs:
- * tool results, the bulk of a file, are counted without being parsed. `null` for a file that is
- * not a session or cannot be read.
- */
-export async function readSessionInfo(path: string, mtimeMs: number): Promise<SavedSession | null> {
-  let header: Record<string, unknown> | null = null;
-  let name: string | undefined;
-  let messageCount = 0;
-  let firstMessage = "";
-  let lastActivity: number | undefined;
-  const lines = createInterface({
-    input: createReadStream(path, { encoding: "utf8" }),
-    crlfDelay: Infinity,
-  });
+/** Reads the bytes `[start, start + length)` of a file, fewer if it ends sooner. */
+async function readBytes(path: string, start: number, length: number): Promise<Buffer> {
+  const handle = await open(path, "r");
   try {
-    for await (const line of lines) {
-      if (!header) {
-        if (!line.trim()) continue;
-        const first = parseObject(line);
-        if (!first) continue;
-        if (first.type !== "session") return null;
-        header = first;
-        continue;
-      }
-      if (line.includes('"type":"session_info"')) {
-        const entry = parseObject(line);
-        if (entry?.type === "session_info") {
-          name =
-            typeof entry.name === "string" && entry.name.trim() ? entry.name.trim() : undefined;
-          continue;
-        }
-      }
-      if (!line.includes('"type":"message"')) continue;
-      // Pi writes `type` first: another entry kind only quotes a message somewhere inside.
-      if (line.startsWith('{"type":"') && !line.startsWith('{"type":"message"')) continue;
-      if (!line.includes('"role":"user"') && !line.includes('"role":"assistant"')) {
-        messageCount += 1;
-        continue;
-      }
-      const entry = parseObject(line);
-      if (entry?.type !== "message") continue;
-      messageCount += 1;
-      const message = asRecord(entry.message);
-      const role = message?.role;
-      if (!message || (role !== "user" && role !== "assistant")) continue;
-      const stamp =
-        typeof message.timestamp === "number"
-          ? message.timestamp
-          : typeof entry.timestamp === "string"
-            ? new Date(entry.timestamp).getTime()
-            : Number.NaN;
-      if (!Number.isNaN(stamp)) lastActivity = Math.max(lastActivity ?? 0, stamp);
-      if (firstMessage || role !== "user") continue;
-      firstMessage = contentText(message.content);
-    }
-  } catch {
-    return null;
+    const buffer = Buffer.alloc(length);
+    const { bytesRead } = await handle.read(buffer, 0, length, start);
+    return buffer.subarray(0, bytesRead);
   } finally {
-    lines.close();
+    await handle.close();
   }
-  if (!header) return null;
+}
+
+/** Whether the bytes before `prior.offset` are the ones the scan saw: the file was only appended to. */
+async function stillAppended(path: string, prior: ScanState): Promise<boolean> {
+  if (prior.guard.length === 0) return true;
+  const now = await readBytes(path, prior.offset - prior.guard.length, prior.guard.length).catch(
+    () => null,
+  );
+  return now !== null && now.equals(prior.guard);
+}
+
+/**
+ * Folds one line into the running totals the way Pi's session list reads a file, parsing only the
+ * lines it needs: tool results, the bulk of a file, are counted without being parsed. `false` for a
+ * file whose first line is not a session header.
+ */
+function applyLine(
+  state: Omit<ScanState, "header"> & { header: ScanState["header"] | null },
+  line: string,
+): boolean {
+  if (!state.header) {
+    if (!line.trim()) return true;
+    const first = parseObject(line);
+    if (!first) return true;
+    if (first.type !== "session") return false;
+    state.header = first;
+    return true;
+  }
+  if (line.includes('"type":"session_info"')) {
+    const entry = parseObject(line);
+    if (entry?.type === "session_info") {
+      state.name =
+        typeof entry.name === "string" && entry.name.trim() ? entry.name.trim() : undefined;
+      return true;
+    }
+  }
+  if (!line.includes('"type":"message"')) return true;
+  // Pi writes `type` first: another entry kind only quotes a message somewhere inside.
+  if (line.startsWith('{"type":"') && !line.startsWith('{"type":"message"')) return true;
+  if (!line.includes('"role":"user"') && !line.includes('"role":"assistant"')) {
+    state.messageCount += 1;
+    return true;
+  }
+  const entry = parseObject(line);
+  if (entry?.type !== "message") return true;
+  state.messageCount += 1;
+  const message = asRecord(entry.message);
+  const role = message?.role;
+  if (!message || (role !== "user" && role !== "assistant")) return true;
+  const stamp =
+    typeof message.timestamp === "number"
+      ? message.timestamp
+      : typeof entry.timestamp === "string"
+        ? new Date(entry.timestamp).getTime()
+        : Number.NaN;
+  if (!Number.isNaN(stamp)) state.lastActivity = Math.max(state.lastActivity ?? 0, stamp);
+  if (state.firstMessage || role !== "user") return true;
+  state.firstMessage = contentText(message.content);
+  return true;
+}
+
+function infoOf(
+  path: string,
+  mtimeMs: number,
+  state: Omit<ScanState, "header"> & { header: ScanState["header"] },
+): SavedSession {
+  const { header, lastActivity } = state;
   const created = typeof header.timestamp === "string" ? new Date(header.timestamp).getTime() : NaN;
   return {
     path,
     cwd: typeof header.cwd === "string" ? header.cwd : "",
-    name,
+    name: state.name,
     modified: new Date(
       lastActivity !== undefined && lastActivity > 0
         ? lastActivity
@@ -164,7 +210,72 @@ export async function readSessionInfo(path: string, mtimeMs: number): Promise<Sa
           ? mtimeMs
           : created,
     ),
-    messageCount,
-    firstMessage: firstMessage || "(no messages)",
+    messageCount: state.messageCount,
+    firstMessage: state.firstMessage || "(no messages)",
   };
+}
+
+/**
+ * Reads one session file, from where `prior` stopped when the file has only grown since. The
+ * result has no info for a file that is not a session or cannot be read.
+ */
+async function scanSession(
+  path: string,
+  mtimeMs: number,
+  prior: ScanState | null,
+): Promise<ScanResult> {
+  const resume = prior !== null && (await stillAppended(path, prior)) ? prior : null;
+  const state: Omit<ScanState, "header"> & { header: ScanState["header"] | null } = resume
+    ? { ...resume }
+    : {
+        header: null,
+        name: undefined,
+        messageCount: 0,
+        firstMessage: "",
+        lastActivity: undefined,
+        offset: 0,
+        guard: Buffer.alloc(0),
+      };
+  // The pieces of the line being read, joined once it is complete: a line that spans many chunks
+  // (a screenshot) is copied once, not again with every chunk.
+  let pieces: Buffer[] = [];
+  try {
+    for await (const chunk of createReadStream(path, {
+      start: state.offset,
+    }) as AsyncIterable<Buffer>) {
+      let from = 0;
+      for (let end = chunk.indexOf(10, from); end !== -1; end = chunk.indexOf(10, from)) {
+        pieces.push(chunk.subarray(from, end));
+        const raw = pieces.length === 1 ? pieces[0]! : Buffer.concat(pieces);
+        if (!applyLine(state, raw.toString("utf8").replace(/\r$/, "")))
+          return { info: null, state: null };
+        state.offset += raw.length + 1;
+        pieces = [];
+        from = end + 1;
+      }
+      if (from < chunk.length) pieces.push(chunk.subarray(from));
+    }
+  } catch {
+    return { info: null, state: null };
+  }
+  const carry = pieces.length > 1 ? Buffer.concat(pieces) : (pieces[0] ?? Buffer.alloc(0));
+  // The bytes before the resume point, which the next scan checks. Without them there is nothing to
+  // check a resume against, so this listing stands but the next one reads the file whole.
+  const guard = await readBytes(
+    path,
+    Math.max(0, state.offset - GUARD_BYTES),
+    Math.min(GUARD_BYTES, state.offset),
+  ).catch(() => null);
+  state.guard = guard ?? Buffer.alloc(0);
+  const { header } = state;
+  if (!header) return { info: null, state: null };
+  // The last line may have no newline yet (it is still being written): it counts for the list, but
+  // the next scan reads it again, whole.
+  let shown = { ...state, header };
+  if (carry.length > 0) {
+    const partial = { ...state };
+    if (applyLine(partial, carry.toString("utf8").replace(/\r$/, "")) && partial.header)
+      shown = { ...partial, header: partial.header };
+  }
+  return { info: infoOf(path, mtimeMs, shown), state: guard ? { ...state, header } : null };
 }

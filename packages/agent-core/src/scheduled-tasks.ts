@@ -150,7 +150,9 @@ export function validateTaskInput(
     ...(input.target ? { target: input.target } : {}),
     ...(input.delivery ? { delivery: input.delivery } : {}),
     ...(input.origin ? { origin: input.origin } : {}),
-    ...(input.deleteAfterRun ? { deleteAfterRun: true } : {}),
+    // Only a one-shot has a "last" run to end on; for anything else the flag would delete a
+    // recurring task after its first run.
+    ...(input.deleteAfterRun && schedule.schedule.kind === "once" ? { deleteAfterRun: true } : {}),
     ...(input.silentIfEmpty ? { silentIfEmpty: true } : {}),
   };
 }

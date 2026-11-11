@@ -197,7 +197,16 @@ export interface ResearchReport {
 
 export interface AgentSnapshot {
   status: AgentStatus;
+  /**
+   * The open conversation's messages. Empty when `messagesUnchanged` is set.
+   */
   messages: ChatMessage[];
+  /**
+   * Set on a snapshot sent because a setting of the open conversation changed (its model, thinking
+   * level, yolo mode or goal): the messages did not, so they are left out, and a listener that has
+   * this conversation keeps its own. A listener that does not asks for a full snapshot.
+   */
+  messagesUnchanged?: boolean;
   approvals: ApprovalRequest[];
   /** Questions of `ask_user` that wait for an answer. */
   questions: QuestionRequest[];
@@ -264,6 +273,13 @@ export type AgentEvent =
   | { type: "status"; status: AgentStatus }
   /** Insert or replace the message with this id. */
   | { type: "message"; message: ChatMessage }
+  /**
+   * More text of the text or thinking part `index` of the message `id`, while a reply streams: only
+   * what was added, so a long answer is not sent whole at every update. `text` starts at character
+   * `offset` of the part; a listener that already has some of it (from a snapshot) keeps its own.
+   * The message's final update is always a full `message`.
+   */
+  | { type: "message_append"; id: string; index: number; offset: number; text: string }
   | { type: "snapshot"; snapshot: AgentSnapshot }
   | { type: "approval_requested"; request: ApprovalRequest }
   | { type: "approval_resolved"; requestId: string }

@@ -289,6 +289,13 @@
       "label": "Tên tài khoản",
       "placeholder": "Công việc, Cá nhân, ten@example.com"
     },
+    "token": {
+      "title": "Kết nối {{name}}",
+      "description": "{{name}} không có đăng nhập qua trình duyệt. Hãy tạo personal access token tại {{url}} rồi dán vào đây; token chỉ nằm trên máy này.",
+      "label": "Access token",
+      "placeholder": "••••••••"
+    },
+    "tokenRefused": "Token bị từ chối. Hãy kiểm tra token chưa hết hạn hay bị thu hồi, và có quyền với các repository bạn cần. Bạn có thể thay token từ menu › Sửa.",
     "addHub": "Thêm hub",
     "address": {
       "title": "Địa chỉ {{name}}",
@@ -302,6 +309,9 @@
       "less": "Thu gọn"
     },
     "items": {
+      "github": {
+        "description": "Tìm mã nguồn, đọc và cập nhật issue, pull request, xem các repository trên GitHub."
+      },
       "gmail": { "description": "Tìm và đọc email của bạn, và soạn sẵn thư nháp để bạn gửi." },
       "calendar": { "description": "Xem các sự kiện của bạn và khi nào bạn rảnh." },
       "drive": { "description": "Tìm và đọc tệp trong Google Drive, và lưu tệp mới." },

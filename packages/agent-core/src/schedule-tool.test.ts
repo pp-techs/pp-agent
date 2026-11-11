@@ -307,4 +307,40 @@ describe("prepareScheduleArguments", () => {
       silentIfEmpty: false,
     });
   });
+
+  test("afterMinutes becomes an absolute time", () => {
+    expect(prepareScheduleArguments({ when: { kind: "once", afterMinutes: "30" } }, NOW)).toEqual({
+      when: { kind: "once", at: NOW + 30 * 60_000 },
+    });
+  });
+
+  test("a local date-time and a bare date are read in local time", () => {
+    const local = prepareScheduleArguments({
+      when: { kind: "once", at: "2026-11-11T21:00" },
+    }) as { when: { at: number } };
+    expect(local.when.at).toBe(new Date(2026, 10, 11, 21, 0).getTime());
+    const dateOnly = prepareScheduleArguments({
+      when: { kind: "once", at: "2026-11-11" },
+    }) as { when: { at: number } };
+    expect(dateOnly.when.at).toBe(new Date(2026, 10, 11).getTime());
+  });
+});
+
+describe("deleteAfterRun", () => {
+  const input: SaveScheduledTaskInput = {
+    name: "n",
+    prompt: "p",
+    agentId: "",
+    workspaceId: "",
+    enabled: true,
+    deleteAfterRun: true,
+    schedule: { kind: "daily", time: "09:00" },
+  };
+
+  test("is kept for a one-shot and dropped for a recurring task", () => {
+    expect(validateTaskInput({ ...input, schedule: { kind: "once", at: NOW } }, [])).toMatchObject({
+      deleteAfterRun: true,
+    });
+    expect(validateTaskInput(input, [])).not.toHaveProperty("deleteAfterRun");
+  });
 });

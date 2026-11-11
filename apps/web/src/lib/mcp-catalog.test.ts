@@ -158,4 +158,27 @@ describe("MCP catalog", () => {
     // Added by hand under Settings › MCP: no connector was written, so nothing claims it.
     expect(matchesPreset(ppHub, { ...work, connector: undefined })).toBe(false);
   });
+
+  test("a token preset is offered without a Google client and sends the token as a bearer header", () => {
+    expect(availablePresets(null).map((item) => item.id)).toContain("github");
+    const github = preset("github");
+    expect(github.setup).toBe("token");
+    const server = presetServer(github, {
+      name: "github",
+      description: "Code",
+      token: "  github_pat_abc  ",
+    });
+    expect(server).toMatchObject({
+      transport: "http",
+      url: "https://api.githubcopilot.com/mcp/",
+      connector: "github",
+      headers: { Authorization: "Bearer github_pat_abc" },
+    });
+    // An Authorization header is what tells Settings not to offer an OAuth sign-in.
+    expect(server.oauth).toBeUndefined();
+    expect(() => presetServer(github, { name: "github", description: "" })).toThrow();
+    expect(() => presetServer(github, { name: "github", description: "", token: " " })).toThrow();
+    expect(matchesPreset(github, server)).toBe(true);
+    expect(matchesPreset(preset("notion"), server)).toBe(false);
+  });
 });

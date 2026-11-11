@@ -223,6 +223,7 @@
       "queued": "Waiting"
     },
     "paused": "Paused",
+    "finished": "Finished",
     "nextRun": "Next run: {{when}}",
     "lastRun": {
       "never": "Not run yet",

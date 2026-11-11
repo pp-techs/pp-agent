@@ -110,7 +110,6 @@ export default defineConfig(({ mode }) => ({
         codeSplitting: {
           groups: [
             { name: "react", test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/ },
-            { name: "streamdown", test: /[\\/]node_modules[\\/]streamdown[\\/]/ },
           ],
         },
       },

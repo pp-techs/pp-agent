@@ -12,6 +12,7 @@ import { App } from "./App.tsx";
 import { AppUiLabels } from "@/components/ui-labels-provider.tsx";
 import { LanguageSync } from "@/components/language-sync.tsx";
 import { ThemeProvider, useTheme } from "@/components/theme-provider.tsx";
+import { preloadMarkdown } from "@/components/markdown.tsx";
 import { i18n } from "@/lib/i18n.ts";
 import { isNativeApp, setUpNativeKeyboard } from "@/lib/native.ts";
 
@@ -45,3 +46,7 @@ createRoot(document.getElementById("root")!).render(
     </QueryClientProvider>
   </StrictMode>,
 );
+
+// Once the first screen is drawn, fetch the renderer that messages need.
+if ("requestIdleCallback" in window) requestIdleCallback(preloadMarkdown);
+else setTimeout(preloadMarkdown, 200);
