@@ -1,0 +1,310 @@
+@import '@fontsource-variable/geist';
+
+/* PP Agent documentation theme: same ink, mist, and sky palette as the marketing site. */
+:root {
+  --sl-font: 'Geist Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --sl-font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  --sl-color-accent-low: #dceffb;
+  --sl-color-accent: #2e86be;
+  --sl-color-accent-high: #1f5f8f;
+  --sl-color-text-accent: #1f5f8f;
+
+  --sl-color-white: #0f1b26;
+  --sl-color-gray-1: #1c2b39;
+  --sl-color-gray-2: #35485a;
+  --sl-color-gray-3: #5b6b7a;
+  --sl-color-gray-4: #8a99a8;
+  --sl-color-gray-5: #d7e1e9;
+  --sl-color-gray-6: #eef4f8;
+  --sl-color-black: #ffffff;
+
+  --sl-color-bg: #ffffff;
+  --sl-color-bg-nav: rgb(255 255 255 / 88%);
+  --sl-color-bg-sidebar: #fbfdff;
+  --sl-color-bg-inline-code: #eaf3fa;
+  --sl-color-bg-accent: #1f5f8f;
+  --sl-color-hairline: #e5edf4;
+  --sl-color-hairline-light: #d6e2ec;
+
+  --sl-nav-height: 4rem;
+  --sl-sidebar-width: 19rem;
+  --sl-content-width: 47rem;
+  --sl-line-height: 1.7;
+}
+
+:root[data-theme='dark'] {
+  --sl-color-accent-low: #103a54;
+  --sl-color-accent: #43a0dc;
+  --sl-color-accent-high: #bfe2f7;
+  --sl-color-text-accent: #7cc4ec;
+
+  --sl-color-white: #f2f7fb;
+  --sl-color-gray-1: #e3edf5;
+  --sl-color-gray-2: #aabac8;
+  --sl-color-gray-3: #7e919f;
+  --sl-color-gray-4: #526574;
+  --sl-color-gray-5: #263645;
+  --sl-color-gray-6: #16222d;
+  --sl-color-black: #0b141d;
+
+  --sl-color-bg: #0b141d;
+  --sl-color-bg-nav: rgb(11 20 29 / 88%);
+  --sl-color-bg-sidebar: #0b141d;
+  --sl-color-bg-inline-code: #14232f;
+  --sl-color-bg-accent: #bfe2f7;
+  --sl-color-hairline: #1c2a36;
+  --sl-color-hairline-light: #263645;
+}
+
+/* Header */
+header.header {
+  border-block-end: 1px solid var(--sl-color-hairline);
+  background-color: var(--sl-color-bg-nav);
+  backdrop-filter: blur(14px) saturate(130%);
+}
+
+.site-title {
+  letter-spacing: -0.02em;
+}
+
+.site-title img {
+  height: 2.4rem;
+}
+
+button[data-open-modal] {
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 10px;
+  background-color: var(--sl-color-bg-sidebar);
+}
+
+button[data-open-modal]:hover {
+  border-color: var(--sl-color-hairline-light);
+  background-color: var(--sl-color-bg-inline-code);
+}
+
+/* Sidebar */
+#starlight__sidebar .sidebar-content {
+  border-inline-end: 1px solid var(--sl-color-hairline);
+}
+
+.sidebar-content a.large {
+  margin-inline: -0.55rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  color: var(--sl-color-text);
+  text-decoration: none;
+}
+
+.sidebar-content a.large:hover {
+  background-color: var(--sl-color-bg-inline-code);
+  color: var(--sl-color-white);
+}
+
+#starlight__sidebar .sidebar-content a[aria-current='page'] {
+  margin-inline: -0.55rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  background-color: var(--sl-color-accent-low) !important;
+  color: var(--sl-color-accent-high) !important;
+  font-weight: 550;
+}
+
+.group-label {
+  color: var(--sl-color-gray-3);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Right-hand table of contents */
+starlight-toc nav > h2,
+#starlight__on-this-page--mobile {
+  color: var(--sl-color-gray-3);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+starlight-toc a {
+  color: var(--sl-color-gray-3);
+}
+
+starlight-toc a:hover,
+starlight-toc a[aria-current='true'] {
+  color: var(--sl-color-text-accent);
+}
+
+/* Hero on the documentation landing page */
+.hero {
+  margin-block: 1.5rem 2.5rem;
+  padding: clamp(1.75rem, 4vw, 3rem);
+  overflow: hidden;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 18px;
+  background:
+    radial-gradient(120% 150% at 0% 0%, var(--sl-color-accent-low), transparent 58%),
+    var(--sl-color-bg-sidebar);
+}
+
+.hero .copy h1 {
+  font-size: clamp(2rem, 4.2vw, 3.1rem);
+  letter-spacing: -0.035em;
+}
+
+.hero .tagline {
+  max-width: 42rem;
+  color: var(--sl-color-text);
+  font-size: 1.06rem;
+  line-height: 1.65;
+}
+
+.hero .actions {
+  margin-block-start: 1.5rem;
+}
+
+.hero .sl-link-button {
+  border-radius: 10px;
+}
+
+.hero .sl-link-button.primary {
+  border-color: transparent;
+  background-color: var(--sl-color-accent-high);
+  color: var(--sl-color-bg);
+}
+
+.hero .sl-link-button.primary:hover {
+  background-color: var(--sl-color-accent);
+}
+
+/* Code blocks */
+.expressive-code .frame {
+  overflow: hidden;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 12px;
+}
+
+.expressive-code .frame > .copy {
+  position: absolute !important;
+  inset-block-start: 0.45rem;
+  inset-inline-end: 0.45rem;
+  width: auto;
+  height: auto;
+}
+
+/* Content */
+[data-page-title] {
+  letter-spacing: -0.03em;
+}
+
+.sl-markdown-content {
+  font-size: 1rem;
+}
+
+.sl-markdown-content :is(h2, h3, h4) {
+  letter-spacing: -0.018em;
+}
+
+.sl-markdown-content a {
+  color: var(--sl-color-text-accent);
+  text-decoration-color: color-mix(in oklab, var(--sl-color-accent) 40%, transparent);
+  text-underline-offset: 0.18em;
+}
+
+.sl-markdown-content a:hover {
+  text-decoration-color: currentColor;
+}
+
+.sl-markdown-content :not(pre) > code {
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 5px;
+  background-color: var(--sl-color-bg-inline-code);
+  padding: 0.1em 0.35em;
+  font-size: 0.875em;
+}
+
+.sl-markdown-content table {
+  display: table;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 12px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.92rem;
+}
+
+.sl-markdown-content :is(th, td) {
+  border-block-end: 1px solid var(--sl-color-hairline);
+  padding: 0.7rem 0.9rem;
+}
+
+.sl-markdown-content th {
+  background-color: var(--sl-color-bg-inline-code);
+  color: var(--sl-color-white);
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.sl-markdown-content tr:last-child td {
+  border-block-end: 0;
+}
+
+.sl-markdown-content img {
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 10px;
+}
+
+.starlight-aside {
+  border-radius: 10px;
+}
+
+/* Cards on the documentation landing page */
+.card,
+.card:nth-child(n) {
+  --sl-card-border: var(--sl-color-accent);
+  --sl-card-bg: var(--sl-color-accent-low);
+  border-color: var(--sl-color-hairline);
+  border-radius: 14px;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s,
+    transform 0.2s;
+}
+
+.card:hover {
+  border-color: var(--sl-color-accent);
+  box-shadow: var(--sl-shadow-md);
+  transform: translateY(-2px);
+}
+
+.card .icon {
+  border-radius: 8px;
+  color: var(--sl-color-accent-high);
+}
+
+/* Pagination and footer links */
+.pagination-links a {
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+}
+
+.pagination-links a:hover {
+  border-color: var(--sl-color-accent);
+  background-color: var(--sl-color-bg-inline-code);
+}
+
+@media (min-width: 50rem) {
+  .right-sidebar-panel {
+    border-inline-start: 1px solid var(--sl-color-hairline);
+  }
+}
+
+/* The bundled Vietnamese labels need more room than Starlight's default select width. */
+label[style*='--sl-select-width'] {
+  --sl-select-width: 8rem !important;
+}

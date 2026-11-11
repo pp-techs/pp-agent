@@ -16,6 +16,7 @@ export default defineConfig({
       "apps/mobile/ios/**",
       "apps/mobile/android/**",
       "apps/mobile/www/**",
+      "apps/website/**",
     ],
   },
   lint: {
@@ -30,6 +31,7 @@ export default defineConfig({
       "apps/mobile/ios/**",
       "apps/mobile/android/**",
       "apps/mobile/www/**",
+      "apps/website/**",
     ],
     overrides: [
       {

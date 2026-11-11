@@ -16,8 +16,13 @@ allowBuilds:
   node-pty: true
   protobufjs: false
   tesseract.js: false
+  esbuild: true
+  sharp: true
+  workerd: true
 
 catalog:
+  "@astrojs/sitemap": ^3.7.4
+  "@astrojs/starlight": ^0.42.10
   "@base-ui/react": ^1.9.0
   "@buiducnhat/better-modal": ^1.0.0
   "@capacitor/android": ^8.6.0
@@ -77,8 +82,11 @@ catalog:
   zustand: ^5.0.16
   "@iconify-json/vscode-icons": ^1.2.96
   "@iconify/utils": ^3.1.7
+  astro: 7.4.8
   chart.js: ^4.6.1
   pele: ^1.13.0
+  sharp: ^0.35.5
+  wrangler: 4.159.0
 overrides:
   vite@*: "catalog:"
   # Security fixes the dependents' ranges do not pick up yet; each stays on its own major line.

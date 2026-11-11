@@ -1,0 +1,356 @@
+---
+import { Image } from 'astro:assets';
+import Icon from './Icon.astro';
+import logo from '../assets/logo-horizontal.svg';
+import logoOnDark from '../assets/logo-horizontal-on-dark.svg';
+import screenshot from '../assets/screenshot.png';
+import { landing, type LandingLang } from '../i18n/landing';
+import '../styles/landing.css';
+
+interface Props {
+  lang: LandingLang;
+}
+
+const { lang } = Astro.props;
+const t = landing[lang];
+
+const site = 'https://ppagent.monback.app';
+const releases = 'https://github.com/pp-techs/pp-agent/releases/latest';
+const repository = 'https://github.com/pp-techs/pp-agent';
+const canonical = lang === 'vi' ? `${site}/vi/` : `${site}/`;
+const homeHref = lang === 'vi' ? '/vi/' : '/';
+const docsBase = lang === 'vi' ? '/vi/docs/' : '/docs/';
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'WebSite',
+      '@id': `${canonical}#website`,
+      name: 'PP Agent',
+      url: canonical,
+      description: t.meta.description,
+      inLanguage: lang,
+      publisher: { '@type': 'Organization', name: 'PP Techs', url: 'https://github.com/pp-techs' },
+    },
+    {
+      '@type': 'SoftwareApplication',
+      '@id': `${canonical}#software`,
+      name: 'PP Agent',
+      applicationCategory: 'BusinessApplication',
+      operatingSystem: 'macOS, Windows, Linux',
+      description: t.meta.description,
+      url: canonical,
+      downloadUrl: releases,
+      license: 'https://www.apache.org/licenses/LICENSE-2.0',
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+      publisher: { '@type': 'Organization', name: 'PP Techs', url: 'https://github.com/pp-techs' },
+    },
+  ],
+};
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{t.meta.title}</title>
+    <meta name="description" content={t.meta.description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="alternate" hreflang="en" href={`${site}/`} />
+    <link rel="alternate" hreflang="vi" href={`${site}/vi/`} />
+    <link rel="alternate" hreflang="x-default" href={`${site}/`} />
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f1b26" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="PP Agent" />
+    <meta property="og:title" content={t.meta.title} />
+    <meta property="og:description" content={t.meta.description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:locale" content={lang === 'vi' ? 'vi_VN' : 'en_US'} />
+    <meta property="og:locale:alternate" content={lang === 'vi' ? 'en_US' : 'vi_VN'} />
+    <meta property="og:image" content={`${site}/og.png`} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={t.meta.imageAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={t.meta.title} />
+    <meta name="twitter:description" content={t.meta.description} />
+    <meta name="twitter:image" content={`${site}/og.png`} />
+    <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+    <script is:inline>
+      (() => {
+        const stored = localStorage.getItem('starlight-theme');
+        const system = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        document.documentElement.dataset.theme =
+          stored === 'light' || stored === 'dark' ? stored : system;
+      })();
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">{t.nav.skip}</a>
+
+    <header class="site-header" id="top">
+      <div class="wrap header-inner">
+        <a class="brand" href={homeHref} aria-label="PP Agent">
+          <img class="on-light" src={logo.src} alt="PP Agent" width="152" height="40" />
+          <img class="on-dark" src={logoOnDark.src} alt="PP Agent" width="152" height="40" />
+        </a>
+
+        <nav class="site-nav" aria-label={t.nav.main}>
+          <a href="#features">{t.nav.features}</a>
+          <a href={docsBase}>{t.nav.documentation}</a>
+          <a href="#security">{t.nav.security}</a>
+          <a href="#install">{t.nav.install}</a>
+        </nav>
+
+        <div class="header-actions">
+          <a class="lang-link" href={t.altHref} hreflang={t.altHtmlLang} aria-label={t.altLabel}>
+            {t.altShort}
+          </a>
+          <a class="icon-button" href={repository} aria-label={t.nav.github} rel="noopener">
+            <Icon name="github" size={19} />
+          </a>
+          <button class="theme-toggle" type="button" aria-label={t.nav.theme}>
+            <span class="sun"><Icon name="sun" size={18} /></span>
+            <span class="moon"><Icon name="moon" size={18} /></span>
+          </button>
+          <a class="button small" href={releases}>{t.nav.download}</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="wrap hero-copy">
+          <p class="eyebrow"><span class="dot"></span> {t.hero.eyebrow}</p>
+          <h1>{t.hero.title} <span class="accent">{t.hero.accent}</span>{t.hero.tail}</h1>
+          <p class="lede">{t.hero.lede}</p>
+          <div class="cta-row">
+            <a class="button" href={releases}>
+              <Icon name="download" size={18} /> {t.hero.download}
+            </a>
+            <a class="button secondary" href={docsBase}>
+              {t.hero.docs} <Icon name="arrow-right" size={17} />
+            </a>
+          </div>
+          <p class="platforms">
+            <span>macOS</span>
+            <span>Windows</span>
+            <span>Linux</span>
+            <span>{t.hero.free}</span>
+          </p>
+        </div>
+
+        <div class="wrap hero-shot">
+          <div class="window">
+            <Image
+              src={screenshot}
+              alt={t.hero.imageAlt}
+              widths={[720, 1080, 1600]}
+              sizes="(max-width: 1168px) 100vw, 1120px"
+              formats={['webp']}
+              quality={82}
+              loading="eager"
+              fetchpriority="high"
+            />
+          </div>
+        </div>
+
+        <div class="wrap">
+          <div class="trust">
+            <div><Icon name="lock" size={18} /> {t.trust[0]}</div>
+            <div><Icon name="key" size={18} /> {t.trust[1]}</div>
+            <div><Icon name="check" size={18} /> {t.trust[2]}</div>
+            <div><Icon name="shield-check" size={18} /> {t.trust[3]}</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="wrap split">
+          <div>
+            <p class="kicker">{t.why.kicker}</p>
+            <h2>{t.why.title}</h2>
+          </div>
+          <div class="prose">
+            <p>{t.why.p1}</p>
+            <p>{t.why.p2}</p>
+            <p class="pullquote">{t.why.pullquote}</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section soft" id="features">
+        <div class="wrap">
+          <div class="section-head center">
+            <p class="kicker">{t.features.kicker}</p>
+            <h2>{t.features.title}</h2>
+            <p>{t.features.description}</p>
+          </div>
+
+          <div class="feature-grid">
+            {t.features.items.map((feature) => (
+              <article class="feature">
+                <span class="feature-icon"><Icon name={feature.icon} size={21} /></span>
+                <h3>{feature.title}</h3>
+                <p>{feature.body}</p>
+              </article>
+            ))}
+          </div>
+
+          <div class="more-grid">
+            {t.more.map((item) => (
+              <div class="more-item">
+                <Icon name={item.icon} size={17} />
+                <span><strong>{item.title}</strong>{item.body}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="how-it-works">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="kicker">{t.steps.kicker}</p>
+            <h2>{t.steps.title}</h2>
+            <p>{t.steps.description}</p>
+          </div>
+
+          <div class="steps">
+            {t.steps.items.map((step) => (
+              <article class="step">
+                <h3>{step.title}</h3>
+                <p>{step.body}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section class="section security" id="security">
+        <div class="wrap">
+          <div>
+            <p class="kicker">{t.security.kicker}</p>
+            <h2>{t.security.title}</h2>
+            <p>{t.security.intro}</p>
+          </div>
+          <ul>
+            {t.security.items.map((item) => (
+              <li>
+                <Icon name={item.icon} size={19} />
+                <span><strong>{item.title}</strong> {item.body}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <section class="section" id="install">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="kicker">{t.install.kicker}</p>
+            <h2>{t.install.title}</h2>
+            <p>
+              {t.install.descBefore}
+              <a href={releases}><strong>{t.install.latest}</strong></a>{t.install.descAfter}
+            </p>
+          </div>
+
+          <table class="install-table">
+            <thead>
+              <tr><th>{t.install.system}</th><th>{t.install.file}</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>{t.install.systems[0]}</td><td><code>pp-agent-&lt;version&gt;-mac-arm64.dmg</code></td></tr>
+              <tr><td>{t.install.systems[1]}</td><td><code>pp-agent-&lt;version&gt;-mac-x64.dmg</code></td></tr>
+              <tr><td>{t.install.systems[2]}</td><td><code>pp-agent-&lt;version&gt;-win-x64.exe</code></td></tr>
+              <tr><td>{t.install.systems[3]}</td><td><code>pp-agent-&lt;version&gt;-linux-x86_64.AppImage</code> or <code>…-amd64.deb</code></td></tr>
+            </tbody>
+          </table>
+
+          <p class="note">{t.install.note}</p>
+
+          <div class="cta-row" style="justify-content: flex-start; margin-block-start: 26px;">
+            <a class="button" href={releases}><Icon name="download" size={18} /> {t.install.releases}</a>
+            <a class="button secondary" href={`${docsBase}install/`}>{t.install.guide}</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="final-cta">
+        <div class="wrap">
+          <h2>{t.final.title}</h2>
+          <p>{t.final.body}</p>
+          <div class="cta-row">
+            <a class="button" href={releases}><Icon name="download" size={18} /> {t.final.download}</a>
+            <a class="button secondary" href={docsBase}>{t.final.docs} <Icon name="arrow-right" size={17} /></a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <div class="footer-grid">
+          <div class="footer-brand">
+            <img class="on-light" src={logo.src} alt="PP Agent" width="150" height="40" />
+            <img class="on-dark" src={logoOnDark.src} alt="PP Agent" width="150" height="40" />
+            <p>{t.footer.brand}</p>
+          </div>
+          <div class="footer-col">
+            <h3>{t.footer.product}</h3>
+            <ul>
+              <li><a href="#features">{t.footer.features}</a></li>
+              <li><a href={docsBase}>{t.footer.documentation}</a></li>
+              <li><a href="#install">{t.footer.install}</a></li>
+              <li><a href={`${repository}/blob/main/CHANGELOG.md`}>{t.footer.changelog}</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h3>{t.footer.resources}</h3>
+            <ul>
+              <li><a href={repository}>GitHub</a></li>
+              <li><a href={releases}>{t.footer.releases}</a></li>
+              <li><a href={`${docsBase}architecture/`}>{t.footer.architecture}</a></li>
+              <li><a href={`${repository}/blob/main/CONTRIBUTING.md`}>{t.footer.contributing}</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h3>{t.footer.trust}</h3>
+            <ul>
+              <li><a href={`${docsBase}security-and-privacy/`}>{t.footer.security}</a></li>
+              <li><a href={`${repository}/blob/main/SECURITY.md`}>{t.footer.report}</a></li>
+              <li><a href="https://www.apache.org/licenses/LICENSE-2.0">{t.footer.license}</a></li>
+              <li><a href={`${repository}/blob/main/NOTICE`}>{t.footer.notice}</a></li>
+            </ul>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <span>{t.footer.copyright}</span>
+          <span>{t.footer.disclaimer}</span>
+        </div>
+      </div>
+    </footer>
+
+    <script is:inline>
+      const toggle = document.querySelector('.theme-toggle');
+      toggle?.addEventListener('click', () => {
+        const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+        document.documentElement.dataset.theme = next;
+        localStorage.setItem('starlight-theme', next);
+      });
+
+      const header = document.querySelector('.site-header');
+      const onScroll = () => header?.classList.toggle('is-scrolled', window.scrollY > 8);
+      onScroll();
+      window.addEventListener('scroll', onScroll, { passive: true });
+    </script>
+  </body>
+</html>

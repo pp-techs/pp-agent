@@ -1,0 +1,378 @@
+export const landing = {
+  en: {
+    altHref: '/vi/',
+    altHtmlLang: 'vi',
+    altLabel: 'Tiếng Việt',
+    altShort: 'VI',
+    meta: {
+      title: 'PP Agent — an AI assistant for your whole team',
+      description:
+        'A friendly AI assistant for business teams. Ask about documents, prepare reports, look things up, and get help with company software — with your approval before anything changes.',
+      imageAlt: 'PP Agent, an AI assistant for business teams',
+    },
+    nav: {
+      main: 'Main',
+      features: 'Features',
+      documentation: 'Help',
+      security: 'Safety',
+      install: 'Download',
+      github: 'PP Agent on GitHub',
+      theme: 'Switch color theme',
+      download: 'Download',
+      skip: 'Skip to content',
+    },
+    hero: {
+      eyebrow: 'AI assistant for everyday work · Free',
+      title: 'An AI assistant for the',
+      accent: 'whole team',
+      tail: '.',
+      lede: 'Ask about your documents, prepare reports, look up information, and get help with company software. Nothing is saved or changed without asking you first.',
+      download: 'Download PP Agent',
+      docs: 'See how it works',
+      free: 'Free and open source · Apache-2.0',
+      imageAlt: 'PP Agent helping with a document while the workspace stays open beside the chat',
+    },
+    trust: [
+      'Works on your computer',
+      'No account needed',
+      'Reading is always free',
+      'Changes ask first',
+    ],
+    why: {
+      kicker: 'Why PP Agent',
+      title: 'Built for the work you already do.',
+      p1: 'PP Agent is not a tool for programmers. Your IT team sets it up once, and everyone else just talks to it in plain language.',
+      p2: 'Each person can have an assistant for their own work, with the right instructions, documents, and folder already in place.',
+      pullquote:
+        'Looking and reading are free. Saving a file, changing company data, or using your computer always asks you first.',
+    },
+    features: {
+      kicker: 'Features',
+      title: 'Help with the work that takes time.',
+      description:
+        'Documents, company software, research, and long jobs all live in one conversation — with one simple rule: nothing changes without your approval.',
+      items: [
+        {
+          icon: 'file-text',
+          title: 'Ask about your documents',
+          body: 'Drop in a PDF, Word file, spreadsheet, presentation, or photo and ask a question. PP Agent finds the answer and shows where it came from.',
+        },
+        {
+          icon: 'plug',
+          title: 'Work with company software',
+          body: 'Ask PP Agent to look things up in your CRM, help desk, or internal tools. Your IT team connects them once; each assistant only sees what it needs.',
+        },
+        {
+          icon: 'bot',
+          title: 'An assistant for each job',
+          body: 'Set up a finance assistant, a sales assistant, or one for HR. Each has its own instructions, tools, and folder.',
+        },
+        {
+          icon: 'flask',
+          title: 'Careful research',
+          body: 'Ask a question, approve the plan, and get a report with sources you can check.',
+        },
+        {
+          icon: 'layers',
+          title: 'Long jobs',
+          body: 'For work that takes many steps, PP Agent keeps going until it is done and shows a checklist as it works.',
+        },
+        {
+          icon: 'shield-check',
+          title: 'You approve changes',
+          body: 'Saving files, changing company data, and using your computer ask first. You can allow a tool once or every time.',
+        },
+      ],
+    },
+    more: [
+      { icon: 'key', title: 'Choose your AI', body: 'Use Anthropic, OpenAI, Google, or your company’s own AI service.' },
+      { icon: 'file-text', title: 'Office files', body: 'Create and edit Word, Excel, and PowerPoint files.' },
+      { icon: 'search', title: 'Web search', body: 'Search the web and read pages or documents from the internet.' },
+      { icon: 'terminal', title: 'Side panel', body: 'Keep files, a browser, and notes next to the conversation.' },
+      { icon: 'bot', title: 'Use your computer', body: 'PP Agent can look at other apps; clicking and typing ask first.' },
+      { icon: 'calendar', title: 'Scheduled tasks', body: 'Run a request daily, weekly, or at a set time.' },
+      { icon: 'layers', title: 'Memory and skills', body: 'PP Agent remembers notes and can follow your team’s checklists.' },
+      { icon: 'mic', title: 'Voice input', body: 'Dictate a message instead of typing it.' },
+      { icon: 'smartphone', title: 'Telegram and Zalo', body: 'Chat with your assistant and approve requests from your phone.' },
+      { icon: 'smartphone', title: 'Remote access', body: 'Use PP Agent from your phone or another computer on the same Wi-Fi.' },
+      { icon: 'file-text', title: 'Your history', body: 'Find, pin, and export past conversations.' },
+      { icon: 'lock', title: 'Private by design', body: 'Your conversations stay on your computer; no account needed.' },
+    ],
+    steps: {
+      kicker: 'Get started',
+      title: 'Set up once. Then just ask.',
+      description:
+        'No server to run and no account to create. PP Agent checks for updates and keeps working in the background when you close the window.',
+      items: [
+        {
+          title: 'Connect your AI',
+          body: 'Sign in to Anthropic, OpenAI, Google, or the AI service your company uses. Your IT team can do this for everyone.',
+        },
+        {
+          title: 'Set up your assistants',
+          body: 'Connect company software and create an assistant for each team. Each assistant only sees the tools and folders it needs.',
+        },
+        {
+          title: 'Start asking',
+          body: 'Pick an assistant, attach a document, and ask. Approve the changes you want; long jobs can keep going on their own.',
+        },
+      ],
+    },
+    security: {
+      kicker: 'Safety and privacy',
+      title: 'Safe enough for real work.',
+      intro:
+        'Your conversations and files stay on your computer. Only the information needed for an answer is sent to the AI service you choose.',
+      items: [
+        {
+          icon: 'shield-check',
+          title: 'Nothing changes silently.',
+          body: 'Saving files, changing company data, and using apps ask first. You choose what is allowed.',
+        },
+        {
+          icon: 'key',
+          title: 'Your information stays protected.',
+          body: 'Passwords and connection details are encrypted and kept in your computer’s secure storage.',
+        },
+        {
+          icon: 'lock',
+          title: 'You decide what is shared.',
+          body: 'Only the document or question needed for the answer leaves your computer.',
+        },
+        {
+          icon: 'terminal',
+          title: 'Safety settings stay on the computer.',
+          body: 'A phone cannot turn off the checks that protect your files and company data.',
+        },
+      ],
+    },
+    install: {
+      kicker: 'Download',
+      title: 'Download PP Agent',
+      descBefore: 'Choose the installer for your computer from the',
+      latest: 'latest release',
+      descAfter: '.',
+      system: 'Computer',
+      file: 'File',
+      systems: ['Mac with Apple chip', 'Mac with Intel chip', 'Windows', 'Linux'],
+      note: 'The official installer updates itself. If your computer warns about the app, ask your IT team or follow the installation guide.',
+      releases: 'Download the latest version',
+      guide: 'Installation guide',
+    },
+    final: {
+      title: 'Give your team an assistant that asks first.',
+      body: 'Bring your documents and the way your team already works. PP Agent handles the rest on your computer.',
+      download: 'Download PP Agent',
+      docs: 'Explore the help pages',
+    },
+    footer: {
+      brand:
+        'An AI assistant for business teams. Built by PP Techs and released under the Apache License 2.0.',
+      product: 'Product',
+      resources: 'Help',
+      trust: 'Trust',
+      features: 'Features',
+      documentation: 'Help pages',
+      install: 'Download',
+      changelog: 'What’s new',
+      releases: 'Releases',
+      architecture: 'How it works',
+      contributing: 'Contributing',
+      security: 'Safety and privacy',
+      report: 'Report a security issue',
+      license: 'Apache-2.0 license',
+      notice: 'Notice',
+      copyright: '© 2026 PP Techs.',
+      disclaimer: 'PP Agent is not affiliated with the AI services you connect.',
+    },
+  },
+  vi: {
+    altHref: '/',
+    altHtmlLang: 'en',
+    altLabel: 'English',
+    altShort: 'EN',
+    meta: {
+      title: 'PP Agent — trợ lý AI cho cả đội ngũ',
+      description:
+        'Trợ lý AI thân thiện cho đội ngũ. Hỏi về tài liệu, chuẩn bị báo cáo, tra cứu thông tin và làm việc với phần mềm công ty — mọi thay đổi đều được hỏi trước.',
+      imageAlt: 'PP Agent, trợ lý AI cho đội ngũ',
+    },
+    nav: {
+      main: 'Chính',
+      features: 'Tính năng',
+      documentation: 'Hướng dẫn',
+      security: 'An toàn',
+      install: 'Tải xuống',
+      github: 'PP Agent trên GitHub',
+      theme: 'Đổi giao diện sáng/tối',
+      download: 'Tải xuống',
+      skip: 'Tới nội dung',
+    },
+    hero: {
+      eyebrow: 'Trợ lý AI cho công việc hằng ngày · Miễn phí',
+      title: 'Trợ lý AI cho',
+      accent: 'cả đội ngũ',
+      tail: '.',
+      lede: 'Hỏi về tài liệu, chuẩn bị báo cáo, tra cứu thông tin và nhờ hỗ trợ với phần mềm công ty. Không tệp nào bị lưu hay dữ liệu nào bị thay đổi mà không hỏi bạn.',
+      download: 'Tải PP Agent',
+      docs: 'Xem cách hoạt động',
+      free: 'Miễn phí và mã nguồn mở · Apache-2.0',
+      imageAlt: 'PP Agent đang hỗ trợ đọc tài liệu, với không gian làm việc mở bên cạnh cuộc trò chuyện',
+    },
+    trust: [
+      'Chạy trên máy của bạn',
+      'Không cần tài khoản',
+      'Đọc và xem thì không hỏi',
+      'Thay đổi phải xác nhận',
+    ],
+    why: {
+      kicker: 'Vì sao chọn PP Agent',
+      title: 'Được làm cho công việc bạn vẫn làm mỗi ngày.',
+      p1: 'PP Agent không phải công cụ dành cho lập trình viên. Đội kỹ thuật thiết lập một lần, còn mọi người chỉ cần trò chuyện bằng ngôn ngữ thường ngày.',
+      p2: 'Mỗi người có thể có trợ lý riêng cho công việc của mình, với hướng dẫn, tài liệu và thư mục phù hợp đã được chuẩn bị sẵn.',
+      pullquote:
+        'Xem và đọc thì không cần hỏi. Lưu tệp, thay đổi dữ liệu công ty hoặc dùng máy tính luôn hỏi bạn trước.',
+    },
+    features: {
+      kicker: 'Tính năng',
+      title: 'Hỗ trợ những việc tốn thời gian.',
+      description:
+        'Tài liệu, phần mềm công ty, nghiên cứu và việc dài cùng nằm trong một cuộc trò chuyện — với một quy tắc đơn giản: không gì thay đổi nếu bạn chưa đồng ý.',
+      items: [
+        {
+          icon: 'file-text',
+          title: 'Hỏi về tài liệu',
+          body: 'Kéo thả PDF, Word, bảng tính, bài trình bày hoặc ảnh rồi đặt câu hỏi. PP Agent tìm câu trả lời và chỉ ra thông tin đó nằm ở đâu.',
+        },
+        {
+          icon: 'plug',
+          title: 'Làm việc với phần mềm công ty',
+          body: 'Nhờ PP Agent tra cứu trong CRM, hệ thống hỗ trợ khách hàng hoặc công cụ nội bộ. Đội kỹ thuật kết nối một lần; mỗi trợ lý chỉ thấy phần cần dùng.',
+        },
+        {
+          icon: 'bot',
+          title: 'Trợ lý cho từng công việc',
+          body: 'Tạo trợ lý cho tài chính, kinh doanh hoặc nhân sự. Mỗi trợ lý có hướng dẫn, công cụ và thư mục riêng.',
+        },
+        {
+          icon: 'flask',
+          title: 'Nghiên cứu kỹ',
+          body: 'Đặt câu hỏi, duyệt kế hoạch và nhận báo cáo kèm nguồn để bạn kiểm tra lại.',
+        },
+        {
+          icon: 'layers',
+          title: 'Việc dài hơi',
+          body: 'Với việc nhiều bước, PP Agent tiếp tục làm đến khi xong và hiển thị danh sách việc đang làm.',
+        },
+        {
+          icon: 'shield-check',
+          title: 'Bạn duyệt mọi thay đổi',
+          body: 'Lưu tệp, thay đổi dữ liệu công ty và dùng máy tính đều hỏi trước. Bạn có thể cho phép một lần hoặc luôn cho phép.',
+        },
+      ],
+    },
+    more: [
+      { icon: 'key', title: 'Chọn AI phù hợp', body: 'Dùng Anthropic, OpenAI, Google hoặc dịch vụ AI riêng của công ty.' },
+      { icon: 'file-text', title: 'Tệp Office', body: 'Tạo và sửa tệp Word, Excel, PowerPoint.' },
+      { icon: 'search', title: 'Tìm kiếm web', body: 'Tìm thông tin trên web và đọc các trang hoặc tài liệu.' },
+      { icon: 'terminal', title: 'Bảng bên', body: 'Giữ tệp, trình duyệt và ghi chú ngay cạnh cuộc trò chuyện.' },
+      { icon: 'bot', title: 'Dùng máy tính', body: 'PP Agent có thể xem các ứng dụng khác; bấm và gõ phải hỏi trước.' },
+      { icon: 'calendar', title: 'Việc định kỳ', body: 'Chạy một yêu cầu hằng ngày, hằng tuần hoặc theo giờ đã đặt.' },
+      { icon: 'layers', title: 'Ghi nhớ và kỹ năng', body: 'PP Agent nhớ ghi chú và làm theo quy trình của đội bạn.' },
+      { icon: 'mic', title: 'Nhập bằng giọng nói', body: 'Nói thay vì gõ tin nhắn.' },
+      { icon: 'smartphone', title: 'Telegram và Zalo', body: 'Trò chuyện với trợ lý và duyệt yêu cầu từ điện thoại.' },
+      { icon: 'smartphone', title: 'Dùng từ xa', body: 'Dùng PP Agent từ điện thoại hoặc máy tính khác trên cùng Wi-Fi.' },
+      { icon: 'file-text', title: 'Lịch sử của bạn', body: 'Tìm, ghim và xuất các cuộc trò chuyện cũ.' },
+      { icon: 'lock', title: 'Riêng tư', body: 'Cuộc trò chuyện ở trên máy bạn; không cần tạo tài khoản.' },
+    ],
+    steps: {
+      kicker: 'Bắt đầu',
+      title: 'Thiết lập một lần. Sau đó chỉ cần hỏi.',
+      description:
+        'Không cần chạy server và không cần tạo tài khoản. PP Agent tự kiểm tra cập nhật và tiếp tục làm việc khi bạn đóng cửa sổ.',
+      items: [
+        {
+          title: 'Kết nối AI',
+          body: 'Đăng nhập Anthropic, OpenAI, Google hoặc dịch vụ AI công ty đang dùng. Đội kỹ thuật có thể làm bước này cho mọi người.',
+        },
+        {
+          title: 'Chuẩn bị trợ lý',
+          body: 'Kết nối phần mềm công ty và tạo trợ lý cho từng nhóm. Mỗi trợ lý chỉ thấy công cụ và thư mục cần thiết.',
+        },
+        {
+          title: 'Bắt đầu hỏi',
+          body: 'Chọn trợ lý, đính kèm tài liệu và đặt câu hỏi. Duyệt thay đổi bạn muốn; việc dài có thể tiếp tục tự động.',
+        },
+      ],
+    },
+    security: {
+      kicker: 'An toàn và riêng tư',
+      title: 'An toàn cho công việc thật.',
+      intro:
+        'Cuộc trò chuyện và tệp ở trên máy bạn. Chỉ thông tin cần cho câu trả lời mới được gửi đến dịch vụ AI bạn chọn.',
+      items: [
+        {
+          icon: 'shield-check',
+          title: 'Không gì thay đổi âm thầm.',
+          body: 'Lưu tệp, thay đổi dữ liệu công ty và dùng ứng dụng đều hỏi trước. Bạn quyết định điều gì được phép.',
+        },
+        {
+          icon: 'key',
+          title: 'Thông tin của bạn được bảo vệ.',
+          body: 'Mật khẩu và thông tin kết nối được mã hóa và giữ trong kho bảo mật của máy.',
+        },
+        {
+          icon: 'lock',
+          title: 'Bạn quyết định điều gì được chia sẻ.',
+          body: 'Chỉ tài liệu hoặc câu hỏi cần cho câu trả lời mới rời khỏi máy bạn.',
+        },
+        {
+          icon: 'terminal',
+          title: 'Cài đặt an toàn ở lại trên máy.',
+          body: 'Điện thoại không thể tắt các bước kiểm tra bảo vệ tệp và dữ liệu công ty.',
+        },
+      ],
+    },
+    install: {
+      kicker: 'Tải xuống',
+      title: 'Tải PP Agent',
+      descBefore: 'Chọn bộ cài phù hợp với máy của bạn trong',
+      latest: 'bản phát hành mới nhất',
+      descAfter: '.',
+      system: 'Máy',
+      file: 'Tệp',
+      systems: ['Mac chip Apple', 'Mac chip Intel', 'Windows', 'Linux'],
+      note: 'Bộ cài chính thức tự cập nhật. Nếu máy hiện cảnh báo về ứng dụng, hãy hỏi đội kỹ thuật hoặc xem hướng dẫn cài đặt.',
+      releases: 'Tải bản mới nhất',
+      guide: 'Hướng dẫn cài đặt',
+    },
+    final: {
+      title: 'Cho đội bạn một trợ lý biết hỏi trước.',
+      body: 'Mang theo tài liệu và cách đội bạn vẫn làm việc. PP Agent lo phần còn lại trên chính máy của bạn.',
+      download: 'Tải PP Agent',
+      docs: 'Xem các trang hướng dẫn',
+    },
+    footer: {
+      brand:
+        'Trợ lý AI cho đội ngũ. Được PP Techs xây dựng và phát hành theo Apache License 2.0.',
+      product: 'Sản phẩm',
+      resources: 'Hướng dẫn',
+      trust: 'Tin cậy',
+      features: 'Tính năng',
+      documentation: 'Trang hướng dẫn',
+      install: 'Tải xuống',
+      changelog: 'Có gì mới',
+      releases: 'Bản phát hành',
+      architecture: 'Cách hoạt động',
+      contributing: 'Đóng góp',
+      security: 'An toàn và riêng tư',
+      report: 'Báo lỗi bảo mật',
+      license: 'Giấy phép Apache-2.0',
+      notice: 'Thông báo',
+      copyright: '© 2026 PP Techs.',
+      disclaimer: 'PP Agent không liên kết với các dịch vụ AI bạn kết nối.',
+    },
+  },
+} as const;
+
+export type LandingLang = keyof typeof landing;
