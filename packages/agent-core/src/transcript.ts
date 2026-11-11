@@ -280,7 +280,9 @@ export class Transcript {
   /** Sends `message`: whole, or as the text a streamed reply added, or not at all if it is as it was. */
   private send(message: ChatMessage): void {
     const before = this.sent.get(message.id);
-    this.sent.set(message.id, message);
+    // A copy: `setEntryIds` changes the message in place, and the change must still show against
+    // what went out.
+    this.sent.set(message.id, { ...message });
     const append = before ? appendedText(before, message) : undefined;
     if (append === null) return;
     if (append && this.emitAppend) this.emitAppend(append);

@@ -151,5 +151,28 @@ describe("SessionInfoCache", () => {
       const [info] = await cache.list();
       expect(info).toMatchObject({ messageCount: 2, firstMessage: "hi" });
     });
+
+    test("reads a line that spans many chunks, and appends after it", async () => {
+      const cache = new SessionInfoCache(dir);
+      // About 600 KB: several stream chunks, with a multi-byte character near the end.
+      const huge = { type: "toolResult", content: [{ type: "image", data: "é".repeat(300_000) }] };
+      const path = await writeSession("a", [
+        header("a"),
+        message("1", "user", "first", 1_000),
+        message("2", "toolResult", huge.content, 2_000),
+        message("3", "assistant", "after the big one", 3_000),
+      ]);
+      const [info] = await cache.list();
+      expect(info).toMatchObject({
+        messageCount: 3,
+        firstMessage: "first",
+        modified: new Date(3_000),
+      });
+
+      await appendFile(path, `${message("4", "user", "more", 4_000)}\n`);
+      const [grown] = await cache.list();
+      expect(grown).toMatchObject({ messageCount: 4, modified: new Date(4_000) });
+      expect(await new SessionInfoCache(dir).list()).toEqual([grown]);
+    });
   });
 });

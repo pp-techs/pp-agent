@@ -114,4 +114,17 @@ describe("Transcript streaming", () => {
       { type: "text", text: "ab" },
     ]);
   });
+  test("sends the saved entry id of a message once the run settles, though its text did not change", () => {
+    const { sent, transcript } = setup();
+    transcript.startAssistant();
+    transcript.updateAssistant(reply(text("Done")), false);
+    vi.advanceTimersByTime(60);
+    transcript.updateAssistant(reply(text("Done")), true);
+    expect(sent).toHaveLength(1);
+
+    transcript.setEntryIds(["entry-1"]);
+    transcript.flush();
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toMatchObject({ whole: { id: "m1", entryId: "entry-1" } });
+  });
 });

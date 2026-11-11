@@ -236,31 +236,37 @@ async function scanSession(
         offset: 0,
         guard: Buffer.alloc(0),
       };
-  let carry: Buffer = Buffer.alloc(0);
+  // The pieces of the line being read, joined once it is complete: a line that spans many chunks
+  // (a screenshot) is copied once, not again with every chunk.
+  let pieces: Buffer[] = [];
   try {
     for await (const chunk of createReadStream(path, {
       start: state.offset,
     }) as AsyncIterable<Buffer>) {
-      let data = carry.length > 0 ? Buffer.concat([carry, chunk]) : chunk;
       let from = 0;
-      for (let end = data.indexOf(10, from); end !== -1; end = data.indexOf(10, from)) {
-        const raw = data.subarray(from, end);
-        const line = raw.toString("utf8").replace(/\r$/, "");
-        if (!applyLine(state, line)) return { info: null, state: null };
-        state.offset += end + 1 - from;
+      for (let end = chunk.indexOf(10, from); end !== -1; end = chunk.indexOf(10, from)) {
+        pieces.push(chunk.subarray(from, end));
+        const raw = pieces.length === 1 ? pieces[0]! : Buffer.concat(pieces);
+        if (!applyLine(state, raw.toString("utf8").replace(/\r$/, "")))
+          return { info: null, state: null };
+        state.offset += raw.length + 1;
+        pieces = [];
         from = end + 1;
       }
-      data = data.subarray(from);
-      carry = data;
+      if (from < chunk.length) pieces.push(chunk.subarray(from));
     }
   } catch {
     return { info: null, state: null };
   }
-  state.guard = await readBytes(
+  const carry = pieces.length > 1 ? Buffer.concat(pieces) : (pieces[0] ?? Buffer.alloc(0));
+  // The bytes before the resume point, which the next scan checks. Without them there is nothing to
+  // check a resume against, so this listing stands but the next one reads the file whole.
+  const guard = await readBytes(
     path,
     Math.max(0, state.offset - GUARD_BYTES),
     Math.min(GUARD_BYTES, state.offset),
-  ).catch(() => Buffer.alloc(0));
+  ).catch(() => null);
+  state.guard = guard ?? Buffer.alloc(0);
   const { header } = state;
   if (!header) return { info: null, state: null };
   // The last line may have no newline yet (it is still being written): it counts for the list, but
@@ -271,5 +277,5 @@ async function scanSession(
     if (applyLine(partial, carry.toString("utf8").replace(/\r$/, "")) && partial.header)
       shown = { ...partial, header: partial.header };
   }
-  return { info: infoOf(path, mtimeMs, shown), state: { ...state, header } };
+  return { info: infoOf(path, mtimeMs, shown), state: guard ? { ...state, header } : null };
 }
