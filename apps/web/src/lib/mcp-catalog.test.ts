@@ -1,7 +1,9 @@
 import { describe, expect, test } from "vite-plus/test";
 
 import {
+  addressPresetUrl,
   availablePresets,
+  connectorHost,
   matchesPreset,
   MCP_PRESETS,
   presetServer,
@@ -102,5 +104,58 @@ describe("MCP catalog", () => {
     });
     expect(matchesPreset(preset("filesystem"), files)).toBe(true);
     expect(matchesPreset(preset("notion"), files)).toBe(false);
+  });
+
+  test("an address preset is offered without a Google client and appends its path to the address", () => {
+    expect(availablePresets(null).map((item) => item.id)).toContain("pp-hub");
+    const ppHub = preset("pp-hub");
+    expect(addressPresetUrl(ppHub, "hub.acme.vn")).toBe("https://hub.acme.vn/mcp/");
+    expect(addressPresetUrl(ppHub, " https://hub.acme.vn/ ")).toBe("https://hub.acme.vn/mcp/");
+    // A pasted /mcp/ address keeps the host and gets the preset's own path.
+    expect(addressPresetUrl(ppHub, "https://hub.acme.vn/mcp/")).toBe("https://hub.acme.vn/mcp/");
+    // Plain http is only for a hub on this computer.
+    expect(addressPresetUrl(ppHub, "http://localhost:3000")).toBe("http://localhost:3000/mcp/");
+    for (const bad of ["", "ftp://hub.acme.vn", "http://hub.acme.vn", "https://hub.acme.vn/?x=1"]) {
+      expect(addressPresetUrl(ppHub, bad)).toBeNull();
+    }
+  });
+
+  test("an address preset saves the hub and asks for the sign-in its authorization server needs", () => {
+    const ppHub = preset("pp-hub");
+    const server = presetServer(ppHub, {
+      name: "pp-hub",
+      description: "Company drive",
+      address: "hub.acme.vn",
+    });
+    expect(server).toMatchObject({
+      transport: "http",
+      url: "https://hub.acme.vn/mcp/",
+      connector: "pp-hub",
+    });
+    expect(server.headers).toBeUndefined();
+    expect(server.oauth).toEqual({
+      clientRegistration: "cimd",
+      // Logto denies a consent request that names no scope at all.
+      scope: "openid offline_access",
+    });
+    expect(() => presetServer(ppHub, { name: "pp-hub", description: "" })).toThrow();
+    // The row under the card is named after the hub it points at, not the server's name.
+    expect(connectorHost(server.url)).toBe("hub.acme.vn");
+    expect(connectorHost(undefined)).toBeUndefined();
+  });
+
+  test("an address preset's servers match it whatever hub they point at", () => {
+    const ppHub = preset("pp-hub");
+    const work = presetServer(ppHub, { name: "pp-hub", description: "", address: "hub.acme.vn" });
+    const other = presetServer(ppHub, {
+      name: "pp-hub-2",
+      description: "",
+      address: "https://docs.other.vn",
+    });
+    expect(matchesPreset(ppHub, work)).toBe(true);
+    expect(matchesPreset(ppHub, other)).toBe(true);
+    expect(matchesPreset(preset("notion"), work)).toBe(false);
+    // Added by hand under Settings › MCP: no connector was written, so nothing claims it.
+    expect(matchesPreset(ppHub, { ...work, connector: undefined })).toBe(false);
   });
 });

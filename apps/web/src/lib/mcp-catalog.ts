@@ -8,25 +8,30 @@ import googleDrive from "../assets/connectors/google-drive.svg";
 import googleSheets from "../assets/connectors/google-sheets.svg";
 import linear from "../assets/connectors/linear.svg";
 import notion from "../assets/connectors/notion.svg";
+import ppHub from "../assets/connectors/pp-hub.svg";
 import sentry from "../assets/connectors/sentry.svg";
 import stripe from "../assets/connectors/stripe.svg";
 import supabase from "../assets/connectors/supabase.svg";
 import upstash from "../assets/connectors/upstash.svg";
 
 /**
- * What a person does to connect, after pressing Connect. `oauth` and `folder` can be repeated (a
- * second account, a second folder); `open` is one server.
+ * What a person does to connect, after pressing Connect. `oauth`, `address` and `folder` can be
+ * repeated (a second account, a second hub, a second folder); `open` is one server.
  */
 export type McpPresetSetup =
   /** The server asks for a sign-in in the browser. */
   | "oauth"
   /** Nothing: the server is open. */
   | "open"
+  /** An address the person types (their company's hub); the preset's path is appended to it. */
+  | "address"
   /** A folder on this computer, picked in the system dialog and appended to the command. */
   | "folder";
 
 export type McpPresetConnection =
   | { transport: "http"; url: string }
+  /** An address preset: `<the address the person typed>` + this path. */
+  | { transport: "http"; path: string }
   | { transport: "stdio"; command: string; args: string[] };
 
 export type McpPresetId =
@@ -42,6 +47,7 @@ export type McpPresetId =
   | "supabase"
   | "sentry"
   | "context7"
+  | "pp-hub"
   | "filesystem";
 
 /**
@@ -60,6 +66,17 @@ export interface McpPreset {
    * Google client (`google-oauth.ts`), asking for these scopes.
    */
   googleScopes?: readonly string[];
+  /**
+   * How this server's sign-in names the app when its authorization server has no registration
+   * endpoint: `cimd` presents the app's Client ID Metadata Document instead of registering.
+   */
+  clientRegistration?: McpOAuthClient["clientRegistration"];
+  /**
+   * Scopes the sign-in asks for. An authorization server that always asks for consent (Logto, and
+   * so every hub) denies a request that names no scope at all, so `cimd` presets say `openid
+   * offline_access` even though the hub's tokens carry no scopes.
+   */
+  scope?: string;
 }
 
 const GOOGLE = "https://www.googleapis.com/auth/";
@@ -162,6 +179,19 @@ export const MCP_PRESETS: readonly McpPreset[] = [
     connection: { transport: "http", url: "https://mcp.context7.com/mcp" },
   },
   {
+    id: "pp-hub",
+    name: "PP Hub",
+    logo: ppHub,
+    setup: "address",
+    connection: { transport: "http", path: "/mcp/" },
+    // Each company runs its own hub, and every hub signs in through Logto, which registers no
+    // clients: the app names itself with its Client ID Metadata Document instead. Logto always
+    // asks for consent, and denies a request that names no scope, so these are asked for — the
+    // hub's own tokens still carry none.
+    clientRegistration: "cimd",
+    scope: "openid offline_access",
+  },
+  {
     id: "filesystem",
     name: "Filesystem",
     logo: null,
@@ -181,8 +211,12 @@ export function availablePresets(googleClient: McpOAuthClient | null) {
 
 /** True when a configured server runs what the preset would add, whatever its name or account. */
 export function matchesPreset(preset: McpPreset, server: McpServerSettings) {
+  // Written when Connectors added the server: the only way to tell an address preset's servers
+  // apart, since each company chooses the address.
+  if (server.connector !== undefined) return server.connector === preset.id;
   const { connection } = preset;
   if (connection.transport === "http") {
+    if (!("url" in connection)) return false;
     // `https://x.test/mcp/` and `https://x.test/mcp` are the same address.
     const trim = (url: string) => url.replace(/\/+$/, "");
     return server.transport === "http" && trim(server.url ?? "") === trim(connection.url);
@@ -192,6 +226,32 @@ export function matchesPreset(preset: McpPreset, server: McpServerSettings) {
     server.command === connection.command &&
     connection.args.every((arg) => server.args?.includes(arg))
   );
+}
+
+/**
+ * The MCP address of an `address` preset: `hub.acme.vn`, `https://hub.acme.vn/` and
+ * `https://hub.acme.vn/mcp/` all become `https://hub.acme.vn/mcp/`. Null when the text is not an
+ * https address (or plain http on this computer).
+ */
+export function addressPresetUrl(preset: McpPreset, address: string): string | null {
+  const { connection } = preset;
+  if (connection.transport !== "http" || !("path" in connection)) return null;
+  const trimmed = address.trim();
+  if (!trimmed) return null;
+  const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  if (!URL.canParse(candidate)) return null;
+  const url = new URL(candidate);
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) return null;
+  if (url.username || url.password || url.search || url.hash) return null;
+  // Any path the person pasted (the `/mcp/` address itself) is replaced by the preset's own.
+  return `${url.origin}${connection.path}`;
+}
+
+/** What an address preset's row is called: the hub it points at. */
+export function connectorHost(url: string | undefined): string | undefined {
+  if (!url || !URL.canParse(url)) return undefined;
+  return new URL(url).host;
 }
 
 /** “Công việc” → `cong-viec`; empty when nothing usable is left. */
@@ -229,32 +289,39 @@ interface PresetServerInput {
   account?: string;
   /** What a `folder` preset asks for. */
   folder?: string;
+  /** What an `address` preset asks for: the address as the person typed it. */
+  address?: string;
   /** The app's Google client; required for presets with `googleScopes`. */
   googleClient?: McpOAuthClient | null;
 }
 
 /** The server entry to save. */
 export function presetServer(preset: McpPreset, input: PresetServerInput): McpServerSettings {
-  const { name, description, account, folder = "", googleClient } = input;
+  const { name, description, account, folder = "", address = "", googleClient } = input;
   const base = {
     name,
     description,
     enabled: true,
     exposure: "codemode",
+    // Kept on every later save, and what tells an address preset's servers apart.
+    connector: preset.id,
     ...(account ? { account } : {}),
   } as const;
   const { connection } = preset;
   if (connection.transport === "http") {
     if (preset.googleScopes && !googleClient)
       throw new Error(`${preset.name} needs a Google client`);
-    return {
-      ...base,
-      transport: "http",
-      url: connection.url,
-      ...(preset.googleScopes && googleClient
-        ? { oauth: { ...googleClient, scope: preset.googleScopes.join(" ") } }
-        : {}),
-    };
+    const url = "path" in connection ? addressPresetUrl(preset, address) : connection.url;
+    if (!url) throw new Error(`${preset.name} needs an address`);
+    const oauth = preset.googleScopes
+      ? { ...googleClient!, scope: preset.googleScopes.join(" ") }
+      : preset.clientRegistration
+        ? {
+            clientRegistration: preset.clientRegistration,
+            ...(preset.scope ? { scope: preset.scope } : {}),
+          }
+        : undefined;
+    return { ...base, transport: "http", url, ...(oauth ? { oauth } : {}) };
   }
   return {
     ...base,

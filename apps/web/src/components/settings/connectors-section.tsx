@@ -54,7 +54,9 @@ import {
 } from "@/lib/extension-queries";
 import { GOOGLE_CLIENT } from "@/lib/google-oauth";
 import {
+  addressPresetUrl,
   availablePresets,
+  connectorHost,
   matchesPreset,
   presetServer,
   serverName,
@@ -76,40 +78,41 @@ function Logo({ src, fallback }: { src: string | null; fallback: React.ReactNode
   );
 }
 
+/**
+ * One card: the service on the left (logo, name, what connecting does), the one thing to do with
+ * it on the right as a square button, and the accounts already added underneath.
+ */
 function CardShell({
   logo,
   title,
-  status,
   description,
+  action,
   children,
-  footer,
   dimmed,
 }: {
   logo: React.ReactNode;
   title: string;
-  /** Under the title: the connection status. */
-  status?: React.ReactNode;
   description?: string;
-  /** Between the description and the footer: the accounts of a service. */
+  /** Connect, add another account, another hub, another folder: one button, its label read out only. */
+  action?: React.ReactNode;
+  /** Under the header: the accounts of a service. */
   children?: React.ReactNode;
-  footer?: React.ReactNode;
   dimmed?: boolean;
 }) {
   return (
     <Item
       variant="outline"
-      className={`h-full min-w-0 flex-col items-stretch gap-3 p-4 ${dimmed ? "opacity-70" : ""}`}
+      className={`min-w-0 flex-col items-stretch gap-3 p-4 ${dimmed ? "opacity-70" : ""}`}
     >
       <div className="flex items-center gap-3">
         {logo}
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <ItemTitle className="truncate">{title}</ItemTitle>
-          {status}
+          {description && <ItemDescription className="line-clamp-2">{description}</ItemDescription>}
         </div>
+        {action}
       </div>
-      {description && <ItemDescription className="line-clamp-3">{description}</ItemDescription>}
       {children}
-      {footer && <div className="mt-auto flex items-center gap-2 pt-1">{footer}</div>}
     </Item>
   );
 }
@@ -247,13 +250,39 @@ function EmailRow({
   );
 }
 
-/** What tells a service's servers apart: the account's label, or the folder. */
+/** How many accounts a card lists before offering the rest. */
+const ROWS_SHOWN = 3;
+
+/** "Show 4 more" / "Show less" under a card that holds more accounts than it lists. */
+function MoreRows({
+  hidden,
+  open,
+  onToggle,
+}: {
+  hidden: number;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const { t } = useTranslation("extensions");
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="self-start rounded-lg px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+    >
+      {open ? t("connectors.rows.less") : t("connectors.rows.more", { count: hidden })}
+    </button>
+  );
+}
+
+/** What tells a service's servers apart: the account's label, the hub's address, or the folder. */
 function rowLabel(
   preset: McpPreset,
   settings: McpServerSettings,
   several: boolean,
   mainAccount: string,
 ) {
+  if (preset.setup === "address") return connectorHost(settings.url);
   if (preset.setup === "folder") return settings.args?.at(-1);
   if (preset.setup === "oauth") return settings.account ?? (several ? mainAccount : undefined);
   return undefined;
@@ -267,6 +296,13 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
   const signIn = useMcpSignIn(bridge);
   const [view, setView] = React.useState<View>({ kind: "list" });
   const [connecting, setConnecting] = React.useState<string | null>(null);
+  // Cards whose account list is fully open: the mailboxes, and one key per preset.
+  const [expanded, setExpanded] = React.useState<readonly string[]>([]);
+  const showsAll = (key: string) => expanded.includes(key);
+  const toggleAll = (key: string) =>
+    setExpanded((keys) =>
+      keys.includes(key) ? keys.filter((open) => open !== key) : [...keys, key],
+    );
 
   const servers = overview.data?.servers ?? [];
   const back = () => setView({ kind: "list" });
@@ -314,20 +350,21 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
       logo={<Logo src={null} fallback={<MailIcon />} />}
       title={t("email.cardTitle")}
       description={t("email.cardDescription")}
-      footer={
+      action={
         !isWebApp && (
           <Button
-            size="sm"
-            variant={mailboxes.length === 0 ? "outline" : "ghost"}
+            size="icon"
+            variant="outline"
+            aria-label={t("email.add")}
+            title={t("email.add")}
             onClick={() => setView({ kind: "email" })}
           >
             <PlusIcon />
-            {t("email.add")}
           </Button>
         )
       }
     >
-      {mailboxes.map((account) => (
+      {(showsAll("email") ? mailboxes : mailboxes.slice(0, ROWS_SHOWN)).map((account) => (
         <EmailRow
           key={account.settings.name}
           bridge={bridge}
@@ -335,6 +372,13 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
           onEdit={() => setView({ kind: "email", name: account.settings.name })}
         />
       ))}
+      {mailboxes.length > ROWS_SHOWN && (
+        <MoreRows
+          hidden={mailboxes.length - ROWS_SHOWN}
+          open={showsAll("email")}
+          onToggle={() => toggleAll("email")}
+        />
+      )}
     </CardShell>
   );
   const edit = (server: McpServerView) => () =>
@@ -342,6 +386,7 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
 
   async function connect(preset: McpPreset, existing: McpServerView[]) {
     let folder = "";
+    let address = "";
     let account: string | undefined;
     if (preset.setup === "folder") {
       const picked = await bridge.files.pickFolder().catch((error: Error) => {
@@ -350,6 +395,21 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
       });
       if (!picked) return;
       folder = picked;
+    } else if (preset.setup === "address") {
+      const typed = await PromptModal.show({
+        title: t("connectors.address.title", { name: preset.name }),
+        description: t("connectors.address.description"),
+        label: t("connectors.address.label"),
+        placeholder: t("connectors.address.placeholder"),
+        initialValue: "",
+        confirmLabel: t("connectors.connect"),
+      });
+      if (!typed) return;
+      if (!addressPresetUrl(preset, typed)) {
+        toast.error(t("connectors.address.invalid", { example: "hub.acme.vn" }));
+        return;
+      }
+      address = typed;
     } else if (preset.setup === "oauth" && existing.length > 0) {
       // A second account needs a name, to tell it from the first in the cards and for the agent.
       const label = await PromptModal.show({
@@ -374,6 +434,7 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
       description: account ? `${preset.name} (${account}): ${about}` : about,
       account,
       folder,
+      address,
       googleClient: GOOGLE_CLIENT,
     });
     setConnecting(preset.id);
@@ -383,7 +444,7 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
     );
     if (added) {
       toast.success(t("mcpForm.toast.added", { name: preset.name }));
-      if (preset.setup === "oauth") {
+      if (preset.setup !== "open" && preset.setup !== "folder") {
         // A failed or cancelled sign-in leaves the server with its own Sign in button.
         await signIn.mutateAsync(name).then(
           () => toast.success(t("mcp.toast.signedIn", { name: preset.name })),
@@ -396,33 +457,41 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
 
   function presetCard({ preset, servers: own }: { preset: McpPreset; servers: McpServerView[] }) {
     const folder = preset.setup === "folder";
+    const hub = preset.setup === "address";
     const first = own.length === 0;
-    // An open server is one; every other kind can be added again (another account, another folder).
+    // An open server is one; every other kind can be added again (another account, another hub).
     const canAdd = !isWebApp && (first || preset.setup !== "open");
     const label = first
       ? t(folder ? "connectors.chooseFolder" : "connectors.connect")
-      : t(folder ? "connectors.addFolder" : "connectors.addAccount.action");
+      : t(
+          folder
+            ? "connectors.addFolder"
+            : hub
+              ? "connectors.addHub"
+              : "connectors.addAccount.action",
+        );
     return (
       <CardShell
         key={preset.id}
         logo={<Logo src={preset.logo} fallback={<FolderOpenIcon />} />}
         title={preset.name}
         description={t(`connectors.items.${preset.id}.description`)}
-        footer={
+        action={
           canAdd && (
             <Button
-              size="sm"
-              variant={first ? "outline" : "ghost"}
+              size="icon"
+              variant="outline"
+              aria-label={label}
+              title={label}
               disabled={!ready}
               onClick={() => void connect(preset, own)}
             >
               {connecting === preset.id ? <Spinner /> : folder ? <FolderOpenIcon /> : <PlusIcon />}
-              {label}
             </Button>
           )
         }
       >
-        {own.map((server) => (
+        {(showsAll(preset.id) ? own : own.slice(0, ROWS_SHOWN)).map((server) => (
           <ServerRow
             key={server.settings.name}
             bridge={bridge}
@@ -432,6 +501,13 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
             onEdit={edit(server)}
           />
         ))}
+        {own.length > ROWS_SHOWN && (
+          <MoreRows
+            hidden={own.length - ROWS_SHOWN}
+            open={showsAll(preset.id)}
+            onToggle={() => toggleAll(preset.id)}
+          />
+        )}
       </CardShell>
     );
   }
@@ -463,7 +539,7 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
       {connected.length + custom.length + (mailboxes.length > 0 ? 1 : 0) > 0 && (
         <section className="flex flex-col gap-3">
           <h3 className="text-sm font-medium">{t("connectors.sections.connected")}</h3>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-2">
             {mailboxes.length > 0 && emailCard}
             {connected.map(presetCard)}
             {custom.map((server) => (
@@ -485,7 +561,7 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
           {(connected.length > 0 || custom.length > 0 || mailboxes.length > 0) && (
             <h3 className="text-sm font-medium">{t("connectors.sections.available")}</h3>
           )}
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-2">
             {mailboxes.length === 0 && emailCard}
             {available.map(presetCard)}
           </div>

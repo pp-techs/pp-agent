@@ -289,6 +289,18 @@
       "label": "Tên tài khoản",
       "placeholder": "Công việc, Cá nhân, ten@example.com"
     },
+    "addHub": "Thêm hub",
+    "address": {
+      "title": "Địa chỉ {{name}}",
+      "description": "Nhập địa chỉ hub của công ty bạn — địa chỉ bạn vẫn mở trong trình duyệt.",
+      "label": "Địa chỉ hub",
+      "placeholder": "hub.congty.vn",
+      "invalid": "Địa chỉ phải bắt đầu bằng https, ví dụ {{example}}."
+    },
+    "rows": {
+      "more": "Xem thêm {{count}}",
+      "less": "Thu gọn"
+    },
     "items": {
       "gmail": { "description": "Tìm và đọc email của bạn, và soạn sẵn thư nháp để bạn gửi." },
       "calendar": { "description": "Xem các sự kiện của bạn và khi nào bạn rảnh." },
@@ -308,6 +320,9 @@
         "description": "Truy vấn và quản lý các dự án và cơ sở dữ liệu Supabase của bạn."
       },
       "context7": { "description": "Tài liệu và ví dụ mã mới nhất cho các thư viện lập trình." },
+      "pp-hub": {
+        "description": "Kho tài liệu công ty: tìm, đọc, tạo và sửa tài liệu, chia sẻ và bình luận."
+      },
       "filesystem": {
         "description": "Đọc và thay đổi tệp bên trong một thư mục trên máy tính này."
       }
