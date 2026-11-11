@@ -9,6 +9,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import {
   MCP_EXPOSURES,
+  type McpOAuthClient,
   type McpOverview,
   type McpServerSettings,
   type McpServerState,
@@ -211,14 +212,18 @@ function toSettings(name: string, entry: JsonObject): McpServerSettings {
   if (typeof entry.url === "string") settings.url = entry.url;
   const headers = stringRecord(entry.headers);
   if (headers) settings.headers = headers;
+  if (typeof entry.connector === "string") settings.connector = entry.connector;
   if (typeof entry.account === "string") settings.account = entry.account;
   const oauth = asObject(entry.oauth);
-  if (typeof oauth?.clientId === "string") {
-    settings.oauth = { clientId: oauth.clientId };
-    if (typeof oauth.clientSecret === "string") settings.oauth.clientSecret = oauth.clientSecret;
-    if (typeof oauth.scope === "string") settings.oauth.scope = oauth.scope;
-    if (typeof oauth.callbackUrl === "string") settings.oauth.callbackUrl = oauth.callbackUrl;
-  }
+  const client: McpOAuthClient = {};
+  if (typeof oauth?.clientId === "string") client.clientId = oauth.clientId;
+  if (typeof oauth?.clientSecret === "string") client.clientSecret = oauth.clientSecret;
+  if (typeof oauth?.scope === "string") client.scope = oauth.scope;
+  if (typeof oauth?.callbackUrl === "string") client.callbackUrl = oauth.callbackUrl;
+  const registration = oauth?.clientRegistration;
+  if (registration === "auto" || registration === "dcr" || registration === "cimd")
+    client.clientRegistration = registration;
+  if (Object.keys(client).length > 0) settings.oauth = client;
   return settings;
 }
 
@@ -243,6 +248,7 @@ function applySettings(existing: JsonObject, server: McpServerSettings): JsonObj
   set("timeout", server.timeout && server.timeout > 0 ? server.timeout : undefined);
   set("trusted", server.trusted === true ? true : undefined);
   // Only Connectors sets these; any other save leaves them as they are.
+  if (server.connector !== undefined) set("connector", text(server.connector));
   if (server.account !== undefined) set("account", text(server.account));
 
   if (server.transport === "stdio") {
@@ -266,11 +272,19 @@ function applySettings(existing: JsonObject, server: McpServerSettings): JsonObj
     set("headers", map(server.headers));
     if (server.oauth) {
       // Keys of the client this app does not know (callback port) stay.
-      const client: JsonObject = { ...asObject(entry.oauth), clientId: server.oauth.clientId };
-      if (server.oauth.clientSecret !== undefined) client.clientSecret = server.oauth.clientSecret;
-      if (server.oauth.scope !== undefined) client.scope = server.oauth.scope;
-      if (server.oauth.callbackUrl !== undefined) client.callbackUrl = server.oauth.callbackUrl;
-      entry.oauth = client;
+      const client: JsonObject = { ...asObject(entry.oauth) };
+      const field = (key: string, value: string | undefined) => {
+        if (value === undefined) delete client[key];
+        else client[key] = value;
+      };
+      // `cimd` names the client by a metadata document, so a client id must not stay beside it.
+      field("clientId", server.oauth.clientId);
+      field("clientSecret", server.oauth.clientSecret);
+      field("scope", server.oauth.scope);
+      field("callbackUrl", server.oauth.callbackUrl);
+      field("clientRegistration", server.oauth.clientRegistration);
+      if (Object.keys(client).length > 0) entry.oauth = client;
+      else delete entry.oauth;
     }
   }
   return entry;

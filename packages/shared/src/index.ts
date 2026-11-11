@@ -1223,7 +1223,8 @@ export type McpExposure = (typeof MCP_EXPOSURES)[number];
 
 /** The OAuth client an HTTP server signs in with, when it does not register clients itself (Google). */
 export interface McpOAuthClient {
-  clientId: string;
+  /** Absent when the client identifies itself with a metadata document (`clientRegistration: "cimd"`). */
+  clientId?: string;
   clientSecret?: string;
   /** Scopes to ask for, separated by spaces. */
   scope?: string;
@@ -1232,6 +1233,12 @@ export interface McpOAuthClient {
    * when the client's redirect URIs are registered one by one (a Google “Web application” client).
    */
   callbackUrl?: string;
+  /**
+   * How the client names itself to the authorization server: `dcr` registers one (the default
+   * `auto`), `cimd` presents the app's Client ID Metadata Document instead — for servers whose
+   * authorization server has no registration endpoint (Logto, and so PP Hub).
+   */
+  clientRegistration?: "auto" | "dcr" | "cimd";
 }
 
 /** One `mcpServers` entry of mcp.json, as edited in Settings. Unknown keys are preserved on save. */
@@ -1256,6 +1263,12 @@ export interface McpServerSettings {
   headers?: Record<string, string>;
   /** Written by Connectors, kept as it is on every other save. */
   oauth?: McpOAuthClient;
+  /**
+   * The Connectors preset this server was added from (`pp-hub`), written by Connectors and kept on
+   * every other save. Needed for a preset whose address each company chooses for itself: the URL
+   * alone does not say which service it is.
+   */
+  connector?: string;
   /** Which account of a service this server is signed in to (“Work”), for telling servers of one service apart. */
   account?: string;
 }

@@ -292,6 +292,18 @@
       "label": "Account name",
       "placeholder": "Work, Personal, name@example.com"
     },
+    "addHub": "Add hub",
+    "address": {
+      "title": "{{name}} address",
+      "description": "Enter your company's hub address — the one you open in the browser.",
+      "label": "Hub address",
+      "placeholder": "hub.acme.vn",
+      "invalid": "Use an https address such as {{example}}."
+    },
+    "rows": {
+      "more": "Show {{count}} more",
+      "less": "Show less"
+    },
     "items": {
       "gmail": { "description": "Search and read your email, and write drafts for you to send." },
       "calendar": { "description": "See your events and when you are free." },
@@ -308,6 +320,9 @@
       "supabase": { "description": "Query and manage your Supabase projects and databases." },
       "context7": {
         "description": "Up-to-date documentation and code examples for programming libraries."
+      },
+      "pp-hub": {
+        "description": "Your company drive: find, read, create and edit documents, share them and comment."
       },
       "filesystem": { "description": "Read and change files inside one folder on this computer." }
     },
