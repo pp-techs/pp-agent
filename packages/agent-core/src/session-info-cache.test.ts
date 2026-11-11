@@ -87,4 +87,69 @@ describe("SessionInfoCache", () => {
     await utimes(path, time, time);
     expect((await cache.list())[0]?.firstMessage).toBe("aaaa");
   });
+  describe("a file that grew", () => {
+    // What a fresh cache reads from the whole file: the answer an incremental scan must match.
+    const fresh = async () => new SessionInfoCache(dir).list();
+
+    test("continues from the new lines and matches a full read", async () => {
+      const cache = new SessionInfoCache(dir);
+      const path = await writeSession("a", [
+        header("a"),
+        message("1", "user", "first question", 1_000),
+        message("2", "assistant", "answer", 2_000),
+      ]);
+      await cache.list();
+      await appendFile(
+        path,
+        `${message("3", "user", "second", 3_000)}\n${JSON.stringify({ type: "session_info", id: "4", name: "Titled" })}\n`,
+      );
+      const [grown] = await cache.list();
+      expect(grown).toMatchObject({
+        name: "Titled",
+        messageCount: 3,
+        firstMessage: "first question",
+        modified: new Date(3_000),
+      });
+      expect(await fresh()).toEqual([grown]);
+    });
+
+    test("reads a line that was still being written, whole, once it is complete", async () => {
+      const cache = new SessionInfoCache(dir);
+      const path = await writeSession("a", [header("a"), message("1", "user", "hi", 1_000)]);
+      await cache.list();
+      const next = message("2", "assistant", "a longer reply", 2_000);
+      await appendFile(path, next.slice(0, 40));
+      await cache.list();
+      await appendFile(path, `${next.slice(40)}\n`);
+      const [done] = await cache.list();
+      expect(done?.messageCount).toBe(2);
+      expect(await fresh()).toEqual([done]);
+    });
+
+    test("reads the whole file again when it was rewritten, not appended to", async () => {
+      const cache = new SessionInfoCache(dir);
+      await writeSession("a", [header("a"), message("1", "user", "old text", 1_000)]);
+      await cache.list();
+      // Larger than before, and the bytes before the old end are different.
+      const path = await writeSession("a", [
+        header("a"),
+        message("1", "user", "new text that differs", 1_000),
+        message("2", "assistant", "more", 2_000),
+      ]);
+      const [rewritten] = await cache.list();
+      expect(rewritten).toMatchObject({ firstMessage: "new text that differs", messageCount: 2 });
+      expect(await fresh()).toEqual([rewritten]);
+      expect(rewritten?.path).toBe(path);
+    });
+
+    test("handles Windows line endings", async () => {
+      const cache = new SessionInfoCache(dir);
+      const path = join(dir, "a.jsonl");
+      await writeFile(path, `${header("a")}\r\n${message("1", "user", "hi", 1_000)}\r\n`);
+      await cache.list();
+      await appendFile(path, `${message("2", "assistant", "yo", 2_000)}\r\n`);
+      const [info] = await cache.list();
+      expect(info).toMatchObject({ messageCount: 2, firstMessage: "hi" });
+    });
+  });
 });
