@@ -59,6 +59,8 @@
     "skill": "Skill: {{name}}",
     "attachedImage": "Attached image",
     "compacted": "Earlier messages summarized",
+    "markdownFailed": "The formatted text could not load.",
+    "markdownRetry": "Reload",
     "actions": {
       "copyError": "Copy error details",
       "copy": "Copy message",

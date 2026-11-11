@@ -59,6 +59,8 @@
     "skill": "Kỹ năng: {{name}}",
     "attachedImage": "Hình ảnh đính kèm",
     "compacted": "Các tin nhắn trước đó đã được tóm tắt",
+    "markdownFailed": "Không tải được phần định dạng văn bản.",
+    "markdownRetry": "Tải lại",
     "actions": {
       "copyError": "Sao chép chi tiết lỗi",
       "copy": "Sao chép tin nhắn",
