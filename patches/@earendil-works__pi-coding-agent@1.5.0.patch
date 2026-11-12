@@ -1,0 +1,39 @@
+diff --git a/dist/extensions/mcp/oauth.js b/dist/extensions/mcp/oauth.js
+index 9b02ab844d9adca9e3bbbb0ade3facc3a4847368..61c4e827ce67aed52707bfb33e6eacb00f92f116 100644
+--- a/dist/extensions/mcp/oauth.js
++++ b/dist/extensions/mcp/oauth.js
+@@ -21,7 +21,9 @@ import { isClientMetadataDocumentCallback, mcpNamespace } from "../../core/mcp-s
+ const CALLBACK_HOST = "127.0.0.1";
+ const CALLBACK_PATH = "/callback";
+ /** Where pi.dev serves pi's Client ID Metadata Documents: `client.json` and `<callback ID>/client.json`. */
+-const CLIENT_METADATA_BASE_URL = "https://pi.dev/oauth";
++const DEFAULT_CLIENT_METADATA_BASE_URL = "https://pi.dev/oauth";
++/** A host app serves its own documents (name, logo) by setting PI_MCP_CLIENT_METADATA_BASE_URL. */
++const clientMetadataBaseUrl = () => process.env.PI_MCP_CLIENT_METADATA_BASE_URL?.replace(/\/+$/, "") || DEFAULT_CLIENT_METADATA_BASE_URL;
+ /** Redirect URI for refreshes when none is stored. Refreshing never redirects the user. */
+ const FALLBACK_REDIRECT_URL = `http://${CALLBACK_HOST}${CALLBACK_PATH}`;
+ /** Access tokens this close to expiry are refreshed before they are sent. */
+@@ -201,12 +203,12 @@ function clientMetadataDocument(serverUrl, redirectUrl, metadata) {
+         return undefined;
+     }
+     if (metadata.authorization_response_iss_parameter_supported) {
+-        return { url: `${CLIENT_METADATA_BASE_URL}/client.json`, redirectUrl };
++        return { url: `${clientMetadataBaseUrl()}/client.json`, redirectUrl };
+     }
+     const id = callbackId(serverUrl);
+     const redirect = new URL(redirectUrl);
+     redirect.pathname = `${CALLBACK_PATH}/${id}`;
+-    return { url: `${CLIENT_METADATA_BASE_URL}/${id}/client.json`, redirectUrl: redirect.href };
++    return { url: `${clientMetadataBaseUrl()}/${id}/client.json`, redirectUrl: redirect.href };
+ }
+ function createProvider(serverUrl, store, settings, redirectUrl, onRedirect) {
+     return new McpOAuthProvider({
+diff --git a/examples/extensions/custom-provider-anthropic/package-lock.json b/examples/extensions/custom-provider-anthropic/package-lock.json
+deleted file mode 100644
+index c6ed32b21d506919a28b80cd731e489e47ece88d..0000000000000000000000000000000000000000
+diff --git a/examples/extensions/gondolin/package-lock.json b/examples/extensions/gondolin/package-lock.json
+deleted file mode 100644
+index 0887734ddf510f25678cf4b647d285ca4cdd6505..0000000000000000000000000000000000000000
+diff --git a/examples/extensions/with-deps/package-lock.json b/examples/extensions/with-deps/package-lock.json
+deleted file mode 100644
+index 2d84832c4e43fcd45f042eadb56638fee491c368..0000000000000000000000000000000000000000

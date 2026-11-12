@@ -1,13 +1,16 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "ppagent-site",
+  "main": "./worker/index.ts",
   "compatibility_date": "2026-11-11",
   "workers_dev": false,
   "preview_urls": false,
   "assets": {
     "directory": "./dist",
     "html_handling": "auto-trailing-slash",
-    "not_found_handling": "404-page"
+    "not_found_handling": "404-page",
+    // OAuth client metadata documents (worker/index.ts); every other path is a static asset.
+    "run_worker_first": ["/oauth/*"]
   },
   "routes": [
     {

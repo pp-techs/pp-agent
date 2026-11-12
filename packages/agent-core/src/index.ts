@@ -217,7 +217,7 @@ import { testMailAccount } from "./email/client.ts";
 import { EmailConfigFile } from "./email/config.ts";
 import { emailSecretId } from "./email/names.ts";
 import { createEmailTools } from "./email/tools.ts";
-import { VaultMcpAuthStore } from "./mcp-auth.ts";
+import { useAppClientMetadata, VaultMcpAuthStore } from "./mcp-auth.ts";
 import {
   authInteraction,
   availableModels,
@@ -2484,6 +2484,7 @@ export class AgentHost {
       compaction: { enabled: true },
       retry: { enabled: true, maxRetries: 2 },
     });
+    useAppClientMetadata();
     const resourceLoader = new DefaultResourceLoader({
       cwd,
       agentDir: paths.agentDir,

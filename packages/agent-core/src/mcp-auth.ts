@@ -4,6 +4,19 @@ import type { McpExtensionOptions } from "@earendil-works/pi-coding-agent";
 import { t } from "./i18n.ts";
 import { MCP_AUTH_KEY_PREFIX, type VaultCredentialStore } from "./credentials.ts";
 
+/** Where the app serves its Client ID Metadata Documents (apps/website/worker). */
+const CLIENT_METADATA_BASE_URL = "https://ppagent.monback.app/oauth";
+
+/**
+ * Makes Pi's MCP extension identify the app to authorization servers that register no clients
+ * (Logto, so PP Hub) with the app's own metadata document instead of Pi's, so their consent screen
+ * says "PP Agent" with its logo. Reads `PI_MCP_CLIENT_METADATA_BASE_URL`, a hook of the patched Pi
+ * (patches/@earendil-works__pi-coding-agent@1.5.0.patch); an address set by the host is kept.
+ */
+export function useAppClientMetadata(): void {
+  process.env.PI_MCP_CLIENT_METADATA_BASE_URL ??= CLIENT_METADATA_BASE_URL;
+}
+
 /** Vault id of the whole MCP OAuth state. */
 const VAULT_ID = `${MCP_AUTH_KEY_PREFIX}state`;
 /** File Pi's MCP extension writes in plain text when it is not given a store. */
