@@ -76,7 +76,7 @@ export function todoReminder(open: readonly TodoEntry[]): string {
   return [
     "Your checklist still has items that are not marked done:",
     ...lines,
-    `If the work behind them is finished, call ${TODO_TOOL} now with the whole list and every finished item marked done. Do not write any other text or repeat your answer. If you stopped because you need something from the person, call nothing and reply with just "OK".`,
+    `If the work behind them is finished, call ${TODO_TOOL} now with the whole list and every finished item marked done. Do not write any other text or repeat your answer. If you stopped because you need something from the person, call nothing and do not write any text.`,
   ].join("\n");
 }
 
