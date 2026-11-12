@@ -1,5 +1,11 @@
 # @workspace/web
 
+## 0.35.3
+
+### Patch Changes
+
+- 7007354: Signing in to PP Hub (and other MCP servers that register no clients) now shows "PP Agent" and its logo on the consent screen, instead of "pi".
+
 ## 0.35.2
 
 ### Patch Changes

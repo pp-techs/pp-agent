@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.35.3] — 2026-11-12
+
+Signing in to PP Hub (and other MCP servers that register no clients) now shows "PP Agent" and its logo on the consent screen, instead of "pi".
+
 ## [0.35.2] — 2026-11-12
 
 Scheduled tasks now run once or repeat. Pick how often (every few minutes or hours, every day, on chosen weekdays, once a month) and the time, and the editor shows the next three runs; for anything else, "Advanced" takes a cron expression such as `0 9 1,15 * *`. The agent schedules the same way. Tasks you already have keep running: every day and chosen-days tasks keep their exact time, and "every N hours/minutes" tasks are rounded to the nearest gap that fits the clock, for example every 5 hours becomes every 6.
