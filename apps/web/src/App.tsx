@@ -9,6 +9,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@workspace/ui/components/empty";
+import { useIsMobile } from "@workspace/ui/hooks/use-mobile";
 import {
   SidebarInset,
   SidebarProvider,
@@ -172,6 +173,9 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
   const status = useChatStore((state) => state.status);
   const ready = status === "idle" || status === "running";
   const [page, setPage] = React.useState<Page>("chat");
+  // A phone browses files on a page of its own; a wider screen has the file tree and file tabs.
+  const isMobile = useIsMobile();
+  const workbench = !isWebApp || !isMobile;
   // A page opened from the sidebar keeps a history entry of its own, so the phone's back gesture
   // and button (and a browser's back) return to the chat before they leave the app.
   React.useEffect(() => {
@@ -268,11 +272,11 @@ function ChatScreen({ bridge }: { bridge: DesktopBridge }) {
         onDrop={(event) => void onDrop(event)}
       >
         {isWebApp && <ConnectionBanner />}
-        {isWebApp ? chatPage : <Workbench bridge={bridge} chat={chatPage} />}
+        {workbench ? <Workbench bridge={bridge} chat={chatPage} /> : chatPage}
         <DropOverlay active={page === "chat" && ready} />
       </SidebarInset>
       {/* On every page, so the agent's browser shows without leaving (and losing) a schedule draft. */}
-      {!isWebApp && <SidePanel bridge={bridge} />}
+      {workbench && <SidePanel bridge={bridge} />}
     </SidebarProvider>
   );
 }

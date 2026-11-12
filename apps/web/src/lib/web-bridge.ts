@@ -590,8 +590,10 @@ export function createWebBridge(): DesktopBridge {
       onChanged: noop,
     },
     workspace: {
-      list: desktopOnly,
-      preview: desktopOnly,
+      // The files are read on the computer, in the open conversation's workspace (`root` is that
+      // workspace's folder on the computer, which only the computer can resolve).
+      list: (_root, dir) => command({ type: "list_workspace_files", dir }),
+      preview: (_root, path) => command({ type: "preview_workspace_file", path }),
       reveal: desktopOnly,
       attachment: desktopOnly,
       create: desktopOnly,
@@ -602,7 +604,7 @@ export function createWebBridge(): DesktopBridge {
       onChanged: noop,
     },
     browser: {
-      state: desktopOnly,
+      state: async () => ({ tabs: [], activeId: null }),
       open: desktopOnly,
       close: desktopOnly,
       activate: desktopOnly,

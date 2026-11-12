@@ -228,7 +228,7 @@ export function ChatSidebar({
   page: Page;
   onNavigate: (page: Page) => void;
 }) {
-  const { setOpenMobile, toggleSidebar } = useSidebar();
+  const { isMobile, setOpenMobile, toggleSidebar } = useSidebar();
   const labels = useUiLabels();
   const sessions = useQuery(sessionsQuery(bridge));
   const workspaces = useQuery(workspacesQuery(bridge));
@@ -631,7 +631,7 @@ export function ChatSidebar({
       <SidebarFooter className="shrink-0">
         <UpdateNotice bridge={bridge} />
         <SidebarMenu>
-          {isWebApp && (
+          {isWebApp && isMobile && (
             <SidebarMenuItem>
               <SidebarMenuButton
                 isActive={page === "files"}

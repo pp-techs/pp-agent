@@ -37,6 +37,7 @@ import { queryKeys } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
 import { useComposerStore } from "@/stores/composer-store";
 import { useWorkspaceWatch } from "@/hooks/use-panel-state";
+import { isWebApp } from "@/lib/bridge";
 import { openFile } from "@/lib/workbench-actions";
 import { NO_FOLDERS, useFileTreeStore } from "@/stores/file-tree-store";
 
@@ -95,40 +96,44 @@ export function FilePreviewView({
             </TooltipContent>
           </Tooltip>
         )}
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t("panel.files.attach")}
-                onClick={() => void attach()}
-              />
-            }
-          >
-            <PaperclipIcon />
-          </TooltipTrigger>
-          <TooltipContent>{t("panel.files.attach")}</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t("panel.files.reveal")}
-                onClick={() =>
-                  bridge.workspace
-                    .reveal(root, path)
-                    .catch((error: Error) => toast.error(error.message))
+        {!isWebApp && (
+          <>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("panel.files.attach")}
+                    onClick={() => void attach()}
+                  />
                 }
-              />
-            }
-          >
-            <SquareArrowOutUpRightIcon />
-          </TooltipTrigger>
-          <TooltipContent>{t("panel.files.reveal")}</TooltipContent>
-        </Tooltip>
+              >
+                <PaperclipIcon />
+              </TooltipTrigger>
+              <TooltipContent>{t("panel.files.attach")}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("panel.files.reveal")}
+                    onClick={() =>
+                      bridge.workspace
+                        .reveal(root, path)
+                        .catch((error: Error) => toast.error(error.message))
+                    }
+                  />
+                }
+              >
+                <SquareArrowOutUpRightIcon />
+              </TooltipTrigger>
+              <TooltipContent>{t("panel.files.reveal")}</TooltipContent>
+            </Tooltip>
+          </>
+        )}
       </div>
       <div className={cn("min-h-0 flex-1", showsHtml ? "flex flex-col" : "overflow-auto")}>
         <FileContent
@@ -244,7 +249,9 @@ const EntryRow = React.memo(function EntryRow({
     <div
       className="relative"
       onContextMenu={(event) => {
-        event.preventDefault();
+        if (!isWebApp) event.preventDefault();
+        // The computer's files can only be changed on the computer.
+        if (isWebApp) return;
         setMenuMounted(true);
         setPoint({ x: event.clientX, y: event.clientY });
       }}
@@ -260,6 +267,7 @@ const EntryRow = React.memo(function EntryRow({
           entry.kind === "folder" ? actions.onToggle(entry.path) : actions.onOpen(entry.path)
         }
         onKeyDown={(event) => {
+          if (isWebApp) return;
           if (event.key === "F2") actions.onStartRename(entry.path);
           else if (event.key === "Delete") actions.onRemove(entry.path);
           else return;
@@ -446,36 +454,40 @@ function FolderTree({ bridge, root }: { bridge: DesktopBridge; root: string }) {
         <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={root}>
           {root}
         </span>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t("panel.files.newFile")}
-                onClick={() => row.onStartCreate("", "file")}
-              />
-            }
-          >
-            <FilePlusIcon />
-          </TooltipTrigger>
-          <TooltipContent>{t("panel.files.newFile")}</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t("panel.files.newFolder")}
-                onClick={() => row.onStartCreate("", "folder")}
-              />
-            }
-          >
-            <FolderPlusIcon />
-          </TooltipTrigger>
-          <TooltipContent>{t("panel.files.newFolder")}</TooltipContent>
-        </Tooltip>
+        {!isWebApp && (
+          <>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("panel.files.newFile")}
+                    onClick={() => row.onStartCreate("", "file")}
+                  />
+                }
+              >
+                <FilePlusIcon />
+              </TooltipTrigger>
+              <TooltipContent>{t("panel.files.newFile")}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("panel.files.newFolder")}
+                    onClick={() => row.onStartCreate("", "folder")}
+                  />
+                }
+              >
+                <FolderPlusIcon />
+              </TooltipTrigger>
+              <TooltipContent>{t("panel.files.newFolder")}</TooltipContent>
+            </Tooltip>
+          </>
+        )}
         <Tooltip>
           <TooltipTrigger
             render={

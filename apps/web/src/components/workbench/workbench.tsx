@@ -27,6 +27,7 @@ import { useTranslation } from "react-i18next";
 import { FileTypeIcon } from "@/components/panel/file-icon";
 import { PanelTab, PanelTabs } from "@/components/panel/panel-tabs";
 import { OpenFolderButton, SidePanelButton } from "@/components/workbench/workspace-buttons";
+import { isWebApp } from "@/lib/bridge";
 import { useBrowserState, useTerminals, useWorkspaceWatch } from "@/hooks/use-panel-state";
 import { tabLabel } from "@/lib/browser-tabs";
 import { closeMainTab, closingTabs, newBrowserTab, newTerminal } from "@/lib/workbench-actions";
@@ -76,18 +77,20 @@ function NewTabMenu({ bridge, folder }: { bridge: DesktopBridge; folder: string 
         <TooltipContent>{t("workbench.new")}</TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="end" className="w-56">
-        {folder && (
+        {folder && !isWebApp && (
           <DropdownMenuItem onClick={() => void newTerminal(bridge, folder)}>
             <SquareTerminalIcon />
             {t("panel.terminal.new")}
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem
-          onClick={() => void newBrowserTab(bridge, folder, DEFAULT_BROWSER_PROFILE_ID)}
-        >
-          <GlobeIcon />
-          {t("panel.browser.newTab")}
-        </DropdownMenuItem>
+        {!isWebApp && (
+          <DropdownMenuItem
+            onClick={() => void newBrowserTab(bridge, folder, DEFAULT_BROWSER_PROFILE_ID)}
+          >
+            <GlobeIcon />
+            {t("panel.browser.newTab")}
+          </DropdownMenuItem>
+        )}
         {folder && (
           <DropdownMenuItem onClick={() => usePanelStore.getState().setOpen(true)}>
             <FolderTreeIcon />
@@ -216,7 +219,7 @@ function GroupStrip({
       {/* The workspace folder and the file tree's toggle sit at the end of the last group's row. */}
       {index === bench.groups.length - 1 && (
         <>
-          <OpenFolderButton bridge={bridge} />
+          {!isWebApp && <OpenFolderButton bridge={bridge} />}
           <SidePanelButton />
         </>
       )}

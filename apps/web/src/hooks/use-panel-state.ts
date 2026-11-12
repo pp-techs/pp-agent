@@ -37,9 +37,14 @@ export function useTerminals(bridge: DesktopBridge): TerminalInfo[] | null {
 /** How many views follow the workspace now: the watch ends with the last one. */
 let watchers = 0;
 
+/** How often the web app looks again at the files it shows: it has no watch on the computer. */
+const POLL_MS = 5_000;
+
 /**
  * Follows changes in a workspace folder while the calling view is mounted, so file trees and
- * previews refresh. The window has one watch, shared by every view that asks for it.
+ * previews refresh. The window has one watch, shared by every view that asks for it. The web app
+ * (a browser, the phone app, a window on another computer) cannot watch the computer's folder, so
+ * it reads the open folders and files again every few seconds while the page is in view.
  */
 export function useWorkspaceWatch(bridge: DesktopBridge, root: string) {
   const queryClient = useQueryClient();
@@ -49,6 +54,12 @@ export function useWorkspaceWatch(bridge: DesktopBridge, root: string) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFiles(changed) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.filePreviews(changed) });
     };
+    if (bridge.kind === "web") {
+      const timer = setInterval(() => {
+        if (document.visibilityState === "visible") refresh(root);
+      }, POLL_MS);
+      return () => clearInterval(timer);
+    }
     const unsubscribe = bridge.workspace.onChanged(refresh);
     watchers += 1;
     bridge.workspace.watch(root).catch((error: Error) => toast.error(error.message));
