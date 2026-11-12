@@ -110,4 +110,5 @@ minimumReleaseAgeExclude:
   - vitest
   - "@vitest/*"
 patchedDependencies:
+  "@earendil-works/pi-coding-agent@1.5.0": patches/@earendil-works__pi-coding-agent@1.5.0.patch
   "@shadcn/react@0.3.1": patches/@shadcn__react@0.3.1.patch
