@@ -1,5 +1,15 @@
 # @workspace/agent-core
 
+## 0.1.4
+
+### Patch Changes
+
+- 7b63197: Scheduled tasks now run once or repeat. Pick how often (every few minutes or hours, every day, on chosen weekdays, once a month) and the time, and the editor shows the next three runs; for anything else, "Advanced" takes a cron expression such as `0 9 1,15 * *`. The agent schedules the same way. Tasks you already have keep running: every day and chosen-days tasks keep their exact time, and "every N hours/minutes" tasks are rounded to the nearest gap that fits the clock, for example every 5 hours becomes every 6.
+- 7b63197: When creating or editing a scheduled task you can now choose where each result is sent: only the app, or a paired Telegram or Zalo chat (your own chat or any chat you added to a channel). Tasks the agent created with a destination keep it.
+- Updated dependencies [7b63197]
+- Updated dependencies [7b63197]
+  - @workspace/shared@0.1.2
+
 ## 0.1.3
 
 ### Patch Changes

@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.35.2] — 2026-11-12
+
+Scheduled tasks now run once or repeat. Pick how often (every few minutes or hours, every day, on chosen weekdays, once a month) and the time, and the editor shows the next three runs; for anything else, "Advanced" takes a cron expression such as `0 9 1,15 * *`. The agent schedules the same way. Tasks you already have keep running: every day and chosen-days tasks keep their exact time, and "every N hours/minutes" tasks are rounded to the nearest gap that fits the clock, for example every 5 hours becomes every 6.
+
+The date field of a one-time scheduled task is now a calendar with a time box and quick picks ("In 1 hour", "Tomorrow 09:00"), and a new task starts at the next full hour.
+
+Providers and custom gateways in Settings → Models now appear as cards with the provider's logo, in two columns.
+
+When creating or editing a scheduled task you can now choose where each result is sent: only the app, or a paired Telegram or Zalo chat (your own chat or any chat you added to a channel). Tasks the agent created with a destination keep it.
+
 ## [0.35.1] — 2026-11-12
 
 Restarting to install an update on Windows no longer stops halfway with "close PP Agent to continue". The app now stops its background agent, and keeps the login service from starting it again, before the installer runs.

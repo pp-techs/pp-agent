@@ -1,5 +1,11 @@
 # @workspace/ui
 
+## 0.0.3
+
+### Patch Changes
+
+- 7b63197: The date field of a one-time scheduled task is now a calendar with a time box and quick picks ("In 1 hour", "Tomorrow 09:00"), and a new task starts at the next full hour.
+
 ## 0.0.2
 
 ### Patch Changes
