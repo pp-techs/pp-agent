@@ -35,7 +35,7 @@ function setup(
     },
     onState: (value, error) => states.push([value, error]),
     t: fakeT,
-    settings: { get: () => ({ channels: { telegram: { chats } } }) },
+    settings: { get: () => ({ channels: { telegram: [{ id: "default", chats }] } }) },
   });
   channels.push(channel);
   return { api, gateway, pairing, state, paired, states, channel };

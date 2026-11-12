@@ -33,6 +33,10 @@ export type ChannelId = "telegram" | "zalo";
 
 /** What the steps show of a channel, whichever chat app it is. */
 export interface ChannelView {
+  /** The account's id; null while a new account has not been saved yet. */
+  id: string | null;
+  /** The name the person gave the account; empty when none. */
+  label: string;
   enabled: boolean;
   hasToken: boolean;
   agentId: string | null;
@@ -51,6 +55,8 @@ export interface ChannelView {
 
 export function telegramView(status: TelegramStatus): ChannelView {
   return {
+    id: status.id,
+    label: status.label,
     enabled: status.enabled,
     hasToken: status.hasToken,
     agentId: status.agentId,
@@ -67,6 +73,8 @@ export function telegramView(status: TelegramStatus): ChannelView {
 
 export function zaloView(status: ZaloStatus): ChannelView {
   return {
+    id: status.id,
+    label: status.label,
     enabled: status.enabled,
     hasToken: status.hasToken,
     agentId: status.agentId,
@@ -81,8 +89,30 @@ export function zaloView(status: ZaloStatus): ChannelView {
   };
 }
 
+/** The view of an account that is being added: nothing saved yet, switched on by default. */
+export function blankView(): ChannelView {
+  return {
+    id: null,
+    label: "",
+    enabled: true,
+    hasToken: false,
+    agentId: null,
+    workspaceId: DEFAULT_WORKSPACE_ID,
+    state: "off",
+    error: null,
+    bot: null,
+    botForPairing: null,
+    owner: null,
+    pairingCode: null,
+    pairingExpiresAt: null,
+  };
+}
+
 /** What a step saves; the channel's own input type accepts it as is. */
 export interface SaveChannelInput {
+  /** The account to change; omitted adds a new one. */
+  accountId?: string;
+  label?: string;
   token?: string;
   enabled: boolean;
   agentId: string | null;
@@ -92,10 +122,13 @@ export interface SaveChannelInput {
 /** The two commands the steps send, as the channel's mutations offer them. */
 export interface ChannelActions {
   save: {
-    mutate(input: SaveChannelInput, options?: { onSuccess?: () => void }): void;
+    mutate(
+      input: SaveChannelInput,
+      options?: { onSuccess?: (saved: { id: string }) => void },
+    ): void;
     isPending: boolean;
   };
-  startPairing: { mutate(): void; isPending: boolean };
+  startPairing: { mutate(accountId: string): void; isPending: boolean };
 }
 
 interface StepProps {
@@ -154,15 +187,22 @@ export function ConnectStep({ channel, view, actions }: StepProps) {
   const { t } = useTranslation(["settings", "common"]);
   const [token, setToken] = React.useState("");
   const [enabled, setEnabled] = React.useState<boolean | null>(null);
+  const [label, setLabel] = React.useState<string | null>(null);
 
+  const adding = view.id === null;
   const wanted = enabled ?? view.enabled;
+  const wantedLabel = (label ?? view.label).trim();
   const trimmed = token.trim();
-  const dirty = trimmed !== "" || wanted !== view.enabled;
-  const needsToken = wanted && !view.hasToken && trimmed === "";
+  const dirty =
+    trimmed !== "" || wanted !== view.enabled || wantedLabel !== view.label || (adding && wanted);
+  // A new account always needs its token; a saved one only to be switched on.
+  const needsToken = (wanted || adding) && !view.hasToken && trimmed === "";
 
   function save() {
     actions.save.mutate(
       {
+        ...(view.id !== null && { accountId: view.id }),
+        label: wantedLabel,
         ...(trimmed !== "" && { token: trimmed }),
         enabled: wanted,
         agentId: view.agentId,
@@ -172,6 +212,7 @@ export function ConnectStep({ channel, view, actions }: StepProps) {
         onSuccess: () => {
           setToken("");
           setEnabled(null);
+          setLabel(null);
           toast.success(t(`channels.${channel}.saved`));
         },
       },
@@ -191,6 +232,20 @@ export function ConnectStep({ channel, view, actions }: StepProps) {
         }}
       >
         <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor={`${channel}-label`}>
+              {t("channels.accounts.name.label")}
+            </FieldLabel>
+            <Input
+              id={`${channel}-label`}
+              autoComplete="off"
+              maxLength={60}
+              value={label ?? view.label}
+              onChange={(event) => setLabel(event.target.value)}
+              placeholder={t("channels.accounts.name.placeholder")}
+            />
+            <FieldDescription>{t("channels.accounts.name.help")}</FieldDescription>
+          </Field>
           <Field>
             <FieldLabel htmlFor={`${channel}-token`}>
               {t(`channels.${channel}.token.label`)}
@@ -297,8 +352,8 @@ export function PairStep({ channel, view, actions }: StepProps) {
         <Button
           variant="outline"
           size="sm"
-          disabled={!ready || actions.startPairing.isPending}
-          onClick={() => actions.startPairing.mutate()}
+          disabled={view.id === null || !ready || actions.startPairing.isPending}
+          onClick={() => view.id !== null && actions.startPairing.mutate(view.id)}
         >
           {actions.startPairing.isPending && <Spinner data-icon="inline-start" />}
           {view.owner !== null || open || expired
@@ -354,7 +409,12 @@ export function RepliesStep({
 
   function save() {
     actions.save.mutate(
-      { enabled: view.enabled, agentId: agentValue, workspaceId: workspaceValue },
+      {
+        ...(view.id !== null && { accountId: view.id }),
+        enabled: view.enabled,
+        agentId: agentValue,
+        workspaceId: workspaceValue,
+      },
       {
         onSuccess: () => {
           setDraft({});

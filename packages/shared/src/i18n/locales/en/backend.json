@@ -333,6 +333,8 @@
     }
   },
   "channels": {
+    "tokenInUse": "This bot token is already used by another account.",
+    "unknownAccount": "No account \"{{id}}\".",
     "telegram": {
       "start": "Hi! To use this bot, open PP Agent › Settings › Channels › Telegram, start pairing, then send me /pair followed by the code.",
       "startPaired": "Hi {{name}}! Send me a message and I will get to work. /help lists the commands.",

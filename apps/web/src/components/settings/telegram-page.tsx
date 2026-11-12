@@ -32,8 +32,15 @@ import {
   RepliesStep,
   SetupStep,
   StatusLine,
+  blankView,
   telegramView,
 } from "@/components/settings/channel-setup";
+import {
+  AccountList,
+  BackToAccounts,
+  accountTitle,
+  type AccountSelection,
+} from "@/components/settings/channel-accounts";
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { useSettingsSubPage } from "@/components/settings/settings-subpage";
 import {
@@ -44,7 +51,7 @@ import {
 } from "@/components/settings/telegram-chat-fields";
 import { ComputerOnlyNotice } from "@/components/settings/computer-only-notice";
 import { maySend } from "@/lib/bridge";
-import { telegramStatusQuery, useBackgroundCommands } from "@/lib/extension-queries";
+import { telegramAccountsQuery, useBackgroundCommands } from "@/lib/extension-queries";
 
 /** Whoever pairs with the bot talks to the agent from anywhere, so only the computer sets it up. */
 const CAN_SET_UP = maySend("save_telegram") && maySend("start_telegram_pairing");
@@ -105,6 +112,7 @@ function ChatsStep({ bridge, status }: { bridge: DesktopBridge; status: Telegram
     if (!valid || chatId === null || allowedUsers === null) return;
     saveTelegram.mutate(
       {
+        accountId: status.id,
         enabled: status.enabled,
         agentId: status.agentId,
         workspaceId: status.workspaceId,
@@ -317,25 +325,52 @@ function ChatsStep({ bridge, status }: { bridge: DesktopBridge; status: Telegram
   );
 }
 
-/** Settings › Channels › Telegram: connect the bot, pair the owner, choose who answers. */
+/** Settings › Channels › Telegram: the accounts, and for each one its bot, owner and chats. */
 export function TelegramPage({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("settings");
   useSettingsSubPage(t("channels.telegram.title"));
-  const query = useQuery(telegramStatusQuery(bridge));
+  const query = useQuery(telegramAccountsQuery(bridge));
   const { saveTelegram, startPairing, forgetTelegram } = useBackgroundCommands(bridge);
-  const status = query.data;
-  const view = status && telegramView(status);
-  const actions = { save: saveTelegram, startPairing };
+  const [selection, setSelection] = React.useState<AccountSelection>({ kind: "list" });
+  const accounts = query.data;
+  const index =
+    selection.kind === "account" ? (accounts?.findIndex((a) => a.id === selection.id) ?? -1) : -1;
+  const status = index >= 0 ? accounts?.[index] : undefined;
+  const view = selection.kind === "new" ? blankView() : status && telegramView(status);
+  // Saving a new account opens it, so the person can pair it next.
+  const actions = {
+    save: {
+      isPending: saveTelegram.isPending,
+      mutate: (
+        input: Parameters<typeof saveTelegram.mutate>[0],
+        options?: { onSuccess?: (saved: { id: string }) => void },
+      ) =>
+        saveTelegram.mutate(input, {
+          onSuccess: (saved) => {
+            if (selection.kind === "new") setSelection({ kind: "account", id: saved.id });
+            options?.onSuccess?.(saved);
+          },
+        }),
+    },
+    startPairing: {
+      isPending: startPairing.isPending,
+      mutate: (accountId: string) => startPairing.mutate(accountId),
+    },
+  };
 
   async function forget() {
+    if (!status) return;
     const confirmed = await ConfirmModal.show({
       title: t("channels.telegram.forget.title"),
       description: t("channels.telegram.forget.description"),
       confirmLabel: t("channels.telegram.forget.confirm"),
     });
     if (!confirmed) return;
-    forgetTelegram.mutate(undefined, {
-      onSuccess: () => toast.success(t("channels.telegram.forget.done")),
+    forgetTelegram.mutate(status.id, {
+      onSuccess: () => {
+        setSelection({ kind: "list" });
+        toast.success(t("channels.telegram.forget.done"));
+      },
     });
   }
 
@@ -355,20 +390,54 @@ export function TelegramPage({ bridge }: { bridge: DesktopBridge }) {
           <AlertDescription>{query.error.message}</AlertDescription>
         </Alert>
       )}
-      {status && view && (
+      {accounts && selection.kind === "list" && (
+        <AccountList
+          channel="telegram"
+          views={accounts.map(telegramView)}
+          canAdd={CAN_SET_UP}
+          onOpen={(id) => setSelection({ kind: "account", id })}
+          onAdd={() => setSelection({ kind: "new" })}
+        />
+      )}
+      {accounts && selection.kind !== "list" && !view && (
+        // The account was removed from elsewhere while it was open.
+        <BackToAccounts onClick={() => setSelection({ kind: "list" })} />
+      )}
+      {accounts && selection.kind !== "list" && view && (
         <>
-          <StatusLine channel="telegram" view={view} />
+          <BackToAccounts onClick={() => setSelection({ kind: "list" })} />
+          {status && (
+            <h3 className="text-base font-medium">
+              {accountTitle(view, index, t("channels.telegram.title"))}
+            </h3>
+          )}
+          {status && <StatusLine channel="telegram" view={view} />}
           {CAN_SET_UP ? (
             <>
-              <ConnectStep channel="telegram" view={view} actions={actions} />
-              <PairStep channel="telegram" view={view} actions={actions} />
-              <RepliesStep channel="telegram" view={view} actions={actions} bridge={bridge} />
-              <ChatsStep bridge={bridge} status={status} />
+              <ConnectStep
+                key={view.id ?? "new"}
+                channel="telegram"
+                view={view}
+                actions={actions}
+              />
+              {status && (
+                <>
+                  <PairStep channel="telegram" view={view} actions={actions} />
+                  <RepliesStep
+                    key={view.id}
+                    channel="telegram"
+                    view={view}
+                    actions={actions}
+                    bridge={bridge}
+                  />
+                  <ChatsStep key={view.id} bridge={bridge} status={status} />
+                </>
+              )}
             </>
           ) : (
             <ComputerOnlyNotice />
           )}
-          {(status.hasToken || status.ownerId !== null) && maySend("forget_telegram") && (
+          {status && maySend("forget_telegram") && (
             <div>
               <Button
                 variant="destructive"

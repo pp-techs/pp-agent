@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import {
+  DEFAULT_CHANNEL_ACCOUNT_ID,
   MAX_RESEARCH_QUESTION_LENGTH,
   type Attachment,
   type ChannelState,
@@ -31,6 +32,7 @@ import {
 import { TelegramApprovals } from "./approvals.ts";
 import { TelegramQuestions } from "./questions.ts";
 import { formatMessage, sendFormatted, splitText } from "./format.ts";
+import { chatKeyPrefix, offsetFileName } from "../shared/accounts.ts";
 import { findOption } from "../shared/options.ts";
 import { parseResearchArgument } from "../shared/research.ts";
 import type { PairingGuard } from "../shared/pairing.ts";
@@ -97,9 +99,15 @@ export interface TelegramChannelDeps {
 
   /** Where to persist the poll offset. */
   dataDir?: string;
-  /** App settings for per-chat config. */
+  /** Which account of the app this bot is; the first one (`default`) when omitted. */
+  accountId?: string;
+  /** App settings for per-chat config; read live, each message. */
   settings?: {
-    get(): { channels: { telegram: { chats?: Record<string, TelegramChatSettings> } } };
+    get(): {
+      channels: {
+        telegram: Array<{ id: string; chats?: Record<string, TelegramChatSettings> }>;
+      };
+    };
   };
 }
 
@@ -151,7 +159,12 @@ export class TelegramChannel {
   private username: string | null = null;
   private online = false;
 
+  private readonly accountId: string;
+  private readonly keyPrefix: string;
+
   constructor(private readonly deps: TelegramChannelDeps) {
+    this.accountId = deps.accountId ?? DEFAULT_CHANNEL_ACCOUNT_ID;
+    this.keyPrefix = chatKeyPrefix("telegram", this.accountId);
     this.api = deps.api ?? new HttpTelegramApi(deps.token);
     this.botId = /^([1-9]\d*):/.exec(deps.token)?.[1] ?? null;
     this.approvals = new TelegramApprovals(this.api, deps.t);
@@ -190,10 +203,15 @@ export class TelegramChannel {
     this.questions.skipAll();
     for (const [chatId, queue] of this.chats) {
       queue.waiting.length = 0;
-      if (queue.running) void this.deps.gateway.abort(`telegram:${chatId}`).catch(() => {});
+      if (queue.running) void this.deps.gateway.abort(this.key(chatId)).catch(() => {});
     }
     this.online = false;
     this.deps.onState("off", null);
+  }
+
+  /** The gateway's key of a chat of this bot (`telegram:123`, or `telegram:<account>:123`). */
+  private key(chatId: number): string {
+    return `${this.keyPrefix}:${chatId}`;
   }
 
   /** Sends `text` (Markdown) to a private chat, split to Telegram's length limit. */
@@ -299,7 +317,7 @@ export class TelegramChannel {
   private saveOffset(offset: number): void {
     if (!this.deps.dataDir || !this.botId) return;
     try {
-      const file = join(this.deps.dataDir, "telegram-offset.json");
+      const file = join(this.deps.dataDir, offsetFileName("telegram", this.accountId));
       writeFileSync(file, JSON.stringify({ botId: this.botId, offset }), { mode: 0o600 });
     } catch {
       // Best effort: a lost offset means re-processing, which is safe (at-least-once).
@@ -310,7 +328,7 @@ export class TelegramChannel {
   private loadOffset(): number {
     if (!this.deps.dataDir || !this.botId) return 0;
     try {
-      const file = join(this.deps.dataDir, "telegram-offset.json");
+      const file = join(this.deps.dataDir, offsetFileName("telegram", this.accountId));
       const raw = JSON.parse(readFileSync(file, "utf8")) as {
         botId?: unknown;
         offset?: unknown;
@@ -363,13 +381,16 @@ export class TelegramChannel {
   // -------------------------------------------------------------------------------------------
 
   private isConfiguredChat(chatId: number): boolean {
-    return Object.hasOwn(this.deps.settings?.get().channels.telegram.chats ?? {}, String(chatId));
+    return Object.hasOwn(this.savedChats() ?? {}, String(chatId));
   }
 
   /** Per-chat settings from Settings › Channels; empty when none are configured. */
   private chatSettings(chatId: number): TelegramChatSettings {
-    const chats = this.deps.settings?.get().channels.telegram.chats;
-    return chats?.[String(chatId)] ?? {};
+    return this.savedChats()?.[String(chatId)] ?? {};
+  }
+
+  private savedChats(): Record<string, TelegramChatSettings> | undefined {
+    return this.deps.settings?.get().channels.telegram.find((a) => a.id === this.accountId)?.chats;
   }
 
   /** True when `from` may talk in this chat (owner, or in the chat's allowlist). */
@@ -438,7 +459,7 @@ export class TelegramChannel {
       case "new":
         await this.interrupt(chatId);
         try {
-          await this.deps.gateway.newConversation(`telegram:${chatId}`);
+          await this.deps.gateway.newConversation(this.key(chatId));
           await this.reply(chatId, "newConversation");
         } catch (error) {
           await this.reply(chatId, "turnFailed", { error: (error as Error).message });
@@ -473,7 +494,7 @@ export class TelegramChannel {
     const queue = this.queue(chatId);
     if (queue.running && busyMode === "steer" && plain && message.text?.trim()) {
       try {
-        const accepted = await this.deps.gateway.steerTurn(`telegram:${chatId}`, {
+        const accepted = await this.deps.gateway.steerTurn(this.key(chatId), {
           text: message.text.trim(),
           attachments: [],
           sender: { id: String(from.id), name: displayName(from), owner: isOwner },
@@ -484,7 +505,7 @@ export class TelegramChannel {
       }
     }
     if (queue.running && busyMode === "interrupt") {
-      await this.deps.gateway.abort(`telegram:${chatId}`).catch(() => {});
+      await this.deps.gateway.abort(this.key(chatId)).catch(() => {});
     }
     if (queue.waiting.length >= MAX_QUEUED_MESSAGES) {
       await this.reply(chatId, "busy");
@@ -497,7 +518,7 @@ export class TelegramChannel {
   /** Replies with the chat's saved sessions, current first. */
   private async listSessions(chatId: number): Promise<void> {
     try {
-      const sessions = await this.deps.gateway.listChatSessions(`telegram:${chatId}`);
+      const sessions = await this.deps.gateway.listChatSessions(this.key(chatId));
       if (sessions.length === 0) {
         await this.reply(chatId, "noSessions");
         return;
@@ -520,7 +541,7 @@ export class TelegramChannel {
       return;
     }
     try {
-      const sessions = await this.deps.gateway.listChatSessions(`telegram:${chatId}`);
+      const sessions = await this.deps.gateway.listChatSessions(this.key(chatId));
       const target = sessions[index - 1];
       if (!target) {
         await this.reply(chatId, "sessionNotFound", { number: index });
@@ -531,7 +552,7 @@ export class TelegramChannel {
         return;
       }
       await this.interrupt(chatId);
-      await this.deps.gateway.resumeChatSession(`telegram:${chatId}`, target.id);
+      await this.deps.gateway.resumeChatSession(this.key(chatId), target.id);
       await this.reply(chatId, "sessionResumed", { title: target.title });
     } catch (error) {
       await this.reply(chatId, "turnFailed", { error: (error as Error).message });
@@ -555,7 +576,7 @@ export class TelegramChannel {
   /** `/agent`, `/workspace`, `/model`, `/thinking`: switch to the one named, or offer the list. */
   private async choose(chatId: number, kind: ChoiceKind, argument: string): Promise<void> {
     try {
-      const { options, currentId } = await this.listFor(`telegram:${chatId}`, kind);
+      const { options, currentId } = await this.listFor(this.key(chatId), kind);
       if (options.length === 0) {
         await this.reply(chatId, "noChoices");
         return;
@@ -601,7 +622,7 @@ export class TelegramChannel {
     kind: ChoiceKind,
     option: ChatOption,
   ): Promise<[TelegramTextName, Record<string, string>]> {
-    const chatKey = `telegram:${chatId}`;
+    const chatKey = this.key(chatId);
     const { gateway } = this.deps;
     if (kind === "agent") await gateway.choose(chatKey, { agentId: option.id });
     else if (kind === "workspace") await gateway.choose(chatKey, { workspaceId: option.id });
@@ -714,7 +735,7 @@ export class TelegramChannel {
     this.approvals.denyAll(chatId);
     this.questions.skipAll(chatId);
     try {
-      await this.deps.gateway.abort(`telegram:${chatId}`);
+      await this.deps.gateway.abort(this.key(chatId));
     } catch (error) {
       console.warn("[telegram] Could not stop the turn:", (error as Error).message);
     }
@@ -849,9 +870,7 @@ export class TelegramChannel {
   }
 
   private async runTurn(chatId: number, input: ChannelInput): Promise<void> {
-    await this.answer(chatId, (hooks) =>
-      this.deps.gateway.runTurn(`telegram:${chatId}`, input, hooks),
-    );
+    await this.answer(chatId, (hooks) => this.deps.gateway.runTurn(this.key(chatId), input, hooks));
   }
 
   /**
@@ -867,7 +886,7 @@ export class TelegramChannel {
     },
   ): Promise<void> {
     const result = await this.answer(chatId, (hooks) =>
-      this.deps.gateway.runResearch(`telegram:${chatId}`, request, hooks),
+      this.deps.gateway.runResearch(this.key(chatId), request, hooks),
     );
     if (result?.status === "done" && result.report) await this.sendReport(chatId, result.report);
   }

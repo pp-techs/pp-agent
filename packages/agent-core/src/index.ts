@@ -104,6 +104,10 @@ import {
   type ToolSummary,
   type WorkspaceProfile,
   type WorkspaceInstructions,
+  type SaveTelegramInput,
+  type SaveZaloInput,
+  type TelegramStatus,
+  type ZaloStatus,
 } from "@workspace/shared";
 import {
   AGENT_ENTRY_TYPE,
@@ -145,6 +149,7 @@ import {
   assistantText,
   chatAgentId,
 } from "./channel-sessions.ts";
+import { ChannelAccounts, findChannel } from "./channels/shared/accounts.ts";
 import { TelegramService } from "./channels/telegram/index.ts";
 import { ZaloService } from "./channels/zalo/index.ts";
 import type {
@@ -650,7 +655,10 @@ export class AgentHost {
   /** What each saved session file holds, read again only when the file changed. */
   private sessionInfoCache: SessionInfoCache | null = null;
   /** The chat apps (Telegram bot, Zalo bot); null until the services are ready. */
-  private chatApps: { telegram: TelegramService; zalo: ZaloService } | null = null;
+  private chatApps: {
+    telegram: ChannelAccounts<TelegramStatus, SaveTelegramInput>;
+    zalo: ChannelAccounts<ZaloStatus, SaveZaloInput>;
+  } | null = null;
   /** Open Pi sessions of chats by chat key (`telegram:<id>`); idle ones are released. */
   private readonly chats = new Map<string, ChatSession>();
   /** When each open chat session last finished a turn. */
@@ -851,21 +859,36 @@ export class AgentHost {
         });
       }
       await this.startSession(this.newSessionManager());
+      const changed = () => emit({ type: "settings_changed", scopes: ["background"] });
       this.chatApps = {
-        telegram: new TelegramService({
-          dataDir: paths.agentDir,
-          settings,
-          credentials: this.credentials,
-          gateway: this.gateway,
-          changed: () => emit({ type: "settings_changed", scopes: ["background"] }),
-          t: (key, vars) => t(key, vars),
+        telegram: new ChannelAccounts({
+          saved: () => settings.get().channels.telegram,
+          create: (accountId) =>
+            new TelegramService({
+              accountId,
+              dataDir: paths.agentDir,
+              settings,
+              credentials: this.credentials,
+              gateway: this.gateway,
+              changed,
+              t: (key, vars) => t(key, vars),
+            }),
+          tokenInUse: () => t("channels.tokenInUse"),
+          unknownAccount: (id) => t("channels.unknownAccount", { id }),
         }),
-        zalo: new ZaloService({
-          settings,
-          credentials: this.credentials,
-          gateway: this.gateway,
-          changed: () => emit({ type: "settings_changed", scopes: ["background"] }),
-          t: (key, vars) => t(key, vars),
+        zalo: new ChannelAccounts({
+          saved: () => settings.get().channels.zalo,
+          create: (accountId) =>
+            new ZaloService({
+              accountId,
+              settings,
+              credentials: this.credentials,
+              gateway: this.gateway,
+              changed,
+              t: (key, vars) => t(key, vars),
+            }),
+          tokenInUse: () => t("channels.tokenInUse"),
+          unknownAccount: (id) => t("channels.unknownAccount", { id }),
         }),
       };
       this.ready.resolve(services);
@@ -1148,22 +1171,22 @@ export class AgentHost {
       case "set_service_installed":
         return this.setServiceInstalled(command.installed);
 
-      case "get_telegram_status":
-        return this.requireChatApps().telegram.status();
+      case "list_telegram_accounts":
+        return this.requireChatApps().telegram.list();
       case "save_telegram":
         return this.requireChatApps().telegram.save(command.config);
       case "start_telegram_pairing":
-        return this.requireChatApps().telegram.startPairing();
+        return this.requireChatApps().telegram.startPairing(command.accountId);
       case "forget_telegram":
-        return this.requireChatApps().telegram.forget();
-      case "get_zalo_status":
-        return this.requireChatApps().zalo.status();
+        return this.requireChatApps().telegram.forget(command.accountId);
+      case "list_zalo_accounts":
+        return this.requireChatApps().zalo.list();
       case "save_zalo":
         return this.requireChatApps().zalo.save(command.config);
       case "start_zalo_pairing":
-        return this.requireChatApps().zalo.startPairing();
+        return this.requireChatApps().zalo.startPairing(command.accountId);
       case "forget_zalo":
-        return this.requireChatApps().zalo.forget();
+        return this.requireChatApps().zalo.forget(command.accountId);
 
       case "get_remote_access":
         return this.requireRemote().status();
@@ -4923,14 +4946,16 @@ export class AgentHost {
     return this.chatApps;
   }
 
-  /** Every chat app, Telegram first; empty until the services are ready. */
+  /** Every account of every chat app, Telegram first; empty until the services are ready. */
   private channelServices(): ChannelService[] {
-    return this.chatApps ? [this.chatApps.telegram, this.chatApps.zalo] : [];
+    return this.chatApps
+      ? [...this.chatApps.telegram.services(), ...this.chatApps.zalo.services()]
+      : [];
   }
 
-  /** The chat app a chat key (`telegram:123`) or delivery target (`zalo:abc`) belongs to. */
+  /** The account a chat key (`telegram:123`, `telegram:work:123`) or delivery target belongs to. */
   private channelFor(key: string): ChannelService | undefined {
-    return this.channelServices().find((channel) => key.startsWith(`${channel.id}:`));
+    return findChannel(this.channelServices(), key);
   }
 
   /**
@@ -4947,7 +4972,7 @@ export class AgentHost {
   }
 
   /**
-   * Label, agent, and workspace of a chat (key `telegram:<id>` or `zalo:<id>`). Workspace: what the
+   * Label, agent, and workspace of a chat (key `telegram:<id>`, `telegram:<account>:<id>` or `zalo:<id>`). Workspace: what the
    * person picked in the chat with `/workspace`, else the channel's own choice in Settings. Agent:
    * what they picked with `/agent`, else the one pinned for the channel, else the workspace's own
    * agent, else the built-in one. A pick whose agent or workspace was deleted is ignored.

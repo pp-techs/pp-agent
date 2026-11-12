@@ -1,4 +1,5 @@
 import {
+  DEFAULT_CHANNEL_ACCOUNT_ID,
   MAX_RESEARCH_QUESTION_LENGTH,
   type Attachment,
   type ChannelState,
@@ -15,6 +16,7 @@ import type {
   TurnHooks,
   TurnResult,
 } from "../types.ts";
+import { chatKeyPrefix } from "../shared/accounts.ts";
 import { findOption } from "../shared/options.ts";
 import type { PairingGuard } from "../shared/pairing.ts";
 import { abortableSleep } from "../shared/sleep.ts";
@@ -78,9 +80,13 @@ export interface ZaloChannelDeps {
   onPaired(owner: ZaloOwner): void;
   onState(state: ChannelState, error: string | null): void;
   t: ZaloTranslate;
+  /** Which account of the app this bot is; the first one (`default`) when omitted. */
+  accountId?: string;
   /** Per-chat access, bindings and busy mode from Settings › Channels; read live, each message. */
   settings?: {
-    get(): { channels: { zalo: { chats?: Record<string, ZaloChatSettings> } } };
+    get(): {
+      channels: { zalo: Array<{ id: string; chats?: Record<string, ZaloChatSettings> }> };
+    };
   };
 }
 
@@ -122,7 +128,12 @@ export class ZaloChannel {
   private botName: string | null = null;
   private online = false;
 
+  private readonly accountId: string;
+  private readonly keyPrefix: string;
+
   constructor(private readonly deps: ZaloChannelDeps) {
+    this.accountId = deps.accountId ?? DEFAULT_CHANNEL_ACCOUNT_ID;
+    this.keyPrefix = chatKeyPrefix("zalo", this.accountId);
     this.api = deps.api ?? new HttpZaloApi(deps.token);
     this.prompts = new ZaloPrompts((chatId, text) => this.api.sendMessage(chatId, text), deps.t);
   }
@@ -158,7 +169,7 @@ export class ZaloChannel {
     this.prompts.cancelAll();
     for (const [chatId, queue] of this.chats) {
       queue.waiting.length = 0;
-      if (queue.running) void this.deps.gateway.abort(`zalo:${chatId}`).catch(() => {});
+      if (queue.running) void this.deps.gateway.abort(this.key(chatId)).catch(() => {});
     }
     this.online = false;
     this.deps.onState("off", null);
@@ -254,9 +265,16 @@ export class ZaloChannel {
   // Messages
   // -------------------------------------------------------------------------------------------
 
+  /** The gateway's key of a chat of this bot (`zalo:abc`, or `zalo:<account>:abc`). */
+  private key(chatId: string): string {
+    return `${this.keyPrefix}:${chatId}`;
+  }
+
   /** Per-chat settings from Settings › Channels; empty when none are configured. */
   private chatSettings(chatId: string): ZaloChatSettings {
-    const chats = this.deps.settings?.get().channels.zalo.chats;
+    const chats = this.deps.settings
+      ?.get()
+      .channels.zalo.find((account) => account.id === this.accountId)?.chats;
     return chats?.[chatId] ?? {};
   }
 
@@ -325,7 +343,7 @@ export class ZaloChannel {
       case "new":
         await this.interrupt(chatId);
         try {
-          await this.deps.gateway.newConversation(`zalo:${chatId}`);
+          await this.deps.gateway.newConversation(this.key(chatId));
           await this.reply(chatId, "newConversation");
         } catch (error) {
           await this.reply(chatId, "turnFailed", { error: (error as Error).message });
@@ -359,7 +377,7 @@ export class ZaloChannel {
     const plain = update.event_name === "message.text.received";
     if (queue.running && busyMode === "steer" && plain && text) {
       try {
-        const accepted = await this.deps.gateway.steerTurn(`zalo:${chatId}`, {
+        const accepted = await this.deps.gateway.steerTurn(this.key(chatId), {
           text,
           attachments: [],
           sender: { id: from.id, name: displayName(from), owner: isOwner },
@@ -370,7 +388,7 @@ export class ZaloChannel {
       }
     }
     if (queue.running && busyMode === "interrupt") {
-      await this.deps.gateway.abort(`zalo:${chatId}`).catch(() => {});
+      await this.deps.gateway.abort(this.key(chatId)).catch(() => {});
     }
     if (queue.waiting.length >= MAX_QUEUED_MESSAGES) {
       await this.reply(chatId, "busy");
@@ -383,7 +401,7 @@ export class ZaloChannel {
   /** Replies with the chat's saved sessions, current first. */
   private async listSessions(chatId: string): Promise<void> {
     try {
-      const sessions = await this.deps.gateway.listChatSessions(`zalo:${chatId}`);
+      const sessions = await this.deps.gateway.listChatSessions(this.key(chatId));
       if (sessions.length === 0) {
         await this.reply(chatId, "noSessions");
         return;
@@ -403,7 +421,7 @@ export class ZaloChannel {
       return;
     }
     try {
-      const sessions = await this.deps.gateway.listChatSessions(`zalo:${chatId}`);
+      const sessions = await this.deps.gateway.listChatSessions(this.key(chatId));
       const target = sessions[index - 1];
       if (!target) {
         await this.reply(chatId, "sessionNotFound", { number: index });
@@ -414,7 +432,7 @@ export class ZaloChannel {
         return;
       }
       await this.interrupt(chatId);
-      await this.deps.gateway.resumeChatSession(`zalo:${chatId}`, target.id);
+      await this.deps.gateway.resumeChatSession(this.key(chatId), target.id);
       await this.reply(chatId, "sessionResumed", { title: target.title });
     } catch (error) {
       await this.reply(chatId, "turnFailed", { error: (error as Error).message });
@@ -437,7 +455,7 @@ export class ZaloChannel {
 
   /** `/agent`, `/workspace`, `/model`, `/thinking`: switch to the one named, or list the choices. */
   private async choose(chatId: string, kind: ChoiceKind, argument: string): Promise<void> {
-    const chatKey = `zalo:${chatId}`;
+    const chatKey = this.key(chatId);
     try {
       const { options, currentId } = await this.listFor(chatKey, kind);
       if (options.length === 0) {
@@ -503,7 +521,7 @@ export class ZaloChannel {
     if (queue) queue.waiting.length = 0;
     this.prompts.cancelAll(chatId);
     try {
-      await this.deps.gateway.abort(`zalo:${chatId}`);
+      await this.deps.gateway.abort(this.key(chatId));
     } catch (error) {
       console.warn("[zalo] Could not stop the turn:", (error as Error).message);
     }
@@ -661,7 +679,7 @@ export class ZaloChannel {
     const timer = setInterval(typing, TYPING_INTERVAL_MS);
     let result: ResearchResult;
     try {
-      result = await this.deps.gateway.runResearch(`zalo:${chatId}`, request, this.hooks(chatId));
+      result = await this.deps.gateway.runResearch(this.key(chatId), request, this.hooks(chatId));
     } catch (error) {
       await this.reply(chatId, "turnFailed", { error: (error as Error).message });
       return;
@@ -707,7 +725,7 @@ export class ZaloChannel {
     let lastText = "";
     let result: TurnResult;
     try {
-      result = await this.deps.gateway.runTurn(`zalo:${chatId}`, input, {
+      result = await this.deps.gateway.runTurn(this.key(chatId), input, {
         onText: (text) => {
           lastText = text;
         },

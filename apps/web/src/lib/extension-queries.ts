@@ -137,19 +137,27 @@ export const serviceStatusQuery = (bridge: DesktopBridge) =>
     queryFn: () => bridge.agent.command({ type: "get_service_status" }),
   });
 
-/** Telegram connection, bot, paired person and the open pairing code, if any. */
-export const telegramStatusQuery = (bridge: DesktopBridge) =>
+/** Every Telegram account: connection, bot, paired person and the open pairing code, if any. */
+export const telegramAccountsQuery = (bridge: DesktopBridge) =>
   queryOptions({
     queryKey: queryKeys.telegramStatus,
-    queryFn: () => bridge.agent.command({ type: "get_telegram_status" }),
+    queryFn: () => bridge.agent.command({ type: "list_telegram_accounts" }),
   });
 
-/** Zalo connection, bot, paired person and the open pairing code, if any. */
-export const zaloStatusQuery = (bridge: DesktopBridge) =>
+/** Every Zalo account: connection, bot, paired person and the open pairing code, if any. */
+export const zaloAccountsQuery = (bridge: DesktopBridge) =>
   queryOptions({
     queryKey: queryKeys.zaloStatus,
-    queryFn: () => bridge.agent.command({ type: "get_zalo_status" }),
+    queryFn: () => bridge.agent.command({ type: "list_zalo_accounts" }),
   });
+
+/** `list` with `account` put in place of the one that has its id, or added at the end. */
+function withAccount<A extends { id: string }>(list: A[] | undefined, account: A): A[] {
+  const rest = list ?? [];
+  return rest.some((item) => item.id === account.id)
+    ? rest.map((item) => (item.id === account.id ? account : item))
+    : [...rest, account];
+}
 
 /** Mutations of Settings › Background; each stores the status it returns. */
 export function useBackgroundCommands(bridge: DesktopBridge) {
@@ -160,38 +168,45 @@ export function useBackgroundCommands(bridge: DesktopBridge) {
     onSuccess: (status) => queryClient.setQueryData(queryKeys.serviceStatus, status),
     onError: showError,
   });
-  const telegramDone = (status: TelegramStatus) =>
-    queryClient.setQueryData(queryKeys.telegramStatus, status);
+  const telegramSaved = (status: TelegramStatus) =>
+    queryClient.setQueryData<TelegramStatus[]>(queryKeys.telegramStatus, (list) =>
+      withAccount(list, status),
+    );
   const saveTelegram = useMutation({
     mutationFn: (config: SaveTelegramInput) =>
       bridge.agent.command({ type: "save_telegram", config }),
-    onSuccess: telegramDone,
+    onSuccess: telegramSaved,
     onError: showError,
   });
   const startPairing = useMutation({
-    mutationFn: () => bridge.agent.command({ type: "start_telegram_pairing" }),
-    onSuccess: telegramDone,
+    mutationFn: (accountId: string) =>
+      bridge.agent.command({ type: "start_telegram_pairing", accountId }),
+    onSuccess: telegramSaved,
     onError: showError,
   });
   const forgetTelegram = useMutation({
-    mutationFn: () => bridge.agent.command({ type: "forget_telegram" }),
-    onSuccess: telegramDone,
+    mutationFn: (accountId: string) => bridge.agent.command({ type: "forget_telegram", accountId }),
+    onSuccess: (list) => queryClient.setQueryData(queryKeys.telegramStatus, list),
     onError: showError,
   });
-  const zaloDone = (status: ZaloStatus) => queryClient.setQueryData(queryKeys.zaloStatus, status);
+  const zaloSaved = (status: ZaloStatus) =>
+    queryClient.setQueryData<ZaloStatus[]>(queryKeys.zaloStatus, (list) =>
+      withAccount(list, status),
+    );
   const saveZalo = useMutation({
     mutationFn: (config: SaveZaloInput) => bridge.agent.command({ type: "save_zalo", config }),
-    onSuccess: zaloDone,
+    onSuccess: zaloSaved,
     onError: showError,
   });
   const startZaloPairing = useMutation({
-    mutationFn: () => bridge.agent.command({ type: "start_zalo_pairing" }),
-    onSuccess: zaloDone,
+    mutationFn: (accountId: string) =>
+      bridge.agent.command({ type: "start_zalo_pairing", accountId }),
+    onSuccess: zaloSaved,
     onError: showError,
   });
   const forgetZalo = useMutation({
-    mutationFn: () => bridge.agent.command({ type: "forget_zalo" }),
-    onSuccess: zaloDone,
+    mutationFn: (accountId: string) => bridge.agent.command({ type: "forget_zalo", accountId }),
+    onSuccess: (list) => queryClient.setQueryData(queryKeys.zaloStatus, list),
     onError: showError,
   });
   return {

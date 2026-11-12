@@ -1,20 +1,30 @@
 import {
+  DEFAULT_CHANNEL_ACCOUNT_ID,
   DEFAULT_WORKSPACE_ID,
   type ChannelState,
   type SaveZaloInput,
+  type ZaloAccountSettings,
   type ZaloStatus,
 } from "@workspace/shared";
 import type { VaultCredentialStore } from "../../credentials.ts";
 import type { SettingsStore } from "../../settings-store.ts";
-import { ZALO_TOKEN_KEY } from "../names.ts";
+import {
+  accountDisplayName,
+  accountTokenKey,
+  chatKeyPrefix,
+  upsertAccount,
+  type AccountService,
+} from "../shared/accounts.ts";
 import { BotService } from "../shared/bot-service.ts";
 import type { ChannelGateway, ChannelService, ChannelSummary } from "../types.ts";
 import { HttpZaloApi, ZaloApiError, type ZaloApi } from "./api.ts";
 import { ZaloChannel, type ZaloOwner } from "./channel.ts";
-import { readZaloSettings } from "./settings.ts";
+import { defaultZaloSettings, readZaloSettings } from "./settings.ts";
 import type { ZaloTranslate } from "./text.ts";
 
 export interface ZaloServiceDeps {
+  /** Which account of Zalo this service runs; the first one (`default`) when omitted. */
+  accountId?: string;
   settings: SettingsStore;
   credentials: Pick<VaultCredentialStore, "read" | "modify" | "delete">;
   gateway: ChannelGateway;
@@ -26,23 +36,43 @@ export interface ZaloServiceDeps {
 }
 
 /**
- * Owns the Zalo channel: starts it when it is enabled and a token is saved, keeps it in step with
- * the settings, and runs the pairing. Changes are applied one at a time.
+ * Owns one Zalo account (bot): starts it when it is enabled and a token is saved, keeps it in step
+ * with the settings, and runs the pairing. Changes are applied one at a time. The first account's
+ * chat keys are `zalo:<chat>`, another's `zalo:<account>:<chat>`.
  */
-export class ZaloService extends BotService<ZaloChannel> implements ChannelService {
-  readonly id = "zalo";
-  readonly label = "Zalo";
+export class ZaloService
+  extends BotService<ZaloChannel>
+  implements ChannelService, AccountService<ZaloStatus, SaveZaloInput>
+{
+  readonly id: string;
+  readonly accountId: string;
 
   constructor(private readonly deps: ZaloServiceDeps) {
+    const accountId = deps.accountId ?? DEFAULT_CHANNEL_ACCOUNT_ID;
     super({
       credentials: deps.credentials,
-      tokenKey: ZALO_TOKEN_KEY,
+      tokenKey: accountTokenKey("zalo", accountId),
       changed: () => deps.changed(),
     });
+    this.accountId = accountId;
+    this.id = chatKeyPrefix("zalo", accountId);
+  }
+
+  /** "Zalo", or "Zalo (Work)" for an account with a name. */
+  get label(): string {
+    return accountDisplayName("Zalo", this.account()?.label ?? "");
+  }
+
+  /** The saved settings of this account; null before its first save and after it was forgotten. */
+  private account(): ZaloAccountSettings | null {
+    return (
+      this.deps.settings.get().channels.zalo.find((account) => account.id === this.accountId) ??
+      null
+    );
   }
 
   protected isEnabled(): boolean {
-    return this.deps.settings.get().channels.zalo.enabled;
+    return this.account()?.enabled ?? false;
   }
 
   protected pairingNeedsToken(): string {
@@ -59,6 +89,7 @@ export class ZaloService extends BotService<ZaloChannel> implements ChannelServi
   ): ZaloChannel {
     return new ZaloChannel({
       token,
+      accountId: this.accountId,
       api: this.deps.api?.(token),
       gateway: this.deps.gateway,
       pairing: this.guard,
@@ -72,12 +103,12 @@ export class ZaloService extends BotService<ZaloChannel> implements ChannelServi
 
   summary(): ChannelSummary {
     const { enabled, workspaceId, agentId, ownerId, ownerName } =
-      this.deps.settings.get().channels.zalo;
+      this.account() ?? defaultZaloSettings();
     return {
       enabled,
       workspaceId,
       agentId,
-      ownerKey: ownerId === null ? null : `zalo:${ownerId}`,
+      ownerKey: ownerId === null ? null : `${this.id}:${ownerId}`,
       ownerName,
     };
   }
@@ -85,7 +116,10 @@ export class ZaloService extends BotService<ZaloChannel> implements ChannelServi
   async status(): Promise<ZaloStatus> {
     const pairing = this.guard.current(Date.now());
     return {
-      ...this.deps.settings.get().channels.zalo,
+      ...defaultZaloSettings(),
+      id: this.accountId,
+      label: "",
+      ...this.account(),
       hasToken: (await this.readToken()) !== null,
       botName: this.botName,
       state: this.state,
@@ -97,15 +131,12 @@ export class ZaloService extends BotService<ZaloChannel> implements ChannelServi
 
   /** Sends to the paired owner (`home`) or an explicitly configured Zalo chat. */
   async deliver(peer: string, text: string): Promise<void> {
-    const { t, settings } = this.deps;
+    const { t } = this.deps;
     const owner = this.owner();
     if (!owner) throw new Error(t("channels.zalo.notifyNeedsOwner"));
-    const match = /^zalo:(.+)$/.exec(peer);
-    const chatId = peer === "home" ? owner.id : match ? match[1] : null;
-    if (
-      !chatId ||
-      (chatId !== owner.id && !Object.hasOwn(settings.get().channels.zalo.chats ?? {}, chatId))
-    ) {
+    const rest = peer.startsWith(`${this.id}:`) ? peer.slice(this.id.length + 1) : "";
+    const chatId = peer === "home" ? owner.id : rest || null;
+    if (!chatId || (chatId !== owner.id && !Object.hasOwn(this.account()?.chats ?? {}, chatId))) {
       throw new Error(`Unknown delivery target: ${peer}`);
     }
     const channel = this.onlineChannel;
@@ -127,7 +158,11 @@ export class ZaloService extends BotService<ZaloChannel> implements ChannelServi
         if (!token) throw new Error(t("channels.zalo.tokenRequired"));
         botName = await this.verify(token);
       }
-      if (input.enabled && token === undefined && (await this.readToken()) === null)
+      if (
+        (input.enabled || this.account() === null) &&
+        token === undefined &&
+        (await this.readToken()) === null
+      )
         throw new Error(t("channels.zalo.tokenRequired"));
 
       if (token !== undefined) {
@@ -135,8 +170,11 @@ export class ZaloService extends BotService<ZaloChannel> implements ChannelServi
         this.botName = botName;
       }
       settings.update((draft) => {
-        draft.channels.zalo = {
-          ...draft.channels.zalo,
+        upsertAccount(draft.channels.zalo, this.accountId, (previous) => ({
+          ...defaultZaloSettings(),
+          ...previous,
+          id: this.accountId,
+          label: input.label?.trim().slice(0, 60) ?? previous?.label ?? "",
           enabled: input.enabled,
           agentId: draft.agents.some((agent) => agent.id === input.agentId) ? input.agentId : null,
           workspaceId: draft.workspaces.some((workspace) => workspace.id === input.workspaceId)
@@ -145,7 +183,7 @@ export class ZaloService extends BotService<ZaloChannel> implements ChannelServi
           ...(input.chats !== undefined
             ? { chats: readZaloSettings({ chats: input.chats }).chats ?? {} }
             : {}),
-        };
+        }));
       });
       await this.reconcile();
       this.deps.changed();
@@ -160,19 +198,18 @@ export class ZaloService extends BotService<ZaloChannel> implements ChannelServi
     });
   }
 
-  forget(): Promise<ZaloStatus> {
+  /** Stops the bot and removes the account: token and settings. */
+  forget(): Promise<void> {
     return this.serial(async () => {
       await this.stopChannel();
       await this.deleteToken();
       this.deps.settings.update((draft) => {
-        const zalo = draft.channels.zalo;
-        zalo.enabled = false;
-        zalo.ownerId = null;
-        zalo.ownerName = null;
+        draft.channels.zalo = draft.channels.zalo.filter(
+          (account) => account.id !== this.accountId,
+        );
       });
       this.botName = null;
       this.deps.changed();
-      return this.status();
     });
   }
 
@@ -192,14 +229,16 @@ export class ZaloService extends BotService<ZaloChannel> implements ChannelServi
   }
 
   private owner(): ZaloOwner | null {
-    const { ownerId, ownerName } = this.deps.settings.get().channels.zalo;
+    const { ownerId, ownerName } = this.account() ?? defaultZaloSettings();
     return ownerId === null ? null : { id: ownerId, name: ownerName ?? ownerId };
   }
 
   private paired(owner: ZaloOwner): void {
     this.deps.settings.update((draft) => {
-      draft.channels.zalo.ownerId = owner.id;
-      draft.channels.zalo.ownerName = owner.name;
+      const account = draft.channels.zalo.find((candidate) => candidate.id === this.accountId);
+      if (!account) return;
+      account.ownerId = owner.id;
+      account.ownerName = owner.name;
     });
     this.guard.close();
     this.deps.changed();

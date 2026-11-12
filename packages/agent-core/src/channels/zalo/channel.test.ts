@@ -30,7 +30,7 @@ function setup(initialOwner: ZaloOwner | null = OWNER, chats?: Record<string, Za
     },
     onState: (value, error) => states.push([value, error]),
     t: fakeT,
-    settings: { get: () => ({ channels: { zalo: { chats } } }) },
+    settings: { get: () => ({ channels: { zalo: [{ id: "default", chats }] } }) },
   });
   channels.push(channel);
   return { api, gateway, pairing, state, paired, states, channel };

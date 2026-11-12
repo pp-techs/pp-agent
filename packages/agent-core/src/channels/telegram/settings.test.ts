@@ -5,6 +5,7 @@ import type { TelegramChatSettings } from "@workspace/shared";
 import { describe, expect, test } from "vite-plus/test";
 import { SettingsStore } from "../../settings-store.ts";
 import { readChannelsSettings } from "../settings.ts";
+import { defaultTelegramSettings } from "./settings.ts";
 
 describe("saved Telegram chat settings", () => {
   test("restores labels, bindings, access, allowlists and busy modes through SettingsStore", () => {
@@ -29,9 +30,11 @@ describe("saved Telegram chat settings", () => {
         "-100456": { access: "members", allowedUsers: [], busyMode: "queue" },
       };
       settings.update((draft) => {
-        draft.channels.telegram.chats = chats;
+        draft.channels.telegram = [
+          { id: "default", label: "", ...defaultTelegramSettings(), chats },
+        ];
       });
-      expect(new SettingsStore(path).get().channels.telegram.chats).toEqual(chats);
+      expect(new SettingsStore(path).get().channels.telegram[0]?.chats).toEqual(chats);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
@@ -58,9 +61,9 @@ describe("saved Telegram chat settings", () => {
         },
       },
     });
-    expect(result.telegram.enabled).toBe(true);
-    expect(result.telegram.chats).toEqual({ "7": { label: "Valid" } });
-    expect(readChannelsSettings({ telegram: { chats: [] } }).telegram.chats).toBeUndefined();
+    expect(result.telegram[0]?.enabled).toBe(true);
+    expect(result.telegram[0]?.chats).toEqual({ "7": { label: "Valid" } });
+    expect(readChannelsSettings({ telegram: { chats: [] } }).telegram[0]?.chats).toBeUndefined();
   });
 
   test.each(
@@ -70,7 +73,7 @@ describe("saved Telegram chat settings", () => {
   )("fails closed for a malformed restricted allowlist: $allowedUsers", ({ allowedUsers }) => {
     const chat = readChannelsSettings({
       telegram: { chats: { "-100123": { access: "members", allowedUsers, busyMode: "steer" } } },
-    }).telegram.chats?.["-100123"];
+    }).telegram[0]?.chats?.["-100123"];
     expect(chat?.access).toBe("owner");
     expect(chat?.busyMode).toBe("steer");
   });
@@ -78,7 +81,7 @@ describe("saved Telegram chat settings", () => {
   test("removing invalid allowlist entries does not widen a valid restriction", () => {
     const chat = readChannelsSettings({
       telegram: { chats: { "-100123": { access: "members", allowedUsers: [7, "8", -1] } } },
-    }).telegram.chats?.["-100123"];
+    }).telegram[0]?.chats?.["-100123"];
     expect(chat).toEqual({ access: "members", allowedUsers: [7] });
   });
 });

@@ -535,6 +535,20 @@
         "allowedUsers": "Allowed user ids",
         "allowedUsersHelp": "Applies when anyone in the chat can talk: comma-separated Zalo user IDs. Empty allows everyone in the chat; owner-only access still allows only the paired owner."
       }
+    },
+    "accounts": {
+      "title": "Accounts",
+      "empty": "No account yet. Add one to start.",
+      "add": "Add an account",
+      "back": "All accounts",
+      "summary": "Bot {{bot}} · Paired with {{owner}}",
+      "count_one": "{{count}} account",
+      "count_other": "{{count}} accounts",
+      "name": {
+        "label": "Name",
+        "placeholder": "For example: Work",
+        "help": "Shown in the app and to the agent, so you can tell the accounts apart. Optional."
+      }
     }
   },
   "browserSection": {

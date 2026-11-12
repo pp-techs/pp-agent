@@ -765,7 +765,6 @@ export interface ServiceStatus {
   detail: string | null;
 }
 
-/** Telegram settings in settings.json. The bot token is in the vault, never here. */
 /** Per-chat settings for a Telegram chat. */
 export interface TelegramChatSettings {
   /** Human label for the settings UI. */
@@ -782,6 +781,7 @@ export interface TelegramChatSettings {
   busyMode?: "queue" | "steer" | "interrupt";
 }
 
+/** One Telegram bot in settings.json. The bot token is in the vault, never here. */
 export interface TelegramSettings {
   enabled: boolean;
   /** Workspace of new Telegram conversations; the agent is the workspace's own unless pinned here. */
@@ -811,7 +811,7 @@ export interface ZaloChatSettings {
   busyMode?: "queue" | "steer" | "interrupt";
 }
 
-/** Zalo Bot settings in settings.json. The bot token is in the vault, never here. */
+/** One Zalo bot in settings.json. The bot token is in the vault, never here. */
 export interface ZaloSettings {
   enabled: boolean;
   /** Workspace of new Zalo conversations; the agent is the workspace's own unless pinned here. */
@@ -825,14 +825,35 @@ export interface ZaloSettings {
   chats?: Record<string, ZaloChatSettings>;
 }
 
+/**
+ * Id of the first account of a chat app. Its chat keys keep the short form (`telegram:123`) and
+ * its token the short vault id (`channel:telegram`), so what was saved before accounts still works.
+ */
+export const DEFAULT_CHANNEL_ACCOUNT_ID = "default";
+
+/** Ids of accounts: short, lower case, and never containing the `:` of a chat key. */
+export const CHANNEL_ACCOUNT_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,31}$/;
+
+/** A chat app can have as many accounts (bots) as the person wants, each with its own token. */
+export interface ChannelAccount {
+  /** Stable id; part of the chat keys and the vault id of every account but the first. */
+  id: string;
+  /** Name the person gave it ("Work bot"); empty when none. */
+  label: string;
+}
+
+export interface TelegramAccountSettings extends TelegramSettings, ChannelAccount {}
+export interface ZaloAccountSettings extends ZaloSettings, ChannelAccount {}
+
+/** The first account comes first; its owner is where `home` deliveries go. */
 export interface ChannelsSettings {
-  telegram: TelegramSettings;
-  zalo: ZaloSettings;
+  telegram: TelegramAccountSettings[];
+  zalo: ZaloAccountSettings[];
 }
 
 export type ChannelState = "off" | "connecting" | "online" | "error";
 
-export interface TelegramStatus extends TelegramSettings {
+export interface TelegramStatus extends TelegramAccountSettings {
   hasToken: boolean;
   /** Without the leading `@`; known once the token has been accepted by Telegram. */
   botUsername: string | null;
@@ -844,6 +865,10 @@ export interface TelegramStatus extends TelegramSettings {
 }
 
 export interface SaveTelegramInput {
+  /** The account to change; omitted adds a new account (which needs a token). */
+  accountId?: string;
+  /** Name of the account; omitted keeps it (empty for a new one). */
+  label?: string;
   /** A new bot token; omitted keeps the stored one. */
   token?: string;
   enabled: boolean;
@@ -854,7 +879,7 @@ export interface SaveTelegramInput {
   chats?: Record<string, TelegramChatSettings>;
 }
 
-export interface ZaloStatus extends ZaloSettings {
+export interface ZaloStatus extends ZaloAccountSettings {
   hasToken: boolean;
   /** The bot's account name; known once Zalo has accepted the token. */
   botName: string | null;
@@ -866,6 +891,10 @@ export interface ZaloStatus extends ZaloSettings {
 }
 
 export interface SaveZaloInput {
+  /** The account to change; omitted adds a new account (which needs a token). */
+  accountId?: string;
+  /** Name of the account; omitted keeps it (empty for a new one). */
+  label?: string;
   /** A new bot token; omitted keeps the stored one. */
   token?: string;
   enabled: boolean;
@@ -1675,18 +1704,22 @@ export interface AgentCommandMap {
   get_service_status: { params: NoParams; result: ServiceStatus };
   /** Registers (or removes) the daemon with the OS service manager. */
   set_service_installed: { params: { installed: boolean }; result: ServiceStatus };
-  get_telegram_status: { params: NoParams; result: TelegramStatus };
+  /** Every Telegram account, in the order they were added. */
+  list_telegram_accounts: { params: NoParams; result: TelegramStatus[] };
+  /** Changes an account, or adds one when `config.accountId` is omitted. */
   save_telegram: { params: { config: SaveTelegramInput }; result: TelegramStatus };
-  /** Opens a pairing window and returns the status with the one-time code. */
-  start_telegram_pairing: { params: NoParams; result: TelegramStatus };
-  /** Removes the token and the paired owner and turns the channel off. */
-  forget_telegram: { params: NoParams; result: TelegramStatus };
-  get_zalo_status: { params: NoParams; result: ZaloStatus };
+  /** Opens a pairing window for one account and returns its status with the one-time code. */
+  start_telegram_pairing: { params: { accountId: string }; result: TelegramStatus };
+  /** Removes one account (its token, owner and settings) and stops it; returns the ones left. */
+  forget_telegram: { params: { accountId: string }; result: TelegramStatus[] };
+  /** Every Zalo account, in the order they were added. */
+  list_zalo_accounts: { params: NoParams; result: ZaloStatus[] };
+  /** Changes an account, or adds one when `config.accountId` is omitted. */
   save_zalo: { params: { config: SaveZaloInput }; result: ZaloStatus };
-  /** Opens a pairing window and returns the status with the one-time code. */
-  start_zalo_pairing: { params: NoParams; result: ZaloStatus };
-  /** Removes the token and the paired owner and turns the channel off. */
-  forget_zalo: { params: NoParams; result: ZaloStatus };
+  /** Opens a pairing window for one account and returns its status with the one-time code. */
+  start_zalo_pairing: { params: { accountId: string }; result: ZaloStatus };
+  /** Removes one account (its token, owner and settings) and stops it; returns the ones left. */
+  forget_zalo: { params: { accountId: string }; result: ZaloStatus[] };
 
   /** Default profile first, then by name. */
   list_browser_profiles: { params: NoParams; result: BrowserProfile[] };

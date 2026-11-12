@@ -161,12 +161,16 @@ function hideValues(values: Record<string, string> | undefined) {
 
 /**
  * What a device receives for a command: the host's answer, without the secrets a phone has no use
- * for (it cannot edit MCP servers or pair Telegram and Zalo) and a copied token should not expose.
+ * for (it cannot edit MCP servers or pair Telegram and Zalo accounts) and a copied token should not expose.
  */
 function remoteView(command: AgentCommand, data: unknown): unknown {
-  if (command.type === "get_telegram_status" || command.type === "get_zalo_status")
-    return data && typeof data === "object"
-      ? { ...data, pairingCode: null, pairingExpiresAt: null }
+  if (command.type === "list_telegram_accounts" || command.type === "list_zalo_accounts")
+    return Array.isArray(data)
+      ? data.map((account: unknown) =>
+          account && typeof account === "object"
+            ? { ...account, pairingCode: null, pairingExpiresAt: null }
+            : account,
+        )
       : data;
   if (command.type !== "list_mcp_servers") return data;
   const overview = data as McpOverview;

@@ -32,8 +32,15 @@ import {
   RepliesStep,
   SetupStep,
   StatusLine,
+  blankView,
   zaloView,
 } from "@/components/settings/channel-setup";
+import {
+  AccountList,
+  BackToAccounts,
+  accountTitle,
+  type AccountSelection,
+} from "@/components/settings/channel-accounts";
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { useSettingsSubPage } from "@/components/settings/settings-subpage";
 import {
@@ -44,7 +51,7 @@ import {
 } from "@/components/settings/zalo-chat-fields";
 import { ComputerOnlyNotice } from "@/components/settings/computer-only-notice";
 import { maySend } from "@/lib/bridge";
-import { useBackgroundCommands, zaloStatusQuery } from "@/lib/extension-queries";
+import { zaloAccountsQuery, useBackgroundCommands } from "@/lib/extension-queries";
 
 /** Whoever pairs with the bot talks to the agent from anywhere, so only the computer sets it up. */
 const CAN_SET_UP = maySend("save_zalo") && maySend("start_zalo_pairing");
@@ -105,6 +112,7 @@ function ChatsStep({ bridge, status }: { bridge: DesktopBridge; status: ZaloStat
     if (!valid || chatId === null || allowedUsers === null) return;
     saveZalo.mutate(
       {
+        accountId: status.id,
         enabled: status.enabled,
         agentId: status.agentId,
         workspaceId: status.workspaceId,
@@ -305,25 +313,52 @@ function ChatsStep({ bridge, status }: { bridge: DesktopBridge; status: ZaloStat
   );
 }
 
-/** Settings › Channels › Zalo: connect the bot, pair the owner, choose who answers. */
+/** Settings › Channels › Zalo: the accounts, and for each one its bot, owner and chats. */
 export function ZaloPage({ bridge }: { bridge: DesktopBridge }) {
   const { t } = useTranslation("settings");
   useSettingsSubPage(t("channels.zalo.title"));
-  const query = useQuery(zaloStatusQuery(bridge));
+  const query = useQuery(zaloAccountsQuery(bridge));
   const { saveZalo, startZaloPairing, forgetZalo } = useBackgroundCommands(bridge);
-  const status = query.data;
-  const view = status && zaloView(status);
-  const actions = { save: saveZalo, startPairing: startZaloPairing };
+  const [selection, setSelection] = React.useState<AccountSelection>({ kind: "list" });
+  const accounts = query.data;
+  const index =
+    selection.kind === "account" ? (accounts?.findIndex((a) => a.id === selection.id) ?? -1) : -1;
+  const status = index >= 0 ? accounts?.[index] : undefined;
+  const view = selection.kind === "new" ? blankView() : status && zaloView(status);
+  // Saving a new account opens it, so the person can pair it next.
+  const actions = {
+    save: {
+      isPending: saveZalo.isPending,
+      mutate: (
+        input: Parameters<typeof saveZalo.mutate>[0],
+        options?: { onSuccess?: (saved: { id: string }) => void },
+      ) =>
+        saveZalo.mutate(input, {
+          onSuccess: (saved) => {
+            if (selection.kind === "new") setSelection({ kind: "account", id: saved.id });
+            options?.onSuccess?.(saved);
+          },
+        }),
+    },
+    startPairing: {
+      isPending: startZaloPairing.isPending,
+      mutate: (accountId: string) => startZaloPairing.mutate(accountId),
+    },
+  };
 
   async function forget() {
+    if (!status) return;
     const confirmed = await ConfirmModal.show({
       title: t("channels.zalo.forget.title"),
       description: t("channels.zalo.forget.description"),
       confirmLabel: t("channels.zalo.forget.confirm"),
     });
     if (!confirmed) return;
-    forgetZalo.mutate(undefined, {
-      onSuccess: () => toast.success(t("channels.zalo.forget.done")),
+    forgetZalo.mutate(status.id, {
+      onSuccess: () => {
+        setSelection({ kind: "list" });
+        toast.success(t("channels.zalo.forget.done"));
+      },
     });
   }
 
@@ -343,20 +378,49 @@ export function ZaloPage({ bridge }: { bridge: DesktopBridge }) {
           <AlertDescription>{query.error.message}</AlertDescription>
         </Alert>
       )}
-      {status && view && (
+      {accounts && selection.kind === "list" && (
+        <AccountList
+          channel="zalo"
+          views={accounts.map(zaloView)}
+          canAdd={CAN_SET_UP}
+          onOpen={(id) => setSelection({ kind: "account", id })}
+          onAdd={() => setSelection({ kind: "new" })}
+        />
+      )}
+      {accounts && selection.kind !== "list" && !view && (
+        // The account was removed from elsewhere while it was open.
+        <BackToAccounts onClick={() => setSelection({ kind: "list" })} />
+      )}
+      {accounts && selection.kind !== "list" && view && (
         <>
-          <StatusLine channel="zalo" view={view} />
+          <BackToAccounts onClick={() => setSelection({ kind: "list" })} />
+          {status && (
+            <h3 className="text-base font-medium">
+              {accountTitle(view, index, t("channels.zalo.title"))}
+            </h3>
+          )}
+          {status && <StatusLine channel="zalo" view={view} />}
           {CAN_SET_UP ? (
             <>
-              <ConnectStep channel="zalo" view={view} actions={actions} />
-              <PairStep channel="zalo" view={view} actions={actions} />
-              <RepliesStep channel="zalo" view={view} actions={actions} bridge={bridge} />
-              <ChatsStep bridge={bridge} status={status} />
+              <ConnectStep key={view.id ?? "new"} channel="zalo" view={view} actions={actions} />
+              {status && (
+                <>
+                  <PairStep channel="zalo" view={view} actions={actions} />
+                  <RepliesStep
+                    key={view.id}
+                    channel="zalo"
+                    view={view}
+                    actions={actions}
+                    bridge={bridge}
+                  />
+                  <ChatsStep key={view.id} bridge={bridge} status={status} />
+                </>
+              )}
             </>
           ) : (
             <ComputerOnlyNotice />
           )}
-          {(status.hasToken || status.ownerId !== null) && maySend("forget_zalo") && (
+          {status && maySend("forget_zalo") && (
             <div>
               <Button
                 variant="destructive"

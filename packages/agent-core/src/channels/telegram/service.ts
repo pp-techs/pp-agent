@@ -1,22 +1,33 @@
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  DEFAULT_CHANNEL_ACCOUNT_ID,
   DEFAULT_WORKSPACE_ID,
   type ChannelState,
   type SaveTelegramInput,
+  type TelegramAccountSettings,
   type TelegramStatus,
 } from "@workspace/shared";
 import type { VaultCredentialStore } from "../../credentials.ts";
 import type { SettingsStore } from "../../settings-store.ts";
-import { TELEGRAM_TOKEN_KEY } from "../names.ts";
+import {
+  accountDisplayName,
+  accountTokenKey,
+  chatKeyPrefix,
+  offsetFileName,
+  upsertAccount,
+  type AccountService,
+} from "../shared/accounts.ts";
 import { BotService } from "../shared/bot-service.ts";
 import type { ChannelGateway, ChannelService, ChannelSummary } from "../types.ts";
 import { HttpTelegramApi, TelegramApiError, type TelegramApi } from "./api.ts";
 import { TelegramChannel, type TelegramOwner } from "./channel.ts";
-import { readTelegramSettings } from "./settings.ts";
+import { defaultTelegramSettings, readTelegramSettings } from "./settings.ts";
 import type { TelegramTranslate } from "./text.ts";
 
 export interface TelegramServiceDeps {
+  /** Which account of Telegram this service runs; the first one (`default`) when omitted. */
+  accountId?: string;
   /** Where to persist the poll offset. */
   dataDir?: string;
   settings: SettingsStore;
@@ -30,23 +41,43 @@ export interface TelegramServiceDeps {
 }
 
 /**
- * Owns the Telegram channel: starts it when it is enabled and a token is saved, keeps it in step
- * with the settings, and runs the pairing. Changes are applied one at a time.
+ * Owns one Telegram account (bot): starts it when it is enabled and a token is saved, keeps it in
+ * step with the settings, and runs the pairing. Changes are applied one at a time. The first
+ * account's chat keys are `telegram:<chat>`, another's `telegram:<account>:<chat>`.
  */
-export class TelegramService extends BotService<TelegramChannel> implements ChannelService {
-  readonly id = "telegram";
-  readonly label = "Telegram";
+export class TelegramService
+  extends BotService<TelegramChannel>
+  implements ChannelService, AccountService<TelegramStatus, SaveTelegramInput>
+{
+  readonly id: string;
+  readonly accountId: string;
 
   constructor(private readonly deps: TelegramServiceDeps) {
+    const accountId = deps.accountId ?? DEFAULT_CHANNEL_ACCOUNT_ID;
     super({
       credentials: deps.credentials,
-      tokenKey: TELEGRAM_TOKEN_KEY,
+      tokenKey: accountTokenKey("telegram", accountId),
       changed: () => deps.changed(),
     });
+    this.accountId = accountId;
+    this.id = chatKeyPrefix("telegram", accountId);
+  }
+
+  /** "Telegram", or "Telegram (Work)" for an account with a name. */
+  get label(): string {
+    return accountDisplayName("Telegram", this.account()?.label ?? "");
+  }
+
+  /** The saved settings of this account; null before its first save and after it was forgotten. */
+  private account(): TelegramAccountSettings | null {
+    return (
+      this.deps.settings.get().channels.telegram.find((account) => account.id === this.accountId) ??
+      null
+    );
   }
 
   protected isEnabled(): boolean {
-    return this.deps.settings.get().channels.telegram.enabled;
+    return this.account()?.enabled ?? false;
   }
 
   protected pairingNeedsToken(): string {
@@ -63,6 +94,7 @@ export class TelegramService extends BotService<TelegramChannel> implements Chan
   ): TelegramChannel {
     return new TelegramChannel({
       dataDir: this.deps.dataDir,
+      accountId: this.accountId,
       settings: this.deps.settings,
       token,
       api: this.deps.api?.(token),
@@ -77,13 +109,13 @@ export class TelegramService extends BotService<TelegramChannel> implements Chan
 
   summary(): ChannelSummary {
     const { enabled, workspaceId, agentId, ownerId, ownerName } =
-      this.deps.settings.get().channels.telegram;
+      this.account() ?? defaultTelegramSettings();
     // A private Telegram chat has the person's user id as its chat id.
     return {
       enabled,
       workspaceId,
       agentId,
-      ownerKey: ownerId === null ? null : `telegram:${ownerId}`,
+      ownerKey: ownerId === null ? null : `${this.id}:${ownerId}`,
       ownerName,
     };
   }
@@ -91,7 +123,10 @@ export class TelegramService extends BotService<TelegramChannel> implements Chan
   async status(): Promise<TelegramStatus> {
     const pairing = this.guard.current(Date.now());
     return {
-      ...this.deps.settings.get().channels.telegram,
+      ...defaultTelegramSettings(),
+      id: this.accountId,
+      label: "",
+      ...this.account(),
       hasToken: (await this.readToken()) !== null,
       botUsername: this.botName,
       state: this.state,
@@ -103,15 +138,14 @@ export class TelegramService extends BotService<TelegramChannel> implements Chan
 
   /** Sends to the paired owner (`home`) or an explicitly configured Telegram chat. */
   async deliver(peer: string, text: string): Promise<void> {
-    const { t, settings } = this.deps;
+    const { t } = this.deps;
     const owner = this.owner();
     if (!owner) throw new Error(t("channels.telegram.notifyNeedsOwner"));
-    const match = /^telegram:(-?[1-9]\d*)$/.exec(peer);
-    const chatId = peer === "home" ? owner.id : match ? Number(match[1]) : NaN;
+    const rest = peer.startsWith(`${this.id}:`) ? peer.slice(this.id.length + 1) : "";
+    const chatId = peer === "home" ? owner.id : /^-?[1-9]\d*$/.test(rest) ? Number(rest) : NaN;
     if (
       !Number.isSafeInteger(chatId) ||
-      (chatId !== owner.id &&
-        !Object.hasOwn(settings.get().channels.telegram.chats ?? {}, String(chatId)))
+      (chatId !== owner.id && !Object.hasOwn(this.account()?.chats ?? {}, String(chatId)))
     ) {
       throw new Error(`Unknown delivery target: ${peer}`);
     }
@@ -134,7 +168,11 @@ export class TelegramService extends BotService<TelegramChannel> implements Chan
         if (!token) throw new Error(t("channels.telegram.tokenRequired"));
         username = await this.verify(token);
       }
-      if (input.enabled && token === undefined && (await this.readToken()) === null)
+      if (
+        (input.enabled || this.account() === null) &&
+        token === undefined &&
+        (await this.readToken()) === null
+      )
         throw new Error(t("channels.telegram.tokenRequired"));
 
       if (token !== undefined) {
@@ -142,8 +180,11 @@ export class TelegramService extends BotService<TelegramChannel> implements Chan
         this.botName = username;
       }
       settings.update((draft) => {
-        draft.channels.telegram = {
-          ...draft.channels.telegram,
+        upsertAccount(draft.channels.telegram, this.accountId, (previous) => ({
+          ...defaultTelegramSettings(),
+          ...previous,
+          id: this.accountId,
+          label: input.label?.trim().slice(0, 60) ?? previous?.label ?? "",
           enabled: input.enabled,
           agentId: draft.agents.some((agent) => agent.id === input.agentId) ? input.agentId : null,
           workspaceId: draft.workspaces.some((workspace) => workspace.id === input.workspaceId)
@@ -152,7 +193,7 @@ export class TelegramService extends BotService<TelegramChannel> implements Chan
           ...(input.chats !== undefined
             ? { chats: readTelegramSettings({ chats: input.chats }).chats ?? {} }
             : {}),
-        };
+        }));
       });
       await this.reconcile();
       this.deps.changed();
@@ -167,21 +208,22 @@ export class TelegramService extends BotService<TelegramChannel> implements Chan
     });
   }
 
-  forget(): Promise<TelegramStatus> {
+  /** Stops the bot and removes the account: token, saved poll offset and settings. */
+  forget(): Promise<void> {
     return this.serial(async () => {
       await this.stopChannel();
       await this.deleteToken();
       if (this.deps.dataDir)
-        await rm(join(this.deps.dataDir, "telegram-offset.json"), { force: true });
+        await rm(join(this.deps.dataDir, offsetFileName("telegram", this.accountId)), {
+          force: true,
+        });
       this.deps.settings.update((draft) => {
-        const telegram = draft.channels.telegram;
-        telegram.enabled = false;
-        telegram.ownerId = null;
-        telegram.ownerName = null;
+        draft.channels.telegram = draft.channels.telegram.filter(
+          (account) => account.id !== this.accountId,
+        );
       });
       this.botName = null;
       this.deps.changed();
-      return this.status();
     });
   }
 
@@ -201,14 +243,16 @@ export class TelegramService extends BotService<TelegramChannel> implements Chan
   }
 
   private owner(): TelegramOwner | null {
-    const { ownerId, ownerName } = this.deps.settings.get().channels.telegram;
+    const { ownerId, ownerName } = this.account() ?? defaultTelegramSettings();
     return ownerId === null ? null : { id: ownerId, name: ownerName ?? String(ownerId) };
   }
 
   private paired(owner: TelegramOwner): void {
     this.deps.settings.update((draft) => {
-      draft.channels.telegram.ownerId = owner.id;
-      draft.channels.telegram.ownerName = owner.name;
+      const account = draft.channels.telegram.find((candidate) => candidate.id === this.accountId);
+      if (!account) return;
+      account.ownerId = owner.id;
+      account.ownerName = owner.name;
     });
     this.guard.close();
     this.deps.changed();

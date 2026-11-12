@@ -4,7 +4,7 @@ import { defaultZaloSettings, readZaloSettings } from "./settings.ts";
 
 describe("saved Zalo settings", () => {
   test("defaults to off and unpaired", () => {
-    expect(readChannelsSettings(null).zalo).toEqual(defaultZaloSettings());
+    expect(readChannelsSettings(null).zalo).toEqual([]);
     expect(defaultZaloSettings()).toMatchObject({ enabled: false, ownerId: null, agentId: null });
   });
 
@@ -16,7 +16,10 @@ describe("saved Zalo settings", () => {
       ownerId: "6ede9afa66b88fe6d6a9",
       ownerName: "Ann",
     };
-    expect(readChannelsSettings({ zalo: saved }).zalo).toEqual(saved);
+    // The single object written before accounts existed becomes the account `default`.
+    expect(readChannelsSettings({ zalo: saved }).zalo).toEqual([
+      { ...saved, id: "default", label: "" },
+    ]);
   });
 
   test("keeps good fields and drops bad ones", () => {
@@ -55,9 +58,9 @@ describe("saved Zalo settings", () => {
         },
       },
     });
-    expect(result.zalo.enabled).toBe(true);
-    expect(result.zalo.chats).toEqual({ "zgr-1": { label: "Valid" } });
-    expect(readChannelsSettings({ zalo: { chats: [] } }).zalo.chats).toBeUndefined();
+    expect(result.zalo[0]?.enabled).toBe(true);
+    expect(result.zalo[0]?.chats).toEqual({ "zgr-1": { label: "Valid" } });
+    expect(readChannelsSettings({ zalo: { chats: [] } }).zalo[0]?.chats).toBeUndefined();
   });
 
   test.each([null, "u1", {}, [""], [0, 1, "  "]].map((allowedUsers) => ({ allowedUsers })))(
@@ -65,7 +68,7 @@ describe("saved Zalo settings", () => {
     ({ allowedUsers }) => {
       const chat = readChannelsSettings({
         zalo: { chats: { "zgr-1": { access: "members", allowedUsers, busyMode: "steer" } } },
-      }).zalo.chats?.["zgr-1"];
+      }).zalo[0]?.chats?.["zgr-1"];
       expect(chat?.access).toBe("owner");
       expect(chat?.busyMode).toBe("steer");
     },
@@ -74,7 +77,7 @@ describe("saved Zalo settings", () => {
   test("removing invalid allowlist entries does not widen a valid restriction", () => {
     const chat = readChannelsSettings({
       zalo: { chats: { "zgr-1": { access: "members", allowedUsers: ["u7", "", "u8"] } } },
-    }).zalo.chats?.["zgr-1"];
+    }).zalo[0]?.chats?.["zgr-1"];
     expect(chat).toEqual({ access: "members", allowedUsers: ["u7", "u8"] });
   });
 });

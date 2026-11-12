@@ -62,6 +62,11 @@ export abstract class BotService<C extends BotChannel> {
     return next;
   }
 
+  /** The saved bot token, or null. */
+  token(): Promise<string | null> {
+    return this.readToken();
+  }
+
   protected async readToken(): Promise<string | null> {
     const credential = await this.base.credentials.read(this.base.tokenKey);
     return credential?.type === "api_key" && credential.key ? credential.key : null;

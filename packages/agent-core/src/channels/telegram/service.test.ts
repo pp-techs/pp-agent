@@ -2,11 +2,17 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Credential } from "@earendil-works/pi-ai";
-import { DEFAULT_AGENT_ID, DEFAULT_WORKSPACE_ID, type SaveTelegramInput } from "@workspace/shared";
+import {
+  DEFAULT_AGENT_ID,
+  DEFAULT_WORKSPACE_ID,
+  type SaveTelegramInput,
+  type TelegramAccountSettings,
+} from "@workspace/shared";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vite-plus/test";
 import { SettingsStore } from "../../settings-store.ts";
 import { TELEGRAM_TOKEN_KEY } from "../names.ts";
 import { TelegramApiError } from "./api.ts";
+import { defaultTelegramSettings } from "./settings.ts";
 import { TelegramService } from "./service.ts";
 import { FakeGateway } from "../shared/testing.ts";
 import { FakeApi, fakeT, textUpdate } from "./testing.ts";
@@ -27,6 +33,23 @@ class FakeVault {
   async delete(id: string) {
     this.entries.delete(id);
   }
+}
+
+/** The first (and in most tests only) Telegram account. */
+function account(settings: SettingsStore): TelegramAccountSettings | undefined {
+  return settings.get().channels.telegram[0];
+}
+
+/** Changes the first account, creating it as a saved one would be when there is none. */
+function patch(settings: SettingsStore, change: (account: TelegramAccountSettings) => void) {
+  settings.update((draft) => {
+    let first = draft.channels.telegram[0];
+    if (!first) {
+      first = { ...defaultTelegramSettings(), id: "default", label: "" };
+      draft.channels.telegram.push(first);
+    }
+    change(first);
+  });
 }
 
 let directory: string;
@@ -77,7 +100,7 @@ describe("save", () => {
     const status = await service.save(input);
     expect(tokens).toContain("123:abc");
     expect(vault.entries.get(TELEGRAM_TOKEN_KEY)).toEqual({ type: "api_key", key: "123:abc" });
-    expect(settings.get().channels.telegram.enabled).toBe(true);
+    expect(account(settings)?.enabled).toBe(true);
     expect(status).toMatchObject({
       enabled: true,
       hasToken: true,
@@ -94,7 +117,7 @@ describe("save", () => {
     api.getMeError = new TelegramApiError("unauthorized", "Unauthorized", 401);
     await expect(service.save(input)).rejects.toThrow("channels.telegram.tokenInvalid");
     expect(vault.entries.size).toBe(0);
-    expect(settings.get().channels.telegram.enabled).toBe(false);
+    expect(account(settings)?.enabled ?? false).toBe(false);
     expect((await service.status()).hasToken).toBe(false);
   });
 
@@ -110,14 +133,14 @@ describe("save", () => {
     await expect(service.save({ ...input, agentId: null })).resolves.toMatchObject({
       agentId: null,
     });
-    expect(settings.get().channels.telegram.agentId).toBeNull();
+    expect(account(settings)?.agentId).toBeNull();
   });
 
   test("normalizes deleted agent and workspace IDs on save", async () => {
     const { service, settings } = setup();
-    settings.update((draft) => {
-      draft.channels.telegram.agentId = "deleted-agent";
-      draft.channels.telegram.workspaceId = "deleted-workspace";
+    patch(settings, (a) => {
+      a.agentId = "deleted-agent";
+      a.workspaceId = "deleted-workspace";
     });
     const saved = await service.save({
       ...input,
@@ -126,7 +149,7 @@ describe("save", () => {
     });
     expect(saved.agentId).toBeNull();
     expect(saved.workspaceId).toBe(DEFAULT_WORKSPACE_ID);
-    expect(settings.get().channels.telegram).toMatchObject({
+    expect(account(settings)).toMatchObject({
       agentId: null,
       workspaceId: DEFAULT_WORKSPACE_ID,
     });
@@ -137,7 +160,7 @@ describe("save", () => {
     await expect(service.save({ ...input, token: "  " })).rejects.toThrow(
       "channels.telegram.tokenRequired",
     );
-    expect(settings.get().channels.telegram.enabled).toBe(false);
+    expect(account(settings)?.enabled ?? false).toBe(false);
   });
 
   test("cannot be enabled without a token, but can keep the stored one when omitted", async () => {
@@ -168,8 +191,8 @@ describe("save", () => {
     "normalizes a malformed runtime allowlist before the next message: $allowedUsers",
     async ({ allowedUsers }) => {
       const { service, settings, api, gateway } = setup();
-      settings.update((draft) => {
-        draft.channels.telegram.ownerId = 7;
+      patch(settings, (a) => {
+        a.ownerId = 7;
       });
       await service.save({
         ...input,
@@ -185,7 +208,7 @@ describe("save", () => {
       expect(saved.chats).toEqual({
         "8": { access: "owner", ...(Array.isArray(allowedUsers) ? { allowedUsers: [] } : {}) },
       });
-      expect(settings.get().channels.telegram.chats).toEqual(saved.chats);
+      expect(account(settings)?.chats).toEqual(saved.chats);
       api.push(textUpdate(2, "must be ignored", 8));
       api.push(textUpdate(3, "/help"));
       await vi.waitFor(() => expect(api.offsets.at(-1)).toBe(4));
@@ -196,8 +219,8 @@ describe("save", () => {
 
   test("normalizes chat IDs and preserves valid restricted runtime members", async () => {
     const { service, settings, api, gateway } = setup();
-    settings.update((draft) => {
-      draft.channels.telegram.ownerId = 7;
+    patch(settings, (a) => {
+      a.ownerId = 7;
     });
     await service.save({
       ...input,
@@ -207,7 +230,7 @@ describe("save", () => {
         "9007199254740992": { access: "members" },
       } as unknown as SaveTelegramInput["chats"],
     });
-    expect(settings.get().channels.telegram.chats).toEqual({
+    expect(account(settings)?.chats).toEqual({
       "8": { access: "members", allowedUsers: [8] },
     });
     api.push(textUpdate(1, "permitted", 8));
@@ -223,8 +246,8 @@ describe("start and stop", () => {
     expect((await service.status()).state).toBe("off");
 
     vault.entries.set(TELEGRAM_TOKEN_KEY, { type: "api_key", key: "123:abc" });
-    settings.update((draft) => {
-      draft.channels.telegram.enabled = true;
+    patch(settings, (a) => {
+      a.enabled = true;
     });
     await service.start();
     await service.start();
@@ -291,8 +314,8 @@ describe("pairing", () => {
     expect(open.pairingExpiresAt).toBeGreaterThan(Date.now());
 
     api.push(textUpdate(1, `/pair ${open.pairingCode}`, 42));
-    await vi.waitFor(() => expect(settings.get().channels.telegram.ownerId).toBe(42));
-    expect(settings.get().channels.telegram.ownerName).toBe("Ann Lee");
+    await vi.waitFor(() => expect(account(settings)?.ownerId).toBe(42));
+    expect(account(settings)?.ownerName).toBe("Ann Lee");
     const status = await service.status();
     expect(status).toMatchObject({ ownerId: 42, ownerName: "Ann Lee", pairingCode: null });
     expect(changed).toHaveBeenCalled();
@@ -317,7 +340,7 @@ describe("delivery", () => {
     await context.service.save(input);
     const { pairingCode } = await context.service.startPairing();
     context.api.push(textUpdate(1, `/pair ${pairingCode}`, 42));
-    await vi.waitFor(() => expect(context.settings.get().channels.telegram.ownerId).toBe(42));
+    await vi.waitFor(() => expect(account(context.settings)?.ownerId).toBe(42));
     context.api.sent.length = 0;
     return context;
   }
@@ -350,8 +373,8 @@ describe("delivery", () => {
 
   test("sends to the selected configured group rather than the owner", async () => {
     const { service, settings, api } = await paired();
-    settings.update((draft) => {
-      draft.channels.telegram.chats = { "-100456": { label: "Reports", access: "owner" } };
+    patch(settings, (a) => {
+      a.chats = { "-100456": { label: "Reports", access: "owner" } };
     });
     await service.deliver("telegram:-100456", "Morning report");
     expect(api.sent.map(({ chatId, text }) => ({ chatId, text }))).toEqual([
@@ -373,18 +396,19 @@ describe("delivery", () => {
 });
 
 describe("forget", () => {
-  test("removes the token and owner, disables and stops", async () => {
+  test("removes the account with its token and owner, and stops", async () => {
     const { service, vault, settings, api } = setup();
     await service.save(input);
     const { pairingCode } = await service.startPairing();
     api.push(textUpdate(1, `/pair ${pairingCode}`, 42));
-    await vi.waitFor(() => expect(settings.get().channels.telegram.ownerId).toBe(42));
+    await vi.waitFor(() => expect(account(settings)?.ownerId).toBe(42));
     const offsetPath = join(directory, "telegram-offset.json");
     expect(existsSync(offsetPath)).toBe(true);
 
-    const status = await service.forget();
+    await service.forget();
     expect(vault.entries.size).toBe(0);
-    expect(status).toMatchObject({
+    expect(settings.get().channels.telegram).toEqual([]);
+    expect(await service.status()).toMatchObject({
       enabled: false,
       hasToken: false,
       ownerId: null,
@@ -392,13 +416,13 @@ describe("forget", () => {
       botUsername: null,
       state: "off",
     });
-    expect(settings.get().channels.telegram.agentId).toBe(DEFAULT_AGENT_ID);
     expect(existsSync(offsetPath)).toBe(false);
   });
 
   test("works when nothing was saved", async () => {
     const { service } = setup();
-    await expect(service.forget()).resolves.toMatchObject({ hasToken: false, state: "off" });
+    await expect(service.forget()).resolves.toBeUndefined();
+    expect(await service.status()).toMatchObject({ hasToken: false, state: "off" });
   });
 });
 
@@ -406,18 +430,13 @@ describe("settings file", () => {
   test("reads channels leniently and keeps them on write", () => {
     const path = join(directory, "settings.json");
     const store = new SettingsStore(path);
-    expect(store.get().channels.telegram).toEqual({
-      enabled: false,
-      agentId: null,
-      workspaceId: DEFAULT_WORKSPACE_ID,
-      ownerId: null,
-      ownerName: null,
+    expect(store.get().channels.telegram).toEqual([]);
+    patch(store, (a) => {
+      a.ownerId = 5;
+      a.ownerName = "Ann";
     });
-    store.update((draft) => {
-      draft.channels.telegram.ownerId = 5;
-      draft.channels.telegram.ownerName = "Ann";
-    });
-    expect(new SettingsStore(path).get().channels.telegram).toMatchObject({
+    expect(account(new SettingsStore(path))).toMatchObject({
+      id: "default",
       ownerId: 5,
       ownerName: "Ann",
     });

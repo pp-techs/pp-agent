@@ -529,6 +529,19 @@
         "allowedUsers": "ID người dùng được phép",
         "allowedUsersHelp": "Áp dụng khi cho phép mọi người trong cuộc trò chuyện: các ID người dùng Zalo cách nhau bằng dấu phẩy. Để trống để cho phép tất cả; chế độ chỉ chủ sở hữu vẫn chỉ cho phép người đã ghép."
       }
+    },
+    "accounts": {
+      "title": "Tài khoản",
+      "empty": "Chưa có tài khoản nào. Hãy thêm một tài khoản để bắt đầu.",
+      "add": "Thêm tài khoản",
+      "back": "Tất cả tài khoản",
+      "summary": "Bot {{bot}} · Đã ghép nối với {{owner}}",
+      "count_other": "{{count}} tài khoản",
+      "name": {
+        "label": "Tên",
+        "placeholder": "Ví dụ: Công việc",
+        "help": "Hiển thị trong ứng dụng và cho tác nhân, để phân biệt các tài khoản. Không bắt buộc."
+      }
     }
   },
   "browserSection": {

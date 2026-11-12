@@ -331,6 +331,8 @@
     }
   },
   "channels": {
+    "tokenInUse": "Token bot này đã được dùng bởi một tài khoản khác.",
+    "unknownAccount": "Không có tài khoản \"{{id}}\".",
     "telegram": {
       "start": "Xin chào! Để dùng bot này, hãy mở PP Agent › Cài đặt › Kênh chat › Telegram, bắt đầu ghép nối, rồi gửi cho tôi /pair kèm mã.",
       "startPaired": "Xin chào {{name}}! Hãy nhắn cho tôi và tôi sẽ bắt tay vào việc. /help liệt kê các lệnh.",

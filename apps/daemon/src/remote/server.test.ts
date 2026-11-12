@@ -51,8 +51,11 @@ function makeServer(): RemoteServer {
         ];
       if (command.type === "list_computer_apps")
         return { allowed: [{ id: "com.apple.Notes", name: "Notes" }], blocked: [blockedApp] };
-      if (command.type === "get_telegram_status" || command.type === "get_zalo_status")
-        return { enabled: true, pairingCode: "ABCDEFGH", pairingExpiresAt: 1, ownerId: null };
+      if (command.type === "list_telegram_accounts" || command.type === "list_zalo_accounts")
+        return [
+          { id: "default", enabled: true, pairingCode: "ABCDEFGH", pairingExpiresAt: 1 },
+          { id: "work", enabled: false, pairingCode: "JKMNPQRS", pairingExpiresAt: 2 },
+        ];
       if (command.type === "list_mcp_servers")
         return {
           servers: [
@@ -536,15 +539,18 @@ describe("RemoteServer", () => {
     ).toEqual([null, "blocked"]);
   });
 
-  it("never shows a device the Telegram or Zalo pairing code", async () => {
+  it("never shows a device the pairing code of any Telegram or Zalo account", async () => {
     const server = makeServer();
     const base = await enabled(server);
     const token = await pair(server, base);
-    for (const type of ["get_telegram_status", "get_zalo_status"]) {
+    for (const type of ["list_telegram_accounts", "list_zalo_accounts"]) {
       const { data } = (await (await command(base, token, { type })).json()) as {
-        data: Record<string, unknown>;
+        data: Record<string, unknown>[];
       };
-      expect(data).toMatchObject({ enabled: true, pairingCode: null, pairingExpiresAt: null });
+      expect(data).toHaveLength(2);
+      for (const account of data)
+        expect(account).toMatchObject({ pairingCode: null, pairingExpiresAt: null });
+      expect(data[0]).toMatchObject({ id: "default", enabled: true });
     }
   });
 
