@@ -1,12 +1,12 @@
 /**
  * Scheduled tasks: when a task is due (pure functions, local time) and the queue that runs them.
  *
- * Times are wall-clock times of the computer. A day's slot is built from calendar fields
- * (`new Date(y, m, d + n, h, min)`), never by adding 24 hours, so daylight-saving changes do not
- * shift "daily at 09:00". A slot inside a skipped hour (spring forward) happens right after the gap.
+ * A task runs once (`once`) or on a cron expression (`cron`, see `@workspace/shared`'s `cron.ts`).
+ * Times are wall-clock times of the computer, so daylight-saving changes do not shift
+ * "every day at 09:00".
  */
 import type { ScheduledTask, TaskSchedule } from "@workspace/shared";
-import { SCHEDULE_LIMITS } from "@workspace/shared";
+import { nextCronRun, parseCron, previousCronRun, SCHEDULE_LIMITS } from "@workspace/shared";
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -41,7 +41,7 @@ export function schedulableOf(task: ScheduledTask): Schedulable {
 // Schedule validation
 // ---------------------------------------------------------------------------------------------
 
-export type ScheduleProblem = "interval" | "time" | "days" | "kind";
+export type ScheduleProblem = "kind" | "cron" | "cronNever" | "cronTooFrequent";
 
 export type ParsedSchedule =
   | { ok: true; schedule: TaskSchedule }
@@ -56,37 +56,78 @@ export function parseTime(value: unknown): { hours: number; minutes: number } | 
   return match ? { hours: Number(match[1]), minutes: Number(match[2]) } : null;
 }
 
-/** A schedule from untrusted input (settings.json or the UI), normalized, or why it does not fit. */
+/** Gaps in minutes that a cron expression can keep: they divide the hour or the day evenly. */
+const CLOCK_GAPS = [5, 6, 10, 12, 15, 20, 30, 60, 120, 180, 240, 360, 480, 720, 1_440];
+
+/** The gap closest to `minutes`; halfway between two, the longer one, so a task never runs more often. */
+function nearestGap(minutes: number): number {
+  return CLOCK_GAPS.reduce((best, gap) =>
+    Math.abs(gap - minutes) <= Math.abs(best - minutes) ? gap : best,
+  );
+}
+
+/**
+ * The cron expression for a schedule saved before cron existed (`interval`, `daily`, `weekly`), or
+ * null when it does not fit. A daily or weekly slot keeps its exact time. An interval counted
+ * from the last run cannot be written in cron, so it is rounded to the nearest step of the clock:
+ * every 45 minutes becomes every 30, every 5 hours every 4, every 2 days every 2nd day of the month.
+ */
+export function legacyToCron(value: Record<string, unknown>): string | null {
+  if (value.kind === "daily") {
+    const time = parseTime(value.time);
+    return time ? `${time.minutes} ${time.hours} * * *` : null;
+  }
+  if (value.kind === "weekly") {
+    const time = parseTime(value.time);
+    const days = Array.isArray(value.days)
+      ? [...new Set(value.days)]
+          .filter((day): day is number => Number.isInteger(day) && day >= 0 && day <= 6)
+          .sort((a, b) => a - b)
+      : [];
+    return time && days.length > 0 ? `${time.minutes} ${time.hours} * * ${days.join(",")}` : null;
+  }
+  if (value.kind === "interval") {
+    const { every, unit } = value;
+    if (typeof every !== "number" || !Number.isInteger(every) || every < 1) return null;
+    if (unit !== "minutes" && unit !== "hours") return null;
+    const minutes = unit === "minutes" ? every : every * 60;
+    if (minutes >= 1_440) {
+      const days = Math.min(Math.round(minutes / 1_440), 31);
+      return days === 1 ? "0 0 * * *" : `0 0 */${days} * *`;
+    }
+    const gap = nearestGap(minutes);
+    if (gap < 60) return `*/${gap} * * * *`;
+    return gap === 60 ? "0 * * * *" : `0 */${gap / 60} * * *`;
+  }
+  return null;
+}
+
+/**
+ * A schedule from untrusted input (settings.json, the UI or the agent), normalized, or why it does
+ * not fit. Schedules saved before cron existed are converted to cron (see `legacyToCron`).
+ */
 export function parseSchedule(raw: unknown): ParsedSchedule {
   if (typeof raw !== "object" || raw === null) return { ok: false, problem: "kind" };
-  const value = raw as Record<string, unknown>;
+  let value = raw as Record<string, unknown>;
+  if (value.kind === "interval" || value.kind === "daily" || value.kind === "weekly") {
+    const expr = legacyToCron(value);
+    if (expr === null) return { ok: false, problem: "kind" };
+    value = { kind: "cron", expr };
+  }
   switch (value.kind) {
-    case "interval": {
-      const { every, unit } = value;
-      if (unit !== "minutes" && unit !== "hours") return { ok: false, problem: "interval" };
-      const [min, max] =
-        unit === "minutes"
-          ? [SCHEDULE_LIMITS.minMinutes, SCHEDULE_LIMITS.maxMinutes]
-          : [1, SCHEDULE_LIMITS.maxHours];
-      if (typeof every !== "number" || !Number.isInteger(every) || every < min || every > max)
-        return { ok: false, problem: "interval" };
-      return { ok: true, schedule: { kind: "interval", every, unit } };
-    }
-    case "daily":
-      if (!parseTime(value.time)) return { ok: false, problem: "time" };
-      return { ok: true, schedule: { kind: "daily", time: value.time as string } };
-    case "weekly": {
-      if (!parseTime(value.time)) return { ok: false, problem: "time" };
-      const days = Array.isArray(value.days)
-        ? [...new Set(value.days)].filter(
-            (day): day is number => Number.isInteger(day) && day >= 0 && day <= 6,
-          )
-        : [];
-      if (days.length === 0) return { ok: false, problem: "days" };
-      return {
-        ok: true,
-        schedule: { kind: "weekly", days: days.sort((a, b) => a - b), time: value.time as string },
-      };
+    case "cron": {
+      const cron = parseCron(value.expr, SCHEDULE_LIMITS.minMinutes);
+      if (!cron.ok)
+        return {
+          ok: false,
+          problem:
+            cron.problem === "never"
+              ? "cronNever"
+              : cron.problem === "tooFrequent"
+                ? "cronTooFrequent"
+                : "cron",
+        };
+      return { ok: true, schedule: { kind: "cron", expr: cron.spec.expr } };
     }
     case "once": {
       const at = value.at;
@@ -103,42 +144,13 @@ export function parseSchedule(raw: unknown): ParsedSchedule {
 // When is a task due
 // ---------------------------------------------------------------------------------------------
 
-function intervalMs(schedule: Extract<TaskSchedule, { kind: "interval" }>): number {
-  return schedule.every * (schedule.unit === "minutes" ? MINUTE_MS : HOUR_MS);
-}
-
-/** Epoch ms of `time` on the calendar day `offset` days from `day`'s date, in local time. */
-function slotAt(day: Date, offset: number, time: string): number {
-  const { hours, minutes } = parseTime(time) ?? { hours: 0, minutes: 0 };
-  return new Date(
-    day.getFullYear(),
-    day.getMonth(),
-    day.getDate() + offset,
-    hours,
-    minutes,
-    0,
-    0,
-  ).getTime();
-}
-
 /** Runs before this moment are already accounted for. */
 function since(task: Schedulable): number {
   return Math.max(task.armedAt, task.lastRunEnd ?? 0);
 }
 
-function runsOn(task: Schedulable, day: Date, offset: number): boolean {
-  const { schedule } = task;
-  if (schedule.kind === "once" || schedule.kind === "daily") return true;
-  if (schedule.kind === "weekly") {
-    const weekday = new Date(day.getFullYear(), day.getMonth(), day.getDate() + offset).getDay();
-    return schedule.days.includes(weekday);
-  }
-  return false;
-}
-
 /**
  * The next time the task is scheduled to run, strictly after `now`; null while it is disabled.
- * An interval task that is already due returns `now`.
  */
 export function nextRun(task: Schedulable, now: number): number | null {
   if (!task.enabled) return null;
@@ -149,15 +161,8 @@ export function nextRun(task: Schedulable, now: number): number | null {
       ? null
       : Math.max(schedule.at, now);
   }
-  if (schedule.kind === "interval") return Math.max(since(task) + intervalMs(schedule), now);
-  const day = new Date(now);
-  // A week and a day cover every weekday, including today's slot already being past.
-  for (let offset = 0; offset <= 7; offset += 1) {
-    if (!runsOn(task, day, offset)) continue;
-    const slot = slotAt(day, offset, schedule.time);
-    if (slot > now) return slot;
-  }
-  return null;
+  const cron = parseCron(schedule.expr);
+  return cron.ok ? nextCronRun(cron.spec, now) : null;
 }
 
 /** The latest scheduled moment at or before `now` that no run has covered yet; null if none. */
@@ -168,19 +173,8 @@ export function lastDue(task: Schedulable, now: number): number | null {
     if (task.lastRunEnd !== null) return null;
     return schedule.at <= now ? schedule.at : null;
   }
-  const baseline = since(task);
-  if (schedule.kind === "interval") {
-    const due = baseline + intervalMs(schedule);
-    return due <= now ? due : null;
-  }
-  const day = new Date(now);
-  for (let offset = 0; offset >= -7; offset -= 1) {
-    if (!runsOn(task, day, offset)) continue;
-    const slot = slotAt(day, offset, schedule.time);
-    if (slot > now) continue;
-    return slot > baseline ? slot : null;
-  }
-  return null;
+  const cron = parseCron(schedule.expr);
+  return cron.ok ? previousCronRun(cron.spec, now, since(task)) : null;
 }
 
 export type Decision =

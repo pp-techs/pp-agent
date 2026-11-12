@@ -251,12 +251,8 @@
     "count_one": "{{count}} task of {{max}}",
     "count_other": "{{count}} tasks of {{max}}",
     "schedule": {
-      "intervalMinutes_one": "Every minute",
-      "intervalMinutes_other": "Every {{count}} minutes",
-      "intervalHours_one": "Every hour",
-      "intervalHours_other": "Every {{count}} hours",
-      "daily": "Every day at {{time}}",
-      "weekly": "{{days}} at {{time}}"
+      "cron": "Cron: {{expr}}",
+      "once": "Once, {{when}}"
     },
     "editor": {
       "newTitle": "New scheduled task",
@@ -280,23 +276,41 @@
       "when": {
         "legend": "When",
         "description": "Times follow this computer's clock.",
-        "kind": "Repeat",
+        "kind": "Run",
         "kinds": {
-          "once": "Once",
-          "interval": "At regular intervals",
+          "repeat": "Repeats",
+          "once": "Once"
+        },
+        "at": "Date and time",
+        "pick": "Pick date and time",
+        "inOneHour": "In 1 hour",
+        "tomorrow": "Tomorrow 09:00",
+        "done": "Done",
+        "atHelp": "Run once at this local date and time. Existing one-shot tasks keep their exact scheduled instant unless you change it.",
+        "cron": "Cron expression",
+        "cronHelp": "Five fields: minute hour day-of-month month day-of-week, in this computer's time. For example 0 9 * * MON-FRI runs at 09:00 on weekdays. Use this for schedules the choices above cannot make.",
+        "cronNext": "Next runs",
+        "cronNextNone": "No upcoming run.",
+        "time": "At",
+        "frequency": "How often",
+        "frequencies": {
+          "minutes": "Every few minutes",
+          "hourly": "Every few hours",
           "daily": "Every day",
-          "weekly": "On chosen days"
+          "weekly": "On certain weekdays",
+          "monthly": "Once a month"
         },
         "every": "Every",
-        "unit": "Unit",
-        "units": {
-          "minutes": "minutes",
-          "hours": "hours"
-        },
-        "time": "At",
-        "at": "Date and time",
-        "atHelp": "Run once at this local date and time. Existing one-shot tasks keep their exact scheduled instant unless you change it.",
-        "days": "On"
+        "everyMinutes_one": "{{count}} minute",
+        "everyMinutes_other": "{{count}} minutes",
+        "everyHours_one": "{{count}} hour",
+        "everyHours_other": "{{count}} hours",
+        "minute": "At",
+        "pastTheHour": "{{minute}} past the hour",
+        "days": "On",
+        "dayOfMonth": "On day",
+        "shortMonths": "In months with fewer days, the task is skipped.",
+        "advanced": "Advanced: write a cron expression"
       },
       "enabled": {
         "label": "Turned on",
@@ -307,13 +321,24 @@
         "nameTaken": "Another task already has this name.",
         "promptRequired": "Write what the agent should do.",
         "tooLong": "Use at most {{max}} characters.",
-        "interval": "Use {{minMinutes}} to {{maxMinutes}} minutes, or 1 to {{maxHours}} hours.",
-        "time": "Enter a time.",
         "at": "Enter a valid local date and time. Times repeated when the timezone clock moves back are ambiguous; choose a time outside the repeated interval.",
-        "days": "Choose at least one day."
+        "cron": "Enter five fields: minute hour day-of-month month day-of-week. Use numbers, *, lists (1,15), ranges (1-5), steps (*/10) and names like MON or JAN.",
+        "cronNever": "No date matches this expression, for example 31 February.",
+        "cronTooFrequent": "This runs more often than every {{minMinutes}} minutes. Use a rarer schedule.",
+        "days": "Choose at least one day.",
+        "time": "Enter a time.",
+        "builder": "Complete the schedule above."
       },
       "create": "Create task",
-      "saved": "Task “{{name}}” saved."
+      "saved": "Task “{{name}}” saved.",
+      "delivery": {
+        "legend": "Send the result to",
+        "description": "Where the answer of each run goes.",
+        "session": "In the app only",
+        "none": "Don't deliver anywhere",
+        "unavailable": "{{chat}} (not available right now)",
+        "noChats": "To send results to Telegram or Zalo, set up a channel in Settings › Channels and pair your account."
+      }
     }
   },
   "background": {

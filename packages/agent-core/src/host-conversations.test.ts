@@ -312,7 +312,7 @@ test("a scheduled run whose delivery throws is still released and recorded as fa
       prompt: "hold-task",
       agentId: DEFAULT_AGENT_ID,
       workspaceId: DEFAULT_WORKSPACE_ID,
-      schedule: { kind: "daily", time: "09:00" },
+      schedule: { kind: "cron", expr: "0 9 * * *" },
       enabled: false,
       target: { mode: "current", sessionId: "origin-session" },
       delivery: { to: "session" },

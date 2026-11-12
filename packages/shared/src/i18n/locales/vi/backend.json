@@ -283,10 +283,10 @@
   "scheduler": {
     "errors": {
       "schedule": {
-        "interval": "Chọn tần suất chạy: mỗi 5 đến 1.440 phút, hoặc mỗi 1 đến 168 giờ.",
-        "time": "Nhập giờ theo dạng HH:MM, ví dụ 09:30.",
-        "days": "Chọn ít nhất một ngày trong tuần.",
-        "kind": "Chọn thời điểm chạy tác vụ."
+        "kind": "Chọn thời điểm chạy tác vụ.",
+        "cron": "Nhập biểu thức cron gồm năm trường: phút giờ ngày-trong-tháng tháng ngày-trong-tuần, ví dụ 0 9 * * MON-FRI.",
+        "cronNever": "Không có ngày nào khớp biểu thức cron này, ví dụ 31 tháng 2.",
+        "cronTooFrequent": "Biểu thức cron này chạy dày hơn mỗi 5 phút."
       },
       "nameRequired": "Nhập tên cho tác vụ.",
       "nameTaken": "Đã có tác vụ tên {{name}}.",

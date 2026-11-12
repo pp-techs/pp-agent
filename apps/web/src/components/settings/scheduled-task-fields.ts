@@ -13,6 +13,18 @@ export function localDateTime(at: number): string {
   return `${day}T${time}${seconds || milliseconds ? `:${pad(seconds)}${fraction}` : ""}`;
 }
 
+/** The parts of a datetime-local value, or null when it is not one. `time` keeps any seconds. */
+export function parseLocalDateTime(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?)$/.exec(value);
+  if (!match) return null;
+  const [, year, month, day, time] = match;
+  const parts = { year: Number(year), month: Number(month), day: Number(day), time: time ?? "" };
+  const date = new Date(parts.year, parts.month - 1, parts.day);
+  // Reject 31 February and the like; `new Date` rolls them over to another day.
+  if (date.getMonth() !== parts.month - 1 || date.getDate() !== parts.day) return null;
+  return { ...parts, timestamp: new Date(value).getTime() };
+}
+
 /** Preserve the original instant, including the later occurrence of a repeated DST hour. */
 export function onceTimestamp(value: string, original?: TaskSchedule): number {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?$/.test(value)) return NaN;

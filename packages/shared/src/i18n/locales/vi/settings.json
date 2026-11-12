@@ -247,10 +247,8 @@
     },
     "count_other": "{{count}} / {{max}} tác vụ",
     "schedule": {
-      "intervalMinutes_other": "Mỗi {{count}} phút",
-      "intervalHours_other": "Mỗi {{count}} giờ",
-      "daily": "Mỗi ngày lúc {{time}}",
-      "weekly": "{{days}} lúc {{time}}"
+      "cron": "Cron: {{expr}}",
+      "once": "Một lần, {{when}}"
     },
     "editor": {
       "newTitle": "Tác vụ định kỳ mới",
@@ -274,23 +272,39 @@
       "when": {
         "legend": "Khi nào",
         "description": "Giờ theo đồng hồ của máy tính này.",
-        "kind": "Lặp lại",
+        "kind": "Chạy",
         "kinds": {
-          "once": "Một lần",
-          "interval": "Cách đều nhau",
-          "daily": "Mỗi ngày",
-          "weekly": "Vào các ngày chọn"
+          "repeat": "Lặp lại",
+          "once": "Một lần"
+        },
+        "at": "Ngày và giờ",
+        "pick": "Chọn ngày và giờ",
+        "inOneHour": "Sau 1 giờ",
+        "tomorrow": "Ngày mai 09:00",
+        "done": "Xong",
+        "atHelp": "Chạy một lần vào ngày giờ trên máy tính này. Tác vụ một lần hiện có giữ nguyên thời điểm chính xác nếu bạn không đổi.",
+        "cron": "Biểu thức cron",
+        "cronHelp": "Năm trường: phút giờ ngày-trong-tháng tháng ngày-trong-tuần, theo giờ máy tính này. Ví dụ 0 9 * * MON-FRI chạy lúc 09:00 các ngày trong tuần. Dùng khi các lựa chọn phía trên không tạo được lịch bạn cần.",
+        "cronNext": "Các lần chạy tới",
+        "cronNextNone": "Không có lần chạy nào sắp tới.",
+        "time": "Lúc",
+        "frequency": "Tần suất",
+        "frequencies": {
+          "minutes": "Mỗi vài phút",
+          "hourly": "Mỗi vài giờ",
+          "daily": "Hằng ngày",
+          "weekly": "Vào một số thứ trong tuần",
+          "monthly": "Mỗi tháng một lần"
         },
         "every": "Mỗi",
-        "unit": "Đơn vị",
-        "units": {
-          "minutes": "phút",
-          "hours": "giờ"
-        },
-        "time": "Lúc",
-        "at": "Ngày và giờ",
-        "atHelp": "Chạy một lần vào ngày giờ trên máy tính này. Tác vụ một lần hiện có giữ nguyên thời điểm chính xác nếu bạn không đổi.",
-        "days": "Vào"
+        "everyMinutes_other": "{{count}} phút",
+        "everyHours_other": "{{count}} giờ",
+        "minute": "Vào phút",
+        "pastTheHour": "Phút {{minute}} của mỗi giờ",
+        "days": "Vào",
+        "dayOfMonth": "Vào ngày",
+        "shortMonths": "Tháng nào không có ngày này thì bỏ qua.",
+        "advanced": "Nâng cao: tự viết biểu thức cron"
       },
       "enabled": {
         "label": "Đang bật",
@@ -301,13 +315,24 @@
         "nameTaken": "Đã có tác vụ khác dùng tên này.",
         "promptRequired": "Hãy viết việc tác nhân cần làm.",
         "tooLong": "Tối đa {{max}} ký tự.",
-        "interval": "Dùng từ {{minMinutes}} đến {{maxMinutes}} phút, hoặc từ 1 đến {{maxHours}} giờ.",
-        "time": "Nhập giờ.",
         "at": "Nhập ngày và giờ hợp lệ trên máy tính này. Giờ lặp lại khi đồng hồ múi giờ lùi lại có thể chỉ hai thời điểm khác nhau; hãy chọn giờ ngoài khoảng bị lặp.",
-        "days": "Chọn ít nhất một ngày."
+        "cron": "Nhập đủ năm trường: phút giờ ngày-trong-tháng tháng ngày-trong-tuần. Dùng số, *, danh sách (1,15), khoảng (1-5), bước (*/10) và tên như MON hoặc JAN.",
+        "cronNever": "Không có ngày nào khớp biểu thức này, ví dụ 31 tháng 2.",
+        "cronTooFrequent": "Biểu thức này chạy dày hơn mỗi {{minMinutes}} phút. Hãy chọn lịch thưa hơn.",
+        "days": "Chọn ít nhất một ngày.",
+        "time": "Nhập giờ.",
+        "builder": "Hãy chọn đủ các mục của lịch ở trên."
       },
       "create": "Tạo tác vụ",
-      "saved": "Đã lưu tác vụ “{{name}}”."
+      "saved": "Đã lưu tác vụ “{{name}}”.",
+      "delivery": {
+        "legend": "Gửi kết quả đến",
+        "description": "Nơi nhận câu trả lời của mỗi lần chạy.",
+        "session": "Chỉ trong ứng dụng",
+        "none": "Không gửi đi đâu",
+        "unavailable": "{{chat}} (hiện không dùng được)",
+        "noChats": "Để gửi kết quả qua Telegram hoặc Zalo, hãy thiết lập kênh trong Cài đặt › Kênh chat và ghép đôi tài khoản của bạn."
+      }
     }
   },
   "background": {

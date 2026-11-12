@@ -29,84 +29,108 @@ function task(
   return { enabled: true, schedule, armedAt, lastRunEnd: null, ...extra };
 }
 
+const cron = (expr: string): TaskSchedule => ({ kind: "cron", expr });
+
 describe("parseTime / parseSchedule", () => {
-  test("accepts HH:MM only", () => {
+  test("parseTime accepts HH:MM only", () => {
     expect(parseTime("09:05")).toEqual({ hours: 9, minutes: 5 });
     expect(parseTime("24:00")).toBeNull();
     expect(parseTime("9:05")).toBeNull();
     expect(parseTime(905)).toBeNull();
   });
 
-  test("interval bounds", () => {
-    expect(parseSchedule({ kind: "interval", every: 30, unit: "minutes" }).ok).toBe(true);
-    expect(parseSchedule({ kind: "interval", every: 4, unit: "minutes" })).toEqual({
-      ok: false,
-      problem: "interval",
+  test("cron schedules are normalized and validated", () => {
+    expect(parseSchedule({ kind: "cron", expr: " 0  9 * * MON-FRI " })).toEqual({
+      ok: true,
+      schedule: cron("0 9 * * MON-FRI"),
     });
-    expect(parseSchedule({ kind: "interval", every: 1.5, unit: "hours" }).ok).toBe(false);
-    expect(parseSchedule({ kind: "interval", every: 169, unit: "hours" }).ok).toBe(false);
-    expect(parseSchedule({ kind: "interval", every: 2, unit: "days" }).ok).toBe(false);
+    expect(parseSchedule({ kind: "cron", expr: "nope" })).toEqual({ ok: false, problem: "cron" });
+    expect(parseSchedule({ kind: "cron", expr: "0 0 31 2 *" })).toEqual({
+      ok: false,
+      problem: "cronNever",
+    });
+    expect(parseSchedule({ kind: "cron", expr: "* * * * *" })).toEqual({
+      ok: false,
+      problem: "cronTooFrequent",
+    });
+    expect(parseSchedule(null)).toEqual({ ok: false, problem: "kind" });
+    expect(parseSchedule({ kind: "yearly" })).toEqual({ ok: false, problem: "kind" });
   });
 
-  test("weekly days are deduplicated, sorted, and required", () => {
+  test("daily and weekly schedules saved earlier become the same cron time", () => {
+    expect(parseSchedule({ kind: "daily", time: "09:05" })).toEqual({
+      ok: true,
+      schedule: cron("5 9 * * *"),
+    });
     expect(parseSchedule({ kind: "weekly", days: [5, 1, 1], time: "08:00" })).toEqual({
       ok: true,
-      schedule: { kind: "weekly", days: [1, 5], time: "08:00" },
+      schedule: cron("0 8 * * 1,5"),
     });
-    expect(parseSchedule({ kind: "weekly", days: [], time: "08:00" })).toEqual({
-      ok: false,
-      problem: "days",
-    });
+    expect(parseSchedule({ kind: "weekly", days: [], time: "08:00" }).ok).toBe(false);
     expect(parseSchedule({ kind: "weekly", days: [7], time: "08:00" }).ok).toBe(false);
-    expect(parseSchedule({ kind: "daily", time: "nope" })).toEqual({ ok: false, problem: "time" });
-    expect(parseSchedule(null)).toEqual({ ok: false, problem: "kind" });
+    expect(parseSchedule({ kind: "daily", time: "nope" }).ok).toBe(false);
+  });
+
+  test("intervals saved earlier become the nearest clock-aligned cron", () => {
+    const expr = (every: unknown, unit: unknown) => {
+      const result = parseSchedule({ kind: "interval", every, unit });
+      return result.ok && result.schedule.kind === "cron" ? result.schedule.expr : null;
+    };
+    expect(expr(5, "minutes")).toBe("*/5 * * * *");
+    expect(expr(30, "minutes")).toBe("*/30 * * * *");
+    expect(expr(45, "minutes")).toBe("0 * * * *");
+    expect(expr(1, "hours")).toBe("0 * * * *");
+    expect(expr(2, "hours")).toBe("0 */2 * * *");
+    // Halfway between two gaps, the longer one wins: it never runs more often than before.
+    expect(expr(5, "hours")).toBe("0 */6 * * *");
+    expect(expr(4, "hours")).toBe("0 */4 * * *");
+    expect(expr(24, "hours")).toBe("0 0 * * *");
+    expect(expr(168, "hours")).toBe("0 0 */7 * *");
+    expect(expr(1_440, "minutes")).toBe("0 0 * * *");
+    expect(expr(1.5, "hours")).toBeNull();
+    expect(expr(0, "hours")).toBeNull();
+    expect(expr(2, "days")).toBeNull();
   });
 });
 
 describe("nextRun", () => {
   test("disabled tasks never run", () => {
-    const disabled = task({ kind: "daily", time: "09:00" }, 0, { enabled: false });
+    const disabled = task(cron("0 9 * * *"), 0, { enabled: false });
     expect(nextRun(disabled, at(2026, 3, 4, 8))).toBeNull();
   });
 
-  test("interval counts from the last run, else from arming", () => {
-    const schedule: TaskSchedule = { kind: "interval", every: 30, unit: "minutes" };
-    const armed = at(2026, 3, 4, 8);
-    expect(nextRun(task(schedule, armed), armed + 10 * MINUTE)).toBe(armed + 30 * MINUTE);
-    const ran = task(schedule, armed, { lastRunEnd: armed + 45 * MINUTE });
-    expect(nextRun(ran, armed + 50 * MINUTE)).toBe(armed + 75 * MINUTE);
-  });
-
-  test("an interval task that is overdue is due now", () => {
-    const schedule: TaskSchedule = { kind: "interval", every: 1, unit: "hours" };
-    const armed = at(2026, 3, 4, 8);
-    const now = armed + 5 * HOUR;
-    expect(nextRun(task(schedule, armed), now)).toBe(now);
-  });
-
-  test("daily: later today, else tomorrow", () => {
-    const schedule: TaskSchedule = { kind: "daily", time: "09:30" };
+  test("a daily slot is later today, else tomorrow", () => {
+    const schedule = cron("30 9 * * *");
     expect(nextRun(task(schedule, 0), at(2026, 3, 4, 8))).toBe(at(2026, 3, 4, 9, 30));
     expect(nextRun(task(schedule, 0), at(2026, 3, 4, 9, 30))).toBe(at(2026, 3, 5, 9, 30));
     expect(nextRun(task(schedule, 0), at(2026, 3, 4, 23, 59))).toBe(at(2026, 3, 5, 9, 30));
   });
 
-  test("daily rolls over month and year ends", () => {
-    const schedule: TaskSchedule = { kind: "daily", time: "00:15" };
-    expect(nextRun(task(schedule, 0), at(2026, 12, 31, 12))).toBe(at(2027, 1, 1, 0, 15));
+  test("a daily slot rolls over month and year ends", () => {
+    expect(nextRun(task(cron("15 0 * * *"), 0), at(2026, 12, 31, 12))).toBe(at(2027, 1, 1, 0, 15));
   });
 
-  test("weekly picks the next chosen weekday", () => {
+  test("chosen weekdays pick the next one", () => {
     // 2026-03-04 is a Wednesday (3). Monday = 1, Friday = 5.
-    const schedule: TaskSchedule = { kind: "weekly", days: [1, 5], time: "07:00" };
+    const schedule = cron("0 7 * * 1,5");
     expect(nextRun(task(schedule, 0), at(2026, 3, 4, 12))).toBe(at(2026, 3, 6, 7));
     expect(nextRun(task(schedule, 0), at(2026, 3, 6, 7))).toBe(at(2026, 3, 9, 7));
     expect(nextRun(task(schedule, 0), at(2026, 3, 6, 6, 59))).toBe(at(2026, 3, 6, 7));
   });
 
-  test("weekly with a single day waits a full week after its slot", () => {
-    const schedule: TaskSchedule = { kind: "weekly", days: [3], time: "07:00" };
-    expect(nextRun(task(schedule, 0), at(2026, 3, 4, 7, 1))).toBe(at(2026, 3, 11, 7));
+  test("a single weekday waits a full week after its slot", () => {
+    expect(nextRun(task(cron("0 7 * * 3"), 0), at(2026, 3, 4, 7, 1))).toBe(at(2026, 3, 11, 7));
+  });
+
+  test("a step runs on the clock, not from the last run", () => {
+    const schedule = cron("*/20 * * * *");
+    const ran = task(schedule, 0, { lastRunEnd: at(2026, 3, 4, 8, 7) });
+    expect(nextRun(ran, at(2026, 3, 4, 8, 7))).toBe(at(2026, 3, 4, 8, 20));
+  });
+
+  test("an expression that cannot be read never runs", () => {
+    expect(nextRun(task(cron("not cron"), 0), at(2026, 3, 4, 8))).toBeNull();
+    expect(lastDue(task(cron("not cron"), 0), at(2026, 3, 4, 8))).toBeNull();
   });
 });
 
@@ -143,7 +167,7 @@ describe("one-shot schedules", () => {
 });
 
 describe("lastDue / decide (catch-up)", () => {
-  const daily: TaskSchedule = { kind: "daily", time: "09:00" };
+  const daily = cron("0 9 * * *");
 
   test("nothing is due before the first slot after arming", () => {
     const armed = at(2026, 3, 4, 10);
@@ -151,23 +175,27 @@ describe("lastDue / decide (catch-up)", () => {
     expect(decide(task(daily, armed), at(2026, 3, 5, 8))).toEqual({ action: "wait" });
   });
 
+  test("a slot is due once its moment has come", () => {
+    const t = task(daily, at(2026, 3, 4, 8));
+    expect(decide(t, at(2026, 3, 4, 8, 30))).toEqual({ action: "wait" });
+    expect(decide(t, at(2026, 3, 4, 9))).toEqual({ action: "run", dueAt: at(2026, 3, 4, 9) });
+  });
+
   test("a slot missed while the app was closed runs once, within 24 hours", () => {
-    const lastRunEnd = at(2026, 3, 4, 9, 1);
-    const closed = task(daily, 0, { lastRunEnd });
-    const now = at(2026, 3, 5, 10);
-    expect(decide(closed, now)).toEqual({ action: "run", dueAt: at(2026, 3, 5, 9) });
+    const closed = task(daily, 0, { lastRunEnd: at(2026, 3, 4, 9, 1) });
+    expect(decide(closed, at(2026, 3, 5, 10))).toEqual({ action: "run", dueAt: at(2026, 3, 5, 9) });
   });
 
   test("several missed slots collapse into one run", () => {
     const closed = task(daily, 0, { lastRunEnd: at(2026, 3, 1, 9, 1) });
-    const now = at(2026, 3, 5, 9, 30);
-    expect(decide(closed, now)).toEqual({ action: "run", dueAt: at(2026, 3, 5, 9) });
+    expect(decide(closed, at(2026, 3, 5, 9, 30))).toEqual({
+      action: "run",
+      dueAt: at(2026, 3, 5, 9),
+    });
   });
 
   test("a slot older than 24 hours is skipped", () => {
-    const weekly = task({ kind: "weekly", days: [3], time: "09:00" }, 0, {
-      lastRunEnd: at(2026, 2, 25, 9, 1),
-    });
+    const weekly = task(cron("0 9 * * 3"), 0, { lastRunEnd: at(2026, 2, 25, 9, 1) });
     // The Wednesday 2026-03-04 09:00 slot, checked on Thursday 10:00 (25 hours later).
     expect(decide(weekly, at(2026, 3, 5, 10))).toEqual({ action: "skip" });
     // Still inside the window the same day.
@@ -180,16 +208,20 @@ describe("lastDue / decide (catch-up)", () => {
   test("a slot already covered by a run is not due again", () => {
     const done = task(daily, 0, { lastRunEnd: at(2026, 3, 5, 9, 2) });
     expect(decide(done, at(2026, 3, 5, 12))).toEqual({ action: "wait" });
+    expect(nextRun(done, at(2026, 3, 5, 12))).toBe(at(2026, 3, 6, 9));
   });
 
-  test("interval tasks catch up once when overdue", () => {
-    const hourly = task({ kind: "interval", every: 1, unit: "hours" }, at(2026, 3, 4, 8));
+  test("frequent schedules catch up once, with the latest slot, however long the app was closed", () => {
+    const hourly = task(cron("0 * * * *"), at(2026, 3, 4, 8));
     expect(decide(hourly, at(2026, 3, 4, 8, 30))).toEqual({ action: "wait" });
-    expect(decide(hourly, at(2026, 3, 4, 14))).toEqual({
+    expect(decide(hourly, at(2026, 3, 4, 14, 20))).toEqual({
       action: "run",
-      dueAt: at(2026, 3, 4, 9),
+      dueAt: at(2026, 3, 4, 14),
     });
-    expect(decide(hourly, at(2026, 3, 8, 14))).toEqual({ action: "skip" });
+    expect(decide(hourly, at(2026, 3, 8, 14, 20))).toEqual({
+      action: "run",
+      dueAt: at(2026, 3, 8, 14),
+    });
   });
 
   test("disabled tasks are never due", () => {
@@ -219,7 +251,7 @@ describe("daylight saving time (America/New_York)", () => {
   });
 
   test("daily 09:00 stays at 09:00 local across spring forward (2026-03-08)", () => {
-    const schedule: TaskSchedule = { kind: "daily", time: "09:00" };
+    const schedule = cron("0 9 * * *");
     const saturday = at(2026, 3, 7, 10);
     const next = nextRun(task(schedule, 0), saturday);
     expect(next).toBe(at(2026, 3, 8, 9));
@@ -229,7 +261,7 @@ describe("daylight saving time (America/New_York)", () => {
   });
 
   test("daily 09:00 stays at 09:00 local across fall back (2026-11-01)", () => {
-    const schedule: TaskSchedule = { kind: "daily", time: "09:00" };
+    const schedule = cron("0 9 * * *");
     const saturday = at(2026, 10, 31, 10);
     const next = nextRun(task(schedule, 0), saturday);
     expect(new Date(next ?? 0).getHours()).toBe(9);
@@ -239,14 +271,14 @@ describe("daylight saving time (America/New_York)", () => {
   });
 
   test("weekly across spring forward keeps the local time", () => {
-    const schedule: TaskSchedule = { kind: "weekly", days: [1], time: "06:30" };
+    const schedule = cron("30 6 * * 1");
     const next = nextRun(task(schedule, 0), at(2026, 3, 6, 12));
     expect(next).toBe(at(2026, 3, 9, 6, 30));
     expect(new Date(next ?? 0).getHours()).toBe(6);
   });
 
   test("a slot inside the skipped hour is still found once", () => {
-    const schedule: TaskSchedule = { kind: "daily", time: "02:30" };
+    const schedule = cron("30 2 * * *");
     const next = nextRun(task(schedule, 0), at(2026, 3, 8, 0, 30));
     // 02:30 does not exist on 2026-03-08; JS resolves it to 03:30, which is still on that day.
     expect(new Date(next ?? 0).getDate()).toBe(8);
@@ -260,7 +292,7 @@ async function flush(): Promise<void> {
 }
 
 describe("Scheduler queue", () => {
-  function setup() {
+  function setup(expr = "*/30 * * * *") {
     let now = at(2026, 3, 4, 9, 0);
     const tasks = ["a", "b"].map((id) => ({
       id,
@@ -271,7 +303,7 @@ describe("Scheduler queue", () => {
       enabled: true,
       armedAt: at(2026, 3, 4, 8),
       lastRun: null,
-      schedule: { kind: "interval" as const, every: 30, unit: "minutes" as const },
+      schedule: { kind: "cron" as const, expr },
     }));
     const log: string[] = [];
     const gates: Array<() => void> = [];
@@ -336,7 +368,8 @@ describe("Scheduler queue", () => {
   });
 
   test("start skips tasks overdue by more than a day", () => {
-    const { scheduler, log, advance } = setup();
+    // Wednesdays at 09:00; the app starts on the Saturday after the last slot.
+    const { scheduler, log, advance } = setup("0 9 * * 3");
     advance(3 * 24 * HOUR);
     scheduler.start();
     expect(log).toEqual(["rearm a", "rearm b"]);

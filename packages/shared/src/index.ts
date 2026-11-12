@@ -4,6 +4,7 @@
  */
 
 export * from "./accelerator.ts";
+export * from "./cron.ts";
 export * from "./server-address.ts";
 
 /** Approval tier of a tool, modelled on omp: reads run freely, writes and execution need a person. */
@@ -835,6 +836,15 @@ export interface ZaloSettings {
  */
 export const DEFAULT_CHANNEL_ACCOUNT_ID = "default";
 
+/**
+ * What a chat key of this account starts with, before the chat id: `telegram` for the first
+ * account (so keys saved before accounts existed still match) and `telegram:<account>` for the
+ * others. Chat ids never contain `:`, so the key's last colon always splits the two.
+ */
+export function chatKeyPrefix(kind: "telegram" | "zalo", accountId: string): string {
+  return accountId === DEFAULT_CHANNEL_ACCOUNT_ID ? kind : `${kind}:${accountId}`;
+}
+
 /** Ids of accounts: short, lower case, and never containing the `:` of a chat key. */
 export const CHANNEL_ACCOUNT_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 
@@ -1016,17 +1026,15 @@ export const SCHEDULE_LIMITS = {
   maxTasks: 50,
   maxNameLength: 60,
   maxPromptLength: 20_000,
+  /** The shortest gap a cron expression may leave between two runs. */
   minMinutes: 5,
-  maxMinutes: 1_440,
-  maxHours: 168,
 } as const;
 
 /** Times are local to the computer. Weekdays are numbered like `Date.getDay()`: 0 = Sunday. */
 export type TaskSchedule =
   | { kind: "once"; at: number }
-  | { kind: "interval"; every: number; unit: "minutes" | "hours" }
-  | { kind: "daily"; time: string }
-  | { kind: "weekly"; days: number[]; time: string };
+  /** Five-field cron expression (`minute hour day-of-month month day-of-week`), see `parseCron`. */
+  | { kind: "cron"; expr: string };
 
 /**
  * Where a scheduled run executes: `current` reads the tail of the session that created it and

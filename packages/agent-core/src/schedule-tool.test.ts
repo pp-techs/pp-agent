@@ -278,24 +278,6 @@ describe("prepareScheduleArguments", () => {
     });
   });
 
-  test("coerces string interval every and weekly days", () => {
-    expect(
-      prepareScheduleArguments({
-        when: { kind: "interval", every: "15", unit: "minutes" },
-      }),
-    ).toEqual({
-      when: { kind: "interval", every: 15, unit: "minutes" },
-    });
-
-    expect(
-      prepareScheduleArguments({
-        when: { kind: "weekly", days: "[1, 3, 5]", time: "09:00" },
-      }),
-    ).toEqual({
-      when: { kind: "weekly", days: [1, 3, 5], time: "09:00" },
-    });
-  });
-
   test("coerces string boolean flags", () => {
     expect(
       prepareScheduleArguments({
@@ -334,7 +316,7 @@ describe("deleteAfterRun", () => {
     workspaceId: "",
     enabled: true,
     deleteAfterRun: true,
-    schedule: { kind: "daily", time: "09:00" },
+    schedule: { kind: "cron", expr: "0 9 * * *" },
   };
 
   test("is kept for a one-shot and dropped for a recurring task", () => {

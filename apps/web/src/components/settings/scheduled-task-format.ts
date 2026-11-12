@@ -16,21 +16,9 @@ export function formatWhen(epochMs: number, locale: string) {
   );
 }
 
-/** "Every 2 hours", "Every day at 09:00", "Mon, Wed at 09:00". */
+/** "Cron: 0 9 * * MON-FRI", or the date of a one-time task. */
 export function formatSchedule(schedule: TaskSchedule, t: TFunction<"settings">, locale: string) {
-  switch (schedule.kind) {
-    case "interval":
-      return schedule.unit === "minutes"
-        ? t("scheduledTasks.schedule.intervalMinutes", { count: schedule.every })
-        : t("scheduledTasks.schedule.intervalHours", { count: schedule.every });
-    case "daily":
-      return t("scheduledTasks.schedule.daily", { time: schedule.time });
-    case "weekly":
-      return t("scheduledTasks.schedule.weekly", {
-        days: WEEKDAY_ORDER.filter((day) => schedule.days.includes(day))
-          .map((day) => weekdayName(day, locale))
-          .join(", "),
-        time: schedule.time,
-      });
-  }
+  return schedule.kind === "cron"
+    ? t("scheduledTasks.schedule.cron", { expr: schedule.expr })
+    : t("scheduledTasks.schedule.once", { when: formatWhen(schedule.at, locale) });
 }

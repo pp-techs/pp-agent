@@ -1,22 +1,16 @@
 import {
   CHANNEL_ACCOUNT_ID_PATTERN,
+  chatKeyPrefix,
   DEFAULT_CHANNEL_ACCOUNT_ID,
   type ChannelAccount,
 } from "@workspace/shared";
+
+export { chatKeyPrefix };
 import { CHANNEL_KEY_PREFIX } from "../names.ts";
 import type { ChannelService } from "../types.ts";
 
 /** The chat apps that can have accounts. */
 export type ChannelKind = "telegram" | "zalo";
-
-/**
- * What a chat key of this account starts with, before the chat id: `telegram` for the first
- * account (so keys saved before accounts existed still match) and `telegram:<account>` for the
- * others. Chat ids never contain `:`, so the key's last colon always splits the two.
- */
-export function chatKeyPrefix(kind: ChannelKind, accountId: string): string {
-  return accountId === DEFAULT_CHANNEL_ACCOUNT_ID ? kind : `${kind}:${accountId}`;
-}
 
 /**
  * The account a chat key (`telegram:123`, `telegram:work:123`) or delivery target belongs to. The

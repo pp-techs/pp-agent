@@ -50,32 +50,21 @@ export const SCHEDULE_SCHEMA = Type.Union(
       ),
     }),
     Type.Object({
-      kind: Type.Literal("interval"),
-      every: Type.Integer({
-        minimum: SCHEDULE_LIMITS.minMinutes,
-        maximum: SCHEDULE_LIMITS.maxMinutes,
+      kind: Type.Literal("cron"),
+      expr: Type.String({
+        description:
+          'Five fields "minute hour day-of-month month day-of-week" in local time, e.g. "0 9 * * MON-FRI"',
       }),
-      unit: Type.Literal("minutes"),
-    }),
-    Type.Object({
-      kind: Type.Literal("interval"),
-      every: Type.Integer({ minimum: 1, maximum: SCHEDULE_LIMITS.maxHours }),
-      unit: Type.Literal("hours"),
-    }),
-    Type.Object({ kind: Type.Literal("daily"), time: Type.String() }),
-    Type.Object({
-      kind: Type.Literal("weekly"),
-      days: Type.Array(Type.Integer({ minimum: 0, maximum: 6 })),
-      time: Type.String(),
     }),
   ],
   {
     description:
       'Schedule object (pass as an object, not a JSON string): { kind: "once", at: epochMs | "YYYY-MM-DDTHH:mm" } ' +
       'or { kind: "once", afterMinutes: N }, ' +
-      `{ kind: "interval", every: N, unit: "minutes" (${SCHEDULE_LIMITS.minMinutes}-${SCHEDULE_LIMITS.maxMinutes}) | "hours" (1-${SCHEDULE_LIMITS.maxHours}) }, ` +
-      '{ kind: "daily", time: "HH:MM" }, ' +
-      'or { kind: "weekly", days: [0-6], time: "HH:MM" }',
+      `{ kind: "cron", expr: "minute hour day-of-month month day-of-week" } for anything recurring ` +
+      "(local time, weekdays 0-6 from Sunday or MON-FRI, runs at most once every " +
+      `${SCHEDULE_LIMITS.minMinutes} minutes), e.g. "0 9 * * *" every day at 09:00, ` +
+      '"0 9 * * MON-FRI" weekdays, "*/30 * * * *" every 30 minutes, "0 9 1,15 * *" on the 1st and 15th',
   },
 );
 
@@ -132,25 +121,6 @@ export function prepareScheduleArguments(args: unknown, now: number = Date.now()
         if (Number.isFinite(minutes) && minutes >= 0) when.at = now + Math.round(minutes * 60_000);
       }
       delete when.afterMinutes;
-    } else if (when.kind === "interval") {
-      if (typeof when.every === "string") {
-        const num = Number(when.every);
-        if (Number.isInteger(num)) {
-          when.every = num;
-        }
-      }
-    } else if (when.kind === "weekly") {
-      if (typeof when.days === "string") {
-        try {
-          const parsedDays = JSON.parse(when.days);
-          if (Array.isArray(parsedDays)) {
-            when.days = parsedDays;
-          }
-        } catch {}
-      }
-      if (Array.isArray(when.days)) {
-        when.days = when.days.map((d) => (typeof d === "string" ? Number(d) : d));
-      }
     }
     raw.when = when;
   }
@@ -175,8 +145,7 @@ export function createScheduleTool(host: ScheduleHost) {
     description:
       "Creates and manages scheduled tasks: prompts that run by themselves on a schedule. " +
       "Actions: `create`, `list`, `update`, `pause`, `resume`, `run`, `remove`. " +
-      'Use `once` for a reminder ("in 30 minutes", "at 21:00 today"); `interval`, `daily` or ' +
-      "`weekly` for recurring work. " +
+      'Use `once` for a reminder ("in 30 minutes", "at 21:00 today") and `cron` for recurring work. ' +
       "`target` decides where the run happens: `current` (reads the tail of this conversation and " +
       "writes its result here — best for reminders), `new` (fresh conversation every run), or " +
       "`session:<id>` (one named session reused across runs — best for recurring reports). " +
