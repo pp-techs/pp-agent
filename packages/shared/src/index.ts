@@ -2529,8 +2529,12 @@ export type ClientFrame =
   | { kind: "command"; id: number; command: AgentCommand }
   /** One-time import of credentials the old desktop vault held; answered with a `result`. */
   | { kind: "vault_import"; id: number; entries: Record<string, StoredCredential> }
-  /** Asks the daemon to exit (an update replaced it, or the desktop app started it and is quitting). */
-  | { kind: "shutdown" }
+  /**
+   * Asks the daemon to exit (an update replaced it, or the desktop app started it and is quitting).
+   * `forUpdate` is set when the app is about to install an update: the daemon then leaves the login
+   * service stopped too, because the installer cannot replace the program while any copy runs.
+   */
+  | { kind: "shutdown"; forUpdate?: boolean }
   /** Whether this client can run the agent's browser tool now (it has a window). */
   | { kind: "browser_available"; available: boolean }
   /** Answers a `browser_request`. */

@@ -465,13 +465,16 @@ ipc.on(IPC.diagnosticsReport, (_event, report: unknown) => {
 ipc.handle(IPC.updatesState, () => updater.state());
 ipc.handle(IPC.updatesCheck, () => updater.check(true));
 ipc.handle(IPC.updatesDownload, () => updater.download(openExternal));
-ipc.handle(IPC.updatesInstall, () =>
+ipc.handle(IPC.updatesInstall, async () => {
+  if (updater.state().status !== "ready") return;
+  // The daemon is a copy of this program; the installer refuses to run while any copy is alive.
+  await daemon.stopForUpdate();
   // Mark the app as quitting before the updater closes the windows: with the tray on, a plain
   // close hides the window to the tray and the update would never install or restart.
   updater.install(() => {
     quitting = true;
-  }),
-);
+  });
+});
 
 app.on("before-quit", () => {
   quitting = true;

@@ -42,8 +42,8 @@ export interface DaemonServerOptions {
   appVersion: string;
   /** True when an app's `spawnDaemon` started this daemon (see `hello_ok`); a service never is. */
   spawnedByApp?: boolean;
-  /** A client asked the daemon to exit. */
-  onShutdown(): void;
+  /** A client asked the daemon to exit; `forUpdate` when an installer is about to replace it. */
+  onShutdown(request: { forUpdate: boolean }): void;
   log?(message: string): void;
   helloTimeoutMs?: number;
   maxFrameBytes?: number;
@@ -340,7 +340,7 @@ export class DaemonServer {
       }
       case "shutdown":
         this.options.log?.("A client asked the daemon to shut down.");
-        this.options.onShutdown();
+        this.options.onShutdown({ forUpdate: frame.forUpdate === true });
         return;
       case "browser_available":
       case "computer_available": {

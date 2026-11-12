@@ -136,3 +136,12 @@ it("restarts the daemon on request and resolves once the new one answers", async
   expect(client["conn"]).not.toBe(first);
   client.dispose();
 });
+
+it("stops even a login-service daemon before an update, telling it to leave the service stopped", async () => {
+  const { client, received } = await setup(true, { spawnedByApp: false });
+  client.start();
+  await vi.waitFor(() => expect(client["conn"]).not.toBeNull());
+  await client.stopForUpdate(2_000);
+  expect(received).toContainEqual({ kind: "shutdown", forUpdate: true });
+  client.dispose();
+});

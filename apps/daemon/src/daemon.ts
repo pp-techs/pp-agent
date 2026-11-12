@@ -70,6 +70,8 @@ async function serve(): Promise<number> {
   const stopped = Promise.withResolvers<void>();
   // Set when a client (the app quitting, or replacing an old version) asked this daemon to stop.
   let shutdownRequested = false;
+  // Set when the app is about to install an update: nothing may start the program again until then.
+  let shutdownForUpdate = false;
   // Only an app's `spawnDaemon` sets this marker; a service or terminal daemon never has it. It is
   // sent to clients, so quitting stops a daemon left behind by an earlier app, not a service one.
   const spawnedByApp = process.env[APP_SPAWN_ENV] === "1";
@@ -78,8 +80,9 @@ async function serve(): Promise<number> {
     token: await ensureToken(paths.tokenFile),
     appVersion: version,
     spawnedByApp,
-    onShutdown: () => {
+    onShutdown: ({ forUpdate }) => {
       shutdownRequested = true;
+      shutdownForUpdate ||= forUpdate;
       stopped.resolve();
     },
     log,
@@ -179,7 +182,7 @@ async function serve(): Promise<number> {
     await server.close();
     // The login service exited quietly while this daemon held the socket; it takes over now, so
     // scheduled tasks and the bots keep running after the app that started this daemon quits.
-    if (shutdownRequested && spawnedByApp) {
+    if (shutdownRequested && spawnedByApp && !shutdownForUpdate) {
       await serviceRefreshed;
       await service
         .startIfInstalled()

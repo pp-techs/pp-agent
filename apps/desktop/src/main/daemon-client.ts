@@ -28,10 +28,22 @@ const DIAL_INTERVAL_MS = 150;
 const START_TIMEOUT_MS = 20_000;
 const HELLO_TIMEOUT_MS = 5_000;
 const REPLACE_TIMEOUT_MS = 5_000;
+/** The daemon stops its agent for up to 5 s before it exits; an update waits a little longer. */
+const STOP_FOR_UPDATE_MS = 10_000;
 /** Commands issued while the daemon is (re)starting wait this long for it. */
 const COMMAND_WAIT_MS = 20_000;
 /** An out-of-date daemon is replaced this many times before it is accepted as it is. */
 const MAX_REPLACEMENTS = 2;
+
+function processExists(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM: it exists but belongs to someone else.
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
 
 type Hello = Extract<DaemonFrame, { kind: "hello_ok" }>;
 
@@ -100,6 +112,8 @@ export class DaemonClient {
   private spawnedPid: number | null = null;
   private spawnError: Error | null = null;
   private ownsDaemon = false;
+  /** Process id the connected daemon reported, so an update can wait for it to exit. */
+  private daemonPid: number | null = null;
   /** The daemon answering says an app spawned it (true even for one left by an earlier app). */
   private daemonSpawnedByApp = false;
   /** Last value given to `setBrowserAvailable`, sent again after every (re)connection. */
@@ -163,6 +177,22 @@ export class DaemonClient {
       conn.socket.end();
     }
     this.rejectPending();
+  }
+
+  /**
+   * Before an installer replaces the app: stops the daemon whoever started it (the installer cannot
+   * overwrite the program while a copy runs, on Windows it refuses to continue), keeps it from
+   * starting the login service again, and resolves once its process is gone or `ms` has passed.
+   */
+  async stopForUpdate(ms = STOP_FOR_UPDATE_MS): Promise<void> {
+    this.quitting = true;
+    const { conn, daemonPid } = this;
+    if (!conn) return;
+    conn.socket.write(encodeFrame({ kind: "shutdown", forUpdate: true } satisfies ClientFrame));
+    const deadline = Date.now() + ms;
+    await this.closeWithin(conn, ms);
+    if (daemonPid === null) return;
+    while (processExists(daemonPid) && Date.now() < deadline) await delay(100);
   }
 
   /**
@@ -261,6 +291,7 @@ export class DaemonClient {
           );
         }
         this.ownsDaemon = hello.pid === this.spawnedPid;
+        this.daemonPid = hello.pid;
         this.daemonSpawnedByApp = hello.spawnedByApp === true;
         this.adopt(conn);
         return conn;
