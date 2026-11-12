@@ -87,6 +87,7 @@ catalog:
   pele: ^1.13.0
   sharp: ^0.35.5
   wrangler: 4.159.0
+  react-day-picker: ^10.0.2
 overrides:
   vite@*: "catalog:"
   # Security fixes the dependents' ranges do not pick up yet; each stays on its own major line.

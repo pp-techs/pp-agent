@@ -589,9 +589,7 @@ const SCHEDULED_DENIED_REASON =
 /** System prompt section of a scheduled run: nobody is watching, and what that means. */
 function formatSchedule(schedule: TaskSchedule): string {
   if (schedule.kind === "once") return `once at ${new Date(schedule.at).toISOString()}`;
-  if (schedule.kind === "interval") return `every ${schedule.every} ${schedule.unit}`;
-  if (schedule.kind === "daily") return `daily at ${schedule.time}`;
-  return `weekly on [${schedule.days.join(",")}] at ${schedule.time}`;
+  return `cron "${schedule.expr}" (local time)`;
 }
 
 /** What a run replies with when there is nothing to report and the task is `silentIfEmpty`. */

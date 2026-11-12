@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { describe, expect, test } from "vite-plus/test";
 
-import { localDateTime, onceTimestamp } from "./scheduled-task-fields";
+import { localDateTime, onceTimestamp, parseLocalDateTime } from "./scheduled-task-fields";
 
 describe("one-shot schedule fields", () => {
   test("display local time and preserve the exact existing instant", () => {
@@ -145,5 +145,23 @@ describe.each([
         { value: times.skippedEnd },
       ]),
     ).toEqual([null, null]);
+  });
+});
+
+describe("parseLocalDateTime", () => {
+  test("splits a datetime-local value and keeps seconds in the time", () => {
+    expect(parseLocalDateTime("2026-11-12T09:30")).toMatchObject({
+      year: 2026,
+      month: 11,
+      day: 12,
+      time: "09:30",
+    });
+    expect(parseLocalDateTime("2026-11-12T09:30:15.5")?.time).toBe("09:30:15.5");
+  });
+
+  test("rejects malformed values and impossible dates", () => {
+    expect(parseLocalDateTime("")).toBeNull();
+    expect(parseLocalDateTime("2026-11-12")).toBeNull();
+    expect(parseLocalDateTime("2026-02-31T09:00")).toBeNull();
   });
 });

@@ -93,7 +93,7 @@ describe("schedule_manage in a Pi session", () => {
       action: "create" as const,
       name: "Friday summary",
       prompt: "Summarize the files in Reports.",
-      when: { kind: "weekly" as const, days: [5], time: "16:00" },
+      when: { kind: "cron" as const, expr: "0 16 * * 5" },
     };
     faux.setResponses([
       fauxAssistantMessage(fauxToolCall(SCHEDULE_TOOL, args(call), { id: "call-1" })),
@@ -105,7 +105,7 @@ describe("schedule_manage in a Pi session", () => {
     expect(created).toHaveLength(1);
     expect(created[0]?.name).toBe("Friday summary");
     expect(created[0]?.prompt).toBe("Summarize the files in Reports.");
-    expect(created[0]?.schedule).toEqual({ kind: "weekly", days: [5], time: "16:00" });
+    expect(created[0]?.schedule).toEqual({ kind: "cron", expr: "0 16 * * 5" });
     expect(created[0]?.enabled).toBe(true);
     const [result] = toolResults(session);
     expect(result?.isError).toBe(false);
@@ -174,7 +174,7 @@ describe("schedule_manage in a Pi session", () => {
             action: "create",
             name: "Friday summary",
             prompt: "Summarize.",
-            when: { kind: "interval", every: 2, unit: "hours" },
+            when: { kind: "cron", expr: "0 */2 * * *" },
           }),
           { id: "call-1" },
         ),

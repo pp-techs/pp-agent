@@ -285,10 +285,10 @@
   "scheduler": {
     "errors": {
       "schedule": {
-        "interval": "Choose how often it runs: every 5 to 1,440 minutes, or every 1 to 168 hours.",
-        "time": "Enter a time as HH:MM, for example 09:30.",
-        "days": "Choose at least one day of the week.",
-        "kind": "Choose when the task runs."
+        "kind": "Choose when the task runs.",
+        "cron": "Enter a cron expression with five fields: minute hour day-of-month month day-of-week, for example 0 9 * * MON-FRI.",
+        "cronNever": "No date matches this cron expression, for example 31 February.",
+        "cronTooFrequent": "This cron expression runs more often than every 5 minutes."
       },
       "nameRequired": "Enter a name for the task.",
       "nameTaken": "A task named {{name}} already exists.",
