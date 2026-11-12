@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.35.1] — 2026-11-12
+
+Restarting to install an update on Windows no longer stops halfway with "close PP Agent to continue". The app now stops its background agent, and keeps the login service from starting it again, before the installer runs.
+
 ## [0.35.0] — 2026-11-12
 
 A chat now has a small outline along its right edge, one mark per question you asked. Hover a mark to read the question and the start of the answer, and click it to jump there.
