@@ -101,7 +101,7 @@ export class Transcript {
       if (block.type === "image")
         parts.push({ type: "image", mimeType: block.mimeType, data: block.data });
     }
-    this.upsert({ id: this.newId(), role: "user", parts }, true);
+    this.upsert({ id: this.newId(), role: "user", parts, at: message.timestamp }, true);
   }
 
   /** Rebuild the chat from a saved session's messages without emitting per-message updates. */
@@ -172,8 +172,15 @@ export class Transcript {
   updateAssistant(message: AssistantMessage, final: boolean): void {
     this.currentAssistantId ??= this.newId();
     const id = this.currentAssistantId;
-    const chat: ChatMessage = { id, role: "assistant", parts: this.assistantParts(id, message) };
+    const chat: ChatMessage = {
+      id,
+      role: "assistant",
+      parts: this.assistantParts(id, message),
+      at: message.timestamp,
+    };
     if (final) {
+      if (typeof message.timestamp === "number")
+        chat.endedAt = message.timestamp + (message.durationMs ?? 0);
       if (message.stopReason === "error") {
         chat.error = modelErrorText(message.errorMessage);
         chat.errorDetail = modelErrorDetail(message);
@@ -330,6 +337,7 @@ function appendedText(before: ChatMessage, after: ChatMessage): MessageAppend | 
     before.error !== after.error ||
     before.errorDetail !== after.errorDetail ||
     before.entryId !== after.entryId ||
+    before.endedAt !== after.endedAt ||
     before.parts.length !== after.parts.length
   )
     return undefined;

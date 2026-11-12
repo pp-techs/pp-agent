@@ -16,6 +16,7 @@ import {
   TraceCollapsible,
   TraceCollapsibleContent,
   TraceCollapsibleTrigger,
+  TraceDescription,
   TraceIcon,
   TraceLine,
   TraceTitle,
@@ -30,7 +31,9 @@ import {
   PencilIcon,
   RefreshCwIcon,
   SparklesIcon,
+  WrenchIcon,
 } from "lucide-react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -39,7 +42,9 @@ import { InlineImage } from "@/components/chat/inline-image";
 import { MessageEditor } from "@/components/chat/message-editor";
 import { useChatThread } from "@/components/chat/chat-thread-context";
 import { ToolStep } from "@/components/chat/tool-step";
+import { formatDuration } from "@/lib/format-duration";
 import { useChatStore } from "@/stores/chat-store";
+import { cn } from "@workspace/ui/lib/utils";
 import { copyText } from "@workspace/ui/lib/clipboard";
 
 type StepPart = Extract<ChatPart, { type: "thinking" | "tool" }>;
@@ -154,17 +159,25 @@ function ErrorNotice({ message }: { message: ChatMessage }) {
   );
 }
 
-/** Copy, regenerate, edit, and branch under a message. Hidden until hovered or focused. */
+const TIME_FORMAT = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
+
+/**
+ * Copy, regenerate, edit, and branch under a message, with the time it was sent. Hidden until
+ * hovered or focused, except under the latest message, where they stay in view.
+ */
 function MessageActions({
   message,
   canRegenerate,
   tooltips,
   onEdit,
+  pinned = false,
 }: {
   message: ChatMessage;
   canRegenerate: boolean;
   tooltips: boolean;
   onEdit?: () => void;
+  /** Always in view: the latest message of the chat. */
+  pinned?: boolean;
 }) {
   const { t } = useTranslation("chat");
   const {
@@ -175,6 +188,7 @@ function MessageActions({
   const temporary = useChatStore((state) => state.temporary);
   const [copied, setCopied] = React.useState(false);
   const { entryId } = message;
+  const time = message.endedAt ?? message.at;
 
   React.useEffect(() => {
     if (!copied) return;
@@ -191,7 +205,12 @@ function MessageActions({
 
   // Touch screens have no hover, so the actions stay in view there.
   return (
-    <MessageFooter className="gap-0.5 px-0 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100 pointer-coarse:opacity-100">
+    <MessageFooter
+      className={cn(
+        "gap-0.5 px-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100 pointer-coarse:opacity-100",
+        pinned ? "opacity-100" : "opacity-0",
+      )}
+    >
       <ActionButton
         label={copied ? t("message.actions.copied") : t("message.actions.copy")}
         tooltip={tooltips}
@@ -229,6 +248,14 @@ function MessageActions({
           <GitBranchIcon />
         </ActionButton>
       )}
+      {time !== undefined && (
+        <time
+          dateTime={new Date(time).toISOString()}
+          className="ms-2 text-xs font-normal text-muted-foreground tabular-nums"
+        >
+          {TIME_FORMAT.format(time)}
+        </time>
+      )}
     </MessageFooter>
   );
 }
@@ -247,6 +274,81 @@ function ThinkingStep({ text, running }: { text: string; running: boolean }) {
         </TraceLine>
       </TraceCollapsibleTrigger>
       <TraceCollapsibleContent className="whitespace-pre-wrap">{text}</TraceCollapsibleContent>
+    </TraceCollapsible>
+  );
+}
+
+type StepKind = "commands" | "reads" | "edits" | "others";
+
+const STEP_KIND: Record<string, StepKind> = {
+  bash: "commands",
+  powershell: "commands",
+  read: "reads",
+  read_document: "reads",
+  office_read: "reads",
+  ls: "reads",
+  find: "reads",
+  grep: "reads",
+  write: "edits",
+  edit: "edits",
+  office_edit: "edits",
+};
+
+/** What a run of steps did, counted by kind, for the one line it collapses to. */
+function summarizeSteps(parts: StepPart[], t: TFunction<"chat">) {
+  const counts: Record<StepKind, number> = { commands: 0, reads: 0, edits: 0, others: 0 };
+  let thought = false;
+  let failed = 0;
+  for (const part of parts) {
+    if (part.type === "thinking") {
+      thought = true;
+      continue;
+    }
+    counts[STEP_KIND[part.name] ?? "others"]++;
+    if (part.status === "error") failed++;
+  }
+  const phrases = (["commands", "reads", "edits", "others"] as const)
+    .filter((kind) => counts[kind] > 0)
+    .map((kind) => t(`steps.${kind}`, { count: counts[kind] }));
+  if (thought) phrases.unshift(t("message.thought"));
+  const text = phrases.join(", ");
+  return { text: text.charAt(0).toUpperCase() + text.slice(1), failed };
+}
+
+/**
+ * A run of thinking and tool steps. It shows the steps while they work, or when one needs an
+ * answer, and collapses to a one line summary once done; the person can open it either way.
+ */
+function StepGroup({
+  parts,
+  streaming,
+  children,
+}: {
+  parts: StepPart[];
+  streaming: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = React.useState<boolean>();
+  const { t } = useTranslation("chat");
+  const { state } = useChatThread();
+  const asking = state.approvals.some((approval) =>
+    parts.some((part) => part.type === "tool" && part.toolCallId === approval.anchorToolCallId),
+  );
+  const { text, failed } = summarizeSteps(parts, t);
+  return (
+    <TraceCollapsible open={open ?? (streaming || asking)} onOpenChange={setOpen}>
+      <TraceCollapsibleTrigger>
+        <TraceLine status={streaming ? "running" : failed > 0 ? "error" : undefined}>
+          <TraceIcon>
+            {parts.every((part) => part.type === "thinking") ? <BrainIcon /> : <WrenchIcon />}
+          </TraceIcon>
+          <TraceTitle>{text}</TraceTitle>
+          {failed > 0 && (
+            <TraceDescription>{t("steps.failed", { count: failed })}</TraceDescription>
+          )}
+        </TraceLine>
+      </TraceCollapsibleTrigger>
+      <TraceCollapsibleContent className="flex flex-col gap-2">{children}</TraceCollapsibleContent>
     </TraceCollapsible>
   );
 }
@@ -340,6 +442,7 @@ function UserMessage({ message, last }: { message: ChatMessage; last: boolean })
           canRegenerate={false}
           tooltips={tooltips}
           onEdit={() => setEditing(true)}
+          pinned={last}
         />
       </MessageContent>
     </Message>
@@ -369,48 +472,124 @@ function CompactionDivider() {
   );
 }
 
+/** Thinking, tool steps and text of a reply, in order. */
+function Blocks({ blocks, streaming }: { blocks: Block[]; streaming: boolean }) {
+  return blocks.map((block, index) => {
+    if (block.kind === "text") {
+      return (
+        <Markdown key={index} streaming={streaming && index === blocks.length - 1}>
+          {block.text}
+        </Markdown>
+      );
+    }
+    const active = streaming && index === blocks.length - 1;
+    const steps = block.parts.map((part, partIndex) =>
+      part.type === "thinking" ? (
+        <ThinkingStep
+          key={partIndex}
+          text={part.text}
+          running={active && partIndex === block.parts.length - 1}
+        />
+      ) : (
+        <ToolStep key={part.toolCallId} part={part} />
+      ),
+    );
+    return (
+      <Trace key={index}>
+        {block.parts.length > 1 ? (
+          <StepGroup parts={block.parts} streaming={active}>
+            {steps}
+          </StepGroup>
+        ) : (
+          steps
+        )}
+      </Trace>
+    );
+  });
+}
+
+/**
+ * A finished run folded into one line, "Worked for 1m 47s": everything the agent did before its
+ * answer, from the steps to the notes between them. Closed until the person opens it.
+ */
+function RunCollapse({
+  earlier,
+  blocks,
+  workedMs,
+}: {
+  earlier: ChatMessage[];
+  blocks: Block[];
+  workedMs?: number;
+}) {
+  const { t } = useTranslation("chat");
+  const parts = [...earlier.flatMap((message) => message.parts), ...blocks.flatMap(blockParts)];
+  const failed = parts.some((part) => part.type === "tool" && part.status === "error");
+  const label =
+    workedMs === undefined
+      ? summarizeSteps(
+          parts.filter(
+            (part): part is StepPart => part.type === "thinking" || part.type === "tool",
+          ),
+          t,
+        ).text
+      : t("message.worked", { duration: formatDuration(workedMs) });
+  return (
+    <TraceCollapsible className="border-b pb-3">
+      <TraceCollapsibleTrigger>
+        <TraceLine status={failed ? "error" : undefined}>
+          <TraceTitle>{label}</TraceTitle>
+        </TraceLine>
+      </TraceCollapsibleTrigger>
+      <TraceCollapsibleContent className="flex flex-col gap-3">
+        {earlier.map((message) => (
+          <React.Fragment key={message.id}>
+            <Blocks blocks={toBlocks(message.parts)} streaming={false} />
+            {message.error && <ErrorNotice message={message} />}
+          </React.Fragment>
+        ))}
+        <Blocks blocks={blocks} streaming={false} />
+      </TraceCollapsibleContent>
+    </TraceCollapsible>
+  );
+}
+
+function blockParts(block: Block): ChatPart[] {
+  return block.kind === "text" ? [{ type: "text", text: block.text }] : block.parts;
+}
+
 function AssistantMessage({
   message,
   last,
   streaming,
+  earlier,
+  workedMs,
 }: {
   message: ChatMessage;
   last: boolean;
   streaming: boolean;
+  earlier?: ChatMessage[];
+  workedMs?: number;
 }) {
   const { tooltips, onPointerEnter } = useActionTooltips(last);
   const blocks = toBlocks(message.parts);
+  // A finished run keeps only its answer in view: the text after the last step.
+  const folded = earlier !== undefined;
+  const lastSteps = blocks.findLastIndex((block) => block.kind === "steps");
+  const inside = folded ? blocks.slice(0, lastSteps + 1) : [];
+  const shown = folded ? blocks.slice(lastSteps + 1) : blocks;
   return (
     <Message onPointerEnter={onPointerEnter}>
       <MessageContent className="gap-3">
-        {blocks.map((block, index) =>
-          block.kind === "text" ? (
-            <Markdown key={index} streaming={streaming && index === blocks.length - 1}>
-              {block.text}
-            </Markdown>
-          ) : (
-            <Trace key={index}>
-              {block.parts.map((part, partIndex) =>
-                part.type === "thinking" ? (
-                  <ThinkingStep
-                    key={partIndex}
-                    text={part.text}
-                    running={
-                      streaming &&
-                      index === blocks.length - 1 &&
-                      partIndex === block.parts.length - 1
-                    }
-                  />
-                ) : (
-                  <ToolStep key={part.toolCallId} part={part} />
-                ),
-              )}
-            </Trace>
-          ),
-        )}
+        {folded && <RunCollapse earlier={earlier} blocks={inside} workedMs={workedMs} />}
+        <Blocks blocks={shown} streaming={streaming} />
         {message.error && <ErrorNotice message={message} />}
         {!streaming && (last || blocks.some((block) => block.kind === "text")) && (
-          <MessageActions message={message} canRegenerate={last} tooltips={tooltips} />
+          <MessageActions
+            message={message}
+            canRegenerate={last}
+            tooltips={tooltips}
+            pinned={last}
+          />
         )}
       </MessageContent>
     </Message>
@@ -421,20 +600,46 @@ function AssistantMessage({
  * A message of the conversation. Only what differs per message is a prop; the rest is the thread's.
  * Messages are replaced, never changed in place, so while a reply streams only its row renders.
  */
-export const ChatMessageView = React.memo(function ChatMessageView({
+export const ChatMessageView = React.memo(
+  ChatMessageViewImpl,
+  // `earlier` is rebuilt with the rows; it is the same when it holds the same messages.
+  (before, after) =>
+    before.message === after.message &&
+    before.last === after.last &&
+    before.streaming === after.streaming &&
+    before.workedMs === after.workedMs &&
+    before.earlier?.length === after.earlier?.length &&
+    (before.earlier ?? []).every((message, index) => message === after.earlier?.[index]),
+);
+
+function ChatMessageViewImpl({
   message,
   last,
   streaming,
+  earlier,
+  workedMs,
 }: {
   message: ChatMessage;
   /** The last message of the chat: the only answer that can be regenerated. */
   last: boolean;
   streaming: boolean;
+  /** The replies before this one in a finished run that did more than answer; they fold away. */
+  earlier?: ChatMessage[];
+  /** How long that run took. */
+  workedMs?: number;
 }) {
   if (message.role === "compaction") return <CompactionDivider />;
   if (message.role === "user") return <UserMessage message={message} last={last} />;
-  return <AssistantMessage message={message} last={last} streaming={streaming} />;
-});
+  return (
+    <AssistantMessage
+      message={message}
+      last={last}
+      streaming={streaming}
+      earlier={earlier}
+      workedMs={workedMs}
+    />
+  );
+}
 
 /** The message just sent, shown until the conversation echoes it. */
 export function PendingMessageView({ message }: { message: ChatMessage }) {

@@ -68,6 +68,10 @@ export interface ChatMessage {
    * branch) refer to. Absent while the message is still streaming.
    */
   entryId?: string;
+  /** When the message was sent (a person's) or the model started answering (a reply), in ms. */
+  at?: number;
+  /** When a reply finished, in ms; absent while it streams. */
+  endedAt?: number;
 }
 
 export interface ApprovalRequest {

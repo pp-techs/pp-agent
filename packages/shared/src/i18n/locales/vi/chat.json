@@ -52,8 +52,19 @@
       }
     }
   },
+  "steps": {
+    "commands_other": "chạy {{count}} lệnh",
+    "reads_other": "đọc {{count}} tệp",
+    "edits_other": "sửa {{count}} tệp",
+    "others_other": "dùng {{count}} công cụ",
+    "failed": "{{count}} lỗi"
+  },
+  "outline": {
+    "label": "Mục lục cuộc trò chuyện"
+  },
   "message": {
     "thinking": "Đang suy luận",
+    "worked": "Đã làm việc {{duration}}",
     "thought": "Đã suy luận",
     "sending": "Đang gửi",
     "skill": "Kỹ năng: {{name}}",

@@ -52,8 +52,23 @@
       }
     }
   },
+  "steps": {
+    "commands_one": "ran {{count}} command",
+    "commands_other": "ran {{count}} commands",
+    "reads_one": "read {{count}} file",
+    "reads_other": "read {{count}} files",
+    "edits_one": "edited {{count}} file",
+    "edits_other": "edited {{count}} files",
+    "others_one": "used {{count}} tool",
+    "others_other": "used {{count}} tools",
+    "failed": "{{count}} failed"
+  },
+  "outline": {
+    "label": "Conversation outline"
+  },
   "message": {
     "thinking": "Thinking",
+    "worked": "Worked for {{duration}}",
     "thought": "Thought",
     "sending": "Sending",
     "skill": "Skill: {{name}}",

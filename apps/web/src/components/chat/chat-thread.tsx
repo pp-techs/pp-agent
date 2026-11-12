@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { DesktopBridge } from "@workspace/shared";
+import type { ChatMessage, DesktopBridge } from "@workspace/shared";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -12,6 +12,7 @@ import { Spinner } from "@workspace/ui/components/spinner";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { ChatOutline, outlineTurns } from "@/components/chat/chat-outline";
 import { ChatMessageView, PendingMessageView } from "@/components/chat/chat-message";
 import {
   ChatThreadProvider,
@@ -19,6 +20,54 @@ import {
 } from "@/components/chat/chat-thread-context";
 import { useBranchSession, useEditMessage, useRegenerate, useRespondApproval } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
+
+interface ThreadRow {
+  message: ChatMessage;
+  index: number;
+  /** Replies of the same finished run that fold into this one. */
+  earlier?: ChatMessage[];
+  workedMs?: number;
+}
+
+/**
+ * The rows of the thread. A run is the replies between two questions; once it is finished and did
+ * more than answer (it thought or used tools), its replies fold into the last one, which shows
+ * "Worked for …" over the steps and keeps its answer in view.
+ */
+function threadRows(messages: ChatMessage[], running: boolean): ThreadRow[] {
+  const rows: ThreadRow[] = [];
+  let start = 0;
+  while (start < messages.length) {
+    if (messages[start].role !== "assistant") {
+      rows.push({ message: messages[start], index: start });
+      start++;
+      continue;
+    }
+    let end = start;
+    while (messages[end + 1]?.role === "assistant") end++;
+    const run = messages.slice(start, end + 1);
+    const finished = end < messages.length - 1 || !running;
+    const steps = run.some((reply) => reply.parts.some((part) => part.type !== "text"));
+    if (!finished || !steps) {
+      run.forEach((message, i) => rows.push({ message, index: start + i }));
+    } else {
+      const final = run[run.length - 1];
+      const asked = messages[start - 1];
+      const ms =
+        asked?.role === "user" && asked.at !== undefined && final.endedAt !== undefined
+          ? final.endedAt - asked.at
+          : undefined;
+      rows.push({
+        message: final,
+        index: end,
+        earlier: run.slice(0, -1),
+        workedMs: ms !== undefined && ms >= 1000 ? ms : undefined,
+      });
+    }
+    start = end + 1;
+  }
+  return rows;
+}
 
 export function ChatThread({ bridge }: { bridge: DesktopBridge }) {
   const messages = useChatStore((state) => state.messages);
@@ -84,16 +133,31 @@ export function ChatThread({ bridge }: { bridge: DesktopBridge }) {
   // Rebuilt only when the messages change, not when the thread renders for another reason.
   const rows = React.useMemo(
     () => [
-      ...messages.map((message, index) => ({
-        key: echoKeys[message.id] ?? message.id,
-        message,
-        last: index === messages.length - 1,
+      ...threadRows(messages, running).map((row) => ({
+        key: echoKeys[row.message.id] ?? row.message.id,
+        message: row.message,
+        last: row.index === messages.length - 1,
         sending: false,
+        earlier: row.earlier,
+        workedMs: row.workedMs,
       })),
-      ...(pending ? [{ key: pending.id, message: pending, last: false, sending: true }] : []),
+      ...(pending
+        ? [
+            {
+              key: pending.id,
+              message: pending,
+              last: false,
+              sending: true,
+              earlier: undefined,
+              workedMs: undefined,
+            },
+          ]
+        : []),
     ],
-    [messages, pending, echoKeys],
+    [messages, pending, echoKeys, running],
   );
+
+  const turns = React.useMemo(() => outlineTurns(rows), [rows]);
 
   return (
     <ChatThreadProvider value={thread}>
@@ -118,6 +182,8 @@ export function ChatThread({ bridge }: { bridge: DesktopBridge }) {
                       message={row.message}
                       last={row.last}
                       streaming={running && row.last}
+                      earlier={row.earlier}
+                      workedMs={row.workedMs}
                     />
                   )}
                 </MessageScrollerItem>
@@ -133,6 +199,7 @@ export function ChatThread({ bridge }: { bridge: DesktopBridge }) {
               )}
             </MessageScrollerContent>
           </MessageScrollerViewport>
+          <ChatOutline turns={turns} />
           <MessageScrollerButton />
         </MessageScroller>
       </MessageScrollerProvider>
