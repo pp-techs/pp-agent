@@ -32,6 +32,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { BrandLogo } from "@/components/brand-logo";
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { PromptModal } from "@/components/modals/prompt-modal";
 import { ComputerOnlyNotice } from "@/components/settings/computer-only-notice";
@@ -64,19 +65,6 @@ import {
 } from "@/lib/mcp-catalog";
 
 type View = { kind: "list" } | { kind: "form"; name?: string } | { kind: "email"; name?: string };
-
-/** A logo on a white tile, so dark marks (Notion) stay readable in the dark theme too. */
-function Logo({ src, fallback }: { src: string | null; fallback: React.ReactNode }) {
-  return src ? (
-    <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border bg-white p-2">
-      <img src={src} alt="" draggable={false} className="size-full object-contain" />
-    </span>
-  ) : (
-    <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border bg-muted text-muted-foreground [&>svg]:size-5">
-      {fallback}
-    </span>
-  );
-}
 
 /**
  * One card: the service on the left (logo, name, what connecting does), the one thing to do with
@@ -348,7 +336,7 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
   const emailCard = (
     <CardShell
       key="email"
-      logo={<Logo src={null} fallback={<MailIcon />} />}
+      logo={<BrandLogo src={null} fallback={<MailIcon />} />}
       title={t("email.cardTitle")}
       description={t("email.cardDescription")}
       action={
@@ -489,7 +477,7 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
     return (
       <CardShell
         key={preset.id}
-        logo={<Logo src={preset.logo} fallback={<FolderOpenIcon />} />}
+        logo={<BrandLogo src={preset.logo} fallback={<FolderOpenIcon />} />}
         title={preset.name}
         description={t(`connectors.items.${preset.id}.description`)}
         action={
@@ -567,7 +555,7 @@ export function ConnectorsSection({ bridge }: { bridge: DesktopBridge }) {
             {custom.map((server) => (
               <CardShell
                 key={server.settings.name}
-                logo={<Logo src={null} fallback={<PlugIcon />} />}
+                logo={<BrandLogo src={null} fallback={<PlugIcon />} />}
                 title={server.settings.name}
                 description={server.settings.description}
               >

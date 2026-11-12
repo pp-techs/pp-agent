@@ -34,7 +34,6 @@ import {
   ItemActions,
   ItemContent,
   ItemDescription,
-  ItemGroup,
   ItemTitle,
 } from "@workspace/ui/components/item";
 import {
@@ -53,20 +52,25 @@ import {
   BrainIcon,
   DownloadIcon,
   ImageIcon,
+  KeyRoundIcon,
   PencilIcon,
   PlusIcon,
   SearchIcon,
+  ServerIcon,
   Trash2Icon,
+  UnplugIcon,
   XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
+import { BrandLogo } from "@/components/brand-logo";
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 import { OptionGroup, SubOptions, SwitchRow } from "@/components/settings/option-group";
 import { SectionHeading } from "@/components/settings/section-heading";
 import { VoiceSettings } from "@/components/settings/voice-settings";
 import { groupByProvider, modelKey, modelLabel, modelLabeler } from "@/lib/models";
+import { providerLogo } from "@/lib/provider-logos";
 import {
   gatewaysQuery,
   modelsQuery,
@@ -170,27 +174,35 @@ function ProviderRow({
     : [t("modelCount", { count: provider.modelCount })];
 
   return (
-    <Item variant="outline" size="xs">
-      <ItemContent className="min-w-0">
-        <ItemTitle>
-          {provider.name}
+    <Item variant="outline" className="min-w-0 items-center gap-3 p-4">
+      <BrandLogo src={providerLogo(provider.id)} fallback={<ServerIcon />} />
+      <ItemContent className="min-w-0 gap-0.5">
+        <ItemTitle className="max-w-full">
+          <span className="truncate">{provider.name}</span>
           {provider.kind === "gateway" && (
             <Badge variant="secondary">{t("providerRow.gatewayBadge")}</Badge>
           )}
         </ItemTitle>
-        <ItemDescription className="line-clamp-1 text-xs">{details.join(" · ")}</ItemDescription>
+        <ItemDescription className="line-clamp-1">{details.join(" · ")}</ItemDescription>
       </ItemContent>
       <ItemActions>
         {provider.kind === "gateway" ? (
           <>
-            <Button variant="outline" size="sm" onClick={() => onEditGateway(provider.id)}>
-              <PencilIcon data-icon="inline-start" />
-              {t("common:actions.edit")}
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label={t("common:actions.edit")}
+              title={t("common:actions.edit")}
+              onClick={() => onEditGateway(provider.id)}
+            >
+              <PencilIcon />
             </Button>
             <Button
-              variant="destructive"
-              size="icon-sm"
+              variant="outline"
+              size="icon"
+              className="text-destructive hover:text-destructive"
               aria-label={t("gatewayRow.delete", { name: provider.name })}
+              title={t("gatewayRow.delete", { name: provider.name })}
               disabled={deleting}
               onClick={() => void onDeleteGateway()}
             >
@@ -199,24 +211,38 @@ function ProviderRow({
           </>
         ) : provider.configured ? (
           <>
-            <Button variant="ghost" size="sm" disabled={connect.isPending} onClick={onConnect}>
-              {connecting && <Spinner data-icon="inline-start" />}
-              {t("providerRow.changeKey")}
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label={t("providerRow.changeKey")}
+              title={t("providerRow.changeKey")}
+              disabled={connect.isPending}
+              onClick={onConnect}
+            >
+              {connecting ? <Spinner /> : <KeyRoundIcon />}
             </Button>
             <Button
-              variant="destructive"
-              size="sm"
+              variant="outline"
+              size="icon"
+              className="text-destructive hover:text-destructive"
+              aria-label={t("providerRow.disconnect")}
+              title={t("providerRow.disconnect")}
               disabled={disconnecting}
               onClick={() => void onDisconnect()}
             >
-              {disconnecting && <Spinner data-icon="inline-start" />}
-              {t("providerRow.disconnect")}
+              {disconnecting ? <Spinner /> : <UnplugIcon />}
             </Button>
           </>
         ) : (
-          <Button size="sm" disabled={connect.isPending} onClick={onConnect}>
-            {connecting && <Spinner data-icon="inline-start" />}
-            {t("providerRow.connect")}
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label={t("providerRow.connect")}
+            title={t("providerRow.connect")}
+            disabled={connect.isPending}
+            onClick={onConnect}
+          >
+            {connecting ? <Spinner /> : <PlusIcon />}
           </Button>
         )}
       </ItemActions>
@@ -737,10 +763,13 @@ function GatewayRow({
   }
 
   return (
-    <Item variant="outline" size="xs">
-      <ItemContent className="min-w-0">
-        <ItemTitle>{gateway.name}</ItemTitle>
-        <ItemDescription className="line-clamp-1 text-xs">
+    <Item variant="outline" className="min-w-0 items-center gap-3 p-4">
+      <BrandLogo src={null} fallback={<ServerIcon />} />
+      <ItemContent className="min-w-0 gap-0.5">
+        <ItemTitle className="max-w-full">
+          <span className="truncate">{gateway.name}</span>
+        </ItemTitle>
+        <ItemDescription className="line-clamp-2 break-all">
           {[
             gateway.baseUrl,
             t("modelCount", { count: gateway.models.length }),
@@ -753,14 +782,21 @@ function GatewayRow({
         </ItemDescription>
       </ItemContent>
       <ItemActions>
-        <Button variant="outline" size="sm" onClick={onEdit}>
-          <PencilIcon data-icon="inline-start" />
-          {t("common:actions.edit")}
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label={t("common:actions.edit")}
+          title={t("common:actions.edit")}
+          onClick={onEdit}
+        >
+          <PencilIcon />
         </Button>
         <Button
-          variant="destructive"
-          size="icon-sm"
+          variant="outline"
+          size="icon"
+          className="text-destructive hover:text-destructive"
           aria-label={t("gatewayRow.delete", { name: gateway.name })}
+          title={t("gatewayRow.delete", { name: gateway.name })}
           disabled={deleting}
           onClick={() => void onDelete()}
         >
@@ -890,7 +926,7 @@ export function ModelsSection({ bridge }: { bridge: DesktopBridge }) {
             </EmptyHeader>
           </Empty>
         ) : (
-          <ItemGroup>
+          <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-2">
             {connected.map((provider) => (
               <ProviderRow
                 key={provider.id}
@@ -899,7 +935,7 @@ export function ModelsSection({ bridge }: { bridge: DesktopBridge }) {
                 onEditGateway={editGateway}
               />
             ))}
-          </ItemGroup>
+          </div>
         )}
       </section>
 
@@ -920,7 +956,7 @@ export function ModelsSection({ bridge }: { bridge: DesktopBridge }) {
         {gatewayList.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("section.gateways.hint")}</p>
         ) : (
-          <ItemGroup>
+          <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-2">
             {gatewayList.map((gateway) => (
               <GatewayRow
                 key={gateway.id}
@@ -929,7 +965,7 @@ export function ModelsSection({ bridge }: { bridge: DesktopBridge }) {
                 onEdit={() => editGateway(gateway.id)}
               />
             ))}
-          </ItemGroup>
+          </div>
         )}
         <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
           <DialogContent className="flex h-[85vh] flex-col gap-0 overflow-hidden p-6 sm:max-w-2xl">
@@ -963,7 +999,7 @@ export function ModelsSection({ bridge }: { bridge: DesktopBridge }) {
             {query ? t("section.available.noMatch") : t("section.available.allConnected")}
           </p>
         ) : (
-          <ItemGroup>
+          <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-2">
             {available.map((provider) => (
               <ProviderRow
                 key={provider.id}
@@ -972,7 +1008,7 @@ export function ModelsSection({ bridge }: { bridge: DesktopBridge }) {
                 onEditGateway={editGateway}
               />
             ))}
-          </ItemGroup>
+          </div>
         )}
       </section>
     </div>
