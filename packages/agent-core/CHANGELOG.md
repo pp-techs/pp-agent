@@ -1,5 +1,13 @@
 # @workspace/agent-core
 
+## 0.1.3
+
+### Patch Changes
+
+- 68fd487: When the agent finishes a run that thought or used tools, everything it did folds into one line, "Worked for 1m 47s", and only the answer stays in view. Open the line to see the steps.
+- Updated dependencies [68fd487]
+  - @workspace/shared@0.1.1
+
 ## 0.1.2
 
 ### Patch Changes

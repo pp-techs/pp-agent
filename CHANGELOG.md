@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.35.0] — 2026-11-12
+
+A chat now has a small outline along its right edge, one mark per question you asked. Hover a mark to read the question and the start of the answer, and click it to jump there.
+
+A run of thinking and tool steps now collapses into a single line such as "Thought, ran 3 commands, read 2 files" once it is done. It stays open while the agent works or waits for your approval, and you can open it any time to see each step.
+
+Settings › Connectors has **GitHub**. GitHub registers no OAuth clients, so Connect asks for a personal access token (with a link to where to create one) in a masked field and saves it as the `Authorization` header of GitHub's remote MCP server; a second account is added with its own token. The token stays in `mcp.json` on this computer and is never sent to a phone. Zoho Mail was already covered by the Email card.
+
+The copy, regenerate and branch buttons now stay in view under the latest message, with the time it was sent beside them. Older messages show them on hover.
+
+Telegram and Zalo can have **more than one account**. In Settings › Channels each app opens a list of accounts: add another bot with its own token and an optional name, then pair and configure it like the first. Every account keeps its own owner, agent, workspace, per-chat settings and conversations, and can be turned off or forgotten on its own; the same bot token cannot be used twice. Your existing bot becomes the first account and keeps its conversations. Scheduled results can be sent to another account's owner or chats with `peer:telegram:<account>:<chat>`.
+
+Scheduled tasks are sturdier. A one-time task whose moment passed more than a day ago is switched off (or removed, if it was set to be removed) instead of rewriting settings every minute, and shows **Finished** in Settings. A run that hangs is given up on after the time limit so it no longer blocks the other tasks. "Delete after run" only applies to one-time tasks and keeps a task whose run failed. "Stay silent when empty" now tells the model to reply `[SILENT]` and also treats an empty answer as nothing to report. Tasks created from a Telegram or Zalo chat remember that chat. A result that could not be sent at first updates the task's last run once it goes out. The agent can set a one-time task with `afterMinutes` or a local time, and the interval limits in its tool now match the real ones.
+
+Opening the app from another device on a wider screen (a tablet or a browser on the local network) now shows the file tree in the side panel and opens files as tabs next to the chat, as on the computer. Files can be read there but not changed: new file, rename, trash, attach and reveal stay on the computer. A phone still browses files on its own page from the sidebar.
+
+When the agent finishes a run that thought or used tools, everything it did folds into one line, "Worked for 1m 47s", and only the answer stays in view. Open the line to see the steps.
+
 ## [0.34.0] — 2026-11-11
 
 Settings › Connectors has **GitHub**. GitHub registers no OAuth clients, so Connect asks for a personal access token (with a link to where to create one) in a masked field and saves it as the `Authorization` header of GitHub's remote MCP server; a second account is added with its own token. The token stays in `mcp.json` on this computer and is never sent to a phone. Zoho Mail was already covered by the Email card.
