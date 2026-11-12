@@ -283,7 +283,7 @@ import {
   toolSelection,
   toolTier,
 } from "./tools.ts";
-import { createTodoTool } from "./todo.ts";
+import { createTodoTool, TODO_REMINDER_TYPE, todoReminder, unfinishedTodos } from "./todo.ts";
 import {
   createGoalTool,
   GOAL_CONTINUE_TYPE,
@@ -505,6 +505,8 @@ interface ConversationState {
   researchSaved: string;
   /** Tool calls so far in the current run; a goal turn without any is not continued. */
   toolCalls: number;
+  /** The run that just settled was the checklist reminder, so another one is not sent after it. */
+  todoReminded: boolean;
   running: boolean;
   /**
    * A title proposed while a turn was running, shown in the list at once but written to the
@@ -1587,6 +1589,43 @@ export class AgentHost {
   }
 
   /**
+   * A run settled: when it wrote a checklist and ended with items still open, asks the agent once
+   * (with a message the chat does not show) to bring it up to date. The reminder's own run is never
+   * followed by another one, and goals and research runs carry on by themselves instead.
+   */
+  private afterTodoTurn(conversation: Conversation): void {
+    if (conversation.todoReminded) {
+      conversation.todoReminded = false;
+      return;
+    }
+    if (conversation.goal?.status === "active" || conversation.research?.status === "active")
+      return;
+    const messages = conversation.session.messages;
+    const last = messages.findLast(
+      (message): message is AssistantMessage => message.role === "assistant",
+    );
+    if (last?.stopReason !== "stop") return;
+    const open = unfinishedTodos(messages);
+    if (open.length === 0) return;
+    conversation.todoReminded = true;
+    // Let the settled run finish unwinding before the next one starts.
+    setImmediate(() => {
+      if (conversation.running || conversation.session.isStreaming) {
+        conversation.todoReminded = false;
+        return;
+      }
+      conversation.session
+        .sendCustomMessage(
+          { customType: TODO_REMINDER_TYPE, content: todoReminder(open), display: false },
+          { triggerTurn: true },
+        )
+        .catch(() => {
+          conversation.todoReminded = false;
+        });
+    });
+  }
+
+  /**
    * Research runs: the person gives a question and a depth and the agent works through it in
    * rounds until it saves a report. Same shape as goals (state on the conversation, a saved entry,
    * hidden continuation turns) plus the plan question and the report files.
@@ -2630,6 +2669,7 @@ export class AgentHost {
       research: restoredResearch,
       researchSaved: JSON.stringify(researchEntry(restoredResearch)),
       toolCalls: 0,
+      todoReminded: false,
       questions: new Map(),
       mcpServers: new McpRegistrations(mcpConfig, (name) => {
         const { mcpServers } = this.agentOf(state);
@@ -2751,6 +2791,7 @@ export class AgentHost {
         }
         this.afterGoalTurn(conversation);
         this.afterResearchTurn(conversation);
+        this.afterTodoTurn(conversation);
         emit({ type: "sessions_changed" });
         this.emitActivity();
         break;
