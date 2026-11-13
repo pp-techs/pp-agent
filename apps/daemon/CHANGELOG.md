@@ -1,5 +1,12 @@
 # @workspace/daemon
 
+## 0.11.5
+
+### Patch Changes
+
+- Updated dependencies [2dd48ee]
+  - @workspace/agent-core@0.1.5
+
 ## 0.11.4
 
 ### Patch Changes
