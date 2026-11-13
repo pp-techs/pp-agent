@@ -1,5 +1,11 @@
 # @workspace/agent-core
 
+## 0.1.5
+
+### Patch Changes
+
+- 2dd48ee: Keep the checklist up to date: the prompt and the `todo_write` result now tell the agent to mark items done as it goes, and when a run ends with a checklist that still has open items the agent is asked once (with a message the chat does not show) to update it.
+
 ## 0.1.4
 
 ### Patch Changes

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.35.3] — 2026-11-13
+
+Keep the checklist up to date: the prompt and the `todo_write` result now tell the agent to mark items done as it goes, and when a run ends with a checklist that still has open items the agent is asked once (with a message the chat does not show) to update it.
+
 ## [0.35.3] — 2026-11-12
 
 Signing in to PP Hub (and other MCP servers that register no clients) now shows "PP Agent" and its logo on the consent screen, instead of "pi".
