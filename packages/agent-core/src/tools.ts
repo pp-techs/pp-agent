@@ -579,7 +579,7 @@ export function planningSection(active: readonly string[]): string | null {
   const lines: string[] = [];
   if (active.includes(TODO_TOOL))
     lines.push(
-      "- For a task that takes three or more steps, keep a checklist with todo_write: write the whole list at the start (all items pending), then call it again whenever an item starts (in_progress, only one at a time) or finishes (done). Skip it for simple requests.",
+      "- For a task that takes three or more steps, keep a checklist with todo_write: write the whole list at the start (all items pending), then call it again right when an item starts (in_progress, only one at a time) and right when it finishes (done), before moving on to the next. Never leave the list stale: before your final answer, call it once more with every finished item marked done. Skip it for simple requests.",
     );
   if (active.includes(DELEGATE_TOOL))
     lines.push(
