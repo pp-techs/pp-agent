@@ -1,5 +1,9 @@
 # @workspace/desktop
 
+## 0.35.3
+
+No changes in this release.
+
 ## 0.35.2
 
 No changes in this release.
