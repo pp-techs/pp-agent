@@ -282,8 +282,8 @@ catalogs:
       specifier: ^0.8.3
       version: 0.8.3
     i18next:
-      specifier: ^26.7.2
-      version: 26.7.2
+      specifier: ^27.1.1
+      version: 27.1.1
     imapflow:
       specifier: ^2.11.0
       version: 2.11.0
@@ -318,8 +318,8 @@ catalogs:
       specifier: ^19.3.1
       version: 19.3.1
     react-i18next:
-      specifier: ^17.1.13
-      version: 17.1.13
+      specifier: ^18.0.1
+      version: 18.0.1
     shadcn:
       specifier: ^4.23.0
       version: 4.23.0
@@ -424,7 +424,7 @@ importers:
         version: 0.8.3
       i18next:
         specifier: 'catalog:'
-        version: 26.7.2(typescript@7.0.2)
+        version: 27.1.1(typescript@7.0.2)
       imapflow:
         specifier: 'catalog:'
         version: 2.11.0
@@ -558,7 +558,7 @@ importers:
         version: 6.0.0
       i18next:
         specifier: 'catalog:'
-        version: 26.7.2(typescript@7.0.2)
+        version: 27.1.1(typescript@7.0.2)
       lucide-react:
         specifier: 'catalog:'
         version: 1.72.0(@types/react@19.3.0)(react@19.3.1)
@@ -576,7 +576,7 @@ importers:
         version: 19.3.1(react@19.3.1)
       react-i18next:
         specifier: 'catalog:'
-        version: 17.1.13(i18next@26.7.2(typescript@7.0.2))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)
+        version: 18.0.1(@types/react@19.3.0)(i18next@27.1.1(typescript@7.0.2))(react@19.3.1)(typescript@7.0.2)
       shiki:
         specifier: 'catalog:'
         version: 4.6.0
@@ -665,7 +665,7 @@ importers:
         version: 0.8.3
       i18next:
         specifier: 'catalog:'
-        version: 26.7.2(typescript@7.0.2)
+        version: 27.1.1(typescript@7.0.2)
       imapflow:
         specifier: 'catalog:'
         version: 2.11.0
@@ -705,7 +705,7 @@ importers:
     dependencies:
       i18next:
         specifier: 'catalog:'
-        version: 26.7.2(typescript@7.0.2)
+        version: 27.1.1(typescript@7.0.2)
 
   packages/ui:
     dependencies:
@@ -4923,6 +4923,15 @@ packages:
       typescript:
         optional: true
 
+  i18next@27.1.1:
+    resolution: {integrity: sha512-Qq3aJizS3RXQ30crhx9BKQLrHoa6GKpgrOJjVZ9vgj3EBxAddrmVfDNUrAMxSUimw5Jc+ld4SSZUAzf1q4nGyQ==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      typescript: ^5 || ^6 || ^7
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
   iconv-lite@0.7.3:
     resolution: {integrity: sha512-IKXpvIzjnC9XTAUbVBcMfGS0EPaIXtW6v+zr+RRp+hqULEpo0owZax6wyRwPOJbWbzjYspQwusTsfVr0ifh4uQ==}
     engines: {node: '>=0.10.0'}
@@ -6176,18 +6185,16 @@ packages:
     peerDependencies:
       react: ^19.3.1
 
-  react-i18next@17.1.13:
-    resolution: {integrity: sha512-ZxhOSlyKSKPtbUNPLwYMmE3w3bhoc0jaZJZ6bc7wGOT6cLbrbs//6m01HxCLtFdSjHvFpwFwoPhxxzIlHSs9cw==}
+  react-i18next@18.0.1:
+    resolution: {integrity: sha512-kPWXI0E/lrPj3+/umcKNzYZVnWmEedLiamMzDIHfbs+5ANf6yzvlZsjKou8f7kaGkfMMDLIZBejV+4aSN1CyBw==}
+    engines: {node: '>=22'}
     peerDependencies:
-      i18next: '>= 26.2.0'
-      react: '>= 16.8.0'
-      react-dom: '*'
-      react-native: '*'
+      '@types/react': '*'
+      i18next: '>= 27.0.1'
+      react: '>= 18.0.0'
       typescript: ^5 || ^6 || ^7
     peerDependenciesMeta:
-      react-dom:
-        optional: true
-      react-native:
+      '@types/react':
         optional: true
       typescript:
         optional: true
@@ -11898,6 +11905,10 @@ snapshots:
     optionalDependencies:
       typescript: 7.0.2
 
+  i18next@27.1.1(typescript@7.0.2):
+    optionalDependencies:
+      typescript: 7.0.2
+
   iconv-lite@0.7.3:
     dependencies:
       safer-buffer: 2.1.2
@@ -13329,15 +13340,13 @@ snapshots:
       react: 19.3.1
       scheduler: 0.28.0
 
-  react-i18next@17.1.13(i18next@26.7.2(typescript@7.0.2))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2):
+  react-i18next@18.0.1(@types/react@19.3.0)(i18next@27.1.1(typescript@7.0.2))(react@19.3.1)(typescript@7.0.2):
     dependencies:
-      '@babel/runtime': 7.29.10
       html-parse-stringify: 4.0.1
-      i18next: 26.7.2(typescript@7.0.2)
+      i18next: 27.1.1(typescript@7.0.2)
       react: 19.3.1
-      use-sync-external-store: 1.7.0(react@19.3.1)
     optionalDependencies:
-      react-dom: 19.3.1(react@19.3.1)
+      '@types/react': 19.3.0
       typescript: 7.0.2
 
   react-is@17.0.2: {}
