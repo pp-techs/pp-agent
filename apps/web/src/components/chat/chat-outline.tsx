@@ -47,7 +47,7 @@ export function ChatOutline({ turns }: { turns: OutlineTurn[] }) {
       aria-label={t("outline.label")}
       className="pointer-events-none absolute inset-y-0 end-3 z-10 hidden items-center md:flex"
     >
-      <ul className="pointer-events-auto flex max-h-[60%] flex-col gap-2 overflow-visible py-2">
+      <ul className="pointer-events-auto flex max-h-[60%] flex-col overflow-visible py-1">
         {turns.map((turn) => {
           const active = turn.key === currentAnchorId;
           return (
@@ -60,7 +60,7 @@ export function ChatOutline({ turns }: { turns: OutlineTurn[] }) {
                   scrollToMessage(turn.key, { align: "start" });
                   event.currentTarget.blur();
                 }}
-                className="flex h-3 w-8 items-center justify-end"
+                className="flex h-2.5 w-8 items-center justify-end"
               >
                 <span
                   className={cn(
