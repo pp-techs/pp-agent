@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.35.4] — 2026-11-17
+
+Make the chat outline marks more compact, with less vertical space between them
+
 ## [0.35.3] — 2026-11-13
 
 Keep the checklist up to date: the prompt and the `todo_write` result now tell the agent to mark items done as it goes, and when a run ends with a checklist that still has open items the agent is asked once (with a message the chat does not show) to update it.

@@ -1,5 +1,11 @@
 # @workspace/web
 
+## 0.35.4
+
+### Patch Changes
+
+- b6465bc: Make the chat outline marks more compact, with less vertical space between them
+
 ## 0.35.3
 
 ### Patch Changes
