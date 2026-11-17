@@ -1,0 +1,16 @@
+diff --git a/dist/extensions/mcp/oauth.js b/dist/extensions/mcp/oauth.js
+index 1b0ce1a..d24fd4b 100644
+--- a/dist/extensions/mcp/oauth.js
++++ b/dist/extensions/mcp/oauth.js
+@@ -132,7 +132,10 @@ export class McpOAuthCredentialStore {
+ }
+ /** pi's Client ID Metadata Documents on pi.dev: `client.json` and `<callback ID>/client.json`. */
+ const PI_CLIENT_METADATA_DOCUMENTS = {
+-    baseUrl: "https://pi.dev/oauth",
++    /** A host app serves its own documents (name, logo) by setting PI_MCP_CLIENT_METADATA_BASE_URL. */
++    get baseUrl() {
++        return process.env.PI_MCP_CLIENT_METADATA_BASE_URL?.replace(/\/+$/, "") || "https://pi.dev/oauth";
++    },
+     listsRedirectUrl: isClientMetadataDocumentCallback,
+ };
+ /** pi's client identity for sign-in and refresh. */
