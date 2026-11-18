@@ -146,7 +146,7 @@ export class TerminalHost {
     return [...this.terminals.values()].map((terminal) => ({ ...terminal.info }));
   }
 
-  create(cwd: string, size: TerminalSize): TerminalInfo {
+  create(cwd: string, size: TerminalSize, session: string): TerminalInfo {
     const t = translator();
     if (this.terminals.size >= MAX_TERMINALS)
       throw new Error(t("panel.terminal.tooMany", { max: MAX_TERMINALS }));
@@ -168,7 +168,7 @@ export class TerminalHost {
     }
     const id = `term-${this.nextId++}`;
     const terminal: Terminal = {
-      info: { id, cwd, title: basename(file).replace(/\.exe$/i, ""), exited: false },
+      info: { id, cwd, session, title: basename(file).replace(/\.exe$/i, ""), exited: false },
       pty,
       backlog: new OutputRing(BACKLOG_CHARS),
       seq: 0,

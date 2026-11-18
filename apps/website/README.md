@@ -8,7 +8,9 @@ Marketing site and documentation for [PP Agent](https://github.com/pp-techs/pp-a
 - [Astro](https://astro.build) — static output, zero JavaScript by default.
 - [Starlight](https://starlight.astro.build) — docs layout, sidebar, Pagefind search, dark mode,
   sitemap, i18n, and Markdown/MDX content.
-- Cloudflare Workers static assets — no server logic, no backend.
+- Cloudflare Workers static assets. `worker/index.ts` handles only `/oauth/*` (client metadata) and
+  `/download/<mac-arm64|mac-x64|win|linux|linux-deb>`, which redirects to that installer in the latest
+  GitHub release (cached 10 minutes; falls back to the release page).
 - `sharp` at build time for screenshot variants.
 
 The site is the `@workspace/website` package in the pnpm workspace. Dependencies come from the

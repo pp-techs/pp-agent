@@ -1774,8 +1774,10 @@ export type AgentCommandResult<K extends AgentCommandType> = AgentCommandMap[K][
 /** A shell the person opened in the side panel. It runs in the main process, never for the agent. */
 export interface TerminalInfo {
   id: string;
-  /** Workspace folder it started in; the panel shows the terminals of the open conversation's. */
+  /** Workspace folder it started in. */
   cwd: string;
+  /** The conversation the terminal belongs to (its session file, "" for one without a session file). */
+  session: string;
   title: string;
   /** The shell ended; the output stays readable until the terminal is closed. */
   exited: boolean;
@@ -1911,6 +1913,8 @@ export interface BrowserTab {
   loading: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
+  /** The conversation the tab belongs to (its session file, "" for one without a session file). */
+  session: string;
 }
 
 export interface BrowserState {
@@ -1951,6 +1955,11 @@ export type BrowserToolAction = (typeof BROWSER_TOOL_ACTIONS)[number];
 export interface BrowserRequest {
   action: BrowserToolAction;
   tab?: string;
+  /**
+   * The conversation that calls (its session file, "" without one): the tool sees only the tabs of
+   * that conversation, and a tab it opens belongs to it.
+   */
+  session?: string;
   /** `open`, `navigate`: an address, or words to search for. */
   url?: string;
   /** `open`: profile name or id; the default profile when omitted. */
@@ -2314,8 +2323,8 @@ export interface DesktopBridge {
   };
   terminal: {
     list(): Promise<TerminalInfo[]>;
-    /** Starts the person's shell in a workspace folder. */
-    create(cwd: string, size: TerminalSize): Promise<TerminalInfo>;
+    /** Starts the person's shell in a workspace folder, for a conversation (`session`, "" for one without a session file). */
+    create(cwd: string, size: TerminalSize, session: string): Promise<TerminalInfo>;
     /**
      * Output so far, for a view that starts showing the terminal. The view then acks every chunk
      * it has drawn (`ack`); the shell pauses while too much output waits, until `detach`.
@@ -2354,8 +2363,8 @@ export interface DesktopBridge {
   };
   browser: {
     state(): Promise<BrowserState>;
-    /** Opens a tab with a profile and makes it the active one. */
-    open(profileId: string, url?: string): Promise<BrowserTab>;
+    /** Opens a tab of a conversation (`session`, "" for one without a session file) with a profile and makes it the active one. */
+    open(profileId: string, session: string, url?: string): Promise<BrowserTab>;
     close(id: string): Promise<void>;
     activate(id: string): Promise<void>;
     /** Goes to an address, or searches the web for anything that is not one. */
@@ -2367,8 +2376,6 @@ export interface DesktopBridge {
      */
     setBounds(id: string, bounds: BrowserBounds | null): void;
     onState(listener: (state: BrowserState) => void): () => void;
-    /** The agent is using a tab: show it, in the main area if the tab is there, else in the side panel. */
-    onReveal(listener: (id: string) => void): () => void;
     /** Installed browsers and their profiles whose cookies can be imported. */
     cookieSources(): Promise<CookieSource[]>;
     /**
@@ -2488,7 +2495,6 @@ export const IPC = {
   browserCookieSourceRunning: "browser:cookie-source-running",
   browserCookieSites: "browser:cookie-sites",
   browserImportCookies: "browser:import-cookies",
-  browserReveal: "browser:reveal",
   computerStatus: "computer:status",
   computerRequestPermissions: "computer:request-permissions",
   diagnosticsInfo: "diagnostics:info",
@@ -2503,7 +2509,7 @@ export const IPC = {
 // ---------------------------------------------------------------------------------------------
 
 /** Bump when a frame below changes incompatibly; a client talking to another version shuts the daemon down. */
-export const DAEMON_PROTOCOL = 4;
+export const DAEMON_PROTOCOL = 5;
 
 export interface AgentPaths {
   /** Folder of the built-in workspace; other workspaces use their own folder. */

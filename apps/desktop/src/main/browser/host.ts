@@ -65,6 +65,8 @@ export function isNewTabInput(input: Input): boolean {
 interface Tab {
   id: string;
   profileId: string;
+  /** The conversation the tab belongs to (its session file, "" for one without a session file). */
+  session: string;
   view: WebContentsView;
 }
 
@@ -127,9 +129,12 @@ export class BrowserHost implements BrowserDriver {
     profileId: string,
     url: string | undefined,
     by: NavigationSource,
+    conversation: string,
   ): Promise<BrowserTab> {
     await this.options.requireProfile(profileId);
-    return describe(this.openTab(profileId, url ? toAddress(url) : "about:blank", true, by));
+    return describe(
+      this.openTab(profileId, url ? toAddress(url) : "about:blank", true, by, conversation),
+    );
   }
 
   async close(tabId: string): Promise<void> {
@@ -279,7 +284,13 @@ export class BrowserHost implements BrowserDriver {
     return tab;
   }
 
-  private openTab(profileId: string, url: string, activate: boolean, by: NavigationSource): Tab {
+  private openTab(
+    profileId: string,
+    url: string,
+    activate: boolean,
+    by: NavigationSource,
+    conversation: string,
+  ): Tab {
     if (this.tabs.size >= MAX_TABS)
       throw new Error(translator()("panel.browser.tooManyTabs", { max: MAX_TABS }));
     // Hidden pages are throttled as in any browser; `drive` lifts that while the agent acts.
@@ -294,7 +305,7 @@ export class BrowserHost implements BrowserDriver {
     if (by === "agent") this.agentPages.add(view.webContents.id);
     this.configureSession(view.webContents.session);
     view.setBounds(this.pixelBounds(this.lastBounds));
-    const tab: Tab = { id: `tab-${this.nextId++}`, profileId, view };
+    const tab: Tab = { id: `tab-${this.nextId++}`, profileId, session: conversation, view };
     this.tabs.set(tab.id, tab);
     this.wire(tab);
     view.setVisible(false);
@@ -308,12 +319,12 @@ export class BrowserHost implements BrowserDriver {
 
   /**
    * A link the page or its menu opens in a new tab; past the tab limit it is only logged. A tab
-   * opened from one of the agent's pages is the agent's too.
+   * opened from one of the agent's pages is the agent's too, and stays in the same conversation.
    */
   private openLink(tab: Tab, url: string, activate: boolean): void {
     const by = this.agentPages.has(tab.view.webContents.id) ? "agent" : "person";
     try {
-      this.openTab(tab.profileId, url, activate, by);
+      this.openTab(tab.profileId, url, activate, by, tab.session);
     } catch (error) {
       console.error("Could not open the link in a new tab:", error);
     }
@@ -498,6 +509,7 @@ function describe(tab: Tab): BrowserTab {
   return {
     id: tab.id,
     profileId: tab.profileId,
+    session: tab.session,
     url: url === "about:blank" ? "" : url,
     title: destroyed || url === "about:blank" ? "" : contents.getTitle(),
     loading: !destroyed && contents.isLoading(),

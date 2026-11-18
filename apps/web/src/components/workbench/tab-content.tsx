@@ -11,14 +11,15 @@ import type { CenterTab } from "@/stores/workbench-store";
  */
 export default function TabContent({
   bridge,
-  root,
+  session,
   tab,
   terminals,
   browser,
   hidden,
 }: {
   bridge: DesktopBridge;
-  root: string;
+  /** The conversation whose main area shows the tab. */
+  session: string;
   tab: Exclude<CenterTab, { kind: "chat" }>;
   terminals: TerminalInfo[] | null;
   browser: BrowserState | null;
@@ -27,7 +28,7 @@ export default function TabContent({
 }) {
   switch (tab.kind) {
     case "file":
-      return <FilePreviewView bridge={bridge} root={root} path={tab.path} />;
+      return <FilePreviewView bridge={bridge} root={tab.root} path={tab.path} />;
     case "terminal": {
       const terminal = terminals?.find((item) => item.id === tab.id);
       return terminal ? <XtermView bridge={bridge} terminal={terminal} /> : null;
@@ -40,7 +41,7 @@ export default function TabContent({
           bridge={bridge}
           tab={page}
           hidden={hidden}
-          onOpen={(profileId, url) => void newBrowserTab(bridge, root, profileId, url)}
+          onOpen={(profileId, url) => void newBrowserTab(bridge, session, profileId, url)}
         />
       );
     }

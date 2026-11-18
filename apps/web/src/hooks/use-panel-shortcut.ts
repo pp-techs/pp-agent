@@ -1,26 +1,22 @@
 import * as React from "react";
 import { DEFAULT_BROWSER_PROFILE_ID, type DesktopBridge } from "@workspace/shared";
 
-import { closeMainTab, newBrowserTab } from "@/lib/workbench-actions";
-import { useChatStore } from "@/stores/chat-store";
+import { closeMainTab, currentSession, newBrowserTab } from "@/lib/workbench-actions";
 import { usePanelStore } from "@/stores/panel-store";
-import { browserHost, NO_WORKSPACE, tabKey, useWorkbenchStore } from "@/stores/workbench-store";
+import { tabKey, useWorkbenchStore } from "@/stores/workbench-store";
 
 /** macOS uses Cmd; elsewhere Ctrl. Ctrl+J stays with the terminal on macOS (it is a newline). */
 export const IS_MAC = navigator.userAgent.includes("Mac");
 
-/** Cmd+T / Ctrl+T: a new browser tab in the main area, in the default profile. */
+/** Cmd+T / Ctrl+T: a new browser tab in the open conversation's main area, in the default profile. */
 function openNewTab(bridge: DesktopBridge) {
-  const folder = useChatStore.getState().workspaceDir;
-  void newBrowserTab(bridge, folder, DEFAULT_BROWSER_PROFILE_ID);
+  void newBrowserTab(bridge, currentSession(), DEFAULT_BROWSER_PROFILE_ID);
 }
 
 /**
  * Cmd+J / Ctrl+J opens and closes the side panel (the file tree); Cmd+T / Ctrl+T opens a new
  * browser tab. A browser page in the main area has the keyboard to itself, so main reports the
- * shortcuts pressed there. Main also asks for a
- * browser tab to show while the agent uses it: it opens in the main area, unless it is already
- * there.
+ * shortcuts pressed there.
  */
 export function usePanelShortcut(bridge: DesktopBridge) {
   React.useEffect(() => {
@@ -46,20 +42,10 @@ export function usePanelShortcut(bridge: DesktopBridge) {
     window.addEventListener("keydown", onKeyDown, true);
     const unsubscribe = bridge.shell.onTogglePanel(toggle);
     const unsubscribeNewTab = bridge.shell.onNewTab(() => openNewTab(bridge));
-    const unsubscribeReveal = bridge.browser.onReveal((tabId) => {
-      const bench = useWorkbenchStore.getState();
-      const scope = useChatStore.getState().workspaceDir ?? NO_WORKSPACE;
-      // Already in this main area: it is not brought to the front again, so the person can go back
-      // to the chat. A tab of another workspace's main area comes here.
-      if (browserHost(bench.byRoot, tabId) !== scope) {
-        bench.add(scope, { kind: "browser", id: tabId });
-      }
-    });
     return () => {
       window.removeEventListener("keydown", onKeyDown, true);
       unsubscribe();
       unsubscribeNewTab();
-      unsubscribeReveal();
     };
   }, [bridge]);
 }
@@ -88,8 +74,8 @@ export function useCloseTabShortcut(bridge: DesktopBridge) {
           );
           return;
         }
-        const scope = useChatStore.getState().workspaceDir ?? NO_WORKSPACE;
-        const bench = useWorkbenchStore.getState().byRoot[scope];
+        const scope = currentSession();
+        const bench = useWorkbenchStore.getState().bySession[scope];
         const group = bench?.groups[bench.focused];
         const front = group?.tabs.find((tab) => tabKey(tab) === group.active);
         if (front && front.kind !== "chat") closeMainTab(bridge, scope, front);

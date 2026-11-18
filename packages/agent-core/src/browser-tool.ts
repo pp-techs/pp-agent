@@ -38,16 +38,20 @@ export function fencePage(text: string): string {
 }
 
 /**
- * Drives the browser in the side panel of the PP Agent window: tabs with the user's sign-in
+ * Drives the browser of the PP Agent window: tabs with the user's sign-in
  * profiles, page snapshots with element references, and real clicks and typing. The work happens
  * in the window (`BrowserBridge`); this tool only passes the call on and fences the page text.
  */
-export function createBrowserTool(bridge: BrowserBridge | undefined) {
+export function createBrowserTool(
+  bridge: BrowserBridge | undefined,
+  /** The conversation's session file now ("" without one): its tabs are the ones the tool sees. */
+  session: () => string | undefined,
+) {
   return defineTool({
     name: BROWSER_TOOL,
     label: "Browser",
     description: [
-      "Uses the browser in the PP Agent side panel, which keeps the user's sign-ins per profile, and shows the user every step.",
+      "Uses the browser of the PP Agent window, which keeps the user's sign-ins per profile, and shows the user every step. The tabs are this conversation's own: it sees no other conversation's tabs.",
       "Actions: tabs (list tabs and profiles), open (new tab: url, optional profile name), select / close (tab), navigate (url), back, forward, reload,",
       "snapshot (the page's headings and interactive elements with refs like e12), text (the page's readable text; offset to continue), screenshot,",
       "click (ref), type (ref, text; clear defaults to true; submit presses Enter), press (key such as Enter, Escape, ArrowDown, Control+A),",
@@ -100,7 +104,7 @@ export function createBrowserTool(bridge: BrowserBridge | undefined) {
     }),
     async execute(_toolCallId, params, signal) {
       if (!bridge?.available()) throw new Error(UNAVAILABLE);
-      const request: BrowserRequest = { ...params };
+      const request: BrowserRequest = { ...params, session: session() ?? "" };
       const result = await bridge.request(request, signal);
       return {
         content: [

@@ -1,6 +1,7 @@
 /**
- * Serves PP Agent's OAuth Client ID Metadata Documents under /oauth/. Everything else is a static
- * asset (`run_worker_first` in wrangler.jsonc lists only /oauth/*).
+ * Serves PP Agent's OAuth Client ID Metadata Documents under /oauth/ and redirects /download/<platform>
+ * to the matching installer of the latest GitHub release. Everything else is a static asset
+ * (`run_worker_first` in wrangler.jsonc lists only /oauth/* and /download/*).
  *
  * The desktop app signs in to MCP servers whose authorization server registers no clients (Logto,
  * so PP Hub) by sending this document's URL as its `client_id`; the server fetches it and shows the
@@ -10,6 +11,20 @@
  */
 const SITE = "https://ppagent.monback.app";
 const BASE = `${SITE}/oauth`;
+const REPOSITORY = "pp-techs/pp-agent";
+const RELEASES_LATEST = `https://github.com/${REPOSITORY}/releases/latest`;
+const LATEST_API = `https://api.github.com/repos/${REPOSITORY}/releases/latest`;
+/** Installer file names carry the version, so each platform is matched by its suffix. */
+const INSTALLERS: Record<string, RegExp> = {
+  "mac-arm64": /-mac-arm64\.dmg$/,
+  "mac-x64": /-mac-x64\.dmg$/,
+  win: /-win-x64\.exe$/,
+  linux: /\.AppImage$/,
+  "linux-deb": /\.deb$/,
+};
+/** GitHub allows 60 unauthenticated API calls an hour per IP; a cached answer keeps one under it. */
+const RELEASE_CACHE_SECONDS = 600;
+
 /** What Pi's `callbackId` makes: 9 bytes as base64url. */
 const CALLBACK_ID = /^[A-Za-z0-9_-]{12}$/;
 
@@ -30,12 +45,57 @@ function metadataDocument(id: string | undefined) {
   };
 }
 
+interface ReleaseAsset {
+  name: string;
+  browser_download_url: string;
+}
+
+/** The latest release's assets, or undefined when GitHub does not answer. */
+async function latestAssets(): Promise<ReleaseAsset[] | undefined> {
+  const cache = caches.default;
+  let response = await cache.match(LATEST_API);
+  if (!response) {
+    response = await fetch(LATEST_API, {
+      headers: { Accept: "application/vnd.github+json", "User-Agent": "ppagent-site" },
+    });
+    if (!response.ok) return undefined;
+    response = new Response(response.body, response);
+    response.headers.set("Cache-Control", `public, max-age=${RELEASE_CACHE_SECONDS}`);
+    await cache.put(LATEST_API, response.clone());
+  }
+  const release = (await response.json()) as { assets?: ReleaseAsset[] };
+  return release.assets;
+}
+
+function redirect(location: string, maxAge: number): Response {
+  return new Response(null, {
+    status: 302,
+    headers: { Location: location, "Cache-Control": `public, max-age=${maxAge}` },
+  });
+}
+
+/** Sends the visitor to the installer; the release page is the fallback so the link never dead-ends. */
+async function download(platform: string): Promise<Response> {
+  const pattern = INSTALLERS[platform];
+  if (!pattern) return new Response("Not found", { status: 404 });
+  let url: string | undefined;
+  try {
+    url = (await latestAssets())?.find((asset) => pattern.test(asset.name))?.browser_download_url;
+  } catch {
+    // Network failure or a malformed answer: fall back to the release page.
+  }
+  return url ? redirect(url, 60) : redirect(RELEASES_LATEST, 0);
+}
+
 export default {
-  fetch(request: Request): Response {
+  async fetch(request: Request): Promise<Response> {
     if (request.method !== "GET" && request.method !== "HEAD") {
       return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
     }
-    const match = /^\/oauth\/(?:([^/]+)\/)?client\.json$/.exec(new URL(request.url).pathname);
+    const { pathname } = new URL(request.url);
+    const target = /^\/download\/([a-z0-9-]+)\/?$/.exec(pathname);
+    if (target) return download(target[1]);
+    const match = /^\/oauth\/(?:([^/]+)\/)?client\.json$/.exec(pathname);
     const id = match?.[1];
     if (!match || (id !== undefined && !CALLBACK_ID.test(id))) {
       return new Response("Not found", { status: 404 });

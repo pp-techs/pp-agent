@@ -1,4 +1,10 @@
-import type { BrowserProfile, BrowserRequest, BrowserResult, BrowserTab } from "@workspace/shared";
+import type {
+  BrowserProfile,
+  BrowserRequest,
+  BrowserResult,
+  BrowserState,
+  BrowserTab,
+} from "@workspace/shared";
 import type { WebContents } from "electron";
 import { modelImage } from "../screenshot.ts";
 import { isPrivateTarget, toAddress } from "./address.ts";
@@ -45,8 +51,6 @@ export interface BrowserAutomationOptions {
   /** Whether an address leads to this computer or the local network (a test seam). */
   isPrivate?: (url: string) => Promise<boolean>;
   profiles(): Promise<BrowserProfile[]>;
-  /** Shows the tab the agent uses (in the side panel or the main area), so the person sees what it does. */
-  reveal(tabId: string): void;
 }
 
 type KeyModifier = "control" | "shift" | "alt" | "meta";
@@ -146,8 +150,9 @@ export function formatSnapshot(
 }
 
 /**
- * Runs the agent's `browser` tool calls on the side panel browser. Pages it acts on become the
- * active tab and the panel shows the browser, so the person watches every step. Messages are for
+ * Runs the agent's `browser` tool calls on the app's browser. A call sees only the tabs of its own
+ * conversation, and the pages it acts on become the active tab; the conversation's main area shows
+ * them, so the person watches every step. Messages are for
  * the model (English).
  */
 export class BrowserAutomation {
@@ -165,33 +170,33 @@ export class BrowserAutomation {
 
   private async act(request: BrowserRequest, driven: string[]): Promise<BrowserResult> {
     const { host } = this.options;
+    const session = request.session ?? "";
     const useTab = async (id: string | undefined) => {
-      const tab = await this.useTab(id);
+      const tab = await this.useTab(id, session);
       host.drive(tab.id);
       driven.push(tab.id);
       return tab;
     };
     switch (request.action) {
       case "tabs":
-        return { text: await this.describeTabs() };
+        return { text: await this.describeTabs(session) };
       case "open": {
         const profile = await this.resolveProfile(request.profile);
         if (request.url) await this.refusePrivate(request.url);
-        const tab = await host.open(profile.id, request.url, "agent");
+        const tab = await host.open(profile.id, request.url, "agent", session);
         host.drive(tab.id);
         driven.push(tab.id);
-        this.options.reveal(tab.id);
         return this.afterChange(tab.id, `Opened tab ${tab.id} in profile ${profile.name}.`);
       }
       case "select": {
-        const tab = this.requireTab(request.tab);
-        await this.show(tab.id);
+        const tab = this.requireTab(request.tab, session);
+        await this.activate(tab.id);
         return this.afterChange(tab.id, `Switched to tab ${tab.id}.`, false);
       }
       case "close": {
-        const tab = this.requireTab(request.tab);
+        const tab = this.requireTab(request.tab, session);
         await host.close(tab.id);
-        return { text: `Closed tab ${tab.id}.\n\n${await this.describeTabs()}` };
+        return { text: `Closed tab ${tab.id}.\n\n${await this.describeTabs(session)}` };
       }
       case "navigate": {
         if (!request.url) throw new Error("navigate needs url.");
@@ -282,8 +287,8 @@ export class BrowserAutomation {
   // Tabs and profiles
   // -------------------------------------------------------------------------------------------
 
-  private async describeTabs(): Promise<string> {
-    const state = this.options.host.state();
+  private async describeTabs(session: string): Promise<string> {
+    const state = this.sessionState(session);
     const profiles = await this.options.profiles();
     const nameOf = (id: string) => profiles.find((profile) => profile.id === id)?.name ?? id;
     const tabs =
@@ -314,8 +319,9 @@ export class BrowserAutomation {
     return profile;
   }
 
-  private requireTab(id: string | undefined): BrowserTab {
-    const state = this.options.host.state();
+  /** The tab to act on: `id`, or the active tab of the conversation. Other conversations' tabs do not exist for it. */
+  private requireTab(id: string | undefined, session: string): BrowserTab {
+    const state = this.sessionState(session);
     const wanted = id ?? state.activeId;
     const tab = state.tabs.find((entry) => entry.id === wanted);
     if (!tab)
@@ -327,17 +333,29 @@ export class BrowserAutomation {
     return tab;
   }
 
-  /** The tab to act on, made the active one and shown in the panel. */
-  private async useTab(id: string | undefined): Promise<BrowserTab> {
-    const tab = this.requireTab(id);
-    await this.show(tab.id);
+  /**
+   * The tabs of one conversation, and its active one: the browser's active tab when it is the
+   * conversation's, else the conversation's newest tab.
+   */
+  private sessionState(session: string): BrowserState {
+    const state = this.options.host.state();
+    const tabs = state.tabs.filter((tab) => tab.session === session);
+    const activeId = tabs.some((tab) => tab.id === state.activeId)
+      ? state.activeId
+      : (tabs.at(-1)?.id ?? null);
+    return { tabs, activeId };
+  }
+
+  /** The tab to act on, made the active one. */
+  private async useTab(id: string | undefined, session: string): Promise<BrowserTab> {
+    const tab = this.requireTab(id, session);
+    await this.activate(tab.id);
     return tab;
   }
 
-  private async show(tabId: string): Promise<void> {
+  private async activate(tabId: string): Promise<void> {
     const { host } = this.options;
     if (host.state().activeId !== tabId) await host.activate(tabId);
-    this.options.reveal(tabId);
   }
 
   private requireRef(request: BrowserRequest): string {
@@ -399,7 +417,8 @@ export class BrowserAutomation {
   /** After a step that may change the page: what was done, and the page as it is now. */
   private async afterChange(tabId: string, done: string, settle = true): Promise<BrowserResult> {
     if (settle) await this.settle(this.options.host.contentsOf(tabId));
-    const tab = this.requireTab(tabId);
+    const tab = this.options.host.state().tabs.find((entry) => entry.id === tabId);
+    if (!tab) throw new Error(`There is no tab ${tabId}. Use tabs to list the open tabs.`);
     return { text: `${done}\n\n${await this.snapshot(tab)}` };
   }
 

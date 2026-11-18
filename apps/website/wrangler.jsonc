@@ -9,8 +9,9 @@
     "directory": "./dist",
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page",
-    // OAuth client metadata documents (worker/index.ts); every other path is a static asset.
-    "run_worker_first": ["/oauth/*"]
+    // OAuth client metadata documents and installer redirects (worker/index.ts); every other path
+    // is a static asset.
+    "run_worker_first": ["/oauth/*", "/download/*"]
   },
   "routes": [
     {

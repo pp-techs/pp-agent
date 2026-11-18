@@ -7,20 +7,23 @@ vi.mock("electron", () => ({}));
 
 const { BrowserAutomation, formatSnapshot, parseKey } = await import("./automation.ts");
 
-/** A browser with one tab, and an address check that calls only 10.0.0.1 private. */
-function fakeBrowser() {
-  const tab = {
-    id: "tab-1",
+/**
+ * A browser with the given tabs (default: one, of no conversation; the first is the active one),
+ * and an address check that calls only 10.0.0.1 private.
+ */
+function fakeBrowser(tabs: { id: string; session: string }[] = [{ id: "tab-1", session: "" }]) {
+  const all = tabs.map((tab) => ({
     profileId: "default",
     url: "https://example.com/",
     title: "Example",
     loading: false,
     canGoBack: false,
     canGoForward: false,
-  };
+    ...tab,
+  }));
   const host = {
-    state: () => ({ tabs: [tab], activeId: "tab-1" }),
-    open: vi.fn(async () => tab),
+    state: () => ({ tabs: all, activeId: all[0].id }),
+    open: vi.fn(async () => all[0]),
     close: vi.fn(),
     activate: vi.fn(),
     navigate: vi.fn(),
@@ -37,7 +40,6 @@ function fakeBrowser() {
     host: host as unknown as BrowserAutomationOptions["host"],
     isPrivate: async (url) => new URL(url).hostname === "10.0.0.1",
     profiles: async () => [{ id: "default", name: "Default" } as BrowserProfile],
-    reveal: () => {},
   });
   return { host, automation };
 }
@@ -62,6 +64,42 @@ describe("BrowserAutomation", () => {
     );
     expect(host.drive).toHaveBeenCalledWith("tab-1");
     expect(host.release).toHaveBeenCalledWith("tab-1");
+  });
+
+  it("sees and acts on the tabs of its own conversation only", async () => {
+    const { host, automation } = fakeBrowser([
+      { id: "tab-1", session: "/sessions/a.jsonl" },
+      { id: "tab-2", session: "/sessions/b.jsonl" },
+    ]);
+    const own = { session: "/sessions/b.jsonl" };
+    const listed = await automation.run({ action: "tabs", ...own });
+    expect(listed.text).toContain("tab-2");
+    expect(listed.text).not.toContain("tab-1");
+
+    await expect(automation.run({ action: "close", tab: "tab-1", ...own })).rejects.toThrow(
+      /no tab tab-1/,
+    );
+    expect(host.close).not.toHaveBeenCalled();
+
+    // Without `tab`, the conversation's own tab is the active one, though the browser's is another.
+    await expect(automation.run({ action: "eval", expression: "1", ...own })).rejects.toThrow(
+      "page crashed",
+    );
+    expect(host.drive).toHaveBeenCalledWith("tab-2");
+  });
+
+  it("opens a tab for the conversation that asks", async () => {
+    const { host, automation } = fakeBrowser();
+    // The page itself is not faked: the step fails when it reads it, after the tab was opened.
+    await automation
+      .run({ action: "open", url: "https://example.com/", session: "/sessions/a" })
+      .catch(() => undefined);
+    expect(host.open).toHaveBeenCalledWith(
+      "default",
+      "https://example.com/",
+      "agent",
+      "/sessions/a",
+    );
   });
 });
 
@@ -97,6 +135,7 @@ it("formats a snapshot with its tab, profile, page and a note when cut short", (
       loading: false,
       canGoBack: false,
       canGoForward: false,
+      session: "",
     },
     "Default",
     {

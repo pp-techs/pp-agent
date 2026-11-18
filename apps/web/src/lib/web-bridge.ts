@@ -612,7 +612,6 @@ export function createWebBridge(): DesktopBridge {
       go: desktopOnly,
       setBounds: () => undefined,
       onState: noop,
-      onReveal: noop,
       cookieSources: async () => [],
       cookieSourceRunning: async () => false,
       cookieSites: async () => [],

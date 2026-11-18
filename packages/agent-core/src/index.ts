@@ -2505,7 +2505,7 @@ export class AgentHost {
       createReadDocumentTool(cwd),
       createWebSearchTool(webSearch),
       createWebFetchTool(),
-      createBrowserTool(this.browser),
+      createBrowserTool(this.browser, () => sessionManager.getSessionFile()),
       createComputerTool(this.computer, this.computerAppNames),
       ...createOfficeTools({
         workspaceDir: cwd,

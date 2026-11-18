@@ -3,16 +3,16 @@ import { create } from "zustand";
 /** What a tab of the main area shows. The content itself lives elsewhere (see below). */
 export type CenterTab =
   | { kind: "chat" }
-  | { kind: "file"; path: string }
+  | { kind: "file"; root: string; path: string }
   | { kind: "terminal"; id: string }
   | { kind: "browser"; id: string };
 
 export const CHAT_TAB: CenterTab = { kind: "chat" };
 
-/** The key of the main area of a conversation without a workspace folder: it holds browser tabs only. */
-export const NO_WORKSPACE = "";
+/** The key of a conversation without a session file (a temporary one, or one not yet known). */
+export const NO_SESSION = "";
 
-/** A tab's identity within a workspace's main area. */
+/** A tab's identity within a conversation's main area. */
 export function tabKey(tab: CenterTab): string {
   switch (tab.kind) {
     case "chat":
@@ -34,10 +34,10 @@ export interface TabGroup {
 }
 
 /**
- * The main area of one workspace: the chat, plus the files, terminals and browser tabs the person
- * moved here from the side panel, in one or two side-by-side groups. The chat is always the first
- * tab of the first group. The tabs only point at their content: files are paths in the workspace,
- * terminals and browser tabs live in the main process.
+ * The main area of one conversation (keyed by its session file): the chat, plus the files,
+ * terminals and browser tabs that open there, in one or two side-by-side groups. The chat is always
+ * the first tab of the first group. The tabs only point at their content: files are paths in the
+ * workspace, terminals and browser tabs live in the main process, which also tells whose they are.
  */
 export interface Workbench {
   groups: TabGroup[];
@@ -49,7 +49,7 @@ export interface Workbench {
 
 export const SPLIT = { min: 0.2, max: 0.8, default: 0.5 } as const;
 
-/** What a workspace without a main-area layout has: the chat alone. */
+/** What a conversation without a main-area layout has: the chat alone. */
 export const SOLO: Workbench = {
   groups: [{ tabs: [CHAT_TAB], active: "chat" }],
   focused: 0,
@@ -57,26 +57,27 @@ export const SOLO: Workbench = {
 };
 
 interface WorkbenchState {
-  byRoot: Record<string, Workbench>;
+  bySession: Record<string, Workbench>;
   /**
    * Adds a tab to the focused group and shows it, or shows it where it already is (`activate`
-   * false adds it behind the tab showing, and leaves a tab already there alone). A browser tab
-   * belongs to one workspace at a time, so it leaves the others.
+   * false adds it behind the tab showing, and leaves a tab already there alone).
    */
-  add: (root: string, tab: CenterTab, activate?: boolean) => void;
+  add: (session: string, tab: CenterTab, activate?: boolean) => void;
   /** Removes a tab from the main area; the chat stays. */
-  close: (root: string, key: string) => void;
-  activate: (root: string, group: number, key: string) => void;
-  focus: (root: string, group: number) => void;
+  close: (session: string, key: string) => void;
+  activate: (session: string, group: number, key: string) => void;
+  focus: (session: string, group: number) => void;
   /** Moves a tab to the other group, opening the second one if there is none. */
-  moveToOther: (root: string, key: string) => void;
-  setSplit: (root: string, split: number) => void;
-  /** A file or folder was renamed: its tabs follow it. */
+  moveToOther: (session: string, key: string) => void;
+  setSplit: (session: string, split: number) => void;
+  /** The conversation is gone: so is its main area. */
+  forgetSession: (session: string) => void;
+  /** A file or folder of a workspace was renamed: its tabs, in every conversation, follow it. */
   renameFile: (root: string, from: string, to: string) => void;
-  /** A file or folder is gone: its tabs close (those of the files inside, for a folder). */
+  /** A file or folder of a workspace is gone: its tabs close (those of the files inside, for a folder). */
   forgetFile: (root: string, path: string) => void;
   /** Drops tabs whose terminal or browser tab no longer exists. */
-  prune: (root: string, keep: (tab: CenterTab) => boolean) => void;
+  prune: (session: string, keep: (tab: CenterTab) => boolean) => void;
 }
 
 export function clampSplit(split: number): number {
@@ -126,23 +127,28 @@ function withTab(
   return { ...bench, groups, focused: activate ? groupIndex : bench.focused };
 }
 
-export const useWorkbenchStore = create<WorkbenchState>()((set, get) => {
-  const update = (root: string, change: (bench: Workbench) => Workbench) =>
+export const useWorkbenchStore = create<WorkbenchState>()((set) => {
+  const update = (session: string, change: (bench: Workbench) => Workbench) =>
     set((state) => {
-      const current = state.byRoot[root] ?? SOLO;
+      const current = state.bySession[session] ?? SOLO;
       const next = change(current);
-      return next === current ? state : { byRoot: { ...state.byRoot, [root]: next } };
+      return next === current ? state : { bySession: { ...state.bySession, [session]: next } };
+    });
+  /** Applies a change to the main area of every conversation (the files of a workspace are in many). */
+  const updateAll = (change: (bench: Workbench) => Workbench) =>
+    set((state) => {
+      const entries = Object.entries(state.bySession).map(
+        ([session, bench]) => [session, change(bench)] as const,
+      );
+      return entries.some(([session, bench]) => bench !== state.bySession[session])
+        ? { bySession: Object.fromEntries(entries) }
+        : state;
     });
   return {
-    byRoot: {},
-    add: (root, tab, activate = true) => {
+    bySession: {},
+    add: (session, tab, activate = true) => {
       const key = tabKey(tab);
-      if (tab.kind === "browser") {
-        for (const other of Object.keys(get().byRoot)) {
-          if (other !== root) update(other, (bench) => withoutTab(bench, key));
-        }
-      }
-      update(root, (bench) => {
+      update(session, (bench) => {
         const found = locate(bench, key);
         if (found) {
           if (!activate) return bench;
@@ -154,78 +160,68 @@ export const useWorkbenchStore = create<WorkbenchState>()((set, get) => {
         return withTab(bench, tab, bench.focused, activate);
       });
     },
-    close: (root, key) => update(root, (bench) => withoutTab(bench, key)),
-    activate: (root, group, key) =>
-      update(root, (bench) => ({
+    close: (session, key) => update(session, (bench) => withoutTab(bench, key)),
+    activate: (session, group, key) =>
+      update(session, (bench) => ({
         ...bench,
         groups: bench.groups.map((item, index) =>
           index === group ? { ...item, active: key } : item,
         ),
         focused: group,
       })),
-    focus: (root, group) =>
-      update(root, (bench) => (bench.focused === group ? bench : { ...bench, focused: group })),
-    moveToOther: (root, key) =>
-      update(root, (bench) => {
+    focus: (session, group) =>
+      update(session, (bench) => (bench.focused === group ? bench : { ...bench, focused: group })),
+    moveToOther: (session, key) =>
+      update(session, (bench) => {
         const found = locate(bench, key);
         const tab = found && bench.groups[found.group].tabs[found.index];
         if (!found || !tab || key === "chat") return bench;
         const target = found.group === 0 ? 1 : 0;
         return withTab(withoutTab(bench, key), tab, target, true);
       }),
-    setSplit: (root, split) => update(root, (bench) => ({ ...bench, split: clampSplit(split) })),
+    setSplit: (session, split) =>
+      update(session, (bench) => ({ ...bench, split: clampSplit(split) })),
+    forgetSession: (session) =>
+      set((state) => {
+        if (!(session in state.bySession)) return state;
+        const { [session]: _gone, ...rest } = state.bySession;
+        return { bySession: rest };
+      }),
     renameFile: (root, from, to) =>
-      update(root, (bench) => {
-        const remap = (path: string) =>
-          path === from || path.startsWith(`${from}/`) ? to + path.slice(from.length) : path;
+      updateAll((bench) => {
+        const remap = (tab: CenterTab): CenterTab =>
+          tab.kind === "file" &&
+          tab.root === root &&
+          (tab.path === from || tab.path.startsWith(`${from}/`))
+            ? { ...tab, path: to + tab.path.slice(from.length) }
+            : tab;
+        if (!bench.groups.some((group) => group.tabs.some((tab) => remap(tab) !== tab))) {
+          return bench;
+        }
         return {
           ...bench,
           groups: bench.groups.map((group) => {
-            const tabs = group.tabs.map((tab) =>
-              tab.kind === "file" ? { ...tab, path: remap(tab.path) } : tab,
-            );
-            const active = group.active.startsWith("file:")
-              ? tabKey({ kind: "file", path: remap(group.active.slice(5)) })
-              : group.active;
-            return { tabs, active };
+            const tabs = group.tabs.map(remap);
+            const showing = group.tabs.findIndex((tab) => tabKey(tab) === group.active);
+            return { tabs, active: showing >= 0 ? tabKey(tabs[showing]) : group.active };
           }),
         };
       }),
     forgetFile: (root, path) =>
-      update(root, (bench) => {
+      updateAll((bench) => {
         const gone = (tab: CenterTab) =>
-          tab.kind === "file" && (tab.path === path || tab.path.startsWith(`${path}/`));
+          tab.kind === "file" &&
+          tab.root === root &&
+          (tab.path === path || tab.path.startsWith(`${path}/`));
         return bench.groups
           .flatMap((group) => group.tabs.filter(gone))
           .reduce((next, tab) => withoutTab(next, tabKey(tab)), bench);
       }),
-    prune: (root, keep) =>
-      update(root, (bench) =>
+    prune: (session, keep) =>
+      update(session, (bench) =>
         bench.groups
           .flatMap((group) => group.tabs.filter((tab) => tab.kind !== "chat" && !keep(tab)))
           .reduce((next, tab) => withoutTab(next, tabKey(tab)), bench),
       ),
   };
 });
-
-/** Ids of the tabs of one kind the main area of any workspace shows. */
-export function hostedIds(
-  byRoot: Record<string, Workbench>,
-  kind: "terminal" | "browser",
-): Set<string> {
-  const ids = new Set<string>();
-  for (const bench of Object.values(byRoot)) {
-    for (const group of bench.groups) {
-      for (const tab of group.tabs) if (tab.kind === kind) ids.add(tab.id);
-    }
-  }
-  return ids;
-}
-
-/** The workspace whose main area shows a browser tab. */
-export function browserHost(byRoot: Record<string, Workbench>, id: string): string | null {
-  for (const [root, bench] of Object.entries(byRoot)) {
-    if (locate(bench, `browser:${id}`)) return root;
-  }
-  return null;
-}

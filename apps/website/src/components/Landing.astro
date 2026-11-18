@@ -16,6 +16,7 @@ const t = landing[lang];
 
 const site = 'https://ppagent.monback.app';
 const releases = 'https://github.com/pp-techs/pp-agent/releases/latest';
+const installer = (platform: string) => `/download/${platform}/`;
 const repository = 'https://github.com/pp-techs/pp-agent';
 const canonical = lang === 'vi' ? `${site}/vi/` : `${site}/`;
 const homeHref = lang === 'vi' ? '/vi/' : '/';
@@ -120,7 +121,7 @@ const jsonLd = {
             <span class="sun"><Icon name="sun" size={18} /></span>
             <span class="moon"><Icon name="moon" size={18} /></span>
           </button>
-          <a class="button small" href={releases}>{t.nav.download}</a>
+          <a class="button small" href={releases} data-download>{t.nav.download}</a>
         </div>
       </div>
     </header>
@@ -132,7 +133,7 @@ const jsonLd = {
           <h1>{t.hero.title} <span class="accent">{t.hero.accent}</span>{t.hero.tail}</h1>
           <p class="lede">{t.hero.lede}</p>
           <div class="cta-row">
-            <a class="button" href={releases}>
+            <a class="button" href={releases} data-download>
               <Icon name="download" size={18} /> {t.hero.download}
             </a>
             <a class="button secondary" href={docsBase}>
@@ -268,17 +269,17 @@ const jsonLd = {
               <tr><th>{t.install.system}</th><th>{t.install.file}</th></tr>
             </thead>
             <tbody>
-              <tr><td>{t.install.systems[0]}</td><td><code>pp-agent-&lt;version&gt;-mac-arm64.dmg</code></td></tr>
-              <tr><td>{t.install.systems[1]}</td><td><code>pp-agent-&lt;version&gt;-mac-x64.dmg</code></td></tr>
-              <tr><td>{t.install.systems[2]}</td><td><code>pp-agent-&lt;version&gt;-win-x64.exe</code></td></tr>
-              <tr><td>{t.install.systems[3]}</td><td><code>pp-agent-&lt;version&gt;-linux-x86_64.AppImage</code> or <code>…-amd64.deb</code></td></tr>
+              <tr><td>{t.install.systems[0]}</td><td><a href={installer('mac-arm64')}><code>pp-agent-&lt;version&gt;-mac-arm64.dmg</code></a></td></tr>
+              <tr><td>{t.install.systems[1]}</td><td><a href={installer('mac-x64')}><code>pp-agent-&lt;version&gt;-mac-x64.dmg</code></a></td></tr>
+              <tr><td>{t.install.systems[2]}</td><td><a href={installer('win')}><code>pp-agent-&lt;version&gt;-win-x64.exe</code></a></td></tr>
+              <tr><td>{t.install.systems[3]}</td><td><a href={installer('linux')}><code>pp-agent-&lt;version&gt;-linux-x86_64.AppImage</code></a> or <a href={installer('linux-deb')}><code>…-amd64.deb</code></a></td></tr>
             </tbody>
           </table>
 
           <p class="note">{t.install.note}</p>
 
           <div class="cta-row" style="justify-content: flex-start; margin-block-start: 26px;">
-            <a class="button" href={releases}><Icon name="download" size={18} /> {t.install.releases}</a>
+            <a class="button" href={releases} data-download><Icon name="download" size={18} /> {t.install.releases}</a>
             <a class="button secondary" href={`${docsBase}install/`}>{t.install.guide}</a>
           </div>
         </div>
@@ -289,7 +290,7 @@ const jsonLd = {
           <h2>{t.final.title}</h2>
           <p>{t.final.body}</p>
           <div class="cta-row">
-            <a class="button" href={releases}><Icon name="download" size={18} /> {t.final.download}</a>
+            <a class="button" href={releases} data-download><Icon name="download" size={18} /> {t.final.download}</a>
             <a class="button secondary" href={docsBase}>{t.final.docs} <Icon name="arrow-right" size={17} /></a>
           </div>
         </div>
@@ -340,6 +341,33 @@ const jsonLd = {
     </footer>
 
     <script is:inline>
+      // Point the download buttons at the installer for this computer. Without JavaScript, or when the
+      // computer is not recognised, they keep linking to the latest release page.
+      (async () => {
+        const ua = navigator.userAgent;
+        if (/Android|iPhone|iPad|iPod|CrOS/.test(ua)) return;
+        let platform;
+        if (/Windows/.test(ua)) platform = 'win';
+        else if (/Macintosh|Mac OS X/.test(ua)) {
+          // Only Chromium reports the chip; elsewhere the buttons lead to the table to choose.
+          const hints = await navigator.userAgentData
+            ?.getHighEntropyValues(['architecture'])
+            .catch(() => undefined);
+          if (hints?.architecture === 'arm') platform = 'mac-arm64';
+          else if (hints?.architecture === 'x86') platform = 'mac-x64';
+          else {
+            for (const link of document.querySelectorAll('a[data-download]')) {
+              if (!link.closest('#install')) link.href = '#install';
+            }
+            return;
+          }
+        } else if (/Linux/.test(ua)) platform = 'linux';
+        else return;
+        for (const link of document.querySelectorAll('a[data-download]')) {
+          link.href = `/download/${platform}/`;
+        }
+      })();
+
       const toggle = document.querySelector('.theme-toggle');
       toggle?.addEventListener('click', () => {
         const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';

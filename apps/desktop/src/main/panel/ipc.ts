@@ -113,7 +113,6 @@ export function createSidePanel(options: SidePanelOptions) {
   const automation = new BrowserAutomation({
     host: browser,
     profiles,
-    reveal: (tabId) => send(IPC.browserReveal, tabId),
   });
 
   function requireWorkspace(root: unknown): string {
@@ -143,8 +142,12 @@ export function createSidePanel(options: SidePanelOptions) {
   }
 
   ipc.handle(IPC.terminalList, () => terminals.list());
-  ipc.handle(IPC.terminalCreate, (_event, cwd: unknown, size: unknown) =>
-    terminals.create(requireWorkspace(cwd), isSize(size) ? size : { cols: 80, rows: 24 }),
+  ipc.handle(IPC.terminalCreate, (_event, cwd: unknown, size: unknown, session: unknown) =>
+    terminals.create(
+      requireWorkspace(cwd),
+      isSize(size) ? size : { cols: 80, rows: 24 },
+      isString(session) ? session : "",
+    ),
   );
   ipc.handle(IPC.terminalBacklog, (_event, id: unknown) =>
     terminals.backlog(isString(id) ? id : ""),
@@ -196,8 +199,13 @@ export function createSidePanel(options: SidePanelOptions) {
 
   ipc.handle(IPC.browserState, () => browser.state());
   // `open` checks the profile itself, as any future caller of the driver must.
-  ipc.handle(IPC.browserOpen, (_event, profileId: unknown, url: unknown) =>
-    browser.open(isString(profileId) ? profileId : "", isString(url) ? url : undefined, "person"),
+  ipc.handle(IPC.browserOpen, (_event, profileId: unknown, session: unknown, url: unknown) =>
+    browser.open(
+      isString(profileId) ? profileId : "",
+      isString(url) ? url : undefined,
+      "person",
+      isString(session) ? session : "",
+    ),
   );
   ipc.handle(IPC.browserClose, (_event, id: unknown) => browser.close(isString(id) ? id : ""));
   ipc.handle(IPC.browserActivate, (_event, id: unknown) =>

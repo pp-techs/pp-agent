@@ -29,14 +29,14 @@ import { PanelTab, PanelTabs } from "@/components/panel/panel-tabs";
 import { OpenFolderButton, SidePanelButton } from "@/components/workbench/workspace-buttons";
 import { isWebApp } from "@/lib/bridge";
 import { useBrowserState, useTerminals, useWorkspaceWatch } from "@/hooks/use-panel-state";
+import { useSessionCleanup } from "@/hooks/use-session-cleanup";
 import { tabLabel } from "@/lib/browser-tabs";
 import { closeMainTab, closingTabs, newBrowserTab, newTerminal } from "@/lib/workbench-actions";
 import { useChatStore } from "@/stores/chat-store";
 import { usePanelStore } from "@/stores/panel-store";
 import {
   type CenterTab,
-  hostedIds,
-  NO_WORKSPACE,
+  NO_SESSION,
   SOLO,
   SPLIT,
   tabKey,
@@ -60,7 +60,15 @@ function FileWatch({ bridge, root }: { bridge: DesktopBridge; root: string }) {
  * The "+" of a tab row: a new browser tab, or (in a workspace) a new terminal or the file tree in
  * the side panel.
  */
-function NewTabMenu({ bridge, folder }: { bridge: DesktopBridge; folder: string | null }) {
+function NewTabMenu({
+  bridge,
+  session,
+  folder,
+}: {
+  bridge: DesktopBridge;
+  session: string;
+  folder: string | null;
+}) {
   const { t } = useTranslation("chat");
   return (
     <DropdownMenu>
@@ -78,14 +86,14 @@ function NewTabMenu({ bridge, folder }: { bridge: DesktopBridge; folder: string 
       </Tooltip>
       <DropdownMenuContent align="end" className="w-56">
         {folder && !isWebApp && (
-          <DropdownMenuItem onClick={() => void newTerminal(bridge, folder)}>
+          <DropdownMenuItem onClick={() => void newTerminal(bridge, session, folder)}>
             <SquareTerminalIcon />
             {t("panel.terminal.new")}
           </DropdownMenuItem>
         )}
         {!isWebApp && (
           <DropdownMenuItem
-            onClick={() => void newBrowserTab(bridge, folder, DEFAULT_BROWSER_PROFILE_ID)}
+            onClick={() => void newBrowserTab(bridge, session, DEFAULT_BROWSER_PROFILE_ID)}
           >
             <GlobeIcon />
             {t("panel.browser.newTab")}
@@ -199,7 +207,7 @@ function GroupStrip({
             );
           })}
       </PanelTabs>
-      <NewTabMenu bridge={bridge} folder={folder} />
+      <NewTabMenu bridge={bridge} session={scope} folder={folder} />
       <Tooltip>
         <TooltipTrigger
           render={
@@ -286,7 +294,7 @@ function GroupView({
             <TabContent
               key={tabKey(tab)}
               bridge={bridge}
-              root={scope}
+              session={scope}
               tab={tab}
               terminals={terminals}
               browser={browser}
@@ -355,13 +363,14 @@ function Divider({
 
 /**
  * The main area of the window: the chat, and beside it (as tabs, in one or two groups) the files,
- * terminals and browser tabs that open there. Each workspace keeps its own layout. With nothing
+ * terminals and browser tabs that open there. Each conversation keeps its own layout and tabs. With nothing
  * open, the tab row holds the pinned chat tab and the "+".
  */
 export function Workbench({ bridge, chat }: { bridge: DesktopBridge; chat: React.ReactNode }) {
   const folder = useChatStore((state) => state.workspaceDir);
-  const scope = folder ?? NO_WORKSPACE;
-  const bench = useWorkbenchStore((state) => state.byRoot[scope]) ?? SOLO;
+  const scope = useChatStore((state) => state.sessionPath) ?? NO_SESSION;
+  const bench = useWorkbenchStore((state) => state.bySession[scope]) ?? SOLO;
+  useSessionCleanup(bridge);
   const terminals = useTerminals(bridge);
   const browser = useBrowserState(bridge);
   const container = React.useRef<HTMLDivElement>(null);
@@ -372,8 +381,8 @@ export function Workbench({ bridge, chat }: { bridge: DesktopBridge; chat: React
   // Keeps the main area and the main process in step:
   // - a closed terminal or browser tab leaves it (only ids seen before count as closed, as a tab
   //   just opened may not have reached these lists yet);
-  // - a browser tab nobody shows (a link that opened a new tab, or one left from before the window
-  //   reloaded) opens as a tab, and so does a terminal of this workspace.
+  // - a terminal or browser tab of this conversation that the main area does not show (one the
+  //   agent opened, or one left from before the window reloaded) opens as a tab.
   const seen = React.useRef(new Set<string>());
   React.useEffect(() => {
     if (!terminals || !browser) return;
@@ -387,23 +396,26 @@ export function Workbench({ bridge, chat }: { bridge: DesktopBridge; chat: React
       scope,
       (tab) => tab.kind === "file" || alive.has(tabKey(tab)) || !seen.current.has(tabKey(tab)),
     );
-    const shownBrowsers = hostedIds(store.byRoot, "browser");
+    const shown = new Set(
+      (useWorkbenchStore.getState().bySession[scope] ?? SOLO).groups.flatMap((group) =>
+        group.tabs.map(tabKey),
+      ),
+    );
     for (const page of browser.tabs) {
-      if (!shownBrowsers.has(page.id) && !closingTabs.has(page.id)) {
+      if (page.session === scope && !shown.has(`browser:${page.id}`) && !closingTabs.has(page.id)) {
         store.add(scope, { kind: "browser", id: page.id });
       }
     }
-    const shownTerminals = hostedIds(store.byRoot, "terminal");
     for (const terminal of terminals) {
       if (
-        terminal.cwd === folder &&
-        !shownTerminals.has(terminal.id) &&
+        terminal.session === scope &&
+        !shown.has(`terminal:${terminal.id}`) &&
         !closingTabs.has(terminal.id)
       ) {
         store.add(scope, { kind: "terminal", id: terminal.id }, false);
       }
     }
-  }, [scope, folder, terminals, browser]);
+  }, [scope, terminals, browser]);
 
   const hasFiles = bench.groups.some((group) => group.tabs.some((tab) => tab.kind === "file"));
   const resizing = dragging || panelResizing;

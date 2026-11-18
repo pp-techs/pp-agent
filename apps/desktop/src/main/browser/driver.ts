@@ -15,7 +15,12 @@ export type NavigationSource = "person" | "agent";
  */
 export interface BrowserDriver {
   state(): BrowserState;
-  open(profileId: string, url: string | undefined, by: NavigationSource): Promise<BrowserTab>;
+  open(
+    profileId: string,
+    url: string | undefined,
+    by: NavigationSource,
+    session: string,
+  ): Promise<BrowserTab>;
   close(tabId: string): Promise<void>;
   navigate(tabId: string, input: string, by: NavigationSource): Promise<void>;
   go(tabId: string, action: BrowserAction): Promise<void>;

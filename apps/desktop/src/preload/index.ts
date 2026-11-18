@@ -91,7 +91,7 @@ const bridge: DesktopBridge = {
   },
   terminal: {
     list: () => invoke(IPC.terminalList),
-    create: (cwd, size) => invoke(IPC.terminalCreate, cwd, size),
+    create: (cwd, size, session) => invoke(IPC.terminalCreate, cwd, size, session),
     backlog: (id) => invoke(IPC.terminalBacklog, id),
     ack: (id, chars) => ipcRenderer.send(IPC.terminalAck, id, chars),
     detach: (id) => ipcRenderer.send(IPC.terminalDetach, id),
@@ -115,14 +115,13 @@ const bridge: DesktopBridge = {
   },
   browser: {
     state: () => invoke(IPC.browserState),
-    open: (profileId, url) => invoke(IPC.browserOpen, profileId, url),
+    open: (profileId, session, url) => invoke(IPC.browserOpen, profileId, session, url),
     close: (id) => invoke(IPC.browserClose, id),
     activate: (id) => invoke(IPC.browserActivate, id),
     navigate: (id, input) => invoke(IPC.browserNavigate, id, input),
     go: (id, action) => invoke(IPC.browserGo, id, action),
     setBounds: (id, bounds) => ipcRenderer.send(IPC.browserSetBounds, id, bounds),
     onState: (listener) => subscribe<[BrowserState]>(IPC.browserChanged, listener),
-    onReveal: (listener) => subscribe<[string]>(IPC.browserReveal, listener),
     cookieSources: () => invoke(IPC.browserCookieSources),
     cookieSourceRunning: (browser) => invoke(IPC.browserCookieSourceRunning, browser),
     cookieSites: (browser, sourceProfile, quitSource) =>
