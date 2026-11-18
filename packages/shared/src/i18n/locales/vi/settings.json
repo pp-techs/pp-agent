@@ -603,6 +603,8 @@
       "noSites": "Hồ sơ trình duyệt này không có cookie nào.",
       "filterSites": "Tìm trang web",
       "siteCookies_other": "{{count}} cookie",
+      "selectAll": "Chọn tất cả ({{count}})",
+      "selectAllMatching": "Chọn tất cả kết quả tìm thấy ({{count}})",
       "moreSites_other": "Còn {{count}} trang web nữa; hãy gõ để tìm.",
       "sitesChosen_other": "Đã chọn {{count}} trang web",
       "submit": "Nhập",

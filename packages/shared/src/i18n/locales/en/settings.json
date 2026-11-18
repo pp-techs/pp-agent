@@ -612,6 +612,8 @@
       "filterSites": "Find a site",
       "siteCookies_one": "{{count}} cookie",
       "siteCookies_other": "{{count}} cookies",
+      "selectAll": "Select all ({{count}})",
+      "selectAllMatching": "Select all matching ({{count}})",
       "moreSites_one": "{{count}} more site; type to find it.",
       "moreSites_other": "{{count}} more sites; type to find them.",
       "sitesChosen_one": "{{count}} site chosen",

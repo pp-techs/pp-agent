@@ -103,6 +103,22 @@ function ImportForm({ bridge, profile, onDone }: ImportCookiesModalProps & { onD
     });
   }
 
+  const allMatchingChosen =
+    matching.length > 0 && matching.every((entry) => chosen.has(entry.site));
+  const someMatchingChosen = matching.some((entry) => chosen.has(entry.site));
+
+  /** Adds or removes every site the filter matches, not only the ones currently shown. */
+  function toggleAll(checked: boolean) {
+    setChosen((current) => {
+      const next = new Set(current);
+      for (const entry of matching) {
+        if (checked) next.add(entry.site);
+        else next.delete(entry.site);
+      }
+      return next;
+    });
+  }
+
   function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!source || !chosenProfile) return;
@@ -170,6 +186,20 @@ function ImportForm({ bridge, profile, onDone }: ImportCookiesModalProps & { onD
               placeholder={t("browserSection.import.filterSites")}
               aria-label={t("browserSection.import.filterSites")}
             />
+            <Field orientation="horizontal" className="gap-2.5">
+              <Checkbox
+                id="cookie-site-all"
+                checked={allMatchingChosen}
+                indeterminate={!allMatchingChosen && someMatchingChosen}
+                disabled={matching.length === 0}
+                onCheckedChange={toggleAll}
+              />
+              <FieldLabel htmlFor="cookie-site-all" className="text-sm font-medium">
+                {needle
+                  ? t("browserSection.import.selectAllMatching", { count: matching.length })
+                  : t("browserSection.import.selectAll", { count: matching.length })}
+              </FieldLabel>
+            </Field>
             <div className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
               {shown.map((entry) => {
                 const checkboxId = `cookie-site-${entry.site}`;
