@@ -1,5 +1,11 @@
 # @workspace/web
 
+## 0.35.5
+
+### Patch Changes
+
+- 0736c02: Importing cookies: a **Select all** checkbox picks every site at once (or every site matching the search), so you no longer tick them one by one
+
 ## 0.35.4
 
 ### Patch Changes

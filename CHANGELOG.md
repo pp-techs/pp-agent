@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.35.5] — 2026-11-18
+
+Importing cookies: a **Select all** checkbox picks every site at once (or every site matching the search), so you no longer tick them one by one
+
 ## [0.35.4] — 2026-11-17
 
 Make the chat outline marks more compact, with less vertical space between them
