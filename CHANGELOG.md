@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.35.6] — 2026-11-18
+
+Terminals, browser tabs and file tabs now belong to the conversation that opened them, not to the whole workspace: switching conversations shows that conversation's own tabs, and the agent's browser tool sees and uses only its own conversation's tabs. Deleting a conversation closes its terminals and browser tabs
+
 ## [0.35.5] — 2026-11-18
 
 Importing cookies: a **Select all** checkbox picks every site at once (or every site matching the search), so you no longer tick them one by one
