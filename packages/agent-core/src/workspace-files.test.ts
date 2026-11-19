@@ -99,4 +99,9 @@ describe("searchWorkspaceFiles", () => {
     const found = await searchWorkspaceFiles(root, "md", [join(root, "data")]);
     expect(found.map((entry) => entry.path)).toEqual(["a.md", "b.md", "docs/guide.md"]);
   });
+
+  it("refuses a workspace that is, or lies inside, a denied folder", async () => {
+    await expect(searchWorkspaceFiles(root, "md", [root])).rejects.toThrow();
+    await expect(searchWorkspaceFiles(join(root, "docs"), "md", [root])).rejects.toThrow();
+  });
 });

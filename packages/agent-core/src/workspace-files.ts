@@ -116,21 +116,27 @@ export async function searchWorkspaceFiles(
   const deniedRoots = await Promise.all(
     denied.map((folder) => realpath(folder).catch(() => folder)),
   );
+  if (deniedRoots.some((denied) => isInside(denied, realRoot)))
+    throw new Error(t("panel.files.outsideWorkspace"));
   const found: { path: string; name: string; inName: boolean }[] = [];
   const folders = [""];
   let visited = 0;
   for (let next = 0; next < folders.length && visited < MAX_VISITED; next++) {
     const dir = folders[next];
-    const children = await readdir(join(realRoot, dir), { withFileTypes: true }).catch(() => []);
+    // A folder swapped for a link since it was listed is not entered.
+    const folder = join(realRoot, dir);
+    if ((await realpath(folder).catch(() => null)) !== folder) continue;
+    const children = await readdir(folder, { withFileTypes: true }).catch(() => []);
     for (const child of children) {
+      if (visited >= MAX_VISITED) break;
       if (HIDDEN.has(child.name)) continue;
       visited++;
       const path = dir ? `${dir}/${child.name}` : child.name;
       if (child.isDirectory()) {
-        const folder = join(realRoot, path);
+        const subfolder = join(realRoot, path);
         if (
           !SEARCH_SKIPPED.has(child.name) &&
-          !deniedRoots.some((denied) => isInside(denied, folder))
+          !deniedRoots.some((denied) => isInside(denied, subfolder))
         )
           folders.push(path);
       } else if (child.isFile()) {

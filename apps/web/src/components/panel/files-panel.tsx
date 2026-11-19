@@ -566,6 +566,7 @@ function FolderTree({ bridge, root }: { bridge: DesktopBridge; root: string }) {
   const toggleFolder = useFileTreeStore((state) => state.toggleFolder);
   const commands = useWorkspaceFileCommands(bridge, root);
   const [editing, setEditing] = React.useState<Editing | null>(null);
+  const [search, setSearch] = React.useState("");
 
   const { mutate: removeEntry } = commands.remove;
   const row = React.useMemo<RowActions>(
@@ -578,6 +579,8 @@ function FolderTree({ bridge, root }: { bridge: DesktopBridge; root: string }) {
         // The new row appears inside the folder, so it has to be open.
         const open = useFileTreeStore.getState().expanded[root]?.includes(dir) ?? false;
         if (dir !== "" && !open) toggleFolder(root, dir);
+        // The name field is a row of the tree, so a search in its place gives way to the tree.
+        setSearch("");
         setEditing({ kind: "new", entry, dir });
       },
       onStartRename: (path) => setEditing({ kind: "rename", path }),
@@ -608,7 +611,6 @@ function FolderTree({ bridge, root }: { bridge: DesktopBridge; root: string }) {
   const refresh = () =>
     void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFiles(root) });
   // The tree shows at once when the field is emptied; a search waits for a pause in the typing.
-  const [search, setSearch] = React.useState("");
   const query = useDebouncedValue(search.trim(), 200);
 
   return (

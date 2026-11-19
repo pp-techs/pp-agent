@@ -119,8 +119,12 @@ export async function searchEntries(root: string, query: string): Promise<Worksp
   let visited = 0;
   for (let next = 0; next < folders.length && visited < MAX_VISITED; next++) {
     const dir = folders[next];
-    const children = await readdir(join(realRoot, dir), { withFileTypes: true }).catch(() => []);
+    // A folder swapped for a link since it was listed is not entered.
+    const folder = join(realRoot, dir);
+    if ((await realpath(folder).catch(() => null)) !== folder) continue;
+    const children = await readdir(folder, { withFileTypes: true }).catch(() => []);
     for (const child of children) {
+      if (visited >= MAX_VISITED) break;
       if (HIDDEN.has(child.name)) continue;
       visited++;
       const path = dir ? `${dir}/${child.name}` : child.name;
