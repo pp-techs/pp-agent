@@ -1,5 +1,14 @@
 # @workspace/desktop
 
+## 0.36.1
+
+### Patch Changes
+
+- a07b0a4: Importing cookies from Chrome, Edge or Brave on Windows now reports an error when the browser protects them with a key only it can unwrap (app-bound encryption) and reading them through the browser itself fails, instead of silently finishing with 0 cookies imported.
+- 29babdb: A skill the agent creates (for example with skill-creator) now goes into the workspace's `.agents/skills` and can be used from your next message, `/` menu included, without restarting the chat. The Personal workspace now always loads the skills in its `.agents/skills`; other workspaces still need "Use the skills this folder carries" turned on.
+- a07b0a4: The checklist panel now opens by default only while work remains and collapses once every item is done, including right after opening or switching to a session whose checklist was already finished.
+- a07b0a4: An update now downloads in the background as soon as it's found, instead of waiting for a click, on Windows and Developer ID signed macOS builds. The download still waits for a restart to install.
+
 ## 0.36.0
 
 ### Minor Changes
