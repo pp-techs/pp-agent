@@ -7,8 +7,8 @@ import { proof } from "@workspace/daemon/auth";
 import { encodeFrame, FrameDecoder } from "@workspace/daemon/framing";
 import { resolveDaemonPaths } from "@workspace/daemon/paths";
 import { DAEMON_PROTOCOL, type ClientFrame } from "@workspace/shared";
-import { afterEach, expect, it, vi } from "vite-plus/test";
-import { DaemonClient } from "./daemon-client.ts";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { DaemonClient, retryWhileLocked } from "./daemon-client.ts";
 
 vi.mock("electron", () => ({ app: { getPath: () => "/tmp" } }));
 vi.mock("./i18n.ts", () => ({ translator: () => (key: string) => key }));
@@ -144,4 +144,39 @@ it("stops even a login-service daemon before an update, telling it to leave the 
   await client.stopForUpdate(2_000);
   expect(received).toContainEqual({ kind: "shutdown", forUpdate: true });
   client.dispose();
+});
+
+describe("retryWhileLocked", () => {
+  function lockedError(code: "EBUSY" | "EPERM" | "EACCES"): NodeJS.ErrnoException {
+    const error = new Error(code) as NodeJS.ErrnoException;
+    error.code = code;
+    return error;
+  }
+
+  it("retries while the file is locked and returns once it opens", async () => {
+    let attempts = 0;
+    const open = vi.fn(() => {
+      attempts += 1;
+      if (attempts < 3) throw lockedError("EBUSY");
+      return 42;
+    });
+    await expect(retryWhileLocked(open, 2_000, 1)).resolves.toBe(42);
+    expect(open).toHaveBeenCalledTimes(3);
+  });
+
+  it("gives up once the timeout passes and throws the lock error", async () => {
+    const open = vi.fn(() => {
+      throw lockedError("EPERM");
+    });
+    await expect(retryWhileLocked(open, 20, 5)).rejects.toMatchObject({ code: "EPERM" });
+    expect(open.mock.calls.length).toBeGreaterThan(0);
+  });
+
+  it("does not retry an error that is not a file lock", async () => {
+    const open = vi.fn(() => {
+      throw new Error("boom");
+    });
+    await expect(retryWhileLocked(open, 2_000, 1)).rejects.toThrow("boom");
+    expect(open).toHaveBeenCalledOnce();
+  });
 });

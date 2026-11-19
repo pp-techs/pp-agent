@@ -34,6 +34,8 @@ const STOP_FOR_UPDATE_MS = 10_000;
 const COMMAND_WAIT_MS = 20_000;
 /** An out-of-date daemon is replaced this many times before it is accepted as it is. */
 const MAX_REPLACEMENTS = 2;
+/** How long to keep retrying a log file Windows still has locked from the daemon that just exited. */
+const LOG_OPEN_RETRY_MS = 2_000;
 
 function processExists(pid: number): boolean {
   try {
@@ -93,6 +95,41 @@ async function delay(ms: number): Promise<void> {
   const done = Promise.withResolvers<void>();
   setTimeout(done.resolve, ms);
   await done.promise;
+}
+
+export function isFileLocked(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "EBUSY" || code === "EPERM" || code === "EACCES";
+}
+
+/**
+ * Retries a synchronous open while it fails with a file-locked error, up to `timeoutMs`. Exported
+ * so a test can drive it without real OS file locking, which `EBUSY` depends on.
+ */
+export async function retryWhileLocked<T>(
+  open: () => T,
+  timeoutMs: number,
+  intervalMs = 100,
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      return open();
+    } catch (error) {
+      if (!isFileLocked(error) || Date.now() > deadline) throw error;
+      await delay(intervalMs);
+    }
+  }
+}
+
+/**
+ * Opens the log file for append, retrying while Windows still has it locked. The daemon this
+ * replaces may still be exiting and releasing its handle on the file when this runs right after
+ * (`restartAgent`, or a replacement after an update): without the retry, that momentary lock
+ * surfaces as a raw `EBUSY` error and the daemon never gets spawned.
+ */
+function openLogForAppend(file: string): Promise<number> {
+  return retryWhileLocked(() => openSync(file, "a"), LOG_OPEN_RETRY_MS);
 }
 
 /**
@@ -297,7 +334,7 @@ export class DaemonClient {
         return conn;
       }
       if (!spawned) {
-        this.spawnDaemon();
+        await this.spawnDaemon();
         spawned = true;
       }
       if (this.spawnError) throw this.spawnError;
@@ -564,9 +601,9 @@ export class DaemonClient {
     }
   }
 
-  private spawnDaemon(): void {
+  private async spawnDaemon(): Promise<void> {
     mkdirSync(dirname(this.paths.logFile), { recursive: true });
-    const log = openSync(this.paths.logFile, "a");
+    const log = await openLogForAppend(this.paths.logFile);
     try {
       const child = spawn(process.execPath, [this.options.daemonScript, "run"], {
         detached: true,
