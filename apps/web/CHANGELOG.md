@@ -1,5 +1,11 @@
 # @workspace/web
 
+## 0.36.2
+
+### Patch Changes
+
+- 3c63c33: Fixed the session age label (e.g. "2 tuần") overlapping the truncated chat title in the sidebar when the label is wider than the reserved space, which happened in Vietnamese and other locales with longer relative-time text.
+
 ## 0.36.1
 
 ### Patch Changes
