@@ -6,6 +6,7 @@ import type * as FeedModule from "./update-feed.ts";
 
 const quitAndInstall = vi.hoisted(() => vi.fn());
 const checkForUpdates = vi.hoisted(() => vi.fn());
+const downloadUpdate = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const handlers = vi.hoisted(() => new Map<string, (event: unknown) => void>());
 /** The app folder whose package.json says whether a macOS build is Developer ID signed. */
 const appPath = vi.hoisted(() => ({ current: "/nonexistent" }));
@@ -20,7 +21,7 @@ vi.mock("electron-updater", () => ({
       allowPrerelease: true,
       on: (name: string, handler: (event: unknown) => void) => handlers.set(name, handler),
       checkForUpdates,
-      downloadUpdate: vi.fn(),
+      downloadUpdate,
       quitAndInstall,
     },
   },
@@ -51,6 +52,7 @@ beforeEach(() => {
   handlers.clear();
   quitAndInstall.mockClear();
   checkForUpdates.mockClear();
+  downloadUpdate.mockClear();
   vi.mocked(fetchSignedFeed).mockReset();
   vi.mocked(sha512File).mockReset();
   // `fail` logs; the tests assert on the state instead.
@@ -70,11 +72,18 @@ describe("Windows", () => {
     await updater.check(true);
     expect(checkForUpdates).toHaveBeenCalledOnce();
     handlers.get("update-available")!({ version: "2.0.0" });
-    expect(updater.state()).toMatchObject({
-      status: "available",
-      version: "2.0.0",
-      install: "in-app",
-    });
+    // In-app mode downloads itself as soon as the version is confirmed signed.
+    expect(updater.state()).toMatchObject({ status: "downloading", version: "2.0.0" });
+    expect(downloadUpdate).toHaveBeenCalledOnce();
+  });
+
+  it("downloads an available update without waiting for a click", async () => {
+    vi.mocked(fetchSignedFeed).mockResolvedValue(signedFeed);
+    const updater = createUpdater(() => {});
+    await updater.check(false);
+    handlers.get("update-available")!({ version: "2.0.0" });
+    expect(downloadUpdate).toHaveBeenCalledOnce();
+    expect(updater.state()).toMatchObject({ status: "downloading", version: "2.0.0" });
   });
 
   it("does not ask the updater when the signed feed has nothing new", async () => {

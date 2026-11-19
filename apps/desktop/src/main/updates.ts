@@ -122,6 +122,18 @@ export function createUpdater(onState: (state: UpdateState) => void): Updater {
       install: mode,
       releaseUrl: releaseUrl(version),
     });
+    // In-app updates download themselves; there is nothing to confirm before fetching bytes, and
+    // the person still confirms before `install` restarts the app. `download-page` mode has no
+    // download to start here: it only opens the release page on demand.
+    if (mode === "in-app") void downloadInApp();
+  }
+
+  /** Starts the in-app download; a no-op once one is already downloading or ready. */
+  async function downloadInApp(): Promise<void> {
+    if (state.status !== "available") return;
+    set({ currentVersion, status: "downloading", version: state.version, percent: 0 });
+    // Failures arrive through the `error` listener.
+    await autoUpdater.downloadUpdate().catch(() => undefined);
   }
 
   if (enabled && mode === "in-app") {
@@ -239,9 +251,9 @@ export function createUpdater(onState: (state: UpdateState) => void): Updater {
         await openExternal(state.releaseUrl);
         return;
       }
-      set({ currentVersion, status: "downloading", version: state.version, percent: 0 });
-      // Failures arrive through the `error` listener.
-      await autoUpdater.downloadUpdate().catch(() => undefined);
+      // The background check already starts this; a click while it is still "available" (the
+      // event has not reached the renderer yet) just starts it instead of waiting on nothing.
+      await downloadInApp();
     },
     install(beginQuit: () => void) {
       if (state.status !== "ready") return;

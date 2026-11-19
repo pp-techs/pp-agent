@@ -21,18 +21,24 @@ interface TodoItem {
   status: "pending" | "in_progress" | "done";
 }
 
+interface LatestTodoCall {
+  /** The call's own id, so the panel can tell one checklist apart from the next. */
+  id: string;
+  args: Record<string, unknown>;
+}
+
 /**
- * Arguments of the newest `todo_write` call of the chat (a stable reference between updates).
+ * The newest `todo_write` call of the chat (a stable reference between updates).
  * Runs on every store update and keystroke, so it walks backwards in place instead of copying.
  */
-function latestTodoArgs(state: { messages: ChatMessage[] }): Record<string, unknown> | undefined {
+function latestTodoCall(state: { messages: ChatMessage[] }): LatestTodoCall | undefined {
   const { messages } = state;
   for (let index = messages.length - 1; index >= 0; index--) {
     const { parts } = messages[index];
     for (let partIndex = parts.length - 1; partIndex >= 0; partIndex--) {
       const part = parts[partIndex];
       if (part.type === "tool" && part.name === "todo_write" && part.status !== "denied")
-        return part.args;
+        return { id: part.toolCallId, args: part.args };
     }
   }
   return undefined;
@@ -67,18 +73,23 @@ const TODO_ICONS: Record<TodoItem["status"], LucideIcon> = {
  */
 export function TodoPanel() {
   const { t } = useTranslation("chat");
-  const args = useChatStore(latestTodoArgs);
-  if (!args) return null;
+  const call = useChatStore(latestTodoCall);
+  if (!call) return null;
 
-  const items = todoItems(args);
+  const items = todoItems(call.args);
 
   const done = items.filter((item) => item.status === "done").length;
   const current = items.find((item) => item.status === "in_progress");
+  // Open by default while work remains; collapsed once everything is done, including right after
+  // opening or switching to a session whose checklist was already finished. The key remounts the
+  // collapsible for each new call, so a person's own toggle does not stick to the next checklist.
+  const defaultOpen = items.length === 0 || done < items.length;
 
   return (
     <div className="mx-auto w-full max-w-3xl px-3 pb-2 md:px-6">
       <Collapsible
-        defaultOpen
+        key={call.id}
+        defaultOpen={defaultOpen}
         className="rounded-2xl border bg-muted/40 text-sm"
         aria-label={t("toolStep.todo.title")}
       >

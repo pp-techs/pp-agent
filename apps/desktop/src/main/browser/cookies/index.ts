@@ -235,7 +235,20 @@ async function readChromium(
       return { cookies, unreadable: 0, profileName: profile.name };
     } catch (error) {
       console.error(`Could not read ${name} cookies through the browser:`, error);
+      // Every plainly-readable cookie was already counted in `read`; when that is empty, the
+      // app-bound ones were the only cookies this import had, so a silent "0 imported" would hide
+      // that the browser bridge failed rather than tell the person there was nothing to copy.
+      if (read.cookies.length === 0) {
+        throw new Error(
+          t("panel.cookies.appBoundFailed", {
+            browser: name,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        );
+      }
     }
+  } else if (read.cookies.length === 0) {
+    throw new Error(t("panel.cookies.appBoundNoBrowser", { browser: name }));
   }
   return {
     cookies: read.cookies,
