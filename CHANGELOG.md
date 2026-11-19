@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.36.2] — 2026-11-19
+
+Restarting the agent on Windows right after it stops (manually, or when an update replaces it) no longer fails with a raw `EBUSY: resource busy or locked` error when the log file is still momentarily locked by the daemon that just exited; it now retries briefly before giving up.
+
+Fixed the session age label (e.g. "2 tuần") overlapping the truncated chat title in the sidebar when the label is wider than the reserved space, which happened in Vietnamese and other locales with longer relative-time text.
+
+Windows updates now always download the full installer instead of a differential (binary-diff) patch. A differential patch interrupted by security software, a full disk, or the app closing mid-write could leave `app.asar` corrupted in a way that only showed up later as "Cannot find package" errors inside the app. Updates now download a bit more data each time, but can no longer corrupt the existing install this way.
+
 ## [0.36.1] — 2026-11-19
 
 Importing cookies from Chrome, Edge or Brave on Windows now reports an error when the browser protects them with a key only it can unwrap (app-bound encryption) and reading them through the browser itself fails, instead of silently finishing with 0 cookies imported.

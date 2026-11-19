@@ -1,5 +1,13 @@
 # @workspace/desktop
 
+## 0.36.2
+
+### Patch Changes
+
+- 3c63c33: Restarting the agent on Windows right after it stops (manually, or when an update replaces it) no longer fails with a raw `EBUSY: resource busy or locked` error when the log file is still momentarily locked by the daemon that just exited; it now retries briefly before giving up.
+- 3c63c33: Fixed the session age label (e.g. "2 tuần") overlapping the truncated chat title in the sidebar when the label is wider than the reserved space, which happened in Vietnamese and other locales with longer relative-time text.
+- 5e078a6: Windows updates now always download the full installer instead of a differential (binary-diff) patch. A differential patch interrupted by security software, a full disk, or the app closing mid-write could leave `app.asar` corrupted in a way that only showed up later as "Cannot find package" errors inside the app. Updates now download a bit more data each time, but can no longer corrupt the existing install this way.
+
 ## 0.36.1
 
 ### Patch Changes
