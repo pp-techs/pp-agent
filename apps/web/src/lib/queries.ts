@@ -62,6 +62,9 @@ export const queryKeys = {
   /** Prefix of every folder listing of one workspace. */
   workspaceFiles: (root: string) => ["workspace-files", root] as const,
   workspaceFolder: (root: string, dir: string) => ["workspace-files", root, dir] as const,
+  workspaceSearch: (root: string, query: string) =>
+    ["workspace-files", root, "search", query] as const,
+  openerApps: ["open-with-apps"] as const,
   /** Prefix of every file preview of one workspace. */
   filePreviews: (root: string) => ["file-preview", root] as const,
   filePreview: (root: string, path: string) => ["file-preview", root, path] as const,

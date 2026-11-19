@@ -103,8 +103,13 @@ const bridge: DesktopBridge = {
   },
   workspace: {
     list: (root, dir) => invoke(IPC.workspaceList, root, dir),
+    search: (root, query) => invoke(IPC.workspaceSearch, root, query),
     preview: (root, path) => invoke(IPC.workspacePreview, root, path),
     reveal: (root, path) => invoke(IPC.workspaceReveal, root, path),
+    open: (root, path) => invoke(IPC.workspaceOpen, root, path),
+    openWith: (root, path, appPath) => invoke(IPC.workspaceOpenWith, root, path, appPath),
+    openers: () => invoke(IPC.workspaceOpeners),
+    chooseOpener: () => invoke(IPC.workspaceChooseOpener),
     attachment: (root, path) => invoke(IPC.workspaceAttachment, root, path),
     create: (root, dir, name, kind) => invoke(IPC.workspaceCreate, root, dir, name, kind),
     rename: (root, path, name) => invoke(IPC.workspaceRename, root, path, name),

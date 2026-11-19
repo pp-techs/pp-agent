@@ -674,6 +674,14 @@ export interface ConfigImportReport {
 /** Id of the built-in workspace (the app's default folder). It can be edited but not deleted. */
 export const DEFAULT_WORKSPACE_ID = "default";
 
+/** An app the person chose to open workspace files with. */
+export interface OpenerApp {
+  /** The app on the computer: an .app folder on macOS, an .exe on Windows. */
+  path: string;
+  /** What the menu calls it. */
+  name: string;
+}
+
 export interface WorkspaceSummary {
   id: string;
   name: string;
@@ -1651,6 +1659,11 @@ export interface AgentCommandMap {
     params: { workspaceId?: string; dir: string };
     result: WorkspaceEntry[];
   };
+  /** Files of a workspace whose path holds every word of `query`, best matches first; at most 100. */
+  search_workspace_files: {
+    params: { workspaceId?: string; query: string };
+    result: WorkspaceEntry[];
+  };
   /** A file of a workspace as text or an image, confined to the workspace folder. */
   preview_workspace_file: { params: { workspaceId?: string; path: string }; result: FilePreview };
   save_workspace: { params: { workspace: SaveWorkspaceInput }; result: WorkspaceProfile };
@@ -2345,8 +2358,18 @@ export interface DesktopBridge {
   workspace: {
     /** Entries of a folder inside the workspace `root` (`dir` relative, "" for the root). */
     list(root: string, dir: string): Promise<WorkspaceEntry[]>;
+    /** Files anywhere in the workspace whose path holds every word of `query`, best matches first. */
+    search(root: string, query: string): Promise<WorkspaceEntry[]>;
     preview(root: string, path: string): Promise<FilePreview>;
     reveal(root: string, path: string): Promise<void>;
+    /** Opens the file with the app the system uses for its type. */
+    open(root: string, path: string): Promise<void>;
+    /** Opens the file with an app of `openers()`, which moves to the top of that list. */
+    openWith(root: string, path: string, appPath: string): Promise<void>;
+    /** Apps the person chose for "Open with", most recently used first. */
+    openers(): Promise<OpenerApp[]>;
+    /** Asks for an app with the system's file dialog and remembers it; null when cancelled. */
+    chooseOpener(): Promise<OpenerApp | null>;
     /** The file as an attachment for the message box. */
     attachment(root: string, path: string): Promise<Attachment>;
     /** Creates an empty file or folder named `name` inside `dir`; resolves to its path. */
@@ -2474,8 +2497,13 @@ export const IPC = {
   terminalData: "terminal:data",
   terminalChanged: "terminal:changed",
   workspaceList: "workspace:list",
+  workspaceSearch: "workspace:search",
   workspacePreview: "workspace:preview",
   workspaceReveal: "workspace:reveal",
+  workspaceOpen: "workspace:open",
+  workspaceOpenWith: "workspace:open-with",
+  workspaceOpeners: "workspace:openers",
+  workspaceChooseOpener: "workspace:choose-opener",
   workspaceAttachment: "workspace:attachment",
   workspaceCreate: "workspace:create",
   workspaceRename: "workspace:rename",

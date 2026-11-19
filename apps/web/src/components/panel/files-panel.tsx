@@ -6,22 +6,36 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@workspace/ui/components/input-group";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
 import { cn } from "@workspace/ui/lib/utils";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AppWindowIcon,
   ChevronRightIcon,
   EyeIcon,
+  ExternalLinkIcon,
   FileCodeIcon,
   FilePlusIcon,
   FolderPlusIcon,
   PaperclipIcon,
   PencilIcon,
   RefreshCwIcon,
+  SearchIcon,
   SquareArrowOutUpRightIcon,
   Trash2Icon,
+  XIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -32,14 +46,71 @@ import {
   filePreviewQuery,
   useWorkspaceFileCommands,
   workspaceFolderQuery,
+  workspaceOpenersQuery,
+  workspaceSearchQuery,
 } from "@/lib/panel-queries";
 import { queryKeys } from "@/lib/queries";
 import { useChatStore } from "@/stores/chat-store";
 import { useComposerStore } from "@/stores/composer-store";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useWorkspaceWatch } from "@/hooks/use-panel-state";
 import { isWebApp } from "@/lib/bridge";
 import { openFile } from "@/lib/workbench-actions";
 import { NO_FOLDERS, useFileTreeStore } from "@/stores/file-tree-store";
+
+/**
+ * "Open" with the system's app for the file, and "Open with" the apps chosen before or one chosen
+ * now. For the content of a menu; the apps are read when the menu opens.
+ */
+function OpenWithItems({
+  bridge,
+  root,
+  path,
+}: {
+  bridge: DesktopBridge;
+  root: string;
+  path: string;
+}) {
+  const { t } = useTranslation("chat");
+  const queryClient = useQueryClient();
+  const openers = useQuery(workspaceOpenersQuery(bridge));
+  const report = (error: Error) => toast.error(error.message);
+  async function chooseAndOpen() {
+    const app = await bridge.workspace.chooseOpener();
+    if (!app) return;
+    void queryClient.invalidateQueries({ queryKey: queryKeys.openerApps });
+    await bridge.workspace.openWith(root, path, app.path);
+  }
+  return (
+    <>
+      <DropdownMenuItem onClick={() => bridge.workspace.open(root, path).catch(report)}>
+        <ExternalLinkIcon />
+        {t("panel.files.open")}
+      </DropdownMenuItem>
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>
+          <AppWindowIcon />
+          {t("panel.files.openWith")}
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+          {openers.data?.map((app) => (
+            <DropdownMenuItem
+              key={app.path}
+              title={app.path}
+              onClick={() => bridge.workspace.openWith(root, path, app.path).catch(report)}
+            >
+              {app.name}
+            </DropdownMenuItem>
+          ))}
+          {openers.data && openers.data.length > 0 && <DropdownMenuSeparator />}
+          <DropdownMenuItem onClick={() => chooseAndOpen().catch(report)}>
+            {t("panel.files.chooseApp")}
+          </DropdownMenuItem>
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    </>
+  );
+}
 
 export function FilePreviewView({
   bridge,
@@ -113,6 +184,23 @@ export function FilePreviewView({
               </TooltipTrigger>
               <TooltipContent>{t("panel.files.attach")}</TooltipContent>
             </Tooltip>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("panel.files.open")}
+                    title={t("panel.files.open")}
+                  />
+                }
+              >
+                <ExternalLinkIcon />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <OpenWithItems bridge={bridge} root={root} path={path} />
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -155,6 +243,8 @@ type Editing =
 
 /** What a row of the tree does; keeps its identity, so rows re-render only when they change. */
 interface RowActions {
+  bridge: DesktopBridge;
+  root: string;
   onToggle: (path: string) => void;
   onOpen: (path: string) => void;
   onStartCreate: (dir: string, entry: "file" | "folder") => void;
@@ -220,6 +310,29 @@ function NameInput({
   );
 }
 
+/**
+ * A menu opened at the point of a right click. It mounts on the first right click, not for each of
+ * up to thousands of rows, and then stays so it can animate closed.
+ */
+function usePointMenu() {
+  // Where the right click happened; the menu is open while it is set.
+  const [point, setPoint] = React.useState<{ x: number; y: number } | null>(null);
+  const [mounted, setMounted] = React.useState(false);
+  const anchor = React.useMemo(
+    () =>
+      point
+        ? { getBoundingClientRect: () => DOMRect.fromRect({ x: point.x, y: point.y }) }
+        : undefined,
+    [point],
+  );
+  const open = React.useCallback((x: number, y: number) => {
+    setMounted(true);
+    setPoint({ x, y });
+  }, []);
+  const close = React.useCallback(() => setPoint(null), []);
+  return { point, mounted, anchor, open, close };
+}
+
 /** One file or folder of the tree; right click opens its menu. */
 const EntryRow = React.memo(function EntryRow({
   entry,
@@ -233,34 +346,24 @@ const EntryRow = React.memo(function EntryRow({
   isOpen: boolean;
 }) {
   const { t } = useTranslation("chat");
-  // Where the right click happened; the menu is open while it is set.
-  const [point, setPoint] = React.useState<{ x: number; y: number } | null>(null);
-  // The menu mounts on the first right click, not for each of up to thousands of rows, and then
-  // stays so it can animate closed.
-  const [menuMounted, setMenuMounted] = React.useState(false);
-  const anchor = React.useMemo(
-    () =>
-      point
-        ? { getBoundingClientRect: () => DOMRect.fromRect({ x: point.x, y: point.y }) }
-        : undefined,
-    [point],
-  );
+  const menu = usePointMenu();
   return (
     <div
       className="relative"
       onContextMenu={(event) => {
+        // The panel's own menu is for what no row claims.
+        event.stopPropagation();
         if (!isWebApp) event.preventDefault();
         // The computer's files can only be changed on the computer.
         if (isWebApp) return;
-        setMenuMounted(true);
-        setPoint({ x: event.clientX, y: event.clientY });
+        menu.open(event.clientX, event.clientY);
       }}
     >
       <button
         type="button"
         style={indent}
         className="flex h-7 w-full items-center gap-1.5 rounded-md pr-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted data-[menu-open]:bg-muted"
-        data-menu-open={point !== null || undefined}
+        data-menu-open={menu.point !== null || undefined}
         title={entry.path}
         aria-expanded={entry.kind === "folder" ? isOpen : undefined}
         onClick={() =>
@@ -280,13 +383,13 @@ const EntryRow = React.memo(function EntryRow({
         <FileTypeIcon kind={entry.kind} name={entry.name} open={isOpen} />
         <span className="truncate">{entry.name}</span>
       </button>
-      {menuMounted && (
-        <DropdownMenu open={point !== null} onOpenChange={(open) => !open && setPoint(null)}>
+      {menu.mounted && (
+        <DropdownMenu open={menu.point !== null} onOpenChange={(open) => !open && menu.close()}>
           {/* The name field takes the focus; the menu must not take it back when it closes. */}
           <DropdownMenuContent
             align="start"
             sideOffset={0}
-            anchor={anchor}
+            anchor={menu.anchor}
             className="w-48"
             finalFocus={false}
           >
@@ -300,6 +403,12 @@ const EntryRow = React.memo(function EntryRow({
                   <FolderPlusIcon />
                   {t("panel.files.newFolder")}
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            {entry.kind === "file" && (
+              <>
+                <OpenWithItems bridge={actions.bridge} root={actions.root} path={entry.path} />
                 <DropdownMenuSeparator />
               </>
             )}
@@ -402,25 +511,76 @@ function FolderRows({
   );
 }
 
-/** The folder tree of a workspace, with its toolbar. */
+/** The files whose path holds the words typed in the search field, nearest to the top first. */
+function SearchResults({
+  bridge,
+  root,
+  query,
+}: {
+  bridge: DesktopBridge;
+  root: string;
+  query: string;
+}) {
+  const { t } = useTranslation("chat");
+  // The last results stay while the next ones load, so the list does not flash between keystrokes.
+  const results = useQuery({
+    ...workspaceSearchQuery(bridge, root, query),
+    enabled: query !== "",
+    placeholderData: keepPreviousData,
+  });
+  if (results.isError)
+    return <p className="px-2 py-1 text-xs text-destructive">{results.error.message}</p>;
+  if (!results.data)
+    return (
+      <div className="px-2 py-1">
+        <Skeleton className="h-5 w-2/3" />
+      </div>
+    );
+  if (results.data.length === 0)
+    return <p className="px-2 py-1 text-xs text-muted-foreground">{t("panel.files.noMatch")}</p>;
+  return results.data.map((entry) => {
+    const dir = entry.path.slice(0, Math.max(entry.path.length - entry.name.length - 1, 0));
+    return (
+      <button
+        key={entry.path}
+        type="button"
+        title={entry.path}
+        className="flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted"
+        onClick={() => openFile(root, entry.path)}
+      >
+        <FileTypeIcon kind="file" name={entry.name} />
+        <span className="shrink-0">{entry.name}</span>
+        <span className="min-w-0 truncate text-xs text-muted-foreground">{dir}</span>
+      </button>
+    );
+  });
+}
+
+/** The folder tree of a workspace, with its search field. */
 function FolderTree({ bridge, root }: { bridge: DesktopBridge; root: string }) {
   const { t } = useTranslation("chat");
+  const menu = usePointMenu();
   const queryClient = useQueryClient();
   const expandedList = useFileTreeStore((state) => state.expanded[root] ?? NO_FOLDERS);
   const expanded = React.useMemo(() => new Set(expandedList), [expandedList]);
   const toggleFolder = useFileTreeStore((state) => state.toggleFolder);
   const commands = useWorkspaceFileCommands(bridge, root);
   const [editing, setEditing] = React.useState<Editing | null>(null);
+  const [search, setSearch] = React.useState("");
 
   const { mutate: removeEntry } = commands.remove;
   const row = React.useMemo<RowActions>(
     () => ({
+      bridge,
+      root,
       onToggle: (path) => toggleFolder(root, path),
       onOpen: (path) => openFile(root, path),
       onStartCreate: (dir, entry) => {
         // The new row appears inside the folder, so it has to be open.
         const open = useFileTreeStore.getState().expanded[root]?.includes(dir) ?? false;
         if (dir !== "" && !open) toggleFolder(root, dir);
+        // The name field is a row of the tree, so a search in its place gives way to the tree.
+        setSearch("");
         setEditing({ kind: "new", entry, dir });
       },
       onStartRename: (path) => setEditing({ kind: "rename", path }),
@@ -448,46 +608,51 @@ function FolderTree({ bridge, root }: { bridge: DesktopBridge; root: string }) {
     },
   };
 
+  const refresh = () =>
+    void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFiles(root) });
+  // The tree shows at once when the field is emptied; a search waits for a pause in the typing.
+  const query = useDebouncedValue(search.trim(), 200);
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center gap-1 px-3 pt-3 pb-1.5">
-        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={root}>
-          {root}
-        </span>
-        {!isWebApp && (
-          <>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={t("panel.files.newFile")}
-                    onClick={() => row.onStartCreate("", "file")}
-                  />
-                }
+    <div
+      className="flex min-h-0 flex-1 flex-col"
+      onContextMenu={(event) => {
+        // Rows stop their own right click; this is what is left: the toolbar and the empty space.
+        event.preventDefault();
+        menu.open(event.clientX, event.clientY);
+      }}
+    >
+      <div className="flex shrink-0 items-center gap-1 border-b px-2 py-2">
+        <InputGroup className="min-w-0 flex-1">
+          <InputGroupAddon>
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput
+            value={search}
+            placeholder={t("panel.files.search")}
+            aria-label={t("panel.files.search")}
+            onChange={(event) => setSearch(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && search) {
+                event.stopPropagation();
+                setSearch("");
+              }
+            }}
+            // The field keeps the system's own menu (paste, select all).
+            onContextMenu={(event) => event.stopPropagation()}
+          />
+          {search && (
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                size="icon-xs"
+                aria-label={t("panel.files.clearSearch")}
+                onClick={() => setSearch("")}
               >
-                <FilePlusIcon />
-              </TooltipTrigger>
-              <TooltipContent>{t("panel.files.newFile")}</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={t("panel.files.newFolder")}
-                    onClick={() => row.onStartCreate("", "folder")}
-                  />
-                }
-              >
-                <FolderPlusIcon />
-              </TooltipTrigger>
-              <TooltipContent>{t("panel.files.newFolder")}</TooltipContent>
-            </Tooltip>
-          </>
-        )}
+                <XIcon />
+              </InputGroupButton>
+            </InputGroupAddon>
+          )}
+        </InputGroup>
         <Tooltip>
           <TooltipTrigger
             render={
@@ -495,9 +660,7 @@ function FolderTree({ bridge, root }: { bridge: DesktopBridge; root: string }) {
                 variant="ghost"
                 size="icon-sm"
                 aria-label={t("panel.files.refresh")}
-                onClick={() =>
-                  void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFiles(root) })
-                }
+                onClick={refresh}
               />
             }
           >
@@ -506,9 +669,48 @@ function FolderTree({ bridge, root }: { bridge: DesktopBridge; root: string }) {
           <TooltipContent>{t("panel.files.refresh")}</TooltipContent>
         </Tooltip>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
-        <FolderRows bridge={bridge} root={root} dir="" depth={0} tree={tree} />
+      <div className="min-h-0 flex-1 overflow-y-auto px-1 py-2">
+        {search.trim() ? (
+          <SearchResults bridge={bridge} root={root} query={query} />
+        ) : (
+          <FolderRows bridge={bridge} root={root} dir="" depth={0} tree={tree} />
+        )}
       </div>
+      {menu.mounted && (
+        <DropdownMenu open={menu.point !== null} onOpenChange={(open) => !open && menu.close()}>
+          {/* The name field takes the focus; the menu must not take it back when it closes. */}
+          <DropdownMenuContent
+            align="start"
+            sideOffset={0}
+            anchor={menu.anchor}
+            className="w-48"
+            finalFocus={false}
+          >
+            {/* The computer's files can only be changed on the computer. */}
+            {!isWebApp && (
+              <>
+                <DropdownMenuItem onClick={() => row.onStartCreate("", "file")}>
+                  <FilePlusIcon />
+                  {t("panel.files.newFile")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => row.onStartCreate("", "folder")}>
+                  <FolderPlusIcon />
+                  {t("panel.files.newFolder")}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => row.onReveal("")}>
+                  <SquareArrowOutUpRightIcon />
+                  {t("panel.files.reveal")}
+                </DropdownMenuItem>
+              </>
+            )}
+            <DropdownMenuItem onClick={refresh}>
+              <RefreshCwIcon />
+              {t("panel.files.refresh")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </div>
   );
 }

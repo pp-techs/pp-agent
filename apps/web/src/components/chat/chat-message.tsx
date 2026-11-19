@@ -523,7 +523,6 @@ function RunCollapse({
 }) {
   const { t } = useTranslation("chat");
   const parts = [...earlier.flatMap((message) => message.parts), ...blocks.flatMap(blockParts)];
-  const failed = parts.some((part) => part.type === "tool" && part.status === "error");
   const label =
     workedMs === undefined
       ? summarizeSteps(
@@ -536,7 +535,7 @@ function RunCollapse({
   return (
     <TraceCollapsible className="border-b pb-3">
       <TraceCollapsibleTrigger>
-        <TraceLine status={failed ? "error" : undefined}>
+        <TraceLine>
           <TraceTitle>{label}</TraceTitle>
         </TraceLine>
       </TraceCollapsibleTrigger>

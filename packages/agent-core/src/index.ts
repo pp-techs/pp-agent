@@ -171,7 +171,11 @@ import {
 } from "./attachments.ts";
 import { BROWSER_TOOL, browserActionTier, createBrowserTool } from "./browser-tool.ts";
 import { isInside } from "./office/files.ts";
-import { listWorkspaceFolder, previewWorkspaceFile } from "./workspace-files.ts";
+import {
+  listWorkspaceFolder,
+  previewWorkspaceFile,
+  searchWorkspaceFiles,
+} from "./workspace-files.ts";
 import { deniedFolders, pathAccess, type PathRules } from "./path-access.ts";
 import {
   COMPUTER_TOOL,
@@ -1103,6 +1107,12 @@ export class AgentHost {
         return listWorkspaceFolder(
           this.filesRoot(command.workspaceId),
           command.dir,
+          this.pathRules().denied,
+        );
+      case "search_workspace_files":
+        return searchWorkspaceFiles(
+          this.filesRoot(command.workspaceId),
+          command.query,
           this.pathRules().denied,
         );
       case "preview_workspace_file":
