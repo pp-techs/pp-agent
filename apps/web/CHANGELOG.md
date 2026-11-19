@@ -1,5 +1,12 @@
 # @workspace/web
 
+## 0.36.1
+
+### Patch Changes
+
+- 29babdb: A skill the agent creates (for example with skill-creator) now goes into the workspace's `.agents/skills` and can be used from your next message, `/` menu included, without restarting the chat. The Personal workspace now always loads the skills in its `.agents/skills`; other workspaces still need "Use the skills this folder carries" turned on.
+- a07b0a4: The checklist panel now opens by default only while work remains and collapses once every item is done, including right after opening or switching to a session whose checklist was already finished.
+
 ## 0.36.0
 
 ### Minor Changes

@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.36.1] — 2026-11-19
+
+Importing cookies from Chrome, Edge or Brave on Windows now reports an error when the browser protects them with a key only it can unwrap (app-bound encryption) and reading them through the browser itself fails, instead of silently finishing with 0 cookies imported.
+
+A skill the agent creates (for example with skill-creator) now goes into the workspace's `.agents/skills` and can be used from your next message, `/` menu included, without restarting the chat. The Personal workspace now always loads the skills in its `.agents/skills`; other workspaces still need "Use the skills this folder carries" turned on.
+
+The checklist panel now opens by default only while work remains and collapses once every item is done, including right after opening or switching to a session whose checklist was already finished.
+
+An update now downloads in the background as soon as it's found, instead of waiting for a click, on Windows and Developer ID signed macOS builds. The download still waits for a restart to install.
+
 ## [0.36.0] — 2026-11-19
 
 Right-clicking the empty space of the file panel opens a menu to create a file or folder in the workspace root, show it in the folder, or refresh the tree.
