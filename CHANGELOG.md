@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.36.0] — 2026-11-19
+
+Right-clicking the empty space of the file panel opens a menu to create a file or folder in the workspace root, show it in the folder, or refresh the tree.
+
+The file panel has a "Find files" field at the top that finds files anywhere in the workspace by name or path. The New file and New folder buttons are gone from the panel's header; right-click the panel to create them.
+
+Files of the file panel can be opened with other apps: "Open" uses the app your system has for the file's type (a music player for an MP3), and "Open with" lists apps you picked before or lets you choose one, such as a code editor. Both are only in the desktop app, in the right-click menu of a file and in the menu button above an open file.
+
+The "Worked for …" line no longer turns red when one of the steps inside it failed; the failed step is still marked when you open it.
+
 ## [0.35.6] — 2026-11-18
 
 Terminals, browser tabs and file tabs now belong to the conversation that opened them, not to the whole workspace: switching conversations shows that conversation's own tabs, and the agent's browser tool sees and uses only its own conversation's tabs. Deleting a conversation closes its terminals and browser tabs

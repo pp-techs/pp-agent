@@ -1,5 +1,17 @@
 # @workspace/desktop
 
+## 0.36.0
+
+### Minor Changes
+
+- 9ee3360: The file panel has a "Find files" field at the top that finds files anywhere in the workspace by name or path. The New file and New folder buttons are gone from the panel's header; right-click the panel to create them.
+- 9ee3360: Files of the file panel can be opened with other apps: "Open" uses the app your system has for the file's type (a music player for an MP3), and "Open with" lists apps you picked before or lets you choose one, such as a code editor. Both are only in the desktop app, in the right-click menu of a file and in the menu button above an open file.
+
+### Patch Changes
+
+- 9ee3360: Right-clicking the empty space of the file panel opens a menu to create a file or folder in the workspace root, show it in the folder, or refresh the tree.
+- 9ee3360: The "Worked for …" line no longer turns red when one of the steps inside it failed; the failed step is still marked when you open it.
+
 ## 0.35.6
 
 ### Patch Changes
