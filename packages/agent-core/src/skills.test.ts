@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
-import { listWorkspaceSkills, workspaceSkillsDir } from "./skills.ts";
+import { listWorkspaceSkills, skillsFingerprint, workspaceSkillsDir } from "./skills.ts";
 
 let cwd: string;
 
@@ -44,5 +44,24 @@ describe("workspace skills", () => {
 
   test("finds none when the folder has no .agents/skills", async () => {
     expect(await listWorkspaceSkills(cwd, [])).toEqual([]);
+  });
+});
+
+describe("skillsFingerprint", () => {
+  test("changes when a skill is added or its SKILL.md is rewritten, not for other files", async () => {
+    const dir = workspaceSkillsDir(cwd);
+    const empty = await skillsFingerprint([dir]);
+    const folder = await skill("weather", "Forecast");
+    const added = await skillsFingerprint([dir]);
+    expect(added).not.toBe(empty);
+
+    await writeFile(join(folder, "notes.txt"), "x");
+    expect(await skillsFingerprint([dir])).toBe(added);
+
+    await writeFile(
+      join(folder, "SKILL.md"),
+      "---\nname: weather\ndescription: Updated text\n---\n",
+    );
+    expect(await skillsFingerprint([dir])).not.toBe(added);
   });
 });

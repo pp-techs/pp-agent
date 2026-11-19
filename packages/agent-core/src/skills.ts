@@ -66,6 +66,31 @@ function serializeSkill(frontmatter: Record<string, unknown>, body: string): str
   return `---\n${stringify(frontmatter).trimEnd()}\n---\n\n${body.trim()}\n`;
 }
 
+/**
+ * A string that changes when a skill is added, removed or its SKILL.md rewritten in any of `dirs`
+ * (folders that hold one folder per skill), to notice a skill the agent created while it worked.
+ */
+export async function skillsFingerprint(dirs: readonly string[]): Promise<string> {
+  const parts: string[] = [];
+  for (const dir of dirs) {
+    let entries: string[];
+    try {
+      entries = await readdir(dir);
+    } catch {
+      continue;
+    }
+    for (const entry of entries.sort()) {
+      try {
+        const file = await stat(join(dir, entry, SKILL_FILE));
+        parts.push(`${dir}/${entry}:${file.mtimeMs}:${file.size}`);
+      } catch {
+        // Not a skill folder.
+      }
+    }
+  }
+  return parts.join("\n");
+}
+
 /** Where pi looks for the skills that belong to a workspace folder. */
 export function workspaceSkillsDir(cwd: string): string {
   return join(cwd, ".agents", "skills");

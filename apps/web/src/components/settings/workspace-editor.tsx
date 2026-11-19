@@ -331,14 +331,20 @@ function WorkspaceSkillsTrust({
   const { t } = useTranslation("agents");
   const trust = useQuery(workspaceSkillsTrustQuery(bridge, workspaceId));
   const setTrust = useSetWorkspaceSkillsTrust(bridge);
+  // The app's own folder always loads its skills (nothing is downloaded into it by itself).
+  const isBuiltIn = workspaceId === DEFAULT_WORKSPACE_ID;
   return (
     <OptionGroup legend={t("workspaceEditor.skills.legend")}>
       <SwitchRow
         id="workspace-skills-trusted"
         label={t("workspaceEditor.skills.label")}
-        description={t("workspaceEditor.skills.description")}
-        checked={trust.data ?? false}
-        disabled={isWebApp || trust.isPending || setTrust.isPending}
+        description={
+          isBuiltIn
+            ? t("workspaceEditor.skills.descriptionBuiltIn")
+            : t("workspaceEditor.skills.description")
+        }
+        checked={isBuiltIn || (trust.data ?? false)}
+        disabled={isWebApp || isBuiltIn || trust.isPending || setTrust.isPending}
         onCheckedChange={(trusted) => setTrust.mutate({ id: workspaceId, trusted })}
       />
     </OptionGroup>

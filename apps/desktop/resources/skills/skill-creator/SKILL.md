@@ -42,6 +42,16 @@ It's OK to briefly explain terms if you're in doubt, and feel free to clarify te
 
 ---
 
+## Where to save skills (PP Agent)
+
+Save a new skill in the current workspace folder, as `.agents/skills/<skill-name>/SKILL.md` (relative to the working directory), and build and test it there. Never write into the app's own data folder or next to this skill: that folder is not the user's workspace. The app loads the skill from the next message on, so the user can use it right away with `/skill:<skill-name>`. When you are done, tell the user the path.
+
+To keep an existing skill that lives elsewhere (for example one installed in the app), copy it with `cp -r` into the workspace's `.agents/skills/` before editing the copy.
+
+The Personal workspace loads its workspace skills at once. Any other workspace loads them only after the user turns on "Use the skills this folder carries" in Settings › Workspaces: if the skill does not show up there, tell the user so.
+
+---
+
 ## Creating a skill
 
 ### Capture Intent

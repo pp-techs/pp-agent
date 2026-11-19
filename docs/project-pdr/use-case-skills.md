@@ -23,6 +23,10 @@ The app ships two skills in `apps/desktop/resources/skills/` and copies them int
 
 ## Trust a workspace's skills
 
-- A downloaded folder can carry skills that steer the agent, so a workspace's own skills stay unloaded until the person turns on **Use the skills this folder carries** in the workspace editor. The trusted folders are saved as `settings.json › trustedSkillFolders` (absolute paths); commands `get_workspace_skills_trust` and `set_workspace_skills_trust { id, trusted }`.
+- The app's own workspace folder (Personal) always loads its skills. A downloaded folder can carry skills that steer the agent, so any other workspace's own skills stay unloaded until the person turns on **Use the skills this folder carries** in the workspace editor. The trusted folders are saved as `settings.json › trustedSkillFolders` (absolute paths); commands `get_workspace_skills_trust` and `set_workspace_skills_trust { id, trusted }`.
 - Trust can only be turned on at the computer: the switch is disabled in the web app, and remote access refuses `set_workspace_skills_trust` with `trusted: true` (turning it off is allowed).
 - The skill lists in Settings and the `/` suggestions show only skills that actually load.
+
+## Skills the agent creates
+
+- The agent saves a new skill in the workspace folder (`.agents/skills/<name>/SKILL.md`), as the system prompt and the built-in skill-creator say. When a run adds or rewrites a skill in the installed folder or the workspace's, the conversation reloads its skills once the run settles, so the skill is usable from the next message (`/` menu included). A skill the agent's own skill list does not include stays filtered out.

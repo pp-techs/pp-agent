@@ -245,7 +245,12 @@ import { SettingsStore } from "./settings-store.ts";
 import { newTaskId, runTitle, validateTaskInput } from "./scheduled-tasks.ts";
 import { nextRun, Scheduler, schedulableOf } from "./scheduler.ts";
 import { VoiceService } from "./transcription.ts";
-import { listWorkspaceSkills, SkillLibrary, workspaceSkillsDir } from "./skills.ts";
+import {
+  listWorkspaceSkills,
+  SkillLibrary,
+  skillsFingerprint,
+  workspaceSkillsDir,
+} from "./skills.ts";
 import { parseSkillBlocks, skillChainExtension } from "./skill-chain.ts";
 import { seedBuiltInSkills } from "./skills-builtin.ts";
 import { createDelegateTool, DELEGATE_TOOL } from "./subagent.ts";
@@ -511,6 +516,8 @@ interface ConversationState {
   toolCalls: number;
   /** The run that just settled was the checklist reminder, so another one is not sent after it. */
   todoReminded: boolean;
+  /** The skill folders' fingerprint when the current run started, to reload skills the run created. */
+  skillsBefore: Promise<string>;
   running: boolean;
   /**
    * A title proposed while a turn was running, shown in the list at once but written to the
@@ -2681,6 +2688,7 @@ export class AgentHost {
       researchSaved: JSON.stringify(researchEntry(restoredResearch)),
       toolCalls: 0,
       todoReminded: false,
+      skillsBefore: Promise.resolve(""),
       questions: new Map(),
       mcpServers: new McpRegistrations(mcpConfig, (name) => {
         const { mcpServers } = this.agentOf(state);
@@ -2778,6 +2786,7 @@ export class AgentHost {
       case "agent_start":
         conversation.running = true;
         conversation.toolCalls = 0;
+        conversation.skillsBefore = this.skillsFingerprintOf(conversation);
         if (inWindow) this.refreshStatus();
         emit({ type: "sessions_changed" });
         this.emitActivity();
@@ -2794,6 +2803,7 @@ export class AgentHost {
           this.scheduleMemory(conversation);
           this.refreshStatus();
           void this.applyPending();
+          void this.reloadCreatedSkills(conversation);
           this.launchPasses(passes);
         } else {
           // Nobody is looking at it: close it now. Opening it later builds a session from
@@ -3277,9 +3287,32 @@ export class AgentHost {
     };
   }
 
-  /** Whether the person trusted the skills of the workspace folder `cwd`. */
+  /**
+   * Whether the skills of the workspace folder `cwd` load: the app's own workspace folder always
+   * does (nothing was downloaded into it by itself), any other once the person trusted it.
+   */
   private skillsTrusted(cwd: string): boolean {
-    return (this.services?.settings.get().trustedSkillFolders ?? []).includes(resolve(cwd));
+    const services = this.services;
+    if (services && resolve(cwd) === resolve(services.paths.workspaceDir)) return true;
+    return (services?.settings.get().trustedSkillFolders ?? []).includes(resolve(cwd));
+  }
+
+  /** Fingerprint of the installed skills and the conversation's workspace skills. */
+  private skillsFingerprintOf(conversation: Conversation): Promise<string> {
+    const { skills } = this.requireServices();
+    return skillsFingerprint([
+      skills.dir,
+      workspaceSkillsDir(conversation.session.sessionManager.getCwd()),
+    ]).catch(() => "");
+  }
+
+  /** A run that added or rewrote a skill (a skill the agent just created): load it for the next message. */
+  private async reloadCreatedSkills(conversation: Conversation): Promise<void> {
+    const [before, after] = await Promise.all([
+      conversation.skillsBefore,
+      this.skillsFingerprintOf(conversation),
+    ]);
+    if (before !== after && this.open === conversation) this.changed(["skills"], { reload: true });
   }
 
   /** What the approval card describes: a note to forget is shown by its text, not its id. */
