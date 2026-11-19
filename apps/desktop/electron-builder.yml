@@ -110,6 +110,13 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  # Differential ("delta") updates patch the installed app.asar in place from a binary diff. A
+  # patch interrupted by security software, a full disk, or the app closing mid-write can leave
+  # app.asar corrupted in a way the app only discovers later, as a package it cannot resolve
+  # inside it (seen in production as "Cannot find package '...app.asar\node_modules\...'" right
+  # after an update). A full download costs more bandwidth per update but cannot corrupt the
+  # existing install this way, since it does not touch it until the new one is written.
+  differentialPackage: false
 linux:
   # The package name (@workspace/desktop) is not a valid file name.
   executableName: pp-agent
