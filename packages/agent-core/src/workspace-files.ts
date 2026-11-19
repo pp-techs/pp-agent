@@ -84,6 +84,78 @@ export async function listWorkspaceFolder(
     );
 }
 
+/** Folders of installed dependencies and build output: thousands of files nobody looks for by name. */
+const SEARCH_SKIPPED = new Set([
+  "node_modules",
+  ".venv",
+  "__pycache__",
+  ".next",
+  ".turbo",
+  ".cache",
+  "dist",
+  "build",
+]);
+const MAX_RESULTS = 100;
+/** Entries looked at before the search gives up on a very large workspace. */
+const MAX_VISITED = 20_000;
+
+/**
+ * The files of the workspace `root` whose path holds every word of `query` (any case), folders
+ * nearest to the top first; a match in the file's own name ranks above one in a folder's name.
+ * Symbolic links are not followed, so the search cannot leave the workspace, and the app's own data
+ * folder is never searched.
+ */
+export async function searchWorkspaceFiles(
+  root: string,
+  query: string,
+  denied: readonly string[],
+): Promise<WorkspaceEntry[]> {
+  const terms = query.slice(0, 200).toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return [];
+  const realRoot = await realpath(root);
+  const deniedRoots = await Promise.all(
+    denied.map((folder) => realpath(folder).catch(() => folder)),
+  );
+  const found: { path: string; name: string; inName: boolean }[] = [];
+  const folders = [""];
+  let visited = 0;
+  for (let next = 0; next < folders.length && visited < MAX_VISITED; next++) {
+    const dir = folders[next];
+    const children = await readdir(join(realRoot, dir), { withFileTypes: true }).catch(() => []);
+    for (const child of children) {
+      if (HIDDEN.has(child.name)) continue;
+      visited++;
+      const path = dir ? `${dir}/${child.name}` : child.name;
+      if (child.isDirectory()) {
+        const folder = join(realRoot, path);
+        if (
+          !SEARCH_SKIPPED.has(child.name) &&
+          !deniedRoots.some((denied) => isInside(denied, folder))
+        )
+          folders.push(path);
+      } else if (child.isFile()) {
+        const lower = path.toLowerCase();
+        if (!terms.every((term) => lower.includes(term))) continue;
+        const name = child.name.toLowerCase();
+        found.push({ path, name: child.name, inName: terms.every((term) => name.includes(term)) });
+      }
+    }
+  }
+  found.sort((a, b) => Number(b.inName) - Number(a.inName) || a.path.length - b.path.length);
+  const entries = await Promise.all(
+    found.slice(0, MAX_RESULTS).map(async ({ path, name }): Promise<WorkspaceEntry | null> => {
+      try {
+        const info = await stat(join(realRoot, path));
+        return { name, path, kind: "file", size: info.size, modified: info.mtimeMs };
+      } catch {
+        // Removed meanwhile.
+        return null;
+      }
+    }),
+  );
+  return entries.filter((entry): entry is WorkspaceEntry => entry !== null);
+}
+
 /** A file of a workspace as text, an image, or neither (too large, or not text). */
 export async function previewWorkspaceFile(
   root: string,

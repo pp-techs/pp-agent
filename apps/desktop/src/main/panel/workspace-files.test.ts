@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -6,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 vi.mock("electron", () => ({ dialog: {}, shell: {} }));
 vi.mock("../i18n.ts", () => ({ translator: () => (key: string) => key }));
 
-const { saveArtifact } = await import("./workspace-files.ts");
+const { saveArtifact, searchEntries } = await import("./workspace-files.ts");
 
 describe("saveArtifact", () => {
   let base: string;
@@ -55,4 +63,36 @@ describe("saveArtifact", () => {
       expect(readdirSync(outside)).toEqual([]);
     },
   );
+});
+
+describe("searchEntries", () => {
+  let base: string;
+  let root: string;
+  beforeEach(() => {
+    base = mkdtempSync(join(tmpdir(), "pp-search-"));
+    root = join(base, "workspace");
+    mkdirSync(join(root, "src", "util"), { recursive: true });
+    mkdirSync(join(root, "node_modules", "dep"), { recursive: true });
+    mkdirSync(join(base, "outside"));
+    writeFileSync(join(root, "src", "util", "parser.ts"), "");
+    writeFileSync(join(root, "src", "Parser-notes.md"), "");
+    writeFileSync(join(root, "src", "util", "other.ts"), "");
+    writeFileSync(join(root, "node_modules", "dep", "parser.js"), "");
+    writeFileSync(join(base, "outside", "parser.txt"), "");
+    symlinkSync(join(base, "outside"), join(root, "linked"));
+  });
+  afterEach(() => rmSync(base, { recursive: true, force: true }));
+
+  it("matches every word in any case, shortest paths first, skipping dependencies and links", async () => {
+    const found = await searchEntries(root, "PARSER");
+    expect(found.map((entry) => entry.path)).toEqual(["src/util/parser.ts", "src/Parser-notes.md"]);
+    expect((await searchEntries(root, "util ts")).map((entry) => entry.path)).toEqual([
+      "src/util/other.ts",
+      "src/util/parser.ts",
+    ]);
+  });
+
+  it("finds nothing for an empty query", async () => {
+    expect(await searchEntries(root, "  ")).toEqual([]);
+  });
 });

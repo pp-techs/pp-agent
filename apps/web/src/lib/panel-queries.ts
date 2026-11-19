@@ -44,6 +44,20 @@ export const workspaceFolderQuery = (bridge: DesktopBridge, root: string, dir: s
     queryFn: () => bridge.workspace.list(root, dir),
   });
 
+export const workspaceSearchQuery = (bridge: DesktopBridge, root: string, query: string) =>
+  queryOptions({
+    queryKey: queryKeys.workspaceSearch(root, query),
+    queryFn: () => bridge.workspace.search(root, query),
+  });
+
+/** Apps remembered for "Open with"; read each time a menu opens, as another window may have added one. */
+export const workspaceOpenersQuery = (bridge: DesktopBridge) =>
+  queryOptions({
+    queryKey: queryKeys.openerApps,
+    queryFn: () => bridge.workspace.openers(),
+    staleTime: 0,
+  });
+
 export const filePreviewQuery = (bridge: DesktopBridge, root: string, path: string) =>
   queryOptions({
     queryKey: queryKeys.filePreview(root, path),

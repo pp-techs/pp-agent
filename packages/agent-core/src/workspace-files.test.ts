@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
-import { listWorkspaceFolder, previewWorkspaceFile } from "./workspace-files.ts";
+import {
+  listWorkspaceFolder,
+  previewWorkspaceFile,
+  searchWorkspaceFiles,
+} from "./workspace-files.ts";
 
 let root = "";
 let outside = "";
@@ -84,5 +88,15 @@ describe("previewWorkspaceFile", () => {
 
   it("reports a file that is not there", async () => {
     await expect(previewWorkspaceFile(root, "gone.md", [])).rejects.toThrow();
+  });
+});
+
+describe("searchWorkspaceFiles", () => {
+  it("finds files by path, never the version control folder or a denied folder", async () => {
+    mkdirSync(join(root, "data"));
+    writeFileSync(join(root, "data", "keys.md"), "k");
+    writeFileSync(join(root, "docs", "guide.md"), "g");
+    const found = await searchWorkspaceFiles(root, "md", [join(root, "data")]);
+    expect(found.map((entry) => entry.path)).toEqual(["a.md", "b.md", "docs/guide.md"]);
   });
 });

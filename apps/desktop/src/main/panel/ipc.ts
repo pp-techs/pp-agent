@@ -1,4 +1,4 @@
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import {
   type AgentCommand,
   type BrowserAction,
@@ -25,16 +25,20 @@ import { BrowserHost } from "../browser/host.ts";
 import { translator } from "../i18n.ts";
 import type { DesktopSettings } from "../settings.ts";
 import type { TrustedIpc } from "../trusted-ipc.ts";
+import { Openers } from "./openers.ts";
 import { TerminalHost } from "./terminals.ts";
 import {
   createEntry,
   entryAttachment,
   listEntries,
+  openEntry,
   previewFile,
   removeEntry,
   renameEntry,
+  resolveFile,
   revealEntry,
   saveArtifact,
+  searchEntries,
   WorkspaceWatcher,
 } from "./workspace-files.ts";
 
@@ -101,6 +105,8 @@ export function createSidePanel(options: SidePanelOptions) {
       throw new Error(translator()("panel.browser.profileNotFound"));
     return profileId;
   }
+
+  const openers = new Openers(join(options.userDataDir, "open-with-apps.json"));
 
   const browser = new BrowserHost({
     userDataDir: options.userDataDir,
@@ -170,12 +176,28 @@ export function createSidePanel(options: SidePanelOptions) {
   ipc.handle(IPC.workspaceList, (_event, root: unknown, dir: unknown) =>
     listEntries(requireWorkspace(root), requireText(dir)),
   );
+  ipc.handle(IPC.workspaceSearch, (_event, root: unknown, query: unknown) =>
+    searchEntries(requireWorkspace(root), requireText(query)),
+  );
   ipc.handle(IPC.workspacePreview, (_event, root: unknown, path: unknown) =>
     previewFile(requireWorkspace(root), requireText(path)),
   );
   ipc.handle(IPC.workspaceReveal, (_event, root: unknown, path: unknown) =>
     revealEntry(requireWorkspace(root), requireText(path)),
   );
+  ipc.handle(IPC.workspaceOpen, (_event, root: unknown, path: unknown) =>
+    openEntry(requireWorkspace(root), requireText(path)),
+  );
+  ipc.handle(
+    IPC.workspaceOpenWith,
+    async (_event, root: unknown, path: unknown, appPath: unknown) =>
+      openers.open(
+        await resolveFile(requireWorkspace(root), requireText(path)),
+        requireText(appPath),
+      ),
+  );
+  ipc.handle(IPC.workspaceOpeners, () => openers.list());
+  ipc.handle(IPC.workspaceChooseOpener, () => openers.choose(options.window()));
   ipc.handle(IPC.workspaceAttachment, (_event, root: unknown, path: unknown) =>
     entryAttachment(requireWorkspace(root), requireText(path)),
   );
