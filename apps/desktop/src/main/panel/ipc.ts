@@ -119,6 +119,7 @@ export function createSidePanel(options: SidePanelOptions) {
     onState: (state) => send(IPC.browserChanged, state),
     onTogglePanel: () => send(IPC.shellTogglePanel),
     onNewTab: () => send(IPC.shellNewTab),
+    onCloseTab: () => send(IPC.shellCloseTab),
     requireProfile: async (profileId) => void (await requireProfile(profileId)),
   });
 

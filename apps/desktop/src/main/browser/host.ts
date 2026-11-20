@@ -58,6 +58,10 @@ export function isTogglePanelInput(input: Input): boolean {
 }
 
 /** Cmd+T (macOS) or Ctrl+T: the new tab shortcut, also while a page has the keyboard. */
+export function isCloseTabInput(input: Input): boolean {
+  return isShortcutInput(input, "w");
+}
+
 export function isNewTabInput(input: Input): boolean {
   return isShortcutInput(input, "t");
 }
@@ -76,6 +80,7 @@ export interface BrowserHostOptions {
   onState(state: BrowserState): void;
   onTogglePanel(): void;
   onNewTab(): void;
+  onCloseTab(): void;
   /** Throws a message for the person when the profile no longer exists. */
   requireProfile(profileId: string): Promise<void>;
 }
@@ -302,6 +307,8 @@ export class BrowserHost implements BrowserDriver {
         nodeIntegration: false,
       },
     });
+    // Transparent until the page paints, so a new tab does not flash white.
+    view.setBackgroundColor("#00000000");
     if (by === "agent") this.agentPages.add(view.webContents.id);
     this.configureSession(view.webContents.session);
     view.setBounds(this.pixelBounds(this.lastBounds));
@@ -360,9 +367,11 @@ export class BrowserHost implements BrowserDriver {
     }
     contents.on("before-input-event", (event, input) => {
       const togglePanel = isTogglePanelInput(input);
-      if (!togglePanel && !isNewTabInput(input)) return;
+      const closeTab = isCloseTabInput(input);
+      if (!togglePanel && !closeTab && !isNewTabInput(input)) return;
       event.preventDefault();
       if (togglePanel) this.options.onTogglePanel();
+      else if (closeTab) this.options.onCloseTab();
       else this.options.onNewTab();
     });
     contents.on("context-menu", (_event, params) => {

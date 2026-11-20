@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@workspace/shared";
+import type { ChatMessage, ChatPart } from "@workspace/shared";
 import {
   Collapsible,
   CollapsibleContent,
@@ -21,24 +21,22 @@ interface TodoItem {
   status: "pending" | "in_progress" | "done";
 }
 
-interface LatestTodoCall {
-  /** The call's own id, so the panel can tell one checklist apart from the next. */
-  id: string;
-  args: Record<string, unknown>;
-}
+type TodoCall = Extract<ChatPart, { type: "tool" }>;
 
 /**
- * The newest `todo_write` call of the chat (a stable reference between updates).
+ * The newest `todo_write` call of the chat. It returns the call itself, never a new object built
+ * from it: a store selector must give the same reference while nothing changed, or React sees a
+ * new snapshot on every read and the app goes blank ("Maximum update depth exceeded").
  * Runs on every store update and keystroke, so it walks backwards in place instead of copying.
  */
-function latestTodoCall(state: { messages: ChatMessage[] }): LatestTodoCall | undefined {
+function latestTodoCall(state: { messages: ChatMessage[] }): TodoCall | undefined {
   const { messages } = state;
   for (let index = messages.length - 1; index >= 0; index--) {
     const { parts } = messages[index];
     for (let partIndex = parts.length - 1; partIndex >= 0; partIndex--) {
       const part = parts[partIndex];
       if (part.type === "tool" && part.name === "todo_write" && part.status !== "denied")
-        return { id: part.toolCallId, args: part.args };
+        return part;
     }
   }
   return undefined;
@@ -88,7 +86,7 @@ export function TodoPanel() {
   return (
     <div className="mx-auto w-full max-w-3xl px-3 pb-2 md:px-6">
       <Collapsible
-        key={call.id}
+        key={call.toolCallId}
         defaultOpen={defaultOpen}
         className="rounded-2xl border bg-muted/40 text-sm"
         aria-label={t("toolStep.todo.title")}
