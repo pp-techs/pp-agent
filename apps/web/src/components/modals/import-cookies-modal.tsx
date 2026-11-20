@@ -21,6 +21,7 @@ import {
 import { Checkbox } from "@workspace/ui/components/checkbox";
 import { Field, FieldContent, FieldDescription, FieldLabel } from "@workspace/ui/components/field";
 import { Input } from "@workspace/ui/components/input";
+import { Textarea } from "@workspace/ui/components/textarea";
 import {
   Select,
   SelectContent,
@@ -31,7 +32,7 @@ import {
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { Spinner } from "@workspace/ui/components/spinner";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { FileUpIcon, InfoIcon } from "lucide-react";
+import { InfoIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -65,6 +66,9 @@ function ImportForm({ bridge, profile, onDone }: ImportCookiesModalProps & { onD
   const [sites, setSites] = React.useState<CookieSite[] | null>(null);
   const [chosen, setChosen] = React.useState<ReadonlySet<string>>(new Set());
   const [filter, setFilter] = React.useState("");
+  /** The paste step: cookies copied from an export, instead of read from a file or a browser. */
+  const [pasting, setPasting] = React.useState(false);
+  const [pasted, setPasted] = React.useState("");
 
   const list = sources.data ?? [];
   const source = list.find((entry) => entry.browser === browser) ?? list[0];
@@ -182,32 +186,50 @@ function ImportForm({ bridge, profile, onDone }: ImportCookiesModalProps & { onD
     return notes;
   }
 
-  function importFromFile() {
-    importCookieFile.mutate(profile.id, {
-      onSuccess: (result) => {
-        if (result === null) return;
-        reportImport(
-          result,
-          t("browserSection.import.fileDone", { count: result.imported, profile: profile.name }),
-          importNotes(result),
-        );
-        onDone();
+  function importFromFile(text?: string) {
+    importCookieFile.mutate(
+      text === undefined ? { profileId: profile.id } : { profileId: profile.id, text },
+      {
+        onSuccess: (result) => {
+          if (result === null) return;
+          reportImport(
+            result,
+            t("browserSection.import.fileDone", { count: result.imported, profile: profile.name }),
+            importNotes(result),
+          );
+          onDone();
+        },
       },
-    });
+    );
   }
 
-  const fileButton = (
-    <Button
-      type="button"
-      variant="ghost"
-      className="mr-auto"
-      title={t("browserSection.import.fromFileHint")}
-      disabled={importCookieFile.isPending}
-      onClick={importFromFile}
-    >
-      {importCookieFile.isPending ? <Spinner /> : <FileUpIcon />}
-      {t("browserSection.import.fromFile")}
-    </Button>
+  /** Other ways in, as quiet links under the main form: a file, or pasted text. */
+  const otherWays = (
+    <p className="flex flex-wrap items-center gap-x-1 text-sm text-muted-foreground">
+      {t("browserSection.import.orImport")}
+      <Button
+        type="button"
+        variant="link"
+        className="h-auto p-0 text-sm"
+        title={t("browserSection.import.fromFileHint")}
+        disabled={importCookieFile.isPending}
+        onClick={() => importFromFile()}
+      >
+        {importCookieFile.isPending && <Spinner />}
+        {t("browserSection.import.fromFile")}
+      </Button>
+      {t("browserSection.import.or")}
+      <Button
+        type="button"
+        variant="link"
+        className="h-auto p-0 text-sm"
+        title={t("browserSection.import.pasteHint")}
+        disabled={importCookieFile.isPending}
+        onClick={() => setPasting(true)}
+      >
+        {t("browserSection.import.paste")}
+      </Button>
+    </p>
   );
   const fileError = importCookieFile.isError && (
     <Alert variant="destructive">
@@ -215,6 +237,49 @@ function ImportForm({ bridge, profile, onDone }: ImportCookiesModalProps & { onD
       <AlertDescription>{importCookieFile.error.message}</AlertDescription>
     </Alert>
   );
+
+  if (pasting) {
+    return (
+      <form
+        className="flex flex-col gap-6"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (pasted.trim()) importFromFile(pasted);
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>{t("browserSection.import.pasteTitle", { name: profile.name })}</DialogTitle>
+          <DialogDescription>{t("browserSection.import.pasteDescription")}</DialogDescription>
+        </DialogHeader>
+        <Textarea
+          autoFocus
+          value={pasted}
+          onChange={(event) => setPasted(event.target.value)}
+          placeholder={t("browserSection.import.pastePlaceholder")}
+          aria-label={t("browserSection.import.pasteTitle", { name: profile.name })}
+          className="h-56 font-mono text-xs"
+          spellCheck={false}
+        />
+        {fileError}
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              importCookieFile.reset();
+              setPasting(false);
+            }}
+          >
+            {t("common:actions.back")}
+          </Button>
+          <Button type="submit" disabled={!pasted.trim() || importCookieFile.isPending}>
+            {importCookieFile.isPending && <Spinner />}
+            {t("browserSection.import.submit")}
+          </Button>
+        </DialogFooter>
+      </form>
+    );
+  }
 
   if (sites !== null && source && chosenProfile) {
     return (
@@ -298,10 +363,10 @@ function ImportForm({ bridge, profile, onDone }: ImportCookiesModalProps & { onD
           </Alert>
         )}
 
+        {otherWays}
         {fileError}
 
         <DialogFooter>
-          {fileButton}
           <Button type="button" variant="outline" onClick={() => setSites(null)}>
             {t("common:actions.back")}
           </Button>
@@ -403,10 +468,10 @@ function ImportForm({ bridge, profile, onDone }: ImportCookiesModalProps & { onD
         </div>
       )}
 
+      {otherWays}
       {fileError}
 
       <DialogFooter>
-        {fileButton}
         <Button type="button" variant="outline" onClick={onDone}>
           {t("common:actions.cancel")}
         </Button>

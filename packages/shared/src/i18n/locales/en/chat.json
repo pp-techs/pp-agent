@@ -615,7 +615,19 @@
       "newTabIn": "New tab in profile",
       "manageProfiles": "Manage profiles…",
       "emptyTitle": "Browse the web",
-      "emptyDescription": "Type an address above. Pages open as tabs next to the chat, with the chosen profile's sign-ins."
+      "emptyDescription": "Type an address above. Pages open as tabs next to the chat, with the chosen profile's sign-ins.",
+      "find": "Find in page",
+      "findPrevious": "Previous match",
+      "findNext": "Next match",
+      "findClose": "Close find",
+      "loadFailedTitle": "This page can't be reached",
+      "retry": "Retry",
+      "resetZoom": "Reset zoom",
+      "startEmpty": "Type an address above. Sites you visit will show up here.",
+      "suggested": "Suggested",
+      "removeSuggestion": "Remove from history",
+      "removedFromHistory": "Removed {{site}} from history",
+      "undo": "Undo"
     }
   },
   "workbench": {

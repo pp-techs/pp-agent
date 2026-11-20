@@ -615,6 +615,8 @@ export function createWebBridge(): DesktopBridge {
       activate: desktopOnly,
       navigate: desktopOnly,
       go: desktopOnly,
+      find: desktopOnly,
+      onShortcut: noop,
       setBounds: () => undefined,
       onState: noop,
       cookieSources: async () => [],

@@ -539,7 +539,7 @@
       "keyDenied": "macOS không cho phép đọc khóa bảo vệ cookie của {{browser}}. Hãy thử lại và chọn “Cho phép” khi macOS hỏi.",
       "keyUnavailable": "Không thể đọc khóa bảo vệ cookie của {{browser}} ({{error}}).",
       "noSites": "Hãy chọn ít nhất một trang web để nhập cookie.",
-      "fileInvalidJson": "Tệp này không phải JSON hợp lệ. Hãy chọn tệp cookie đã xuất (một mảng JSON các cookie).",
+      "fileInvalidJson": "Đây không phải bản xuất cookie. Hãy dùng mảng JSON các cookie hoặc tệp cookies.txt.",
       "fileNotArray": "Tệp này không phải danh sách cookie. Hãy chọn tệp cookie đã xuất (một mảng JSON các cookie).",
       "fileEmpty": "Tệp này không có cookie nào.",
       "fileNoValidCookies": "Không cookie nào trong tệp này dùng được. Mỗi cookie cần có domain, tên và giá trị."

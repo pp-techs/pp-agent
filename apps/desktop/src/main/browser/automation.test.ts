@@ -135,6 +135,8 @@ it("formats a snapshot with its tab, profile, page and a note when cut short", (
       loading: false,
       canGoBack: false,
       canGoForward: false,
+      zoom: 1,
+      loadError: null,
       session: "",
     },
     "Default",

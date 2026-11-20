@@ -610,12 +610,19 @@
       "submit": "Nhập",
       "done_other": "Đã nhập {{count}} cookie từ {{browser}} vào {{profile}}.",
       "skipped_other": "Đã bỏ qua {{count}} cookie (hết hạn hoặc không đọc được).",
-      "fromFile": "Từ tệp…",
+      "fromFile": "một tệp",
       "fromFileHint": "Nhập tệp JSON chứa cookie đã xuất bằng tiện ích mở rộng của trình duyệt.",
+      "paste": "dữ liệu dán",
+      "pasteHint": "Dán cookie đã sao chép từ bản xuất thay vì chọn tệp.",
+      "pasteTitle": "Dán cookie vào {{name}}",
+      "pasteDescription": "Dán bản xuất cookie: mảng JSON từ tiện ích cookie, hoặc nội dung tệp cookies.txt.",
+      "pastePlaceholder": "[{ \"domain\": \".example.com\", \"name\": \"session\", \"value\": \"...\" }]",
       "notTransplantable_other": "Đã bỏ qua {{count}} cookie đăng nhập Google gắn với thiết bị kia.",
-      "warningAppBound_other": "Không giải mã được {{count}} cookie: trình duyệt này bảo vệ chúng bằng mã hóa app-bound. Bạn có thể nhập cookie từ tệp bằng “Từ tệp…”.",
+      "warningAppBound_other": "Không giải mã được {{count}} cookie: trình duyệt này bảo vệ chúng bằng mã hóa app-bound. Bạn có thể nhập cookie từ một tệp hoặc dữ liệu dán thay thế.",
       "warningUnknown_other": "Không giải mã được {{count}} cookie.",
-      "fileDone_other": "Đã nhập {{count}} cookie từ tệp vào {{profile}}."
+      "fileDone_other": "Đã nhập {{count}} cookie từ tệp vào {{profile}}.",
+      "orImport": "Hoặc nhập từ",
+      "or": "hoặc"
     }
   },
   "computerSection": {

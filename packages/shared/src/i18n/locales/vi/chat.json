@@ -611,7 +611,19 @@
       "newTabIn": "Tab mới trong hồ sơ",
       "manageProfiles": "Quản lý hồ sơ…",
       "emptyTitle": "Duyệt web",
-      "emptyDescription": "Nhập địa chỉ ở trên. Trang mở thành tab ở khu vực chính, với thông tin đăng nhập của hồ sơ đã chọn."
+      "emptyDescription": "Nhập địa chỉ ở trên. Trang mở thành tab ở khu vực chính, với thông tin đăng nhập của hồ sơ đã chọn.",
+      "find": "Tìm trong trang",
+      "findPrevious": "Kết quả trước",
+      "findNext": "Kết quả sau",
+      "findClose": "Đóng tìm kiếm",
+      "loadFailedTitle": "Không thể mở trang này",
+      "retry": "Thử lại",
+      "resetZoom": "Đặt lại thu phóng",
+      "startEmpty": "Nhập địa chỉ ở trên. Các trang bạn đã vào sẽ hiện ở đây.",
+      "suggested": "Gợi ý",
+      "removeSuggestion": "Xóa khỏi lịch sử",
+      "removedFromHistory": "Đã xóa {{site}} khỏi lịch sử",
+      "undo": "Hoàn tác"
     }
   },
   "workbench": {

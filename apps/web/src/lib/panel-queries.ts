@@ -133,7 +133,8 @@ export function useBrowserProfileCommands(bridge: DesktopBridge) {
     onSuccess: invalidate,
   });
   const importCookieFile = useMutation({
-    mutationFn: (profileId: string) => bridge.browser.importCookieFile(profileId),
+    mutationFn: (input: { profileId: string; text?: string }) =>
+      bridge.browser.importCookieFile(input.profileId, input.text),
     onSuccess: invalidate,
   });
   return { save, remove, importCookies, importCookieFile };

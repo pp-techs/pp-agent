@@ -83,13 +83,69 @@ export type CookieFileParse =
   | { ok: true; cookies: PortableCookie[]; skipped: number }
   | { ok: false; reason: "invalid-json" | "not-array" | "empty" | "no-valid-cookies" };
 
-/** Reads the text of a cookie file: a JSON array of `{ domain, name, value, … }` entries. */
+/** One line of a Netscape `cookies.txt`: seven tab-separated fields; null for anything else. */
+function cookieFromNetscapeLine(line: string): PortableCookie | null {
+  let text = line.trim();
+  let httpOnly = false;
+  if (text.startsWith("#HttpOnly_")) {
+    httpOnly = true;
+    text = text.slice("#HttpOnly_".length);
+  } else if (text.startsWith("#")) return null;
+  const fields = text.split("\t");
+  if (fields.length < 7) return null;
+  const [domain, subdomains, path, secure, expires, name, ...rest] = fields as [
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    ...string[],
+  ];
+  const expiry = Number(expires);
+  return cookieFromFileEntry({
+    domain,
+    hostOnly: subdomains.toUpperCase() !== "TRUE",
+    path,
+    secure: secure.toUpperCase() === "TRUE",
+    httpOnly,
+    expirationDate: Number.isFinite(expiry) ? expiry : undefined,
+    name,
+    value: rest.join("\t"),
+  });
+}
+
+function parseNetscape(text: string): CookieFileParse {
+  const lines = text
+    .split(/\r?\n/)
+    .filter((line) => line.trim() && (!line.startsWith("#") || line.startsWith("#HttpOnly_")));
+  const cookies: PortableCookie[] = [];
+  for (const line of lines) {
+    const cookie = cookieFromNetscapeLine(line);
+    if (cookie) cookies.push(cookie);
+  }
+  if (cookies.length === 0) return { ok: false, reason: "invalid-json" };
+  return { ok: true, cookies, skipped: lines.length - cookies.length };
+}
+
+/**
+ * Reads the text of a cookie export: a JSON array of `{ domain, name, value, … }` entries (also
+ * inside a `{ "cookies": [...] }` object), or a Netscape `cookies.txt`.
+ */
 export function parseCookieFile(text: string): CookieFileParse {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    return { ok: false, reason: "invalid-json" };
+    return parseNetscape(text);
+  }
+  if (
+    typeof parsed === "object" &&
+    parsed !== null &&
+    !Array.isArray(parsed) &&
+    Array.isArray((parsed as { cookies?: unknown }).cookies)
+  ) {
+    parsed = (parsed as { cookies: unknown[] }).cookies;
   }
   if (!Array.isArray(parsed)) return { ok: false, reason: "not-array" };
   if (parsed.length === 0) return { ok: false, reason: "empty" };

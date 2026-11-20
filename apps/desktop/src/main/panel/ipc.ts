@@ -48,7 +48,15 @@ import {
   WorkspaceWatcher,
 } from "./workspace-files.ts";
 
-const BROWSER_ACTIONS: readonly BrowserAction[] = ["back", "forward", "reload", "stop"];
+const BROWSER_ACTIONS: readonly BrowserAction[] = [
+  "back",
+  "forward",
+  "reload",
+  "stop",
+  "zoom-in",
+  "zoom-out",
+  "zoom-reset",
+];
 /** Longest text one `terminal.write` may carry (a large paste). */
 const MAX_WRITE_CHARS = 1024 * 1024;
 /** Most sites one cookie import may name (a profile rarely has this many). */
@@ -120,6 +128,7 @@ export function createSidePanel(options: SidePanelOptions) {
     onTogglePanel: () => send(IPC.shellTogglePanel),
     onNewTab: () => send(IPC.shellNewTab),
     onCloseTab: () => send(IPC.shellCloseTab),
+    onShortcut: (tabId, shortcut) => send(IPC.browserShortcut, tabId, shortcut),
     requireProfile: async (profileId) => void (await requireProfile(profileId)),
   });
 
@@ -247,6 +256,9 @@ export function createSidePanel(options: SidePanelOptions) {
     const known = BROWSER_ACTIONS.find((candidate) => candidate === action);
     if (known) return browser.go(isString(id) ? id : "", known);
   });
+  ipc.handle(IPC.browserFind, (_event, id: unknown, text: unknown, forward: unknown) =>
+    browser.find(isString(id) ? id : "", isString(text) ? text : "", forward !== false),
+  );
   ipc.on(IPC.browserSetBounds, (_event, id: unknown, bounds: unknown) =>
     browser.setBounds(isString(id) ? id : "", isBounds(bounds) ? bounds : null),
   );
@@ -306,9 +318,10 @@ export function createSidePanel(options: SidePanelOptions) {
   );
   ipc.handle(
     IPC.browserImportCookieFile,
-    async (_event, profileId: unknown): Promise<CookieImportResult | null> => {
+    async (_event, profileId: unknown, pasted: unknown): Promise<CookieImportResult | null> => {
       const id = await requireProfile(profileId);
-      const text = await openCookieFile(options.window());
+      // Pasted text is read as is; without any, the person picks a file.
+      const text = isString(pasted) ? pasted : await openCookieFile(options.window());
       if (text === null) return null;
       const parsed = parseCookieFile(text);
       if (!parsed.ok) {

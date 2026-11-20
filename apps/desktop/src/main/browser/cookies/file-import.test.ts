@@ -100,3 +100,32 @@ describe("cookie files", () => {
     expect(parseCookieFile('[{"a":1}]')).toEqual({ ok: false, reason: "no-valid-cookies" });
   });
 });
+
+describe("parseCookieFile formats", () => {
+  it("reads a { cookies: [...] } object", () => {
+    const text = JSON.stringify({ cookies: [{ domain: ".a.com", name: "n", value: "v" }] });
+    const parsed = parseCookieFile(text);
+    expect(parsed.ok && parsed.cookies).toHaveLength(1);
+  });
+
+  it("reads a Netscape cookies.txt, with HttpOnly lines and skipping comments", () => {
+    const text = [
+      "# Netscape HTTP Cookie File",
+      ".example.com\tTRUE\t/\tTRUE\t1893456000\tsid\tabc",
+      "#HttpOnly_.example.com\tTRUE\t/\tFALSE\t0\ttoken\txyz",
+      "garbage line",
+    ].join("\n");
+    const parsed = parseCookieFile(text);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.cookies.map((c) => [c.name, c.httpOnly, c.secure, c.expires])).toEqual([
+      ["sid", false, true, 1893456000],
+      ["token", true, false, null],
+    ]);
+    expect(parsed.skipped).toBe(1);
+  });
+
+  it("rejects text that is neither", () => {
+    expect(parseCookieFile("hello")).toEqual({ ok: false, reason: "invalid-json" });
+  });
+});

@@ -541,7 +541,7 @@
       "keyDenied": "macOS did not allow reading the key that protects the cookies of {{browser}}. Try again and choose “Allow” when macOS asks.",
       "keyUnavailable": "The key that protects the cookies of {{browser}} could not be read ({{error}}).",
       "noSites": "Choose at least one site whose cookies to import.",
-      "fileInvalidJson": "This file is not valid JSON. Choose a cookie export (a JSON array of cookies).",
+      "fileInvalidJson": "This is not a cookie export. Use a JSON array of cookies or a cookies.txt file.",
       "fileNotArray": "This file is not a list of cookies. Choose a cookie export (a JSON array of cookies).",
       "fileEmpty": "This file has no cookies.",
       "fileNoValidCookies": "None of the cookies in this file could be used. Each needs a domain, a name and a value."

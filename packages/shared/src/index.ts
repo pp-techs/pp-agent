@@ -1937,6 +1937,10 @@ export interface BrowserTab {
   loading: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
+  /** The page's zoom, 1 being 100%. */
+  zoom: number;
+  /** Why the last load failed (a description such as ERR_NAME_NOT_RESOLVED); null when it did not. */
+  loadError: string | null;
   /** The conversation the tab belongs to (its session file, "" for one without a session file). */
   session: string;
 }
@@ -1946,7 +1950,17 @@ export interface BrowserState {
   activeId: string | null;
 }
 
-export type BrowserAction = "back" | "forward" | "reload" | "stop";
+export type BrowserAction =
+  | "back"
+  | "forward"
+  | "reload"
+  | "stop"
+  | "zoom-in"
+  | "zoom-out"
+  | "zoom-reset";
+
+/** A shortcut pressed while a browser page had the keyboard, for the app to act on. */
+export type BrowserShortcut = "address" | "find";
 
 // ---------------------------------------------------------------------------------------------
 // Browser use: the agent's `browser` tool, run by the window's side panel browser
@@ -2404,6 +2418,10 @@ export interface DesktopBridge {
     /** Goes to an address, or searches the web for anything that is not one. */
     navigate(id: string, input: string): Promise<void>;
     go(id: string, action: BrowserAction): Promise<void>;
+    /** Finds `text` in the page (and moves to the next or previous match); empty text clears. */
+    find(id: string, text: string, forward: boolean): Promise<void>;
+    /** A browser shortcut (Cmd+L, Cmd+F) was pressed while the page of tab `tabId` had the keyboard. */
+    onShortcut(listener: (tabId: string, shortcut: BrowserShortcut) => void): () => void;
     /**
      * Where a tab's page is drawn; null hides it (its view is not showing, a dialog on top).
      * Several tabs can be shown at once, each in its own area.
@@ -2434,10 +2452,11 @@ export interface DesktopBridge {
       sites: string[],
     ): Promise<CookieImportResult>;
     /**
-     * Asks for a JSON file of cookies (an array of `{ domain, name, value, … }`, as cookie export
-     * extensions write) and copies them into a profile; null when cancelled.
+     * Copies cookies exported by an extension (a JSON array of `{ domain, name, value, … }`, or a
+     * Netscape cookies.txt) into a profile. `text` is the pasted export; without it the person is
+     * asked for a file, and null means they cancelled.
      */
-    importCookieFile(profileId: string): Promise<CookieImportResult | null>;
+    importCookieFile(profileId: string, text?: string): Promise<CookieImportResult | null>;
   };
   computer: {
     status(): Promise<ComputerStatus>;
@@ -2533,6 +2552,8 @@ export const IPC = {
   browserActivate: "browser:activate",
   browserNavigate: "browser:navigate",
   browserGo: "browser:go",
+  browserFind: "browser:find",
+  browserShortcut: "browser:shortcut",
   browserSetBounds: "browser:set-bounds",
   browserChanged: "browser:changed",
   browserCookieSources: "browser:cookie-sources",

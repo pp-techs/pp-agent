@@ -62,6 +62,26 @@ export function isCloseTabInput(input: Input): boolean {
   return isShortcutInput(input, "w");
 }
 
+/** Cmd+L (macOS) or Ctrl+L: focus the address bar. */
+export function isAddressInput(input: Input): boolean {
+  return isShortcutInput(input, "l");
+}
+
+/** Cmd+F (macOS) or Ctrl+F: find in the page. */
+export function isFindInput(input: Input): boolean {
+  return isShortcutInput(input, "f");
+}
+
+/** Cmd/Ctrl with +, - or 0: zoom the page in, out or back to 100%. */
+export function zoomActionOf(input: Input): "zoom-in" | "zoom-out" | "zoom-reset" | null {
+  const modifier = process.platform === "darwin" ? input.meta : input.control;
+  if (input.type !== "keyDown" || !modifier || input.alt) return null;
+  if (input.key === "=" || input.key === "+") return "zoom-in";
+  if (input.key === "-") return "zoom-out";
+  if (input.key === "0") return "zoom-reset";
+  return null;
+}
+
 export function isNewTabInput(input: Input): boolean {
   return isShortcutInput(input, "t");
 }
@@ -72,6 +92,8 @@ interface Tab {
   /** The conversation the tab belongs to (its session file, "" for one without a session file). */
   session: string;
   view: WebContentsView;
+  /** The description of the load failure the page is showing, if any. */
+  loadError: string | null;
 }
 
 export interface BrowserHostOptions {
@@ -81,6 +103,7 @@ export interface BrowserHostOptions {
   onTogglePanel(): void;
   onNewTab(): void;
   onCloseTab(): void;
+  onShortcut(tabId: string, shortcut: "address" | "find"): void;
   /** Throws a message for the person when the profile no longer exists. */
   requireProfile(profileId: string): Promise<void>;
 }
@@ -200,7 +223,21 @@ export class BrowserHost implements BrowserDriver {
     if (action === "back") contents.navigationHistory.goBack();
     else if (action === "forward") contents.navigationHistory.goForward();
     else if (action === "reload") contents.reload();
-    else contents.stop();
+    else if (action === "stop") contents.stop();
+    else {
+      const zoom =
+        action === "zoom-reset"
+          ? 1
+          : contents.getZoomFactor() + (action === "zoom-in" ? 0.1 : -0.1);
+      contents.setZoomFactor(Math.min(3, Math.max(0.25, Math.round(zoom * 10) / 10)));
+    }
+    this.emit();
+  }
+
+  async find(tabId: string, text: string, forward: boolean): Promise<void> {
+    const contents = this.requireTab(tabId).view.webContents;
+    if (text) contents.findInPage(text, { forward, findNext: true });
+    else contents.stopFindInPage("clearSelection");
   }
 
   async evaluate(tabId: string, expression: string): Promise<unknown> {
@@ -312,7 +349,13 @@ export class BrowserHost implements BrowserDriver {
     if (by === "agent") this.agentPages.add(view.webContents.id);
     this.configureSession(view.webContents.session);
     view.setBounds(this.pixelBounds(this.lastBounds));
-    const tab: Tab = { id: `tab-${this.nextId++}`, profileId, session: conversation, view };
+    const tab: Tab = {
+      id: `tab-${this.nextId++}`,
+      profileId,
+      session: conversation,
+      view,
+      loadError: null,
+    };
     this.tabs.set(tab.id, tab);
     this.wire(tab);
     view.setVisible(false);
@@ -367,12 +410,35 @@ export class BrowserHost implements BrowserDriver {
     }
     contents.on("before-input-event", (event, input) => {
       const togglePanel = isTogglePanelInput(input);
+      const zoom = zoomActionOf(input);
+      if (zoom) {
+        event.preventDefault();
+        void this.go(tab.id, zoom);
+        return;
+      }
       const closeTab = isCloseTabInput(input);
-      if (!togglePanel && !closeTab && !isNewTabInput(input)) return;
+      const shortcut = isAddressInput(input) ? "address" : isFindInput(input) ? "find" : null;
+      if (!togglePanel && !closeTab && !shortcut && !isNewTabInput(input)) return;
       event.preventDefault();
+      if (shortcut) {
+        this.options.onShortcut(tab.id, shortcut);
+        return;
+      }
       if (togglePanel) this.options.onTogglePanel();
       else if (closeTab) this.options.onCloseTab();
       else this.options.onNewTab();
+    });
+    contents.on("did-start-navigation", (_event, _url, _inPlace, isMainFrame) => {
+      if (isMainFrame && tab.loadError !== null) {
+        tab.loadError = null;
+        this.emit();
+      }
+    });
+    contents.on("did-fail-load", (_event, code, description, _url, isMainFrame) => {
+      // -3 is a navigation the page itself cancelled (a redirect, a new load): not a failure.
+      if (!isMainFrame || code === -3) return;
+      tab.loadError = description || `ERR_${code}`;
+      this.emit();
     });
     contents.on("context-menu", (_event, params) => {
       Menu.buildFromTemplate(this.contextMenu(tab, params)).popup({
@@ -524,5 +590,7 @@ function describe(tab: Tab): BrowserTab {
     loading: !destroyed && contents.isLoading(),
     canGoBack: !destroyed && contents.navigationHistory.canGoBack(),
     canGoForward: !destroyed && contents.navigationHistory.canGoForward(),
+    zoom: destroyed ? 1 : contents.getZoomFactor(),
+    loadError: tab.loadError,
   };
 }

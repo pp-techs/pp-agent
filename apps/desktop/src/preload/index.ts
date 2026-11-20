@@ -1,5 +1,6 @@
 import {
   type AgentEvent,
+  type BrowserShortcut,
   type BrowserState,
   type DesktopBridge,
   IPC,
@@ -125,6 +126,8 @@ const bridge: DesktopBridge = {
     activate: (id) => invoke(IPC.browserActivate, id),
     navigate: (id, input) => invoke(IPC.browserNavigate, id, input),
     go: (id, action) => invoke(IPC.browserGo, id, action),
+    find: (id, text, forward) => invoke(IPC.browserFind, id, text, forward),
+    onShortcut: (listener) => subscribe<[string, BrowserShortcut]>(IPC.browserShortcut, listener),
     setBounds: (id, bounds) => ipcRenderer.send(IPC.browserSetBounds, id, bounds),
     onState: (listener) => subscribe<[BrowserState]>(IPC.browserChanged, listener),
     cookieSources: () => invoke(IPC.browserCookieSources),
@@ -133,7 +136,7 @@ const bridge: DesktopBridge = {
       invoke(IPC.browserCookieSites, browser, sourceProfile, quitSource),
     importCookies: (profileId, browser, sourceProfile, sites) =>
       invoke(IPC.browserImportCookies, profileId, browser, sourceProfile, sites),
-    importCookieFile: (profileId) => invoke(IPC.browserImportCookieFile, profileId),
+    importCookieFile: (profileId, text) => invoke(IPC.browserImportCookieFile, profileId, text),
   },
   computer: {
     status: () => invoke(IPC.computerStatus),
