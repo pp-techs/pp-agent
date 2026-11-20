@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.36.4] — 2026-11-20
+
+Fix the white flash when opening a browser tab, and make Cmd/Ctrl+W close the browser tab instead of the window while a page has focus.
+
+Fix the whole app going blank when opening a conversation that has a checklist. The checklist panel read the newest checklist call through a selector that built a new object on every read, so React saw a changing snapshot and stopped with "Maximum update depth exceeded". The selector now returns the call itself.
+
 ## [0.36.3] — 2026-11-20
 
 Cookie import now tells you what it could not copy instead of reporting a plain "0 cookies": cookies that Chrome, Edge or Brave on Windows protect with app-bound encryption are counted and named as the reason, with a pointer to the new "From file…" button, and an import that copied nothing for that reason shows as an error. "From file…" imports a JSON cookie export (an array of cookies, as browser extensions write it). Google sign-in cookies tied to the source device (SIDCC, AEC, …) are left out, since they only log you out when copied. Import problems are noted in `cookie-import-diag.log` in the app's data folder.
