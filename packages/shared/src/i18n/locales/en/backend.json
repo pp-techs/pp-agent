@@ -260,6 +260,9 @@
     "agentFiles": "Agent files",
     "importAgentTitle": "Import an agent",
     "agentTooLarge": "This file is too large to be an exported agent.",
+    "importCookiesTitle": "Import cookies",
+    "cookieFiles": "Cookie files",
+    "cookieFileTooLarge": "This file is too large to be a cookie export.",
     "exportAgentTitle": "Export agent",
     "exportButton": "Export",
     "exportConversationTitle": "Export conversation",
@@ -537,9 +540,11 @@
       "quitFailed": "{{browser}} could not be quit ({{error}}). Quit it yourself from the system tray or Task Manager, then try again.",
       "keyDenied": "macOS did not allow reading the key that protects the cookies of {{browser}}. Try again and choose “Allow” when macOS asks.",
       "keyUnavailable": "The key that protects the cookies of {{browser}} could not be read ({{error}}).",
-      "appBoundFailed": "{{browser}} protects its cookies with a key only it can unwrap, and reading them through {{browser}} itself failed ({{error}}). Try again, or check that no security software is blocking it from starting.",
-      "appBoundNoBrowser": "{{browser}} protects its cookies with a key only it can unwrap, and its program could not be found on this computer to read them. Reinstall {{browser}} in its usual folder, or try again after it updates.",
-      "noSites": "Choose at least one site whose cookies to import."
+      "noSites": "Choose at least one site whose cookies to import.",
+      "fileInvalidJson": "This file is not valid JSON. Choose a cookie export (a JSON array of cookies).",
+      "fileNotArray": "This file is not a list of cookies. Choose a cookie export (a JSON array of cookies).",
+      "fileEmpty": "This file has no cookies.",
+      "fileNoValidCookies": "None of the cookies in this file could be used. Each needs a domain, a name and a value."
     }
   },
   "computerApps": {

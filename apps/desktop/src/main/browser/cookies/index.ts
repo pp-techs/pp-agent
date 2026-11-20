@@ -21,6 +21,7 @@ import {
 import { readCookiesThroughBrowser } from "./chromium-cdp.ts";
 import { LockedError } from "./database.ts";
 import { listFirefoxProfiles } from "./firefox.ts";
+import { diag } from "./diagnostics.ts";
 import { cookieSite, groupSites, type PortableCookie } from "./portable.ts";
 import { readInBackground } from "./reader-process.ts";
 
@@ -51,6 +52,8 @@ export interface CookieRead {
   cookies: PortableCookie[];
   /** Cookies that could not be decrypted. */
   unreadable: number;
+  /** Of those, the ones only the browser itself can decrypt (Windows app-bound encryption). */
+  appBound: number;
   /** Name of the source profile, for the import record. */
   profileName: string;
 }
@@ -103,6 +106,7 @@ export async function readCookies(
           sites: [...sites],
         }),
         unreadable: 0,
+        appBound: 0,
         profileName: profile.name,
       };
     }
@@ -223,6 +227,7 @@ async function readChromium(
     sites: [...sites],
   });
   if (read.appBound === 0) return { ...read, profileName: profile.name };
+  const appBound = read.appBound;
   // Newer Windows browsers encrypt with a key only they can unwrap: ask the browser itself, and
   // keep the chosen sites of what it hands over.
   const executable = browserExecutable(definition);
@@ -232,27 +237,22 @@ async function readChromium(
       const cookies = (
         await readCookiesThroughBrowser(executable, userData, profile.id, file)
       ).filter((cookie) => chosen.has(cookieSite(cookie.domain)));
-      return { cookies, unreadable: 0, profileName: profile.name };
+      return { cookies, unreadable: 0, appBound: 0, profileName: profile.name };
     } catch (error) {
-      console.error(`Could not read ${name} cookies through the browser:`, error);
-      // Every plainly-readable cookie was already counted in `read`; when that is empty, the
-      // app-bound ones were the only cookies this import had, so a silent "0 imported" would hide
-      // that the browser bridge failed rather than tell the person there was nothing to copy.
-      if (read.cookies.length === 0) {
-        throw new Error(
-          t("panel.cookies.appBoundFailed", {
-            browser: name,
-            error: error instanceof Error ? error.message : String(error),
-          }),
-        );
-      }
+      // The cookies the browser would not hand over stay unread; the caller warns about them.
+      diag(
+        `${name}: ${appBound} app-bound cookies, reading through the browser failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     }
-  } else if (read.cookies.length === 0) {
-    throw new Error(t("panel.cookies.appBoundNoBrowser", { browser: name }));
+  } else {
+    diag(`${name}: ${appBound} app-bound cookies and no browser program found to read them.`);
   }
   return {
     cookies: read.cookies,
-    unreadable: read.unreadable + read.appBound,
+    unreadable: read.unreadable + appBound,
+    appBound,
     profileName: profile.name,
   };
 }

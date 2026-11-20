@@ -3,6 +3,7 @@ import { createModal } from "@buiducnhat/better-modal";
 import {
   type BrowserProfile,
   COOKIE_SOURCE_NAMES,
+  type CookieImportResult,
   type CookieSite,
   type CookieSourceBrowser,
   type DesktopBridge,
@@ -30,7 +31,7 @@ import {
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { Spinner } from "@workspace/ui/components/spinner";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { InfoIcon } from "lucide-react";
+import { FileUpIcon, InfoIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -46,10 +47,18 @@ type ImportCookiesModalProps = { bridge: DesktopBridge; profile: BrowserProfile 
 /** Sites shown at once; typing narrows the list. */
 const SHOWN_SITES = 200;
 
+/** Tells the person what an import did, and why some cookies were left out. */
+function reportImport(result: CookieImportResult, message: string, notes: string[]): void {
+  const description = notes.length > 0 ? notes.join(" ") : undefined;
+  // Nothing imported because cookies could not be read is a failure, not a success.
+  if (result.imported === 0 && result.warning) toast.error(message, { description });
+  else toast.success(message, { description });
+}
+
 function ImportForm({ bridge, profile, onDone }: ImportCookiesModalProps & { onDone: () => void }) {
   const { t } = useTranslation(["settings", "common"]);
   const sources = useQuery(cookieSourcesQuery(bridge));
-  const { importCookies } = useBrowserProfileCommands(bridge);
+  const { importCookies, importCookieFile } = useBrowserProfileCommands(bridge);
   const [browser, setBrowser] = React.useState<CookieSourceBrowser | null>(null);
   const [sourceProfile, setSourceProfile] = React.useState<string | null>(null);
   /** Second step: the sites of the chosen profile, and which of them to import. */
@@ -140,24 +149,72 @@ function ImportForm({ bridge, profile, onDone }: ImportCookiesModalProps & { onD
       },
       {
         onSuccess: (result) => {
-          toast.success(
+          reportImport(
+            result,
             t("browserSection.import.done", {
               count: result.imported,
               browser: COOKIE_SOURCE_NAMES[source.browser],
               profile: profile.name,
             }),
-            {
-              description:
-                result.skipped > 0
-                  ? t("browserSection.import.skipped", { count: result.skipped })
-                  : undefined,
-            },
+            importNotes(result),
           );
           onDone();
         },
       },
     );
   }
+
+  /** What was left out of an import, in words: expired, device-bound, or not decryptable. */
+  function importNotes(result: CookieImportResult): string[] {
+    const notes: string[] = [];
+    if (result.skipped > 0)
+      notes.push(t("browserSection.import.skipped", { count: result.skipped }));
+    if (result.notTransplantable > 0)
+      notes.push(t("browserSection.import.notTransplantable", { count: result.notTransplantable }));
+    if (result.warning) {
+      const count = result.warning.failedCookies;
+      notes.push(
+        result.warning.reason === "app-bound-encryption"
+          ? t("browserSection.import.warningAppBound", { count })
+          : t("browserSection.import.warningUnknown", { count }),
+      );
+    }
+    return notes;
+  }
+
+  function importFromFile() {
+    importCookieFile.mutate(profile.id, {
+      onSuccess: (result) => {
+        if (result === null) return;
+        reportImport(
+          result,
+          t("browserSection.import.fileDone", { count: result.imported, profile: profile.name }),
+          importNotes(result),
+        );
+        onDone();
+      },
+    });
+  }
+
+  const fileButton = (
+    <Button
+      type="button"
+      variant="ghost"
+      className="mr-auto"
+      title={t("browserSection.import.fromFileHint")}
+      disabled={importCookieFile.isPending}
+      onClick={importFromFile}
+    >
+      {importCookieFile.isPending ? <Spinner /> : <FileUpIcon />}
+      {t("browserSection.import.fromFile")}
+    </Button>
+  );
+  const fileError = importCookieFile.isError && (
+    <Alert variant="destructive">
+      <InfoIcon />
+      <AlertDescription>{importCookieFile.error.message}</AlertDescription>
+    </Alert>
+  );
 
   if (sites !== null && source && chosenProfile) {
     return (
@@ -241,7 +298,10 @@ function ImportForm({ bridge, profile, onDone }: ImportCookiesModalProps & { onD
           </Alert>
         )}
 
+        {fileError}
+
         <DialogFooter>
+          {fileButton}
           <Button type="button" variant="outline" onClick={() => setSites(null)}>
             {t("common:actions.back")}
           </Button>
@@ -343,7 +403,10 @@ function ImportForm({ bridge, profile, onDone }: ImportCookiesModalProps & { onD
         </div>
       )}
 
+      {fileError}
+
       <DialogFooter>
+        {fileButton}
         <Button type="button" variant="outline" onClick={onDone}>
           {t("common:actions.cancel")}
         </Button>

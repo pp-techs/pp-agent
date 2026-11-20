@@ -20,8 +20,14 @@ import {
   quitCookieBrowser,
   readCookies,
 } from "../browser/cookies/index.ts";
+import {
+  dropDeviceBound,
+  parseCookieFile,
+  undecryptableWarning,
+} from "../browser/cookies/file-import.ts";
 import { BrowserAutomation } from "../browser/automation.ts";
 import { BrowserHost } from "../browser/host.ts";
+import { openCookieFile } from "../files.ts";
 import { translator } from "../i18n.ts";
 import type { DesktopSettings } from "../settings.ts";
 import type { TrustedIpc } from "../trusted-ipc.ts";
@@ -276,7 +282,8 @@ export function createSidePanel(options: SidePanelOptions) {
       )
         throw new Error(translator()("panel.cookies.noSites"));
       const read = await readCookies(known, fromProfile, sites);
-      const { written, refused } = await browser.setCookies(id, read.cookies);
+      const { cookies, notTransplantable } = dropDeviceBound(read.cookies);
+      const { written, refused } = await browser.setCookies(id, cookies);
       const profile = (await options.command({
         type: "record_browser_import",
         id,
@@ -287,7 +294,45 @@ export function createSidePanel(options: SidePanelOptions) {
           count: written,
         },
       })) as BrowserProfile;
-      return { imported: written, skipped: refused + read.unreadable, profile };
+      return {
+        imported: written,
+        skipped: refused + read.unreadable,
+        notTransplantable,
+        warning: undecryptableWarning(read.unreadable, read.appBound),
+        profile,
+      };
+    },
+  );
+  ipc.handle(
+    IPC.browserImportCookieFile,
+    async (_event, profileId: unknown): Promise<CookieImportResult | null> => {
+      const id = await requireProfile(profileId);
+      const text = await openCookieFile(options.window());
+      if (text === null) return null;
+      const parsed = parseCookieFile(text);
+      if (!parsed.ok) {
+        const t = translator();
+        throw new Error(
+          parsed.reason === "invalid-json"
+            ? t("panel.cookies.fileInvalidJson")
+            : parsed.reason === "not-array"
+              ? t("panel.cookies.fileNotArray")
+              : parsed.reason === "empty"
+                ? t("panel.cookies.fileEmpty")
+                : t("panel.cookies.fileNoValidCookies"),
+        );
+      }
+      const { cookies, notTransplantable } = dropDeviceBound(parsed.cookies);
+      const { written, refused } = await browser.setCookies(id, cookies);
+      // No `lastImport` record: it names a source browser, and a file has none.
+      const profile = (await profiles()).find((entry) => entry.id === id);
+      if (!profile) throw new Error(translator()("panel.browser.profileNotFound"));
+      return {
+        imported: written,
+        skipped: parsed.skipped + refused,
+        notTransplantable,
+        profile,
+      };
     },
   );
 

@@ -258,6 +258,9 @@
     "agentFiles": "Tệp Agent",
     "importAgentTitle": "Nhập một Agent",
     "agentTooLarge": "Tệp này quá lớn để là một Agent đã xuất.",
+    "importCookiesTitle": "Nhập cookie",
+    "cookieFiles": "Tệp cookie",
+    "cookieFileTooLarge": "Tệp này quá lớn để là tệp cookie đã xuất.",
     "exportAgentTitle": "Xuất Agent",
     "exportButton": "Xuất",
     "exportConversationTitle": "Xuất cuộc trò chuyện",
@@ -535,9 +538,11 @@
       "quitFailed": "Không thể thoát {{browser}} ({{error}}). Hãy tự thoát từ khay hệ thống hoặc Task Manager rồi thử lại.",
       "keyDenied": "macOS không cho phép đọc khóa bảo vệ cookie của {{browser}}. Hãy thử lại và chọn “Cho phép” khi macOS hỏi.",
       "keyUnavailable": "Không thể đọc khóa bảo vệ cookie của {{browser}} ({{error}}).",
-      "appBoundFailed": "{{browser}} bảo vệ cookie bằng khóa chỉ chính nó mở được, và việc đọc qua {{browser}} đã thất bại ({{error}}). Hãy thử lại, hoặc kiểm tra xem phần mềm bảo mật có đang chặn nó khởi động không.",
-      "appBoundNoBrowser": "{{browser}} bảo vệ cookie bằng khóa chỉ chính nó mở được, nhưng không tìm thấy chương trình {{browser}} trên máy này để đọc. Hãy cài lại {{browser}} vào thư mục mặc định, hoặc thử lại sau khi trình duyệt cập nhật.",
-      "noSites": "Hãy chọn ít nhất một trang web để nhập cookie."
+      "noSites": "Hãy chọn ít nhất một trang web để nhập cookie.",
+      "fileInvalidJson": "Tệp này không phải JSON hợp lệ. Hãy chọn tệp cookie đã xuất (một mảng JSON các cookie).",
+      "fileNotArray": "Tệp này không phải danh sách cookie. Hãy chọn tệp cookie đã xuất (một mảng JSON các cookie).",
+      "fileEmpty": "Tệp này không có cookie nào.",
+      "fileNoValidCookies": "Không cookie nào trong tệp này dùng được. Mỗi cookie cần có domain, tên và giá trị."
     }
   },
   "computerApps": {

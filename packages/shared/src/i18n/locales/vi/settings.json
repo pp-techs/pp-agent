@@ -609,7 +609,13 @@
       "sitesChosen_other": "Đã chọn {{count}} trang web",
       "submit": "Nhập",
       "done_other": "Đã nhập {{count}} cookie từ {{browser}} vào {{profile}}.",
-      "skipped_other": "Đã bỏ qua {{count}} cookie (hết hạn hoặc không đọc được)."
+      "skipped_other": "Đã bỏ qua {{count}} cookie (hết hạn hoặc không đọc được).",
+      "fromFile": "Từ tệp…",
+      "fromFileHint": "Nhập tệp JSON chứa cookie đã xuất bằng tiện ích mở rộng của trình duyệt.",
+      "notTransplantable_other": "Đã bỏ qua {{count}} cookie đăng nhập Google gắn với thiết bị kia.",
+      "warningAppBound_other": "Không giải mã được {{count}} cookie: trình duyệt này bảo vệ chúng bằng mã hóa app-bound. Bạn có thể nhập cookie từ tệp bằng “Từ tệp…”.",
+      "warningUnknown_other": "Không giải mã được {{count}} cookie.",
+      "fileDone_other": "Đã nhập {{count}} cookie từ tệp vào {{profile}}."
     }
   },
   "computerSection": {

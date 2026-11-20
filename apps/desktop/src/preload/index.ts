@@ -133,6 +133,7 @@ const bridge: DesktopBridge = {
       invoke(IPC.browserCookieSites, browser, sourceProfile, quitSource),
     importCookies: (profileId, browser, sourceProfile, sites) =>
       invoke(IPC.browserImportCookies, profileId, browser, sourceProfile, sites),
+    importCookieFile: (profileId) => invoke(IPC.browserImportCookieFile, profileId),
   },
   computer: {
     status: () => invoke(IPC.computerStatus),

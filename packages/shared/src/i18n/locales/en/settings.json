@@ -622,7 +622,17 @@
       "done_one": "Imported {{count}} cookie from {{browser}} into {{profile}}.",
       "done_other": "Imported {{count}} cookies from {{browser}} into {{profile}}.",
       "skipped_one": "{{count}} cookie was skipped (expired or unreadable).",
-      "skipped_other": "{{count}} cookies were skipped (expired or unreadable)."
+      "skipped_other": "{{count}} cookies were skipped (expired or unreadable).",
+      "fromFile": "From file…",
+      "fromFileHint": "Import a JSON file of cookies exported with a browser extension.",
+      "notTransplantable_one": "{{count}} Google sign-in cookie tied to the other device was left out.",
+      "notTransplantable_other": "{{count}} Google sign-in cookies tied to the other device were left out.",
+      "warningAppBound_one": "{{count}} cookie could not be decrypted: this browser protects it with app-bound encryption. You can import cookies from a file with “From file…”.",
+      "warningAppBound_other": "{{count}} cookies could not be decrypted: this browser protects them with app-bound encryption. You can import cookies from a file with “From file…”.",
+      "warningUnknown_one": "{{count}} cookie could not be decrypted.",
+      "warningUnknown_other": "{{count}} cookies could not be decrypted.",
+      "fileDone_one": "Imported {{count}} cookie from the file into {{profile}}.",
+      "fileDone_other": "Imported {{count}} cookies from the file into {{profile}}."
     }
   },
   "computerSection": {

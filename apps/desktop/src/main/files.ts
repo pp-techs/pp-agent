@@ -123,6 +123,28 @@ export async function openAgentFile(window: BrowserWindow | null): Promise<strin
   return readFile(path, "utf8");
 }
 
+/** Cookie exports are small; anything bigger is not one. */
+const MAX_COOKIE_FILE_BYTES = 20 * 1024 * 1024;
+
+/** Picks a cookie export (JSON) and returns its text; null when cancelled. */
+export async function openCookieFile(window: BrowserWindow | null): Promise<string | null> {
+  const t = translator();
+  const options: Electron.OpenDialogOptions = {
+    title: t("files.importCookiesTitle"),
+    buttonLabel: t("files.importButton"),
+    properties: ["openFile"],
+    filters: [{ name: t("files.cookieFiles"), extensions: ["json"] }],
+  };
+  const result = window
+    ? await dialog.showOpenDialog(window, options)
+    : await dialog.showOpenDialog(options);
+  const path = result.canceled ? undefined : result.filePaths[0];
+  if (!path) return null;
+  if ((await stat(path)).size > MAX_COOKIE_FILE_BYTES)
+    throw new Error(t("files.cookieFileTooLarge"));
+  return readFile(path, "utf8");
+}
+
 /** Asks where to save an exported agent and writes it; false when cancelled. */
 export async function saveAgentFile(
   window: BrowserWindow | null,

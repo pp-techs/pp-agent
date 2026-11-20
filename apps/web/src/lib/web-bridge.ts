@@ -621,6 +621,7 @@ export function createWebBridge(): DesktopBridge {
       cookieSourceRunning: async () => false,
       cookieSites: async () => [],
       importCookies: desktopOnly,
+      importCookieFile: desktopOnly,
     },
     computer: {
       status: desktopOnly,

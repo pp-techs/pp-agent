@@ -1910,10 +1910,21 @@ export interface CookieSite {
   count: number;
 }
 
+/** Why cookies could not be read: `app-bound-encryption` (Windows Chrome/Edge/Brave `v20`) or unknown. */
+export type CookieImportWarning = {
+  reason: "app-bound-encryption" | "unknown";
+  /** Cookies that could not be decrypted for that reason. */
+  failedCookies: number;
+};
+
 export interface CookieImportResult {
   imported: number;
   /** Expired, unreadable, or refused by the browser engine. */
   skipped: number;
+  /** Google sign-in cookies bound to the source device, left out because they cannot work here. */
+  notTransplantable: number;
+  /** Set when cookies could not be decrypted; the person is pointed to importing from a file. */
+  warning?: CookieImportWarning;
   profile: BrowserProfile;
 }
 
@@ -2422,6 +2433,11 @@ export interface DesktopBridge {
       sourceProfile: string,
       sites: string[],
     ): Promise<CookieImportResult>;
+    /**
+     * Asks for a JSON file of cookies (an array of `{ domain, name, value, … }`, as cookie export
+     * extensions write) and copies them into a profile; null when cancelled.
+     */
+    importCookieFile(profileId: string): Promise<CookieImportResult | null>;
   };
   computer: {
     status(): Promise<ComputerStatus>;
@@ -2523,6 +2539,7 @@ export const IPC = {
   browserCookieSourceRunning: "browser:cookie-source-running",
   browserCookieSites: "browser:cookie-sites",
   browserImportCookies: "browser:import-cookies",
+  browserImportCookieFile: "browser:import-cookie-file",
   computerStatus: "computer:status",
   computerRequestPermissions: "computer:request-permissions",
   diagnosticsInfo: "diagnostics:info",

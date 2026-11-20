@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 /**
  * Windows Chrome/Edge/Brave encrypt cookies with a key ("app-bound") that only the browser itself
  * can unwrap. `readChromium` then asks the browser over CDP (`readCookiesThroughBrowser`); these
- * tests cover what happens when that ask cannot run or fails, so a person who picked hundreds of
- * sites sees why nothing was imported instead of a silent "0 cookies" success.
+ * tests cover what happens when that ask cannot run or fails: the import goes on with what it read
+ * and reports the rest, so the person is told why cookies are missing (see `undecryptableWarning`).
  */
 
 const definition = {
@@ -15,7 +15,8 @@ const definition = {
 };
 const profile = { id: "Default", name: "Default" };
 
-vi.mock("electron", () => ({ app: { getLocale: () => "en" } }));
+vi.mock("electron", () => ({ app: { getLocale: () => "en", getPath: () => "/tmp" } }));
+vi.mock("./diagnostics.ts", () => ({ diag: vi.fn() }));
 vi.mock("../../i18n.ts", () => ({ translator: () => (key: string) => key }));
 
 vi.mock("./chromium.ts", async (importOriginal) => ({
@@ -50,23 +51,23 @@ afterEach(() => {
 });
 
 describe("app-bound cookies", () => {
-  it("reports the browser bridge's failure instead of succeeding with nothing imported", async () => {
+  it("returns what it could read and counts the app-bound rest when the browser bridge fails", async () => {
     readInBackground.mockResolvedValue({ cookies: [], unreadable: 0, appBound: 5 });
     vi.mocked(browserExecutable).mockReturnValue("C:\\chrome.exe");
     readCookiesThroughBrowser.mockRejectedValue(new Error("the browser exited"));
 
-    await expect(readCookies("chrome", "Default", ["example.com"])).rejects.toThrow(
-      "panel.cookies.appBoundFailed",
-    );
+    const result = await readCookies("chrome", "Default", ["example.com"]);
+    expect(result.cookies).toEqual([]);
+    expect(result.appBound).toBe(5);
+    expect(result.unreadable).toBe(5);
   });
 
-  it("reports that the browser could not be found when it has no executable to ask", async () => {
+  it("counts them the same way when the browser has no program to ask", async () => {
     readInBackground.mockResolvedValue({ cookies: [], unreadable: 0, appBound: 5 });
     vi.mocked(browserExecutable).mockReturnValue(null);
 
-    await expect(readCookies("chrome", "Default", ["example.com"])).rejects.toThrow(
-      "panel.cookies.appBoundNoBrowser",
-    );
+    const result = await readCookies("chrome", "Default", ["example.com"]);
+    expect(result.appBound).toBe(5);
     expect(readCookiesThroughBrowser).not.toHaveBeenCalled();
   });
 
@@ -90,31 +91,6 @@ describe("app-bound cookies", () => {
     const result = await readCookies("chrome", "Default", ["example.com"]);
     expect(result.cookies).toHaveLength(1);
     expect(result.unreadable).toBe(0);
-  });
-
-  it("does not fail when some cookies were plainly readable despite the bridge failing", async () => {
-    readInBackground.mockResolvedValue({
-      cookies: [
-        {
-          domain: "plain.example",
-          hostOnly: true,
-          name: "a",
-          value: "b",
-          path: "/",
-          secure: false,
-          httpOnly: false,
-          sameSite: "unspecified",
-          expires: null,
-        },
-      ],
-      unreadable: 0,
-      appBound: 5,
-    });
-    vi.mocked(browserExecutable).mockReturnValue("C:\\chrome.exe");
-    readCookiesThroughBrowser.mockRejectedValue(new Error("the browser exited"));
-
-    const result = await readCookies("chrome", "Default", ["example.com", "plain.example"]);
-    expect(result.cookies).toHaveLength(1);
-    expect(result.unreadable).toBe(5);
+    expect(result.appBound).toBe(0);
   });
 });
