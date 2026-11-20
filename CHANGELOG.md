@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.36.5] — 2026-11-20
+
+Browser tabs follow Orca's browser: a start page with the most visited sites, address suggestions from the history, Cmd/Ctrl+L and Cmd/Ctrl+F (find in page), zoom with Cmd/Ctrl +/-/0, and an error page with Retry when a page fails to load. Importing cookies from a file now also accepts pasted text, a `{ "cookies": [...] }` object and Netscape `cookies.txt`.
+
 ## [0.36.4] — 2026-11-20
 
 Fix the white flash when opening a browser tab, and make Cmd/Ctrl+W close the browser tab instead of the window while a page has focus.

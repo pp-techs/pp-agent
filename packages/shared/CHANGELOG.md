@@ -1,5 +1,11 @@
 # @workspace/shared
 
+## 0.1.3
+
+### Patch Changes
+
+- 9895e5b: Browser tabs follow Orca's browser: a start page with the most visited sites, address suggestions from the history, Cmd/Ctrl+L and Cmd/Ctrl+F (find in page), zoom with Cmd/Ctrl +/-/0, and an error page with Retry when a page fails to load. Importing cookies from a file now also accepts pasted text, a `{ "cookies": [...] }` object and Netscape `cookies.txt`.
+
 ## 0.1.2
 
 ### Patch Changes
