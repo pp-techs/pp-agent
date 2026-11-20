@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.36.3] — 2026-11-20
+
+Cookie import now tells you what it could not copy instead of reporting a plain "0 cookies": cookies that Chrome, Edge or Brave on Windows protect with app-bound encryption are counted and named as the reason, with a pointer to the new "From file…" button, and an import that copied nothing for that reason shows as an error. "From file…" imports a JSON cookie export (an array of cookies, as browser extensions write it). Google sign-in cookies tied to the source device (SIDCC, AEC, …) are left out, since they only log you out when copied. Import problems are noted in `cookie-import-diag.log` in the app's data folder.
+
 ## [0.36.2] — 2026-11-19
 
 Restarting the agent on Windows right after it stops (manually, or when an update replaces it) no longer fails with a raw `EBUSY: resource busy or locked` error when the log file is still momentarily locked by the daemon that just exited; it now retries briefly before giving up.
