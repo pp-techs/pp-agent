@@ -9,6 +9,7 @@ import { appendGap } from "@/lib/append-text";
 import { queryKeys } from "@/lib/queries";
 import { createSnapshotResync } from "@/lib/snapshot-resync";
 import { useChatStore } from "@/stores/chat-store";
+import { useRunStore } from "@/stores/run-store";
 import { focusComposer } from "@/lib/slash-commands";
 
 /** Queries to refetch per changed scope; some scopes feed more than one query. */
@@ -76,6 +77,9 @@ export function useAgentConnection(bridge: DesktopBridge) {
             return;
           }
           snapshotResync.received();
+          // The run going on in the conversation just opened: the Run tab catches up.
+          if (event.snapshot.runTrace?.length)
+            useRunStore.getState().apply(event.snapshot.sessionPath ?? "", event.snapshot.runTrace);
           invalidate(queryKeys.sessions);
           // A new session reconnects MCP servers, so the tool list may change.
           invalidate(queryKeys.tools);
@@ -88,6 +92,9 @@ export function useAgentConnection(bridge: DesktopBridge) {
           break;
         case "sessions_changed":
           invalidate(queryKeys.sessions);
+          break;
+        case "run_trace":
+          useRunStore.getState().apply(event.session, event.spans);
           break;
         case "settings_changed":
           for (const scope of event.scopes) SCOPE_KEYS[scope].forEach(invalidate);

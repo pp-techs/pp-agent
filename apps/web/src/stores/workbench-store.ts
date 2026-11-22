@@ -5,7 +5,9 @@ export type CenterTab =
   | { kind: "chat" }
   | { kind: "file"; root: string; path: string }
   | { kind: "terminal"; id: string }
-  | { kind: "browser"; id: string };
+  | { kind: "browser"; id: string }
+  /** The conversation's runs: agents, helpers and tool calls as a graph and a timeline. */
+  | { kind: "run" };
 
 export const CHAT_TAB: CenterTab = { kind: "chat" };
 
@@ -23,6 +25,8 @@ export function tabKey(tab: CenterTab): string {
       return `terminal:${tab.id}`;
     case "browser":
       return `browser:${tab.id}`;
+    case "run":
+      return "run";
   }
 }
 

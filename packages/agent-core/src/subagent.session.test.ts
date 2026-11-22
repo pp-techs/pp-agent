@@ -8,7 +8,13 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentEvent, AgentPaths, ChatPart, StoredCredential } from "@workspace/shared";
+import type {
+  AgentEvent,
+  AgentPaths,
+  ChatPart,
+  RunSpan,
+  StoredCredential,
+} from "@workspace/shared";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { AgentHost } from "./index.ts";
 
@@ -233,6 +239,27 @@ test("one call runs several sub agents; a named Agent's rules and the shared con
     delegateCalls.some(
       (part) => part.helpers?.length === 3 && part.helpers.every((h) => h.status === "done"),
     ),
+  ).toBe(true);
+
+  // The run trace has the three helpers under the delegate call, each finished.
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  const spans = new Map<string, RunSpan>();
+  for (const event of emitted)
+    if (event.type === "run_trace") for (const span of event.spans) spans.set(span.id, span);
+  const delegate = [...spans.values()].find(
+    (span) => span.kind === "tool" && span.name === "delegate_task",
+  );
+  expect(delegate).toBeDefined();
+  const helpers = [...spans.values()].filter(
+    (span) => span.kind === "agent" && span.parentId === delegate?.id,
+  );
+  expect(helpers.map((span) => [span.name, span.status])).toEqual([
+    ["Finance", "done"],
+    ["Helper 2", "done"],
+    ["Helper 3", "done"],
+  ]);
+  expect(
+    helpers.every((span) => span.endedAt !== undefined && Boolean(span.model?.endsWith("/fake"))),
   ).toBe(true);
 });
 

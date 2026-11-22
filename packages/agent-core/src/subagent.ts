@@ -20,6 +20,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { pathAccess, type PathRules } from "./path-access.ts";
+import { HelperTrace, type SpanSink } from "./run-trace.ts";
 import { DELEGATE_TASK_TOOL, type HelperProgress } from "@workspace/shared";
 
 export const DELEGATE_TOOL = DELEGATE_TASK_TOOL;
@@ -156,6 +157,8 @@ export interface DelegateToolOptions {
   agents: () => HelperAgent[];
   /** Folders file reads may and may not reach besides the workspace. */
   pathRules: () => PathRules;
+  /** The run trace of the calling conversation, if it keeps one (the Run tab). */
+  trace?: () => SpanSink | undefined;
 }
 
 /** What one sub agent runs with. */
@@ -175,6 +178,7 @@ async function runHelper(
   spec: HelperSpec,
   signal: AbortSignal | undefined,
   onStep: (tool: string, target: string) => void,
+  trace?: HelperTrace,
 ): Promise<string> {
   if (signal?.aborted) throw new Error("Stopped.");
   const allowed = new Set(spec.tools);
@@ -238,7 +242,14 @@ async function runHelper(
     if (event.type === "tool_execution_start") {
       toolCalls += 1;
       onStep(event.toolName, progressTarget(event.args));
+      trace?.startTool(event.toolCallId, event.toolName, event.args);
       if (toolCalls >= MAX_TOOL_CALLS) stop("calls");
+    } else if (event.type === "tool_execution_end") {
+      trace?.endTool(event.toolCallId, event.result?.content, event.isError);
+    } else if (event.type === "turn_start") {
+      trace?.startStep();
+    } else if (event.type === "message_end" && event.message.role === "assistant") {
+      trace?.endStep(event.message);
     } else if (event.type === "turn_end" && event.toolResults.length > 0) {
       toolTurns += 1;
       if (toolTurns >= MAX_TOOL_TURNS) stop("turns");
@@ -352,7 +363,7 @@ export function createDelegateTool(options: DelegateToolOptions) {
         { minItems: 1, maxItems: MAX_PARALLEL_TASKS },
       ),
     }),
-    async execute(_toolCallId, params, signal, onUpdate, ctx) {
+    async execute(toolCallId, params, signal, onUpdate, ctx) {
       if (signal?.aborted) throw new Error("Stopped.");
       const agents = options.agents();
       const background = params.context?.trim();
@@ -400,17 +411,33 @@ export function createDelegateTool(options: DelegateToolOptions) {
         onUpdate?.({ content: [], details: { helpers } });
       };
       report();
+      const sink = options.trace?.();
       const settled = await Promise.allSettled(
-        runs.map(async ({ spec, helper }) => {
+        runs.map(async ({ spec, helper }, index) => {
+          const trace = sink
+            ? new HelperTrace(sink, toolCallId, index, {
+                label: spec.label,
+                task: spec.task,
+                model: `${spec.model.provider}/${spec.model.id}`,
+              })
+            : undefined;
           try {
-            const summary = await runHelper(options, spec, signal, (tool, target) => {
-              helper.steps.push({ tool, target });
-              report();
-            });
+            const summary = await runHelper(
+              options,
+              spec,
+              signal,
+              (tool, target) => {
+                helper.steps.push({ tool, target });
+                report();
+              },
+              trace,
+            );
             helper.status = "done";
             report();
+            trace?.end({ output: summary });
             return summary;
           } catch (error) {
+            trace?.end({ error: error instanceof Error ? error.message : String(error) });
             helper.status = "failed";
             helper.error = (error instanceof Error ? error.message : String(error))
               .replace(/\s+/g, " ")

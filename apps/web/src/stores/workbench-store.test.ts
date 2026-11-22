@@ -16,6 +16,15 @@ const keys = (group: number, session = SESSION) => bench(session).groups[group].
 beforeEach(() => useWorkbenchStore.setState({ bySession: {} }));
 
 describe("workbench store", () => {
+  it("keeps one Run tab per conversation, and a prune of closed tabs leaves it", () => {
+    store().add(SESSION, { kind: "run" });
+    store().add(SESSION, { kind: "terminal", id: "t1" });
+    store().add(SESSION, { kind: "run" });
+    expect(keys(0)).toEqual(["chat", "run", "terminal:t1"]);
+    store().prune(SESSION, (tab) => tab.kind === "run");
+    expect(keys(0)).toEqual(["chat", "run"]);
+  });
+
   it("shows an added tab, and an added tab again where it already is", () => {
     store().add(SESSION, file("a.md"));
     store().add(SESSION, { kind: "terminal", id: "t1" });

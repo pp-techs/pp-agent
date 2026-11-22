@@ -19,6 +19,7 @@ import {
   FolderTreeIcon,
   GlobeIcon,
   MessageSquareIcon,
+  NetworkIcon,
   PlusIcon,
   SquareTerminalIcon,
 } from "lucide-react";
@@ -26,12 +27,22 @@ import { useTranslation } from "react-i18next";
 
 import { FileTypeIcon } from "@/components/panel/file-icon";
 import { PanelTab, PanelTabs } from "@/components/panel/panel-tabs";
-import { OpenFolderButton, SidePanelButton } from "@/components/workbench/workspace-buttons";
+import {
+  OpenFolderButton,
+  RunTabButton,
+  SidePanelButton,
+} from "@/components/workbench/workspace-buttons";
 import { isWebApp } from "@/lib/bridge";
 import { useBrowserState, useTerminals, useWorkspaceWatch } from "@/hooks/use-panel-state";
 import { useSessionCleanup } from "@/hooks/use-session-cleanup";
 import { tabLabel } from "@/lib/browser-tabs";
-import { closeMainTab, closingTabs, newBrowserTab, newTerminal } from "@/lib/workbench-actions";
+import {
+  closeMainTab,
+  closingTabs,
+  newBrowserTab,
+  newTerminal,
+  openRunTab,
+} from "@/lib/workbench-actions";
 import { useChatStore } from "@/stores/chat-store";
 import { usePanelStore } from "@/stores/panel-store";
 import {
@@ -99,6 +110,10 @@ function NewTabMenu({
             {t("panel.browser.newTab")}
           </DropdownMenuItem>
         )}
+        <DropdownMenuItem onClick={openRunTab}>
+          <NetworkIcon />
+          {t("run.open")}
+        </DropdownMenuItem>
         {folder && (
           <DropdownMenuItem onClick={() => usePanelStore.getState().setOpen(true)}>
             <FolderTreeIcon />
@@ -160,6 +175,8 @@ function GroupStrip({
           label: page ? tabLabel(page, t("panel.browser.newTab")) : "…",
         };
       }
+      case "run":
+        return { icon: <NetworkIcon />, label: t("run.tab") };
     }
   }
 
@@ -227,6 +244,7 @@ function GroupStrip({
       {/* The workspace folder and the file tree's toggle sit at the end of the last group's row. */}
       {index === bench.groups.length - 1 && (
         <>
+          <RunTabButton />
           {!isWebApp && <OpenFolderButton bridge={bridge} />}
           <SidePanelButton />
         </>
@@ -394,7 +412,11 @@ export function Workbench({ bridge, chat }: { bridge: DesktopBridge; chat: React
     const store = useWorkbenchStore.getState();
     store.prune(
       scope,
-      (tab) => tab.kind === "file" || alive.has(tabKey(tab)) || !seen.current.has(tabKey(tab)),
+      (tab) =>
+        tab.kind === "file" ||
+        tab.kind === "run" ||
+        alive.has(tabKey(tab)) ||
+        !seen.current.has(tabKey(tab)),
     );
     const shown = new Set(
       (useWorkbenchStore.getState().bySession[scope] ?? SOLO).groups.flatMap((group) =>

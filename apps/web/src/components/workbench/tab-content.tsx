@@ -2,6 +2,7 @@ import type { BrowserState, DesktopBridge, TerminalInfo } from "@workspace/share
 import { BrowserView } from "@/components/panel/browser-view";
 import { FilePreviewView } from "@/components/panel/files-panel";
 import { XtermView } from "@/components/panel/xterm-view";
+import { RunView } from "@/components/run/run-view";
 import { newBrowserTab } from "@/lib/workbench-actions";
 import type { CenterTab } from "@/stores/workbench-store";
 
@@ -27,6 +28,8 @@ export default function TabContent({
   hidden: boolean;
 }) {
   switch (tab.kind) {
+    case "run":
+      return <RunView session={session} />;
     case "file":
       return <FilePreviewView bridge={bridge} root={tab.root} path={tab.path} />;
     case "terminal": {

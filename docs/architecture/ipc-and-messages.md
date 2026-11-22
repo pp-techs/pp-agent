@@ -122,6 +122,7 @@ The daemon never sends a stored secret to a client: views such as `GatewayView` 
 | `settings_changed { scopes }`              | Invalidates the TanStack queries mapped from each `SettingsScope`.                                                                              |
 | `auth_prompt` / `auth_prompt_closed`       | Pushes / removes a sign-in prompt in the auth prompt modal store.                                                                               |
 | `auth_info`                                | Toast with the flow title, message and an "Open" action for the URL.                                                                            |
+| `run_trace { session, spans }`             | Upserts the changed spans of that conversation's run trace in `stores/run-store.ts` (the Run tab). Sent for every conversation, open or not.    |
 | `error`                                    | Error toast.                                                                                                                                    |
 
 Scope → query mapping (`SCOPE_KEYS`):

@@ -5,6 +5,8 @@
 
 export * from "./accelerator.ts";
 export * from "./cron.ts";
+export * from "./run-trace.ts";
+import type { RunSpan } from "./run-trace.ts";
 export * from "./server-address.ts";
 
 /** Approval tier of a tool, modelled on omp: reads run freely, writes and execution need a person. */
@@ -243,6 +245,8 @@ export interface AgentSnapshot {
   context: ContextUsage | null;
   /** Which conversations are answering right now, the open one and those left running. */
   activity: SessionActivity;
+  /** Run trace of the open conversation's latest run, while it is running (the Run tab catches up). */
+  runTrace?: RunSpan[];
 }
 
 /** Session files of the conversations that are answering, and of those waiting for the person. */
@@ -308,6 +312,11 @@ export type AgentEvent =
   | { type: "auth_info"; flowTitle: string; message: string; url?: string }
   /** The background memory pass changed notes; `undo_memory_pass` with `passId` reverses it. */
   | { type: "memory_auto_saved"; passId: string; changes: MemoryChange[] }
+  /**
+   * Spans of a conversation's run trace that started or changed (the Run tab), for any
+   * conversation, open or not; a listener upserts them by id.
+   */
+  | { type: "run_trace"; session: string; spans: RunSpan[] }
   | { type: "error"; message: string };
 
 /** Something the person attached to a message. Exactly one of `path` or `data` is set. */

@@ -676,5 +676,62 @@
     "copy": "Copy text",
     "copied": "Copied",
     "close": "Close"
+  },
+  "run": {
+    "tab": "Run",
+    "open": "Show the run (agents and tool calls)",
+    "empty": "Nothing has run in this conversation yet. Send a message and its agents, helpers and tool calls show here.",
+    "pickRun": "Run",
+    "live": "Live",
+    "views": {
+      "graph": "Workflow",
+      "timeline": "Timeline"
+    },
+    "follow": "Follow live",
+    "kind": {
+      "run": "Run",
+      "agent": "Agent",
+      "tool": "Tool call",
+      "step": "Model step"
+    },
+    "status": {
+      "running": "Running",
+      "waiting": "Waiting for you",
+      "done": "Done",
+      "error": "Failed",
+      "denied": "Denied",
+      "stopped": "Stopped"
+    },
+    "detail": {
+      "close": "Close details",
+      "started": "Started",
+      "duration": "Duration",
+      "model": "Model",
+      "target": "Works on",
+      "args": "Arguments",
+      "output": "Result",
+      "error": "Error",
+      "task": "Task",
+      "copy": "Copy",
+      "copied": "Copied",
+      "none": "Select a node or a bar to see its details.",
+      "thinking": "Thinking",
+      "reply": "Reply",
+      "tokens": "Tokens (in / out)"
+    },
+    "summary": "{{agents}} agents · {{steps}} model steps · {{tools}} tool calls · {{duration}}",
+    "untitled": "Run {{n}}",
+    "flow": {
+      "request": "Request",
+      "step": "Model",
+      "thinking": "Thinking…",
+      "toolsOnly": "Asked for tools",
+      "tokens": "{{count}} tokens",
+      "more": "+{{count}} more calls",
+      "parallel": "helpers in parallel",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "fit": "Fit to view"
+    }
   }
 }

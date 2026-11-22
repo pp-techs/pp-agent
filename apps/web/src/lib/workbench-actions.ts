@@ -3,6 +3,7 @@ import { toast } from "sonner";
 
 import { focusAddressOnShow } from "@/lib/browser-tabs";
 import { useChatStore } from "@/stores/chat-store";
+import { useRunStore } from "@/stores/run-store";
 import { type CenterTab, NO_SESSION, tabKey, useWorkbenchStore } from "@/stores/workbench-store";
 
 function showError(error: unknown) {
@@ -17,6 +18,11 @@ export function currentSession(): string {
 /** Opens a workspace file as a tab of the open conversation's main area, or shows its tab if it is there. */
 export function openFile(root: string, path: string): void {
   useWorkbenchStore.getState().add(currentSession(), { kind: "file", root, path });
+}
+
+/** Shows the Run tab of the open conversation's main area (its runs as a graph and a timeline). */
+export function openRunTab(): void {
+  useWorkbenchStore.getState().add(currentSession(), { kind: "run" });
 }
 
 /** Terminals and browser tabs being closed: the main area does not take them back meanwhile. */
@@ -68,6 +74,7 @@ export async function newBrowserTab(
 /** A conversation was deleted: its terminals end, its browser tabs close, and its main area goes. */
 export async function closeSessionTabs(bridge: DesktopBridge, session: string): Promise<void> {
   useWorkbenchStore.getState().forgetSession(session);
+  useRunStore.getState().forgetSession(session);
   try {
     const [terminals, browser] = await Promise.all([
       bridge.terminal.list(),

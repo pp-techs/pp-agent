@@ -672,5 +672,62 @@
     "copy": "Sao chép nội dung",
     "copied": "Đã sao chép",
     "close": "Đóng"
+  },
+  "run": {
+    "tab": "Tiến trình",
+    "open": "Xem tiến trình chạy (agent và lệnh gọi công cụ)",
+    "empty": "Cuộc trò chuyện này chưa chạy gì. Gửi một tin nhắn, các agent, trợ lý và lệnh gọi công cụ sẽ hiện ở đây.",
+    "pickRun": "Lượt chạy",
+    "live": "Trực tiếp",
+    "views": {
+      "graph": "Luồng",
+      "timeline": "Dòng thời gian"
+    },
+    "follow": "Theo dõi trực tiếp",
+    "kind": {
+      "run": "Lượt chạy",
+      "agent": "Agent",
+      "tool": "Lệnh gọi công cụ",
+      "step": "Bước mô hình"
+    },
+    "status": {
+      "running": "Đang chạy",
+      "waiting": "Đang chờ bạn",
+      "done": "Xong",
+      "error": "Lỗi",
+      "denied": "Bị từ chối",
+      "stopped": "Đã dừng"
+    },
+    "detail": {
+      "close": "Đóng chi tiết",
+      "started": "Bắt đầu",
+      "duration": "Thời lượng",
+      "model": "Mô hình",
+      "target": "Đối tượng",
+      "args": "Tham số",
+      "output": "Kết quả",
+      "error": "Lỗi",
+      "task": "Nhiệm vụ",
+      "copy": "Sao chép",
+      "copied": "Đã sao chép",
+      "none": "Chọn một nút hoặc một thanh để xem chi tiết.",
+      "thinking": "Suy nghĩ",
+      "reply": "Trả lời",
+      "tokens": "Token (vào / ra)"
+    },
+    "summary": "{{agents}} agent · {{steps}} bước mô hình · {{tools}} lệnh gọi công cụ · {{duration}}",
+    "untitled": "Lượt {{n}}",
+    "flow": {
+      "request": "Yêu cầu",
+      "step": "Mô hình",
+      "thinking": "Đang suy nghĩ…",
+      "toolsOnly": "Gọi công cụ",
+      "tokens": "{{count}} token",
+      "more": "+{{count}} lệnh gọi nữa",
+      "parallel": "trợ lý chạy song song",
+      "zoomIn": "Phóng to",
+      "zoomOut": "Thu nhỏ",
+      "fit": "Vừa khung"
+    }
   }
 }

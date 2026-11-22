@@ -254,6 +254,8 @@ import {
 import { parseSkillBlocks, skillChainExtension } from "./skill-chain.ts";
 import { seedBuiltInSkills } from "./skills-builtin.ts";
 import { createDelegateTool, DELEGATE_TOOL } from "./subagent.ts";
+import { RunTracer, type SpanSink } from "./run-trace.ts";
+import { messageText } from "./one-shot.ts";
 import { WEB_FETCH_TOOL } from "./web/names.ts";
 import {
   extractMemory,
@@ -456,6 +458,8 @@ interface SessionScope {
    * yolo mode, asks the owner before tools, and leaves the owner's memory out of the prompt.
    */
   chatAccess?: () => ChatAccess;
+  /** Window conversations: the run trace helpers of `delegate_task` add their spans to. */
+  trace?: () => SpanSink | undefined;
 }
 
 /** What a chat's turn is doing right now; the session events and the approval gate read it. */
@@ -534,6 +538,8 @@ interface ConversationState {
   /** Agent and workspace as of when it left the window; the host's own fields are the open one's. */
   agentId: string;
   workspaceId: string;
+  /** Spans of its runs for the Run tab: turns, agents, helpers and tool calls with their timing. */
+  trace: RunTracer;
 }
 
 type Conversation = ConversationState & {
@@ -1326,6 +1332,7 @@ export class AgentHost {
         ? { objective: open.goal.objective, status: open.goal.status, waiting: open.goal.stalled }
         : null,
       research: open?.research ? this.summarizeResearch(open.research) : null,
+      ...(open?.trace.live() ? { runTrace: open.trace.live() } : {}),
     };
   }
 
@@ -2484,6 +2491,7 @@ export class AgentHost {
       askUser: (call, signal) => this.requestQuestion(conversation, call, signal),
       surface: { kind: "window", label: "in the desktop window" },
       visibility: "all",
+      trace: () => conversation.trace,
       goal: {
         current: () => conversation.goal,
         complete: () => {
@@ -2645,6 +2653,7 @@ export class AgentHost {
               tools: helperTools(settings.get(), agent.tools),
             })),
           pathRules: () => this.pathRules(),
+          trace: () => scope.trace?.(),
         }),
       ],
       resourceLoader,
@@ -2701,6 +2710,10 @@ export class AgentHost {
       memoryPass: true,
       agentId: this.agentId,
       workspaceId: this.workspaceId,
+      // Every conversation reports its own: a background run keeps its trace for when it is opened.
+      trace: new RunTracer((spans) =>
+        emit({ type: "run_trace", session: conversation.session.sessionFile ?? "", spans }),
+      ),
     };
     const session = await this.buildSession(
       sessionManager,
@@ -2736,6 +2749,8 @@ export class AgentHost {
     clearTimeout(conversation.memoryTimer ?? undefined);
     conversation.memoryTimer = null;
     conversation.unsubscribe();
+    conversation.trace.endRun("stopped");
+    conversation.trace.dispose();
     conversation.mcpServers.detach();
     conversation.session.dispose();
     // A temporary conversation leaves nothing behind, the files it was given included.
@@ -2787,12 +2802,19 @@ export class AgentHost {
         conversation.running = true;
         conversation.toolCalls = 0;
         conversation.skillsBefore = this.skillsFingerprintOf(conversation);
+        conversation.trace.startRun("", {
+          name: this.agentOf(conversation).name,
+          ...(conversation.session.model
+            ? { model: `${conversation.session.model.provider}/${conversation.session.model.id}` }
+            : {}),
+        });
         if (inWindow) this.refreshStatus();
         emit({ type: "sessions_changed" });
         this.emitActivity();
         break;
       case "agent_settled":
         conversation.running = false;
+        conversation.trace.endRun();
         transcript.setEntryIds(chatEntryIds(conversation.session.sessionManager));
         transcript.flush();
         this.writePendingTitle(conversation);
@@ -2819,6 +2841,7 @@ export class AgentHost {
       case "message_start":
         if (event.message.role === "user") {
           transcript.addUser(event.message);
+          conversation.trace.nameRun(messageText(event.message));
           this.titleFromFirstMessage(conversation, event.message);
           // A goal that was waiting for the person is running again: tell the banner.
           if (inWindow && conversation.goal)
@@ -2829,11 +2852,22 @@ export class AgentHost {
         if (event.message.role === "assistant") transcript.updateAssistant(event.message, false);
         break;
       case "message_end":
-        if (event.message.role === "assistant") transcript.updateAssistant(event.message, true);
+        if (event.message.role === "assistant") {
+          transcript.updateAssistant(event.message, true);
+          const { stopReason } = event.message;
+          conversation.trace.endStep(event.message);
+          conversation.trace.noteOutcome(
+            stopReason === "aborted" ? "stopped" : stopReason === "error" ? "error" : "done",
+          );
+        }
         if (inWindow) emit({ type: "context", context: this.contextUsage() });
+        break;
+      case "turn_start":
+        conversation.trace.startStep();
         break;
       case "tool_execution_start":
         transcript.setToolStatus(event.toolCallId, "running");
+        conversation.trace.startTool(event.toolCallId, event.toolName, event.args);
         break;
       case "tool_execution_update": {
         // delegate_task reports the sub agents' status while they work; the final summaries replace it.
@@ -2849,6 +2883,7 @@ export class AgentHost {
       case "tool_execution_end": {
         conversation.toolCalls += 1;
         const content: unknown = event.result?.content;
+        conversation.trace.endTool(event.toolCallId, content, event.isError);
         transcript.finishTool(
           event.toolCallId,
           Array.isArray(content) ? content : [],
@@ -3398,6 +3433,7 @@ export class AgentHost {
     request: ApprovalRequest,
   ): Promise<boolean> {
     conversation.transcript.setToolStatus(request.toolCallId, "awaiting-approval");
+    conversation.trace.setToolStatus(request.toolCallId, "waiting");
     const { promise, resolve } = Promise.withResolvers<boolean>();
     conversation.approvals.set(request.requestId, { request, resolve });
     if (conversation === this.open) emit({ type: "approval_requested", request });
@@ -3440,6 +3476,7 @@ export class AgentHost {
       entry.request.toolCallId,
       approved ? "running" : "denied",
     );
+    conversation.trace.setToolStatus(entry.request.toolCallId, approved ? "running" : "denied");
     if (conversation === this.open) emit({ type: "approval_resolved", requestId });
     this.emitActivity();
     entry.resolve(approved);
@@ -3471,6 +3508,7 @@ export class AgentHost {
       ...(call.plan ? { plan: call.plan } : {}),
     };
     conversation.transcript.setToolStatus(request.toolCallId, "awaiting-answer");
+    conversation.trace.setToolStatus(request.toolCallId, "waiting");
     const { promise, resolve } = Promise.withResolvers<QuestionAnswer[] | null>();
     const onAbort = () => this.resolveQuestion(request.requestId, null);
     signal?.addEventListener("abort", onAbort, { once: true });
@@ -3498,6 +3536,7 @@ export class AgentHost {
     conversation.questions.delete(requestId);
     // A skipped question is final, as a denied approval: the error the tool ends with must not replace it.
     conversation.transcript.setToolStatus(entry.request.toolCallId, checked ? "running" : "denied");
+    conversation.trace.setToolStatus(entry.request.toolCallId, checked ? "running" : "denied");
     if (conversation === this.open) emit({ type: "question_resolved", requestId });
     this.emitActivity();
     entry.resolve(checked);
