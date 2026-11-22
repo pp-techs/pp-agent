@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.37.0] — 2026-11-22
+
+New Run tab in the main area: follow what the agent does while it works. The workflow view shows each model step and the tool calls it asked for, in order, with the helpers of `delegate_task` in parallel lanes, the work going on animated and the view following it; a timeline shows who worked when. Click any step for its status, timing, tokens, arguments and result. The last 20 runs of each conversation stay viewable while the app is open.
+
 ## [0.36.5] — 2026-11-20
 
 Browser tabs follow Orca's browser: a start page with the most visited sites, address suggestions from the history, Cmd/Ctrl+L and Cmd/Ctrl+F (find in page), zoom with Cmd/Ctrl +/-/0, and an error page with Retry when a page fails to load. Importing cookies from a file now also accepts pasted text, a `{ "cookies": [...] }` object and Netscape `cookies.txt`.
