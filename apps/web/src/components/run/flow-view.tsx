@@ -328,10 +328,10 @@ export function FlowView({
   const groups = [...layout.groups].sort((a, b) => a.depth - b.depth);
 
   return (
-    <div className="relative size-full">
+    <div className="relative isolate size-full overflow-hidden">
       <div
         ref={viewport}
-        className="size-full cursor-grab touch-none overflow-hidden select-none active:cursor-grabbing"
+        className="relative size-full cursor-grab touch-none overflow-hidden select-none active:cursor-grabbing"
         style={{
           backgroundImage: "radial-gradient(var(--border) 1px, transparent 1px)",
           backgroundSize: `${20 * view.scale}px ${20 * view.scale}px`,

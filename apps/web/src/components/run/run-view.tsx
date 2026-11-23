@@ -106,8 +106,8 @@ export function RunView({ session }: { session: string }) {
   }));
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
+    <div className="isolate flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      <div className="relative z-10 flex flex-wrap items-center gap-2 border-b bg-background px-3 py-2">
         <Select
           items={runItems}
           value={runId}
@@ -166,8 +166,8 @@ export function RunView({ session }: { session: string }) {
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
-      <div className="flex min-h-0 flex-1">
-        <div className="relative min-w-0 flex-1">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+        <div className="relative isolate min-w-0 flex-1 overflow-hidden">
           {view === "timeline" ? (
             <TimelineView spans={spans} now={now} selected={selected} onSelect={setSelected} />
           ) : (
@@ -183,7 +183,7 @@ export function RunView({ session }: { session: string }) {
           </div>
         </div>
         {selectedSpan && (
-          <aside className="w-80 shrink-0 border-l max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:z-10 max-md:w-full max-md:bg-background">
+          <aside className="relative z-10 w-80 shrink-0 border-l bg-background max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:z-10 max-md:w-full max-md:bg-background">
             <SpanDetail span={selectedSpan} now={now} onClose={() => setSelected(null)} />
           </aside>
         )}
