@@ -83,6 +83,7 @@ function createClientWindow(target: ClientTarget, url: string, icon: string): Br
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      spellcheck: false,
       partition: PARTITION,
     },
   });

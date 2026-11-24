@@ -323,6 +323,8 @@ function createWindow(): void {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      // On by default on Windows and Linux; it underlines words in every input.
+      spellcheck: false,
     },
   });
   window.once("ready-to-show", () => window?.show());

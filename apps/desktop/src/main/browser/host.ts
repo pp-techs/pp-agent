@@ -34,7 +34,12 @@ const POPUP_OPTIONS: Electron.BrowserWindowConstructorOptions = {
   width: 520,
   height: 720,
   autoHideMenuBar: true,
-  webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+  webPreferences: {
+    sandbox: true,
+    contextIsolation: true,
+    nodeIntegration: false,
+    spellcheck: false,
+  },
 };
 
 export function partitionOf(profileId: string): string {
@@ -342,6 +347,9 @@ export class BrowserHost implements BrowserDriver {
         sandbox: true,
         contextIsolation: true,
         nodeIntegration: false,
+        // Chromium's spellchecker is on by default on Windows and Linux and underlines words in
+        // every field of the page.
+        spellcheck: false,
       },
     });
     // Transparent until the page paints, so a new tab does not flash white.
