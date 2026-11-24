@@ -1,5 +1,11 @@
 # @workspace/desktop
 
+## 0.37.1
+
+### Patch Changes
+
+- ec0496b: Text fields in the app and in the side panel browser are no longer underlined by the spellchecker on Windows and Linux.
+
 ## 0.37.0
 
 ### Minor Changes

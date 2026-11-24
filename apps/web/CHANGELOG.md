@@ -1,5 +1,11 @@
 # @workspace/web
 
+## 0.37.1
+
+### Patch Changes
+
+- 58c1e85: On iPhone and iPad, tapping a text field no longer zooms the page in, in the phone app and in Safari. Pinch to zoom still works.
+
 ## 0.37.0
 
 ### Minor Changes
