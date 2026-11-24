@@ -15,7 +15,9 @@ import { ThemeProvider, useTheme } from "@/components/theme-provider.tsx";
 import { preloadMarkdown } from "@/components/markdown.tsx";
 import { i18n } from "@/lib/i18n.ts";
 import { isNativeApp, setUpNativeKeyboard } from "@/lib/native.ts";
+import { preventIosFocusZoom } from "@/lib/ios-viewport.ts";
 
+preventIosFocusZoom();
 if (isNativeApp) setUpNativeKeyboard();
 
 const queryClient = new QueryClient({
