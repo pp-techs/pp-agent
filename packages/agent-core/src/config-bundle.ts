@@ -7,7 +7,7 @@
  * and applying the same bundle twice changes nothing.
  */
 import { existsSync, readFileSync, renameSync, rmSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import {
   type ConfigBundle,
   type ConfigBundleFile,
@@ -91,9 +91,9 @@ export function parseConfigBundle(json: string): ConfigBundle {
   if (Array.isArray(config.untrustedSkillFolders))
     bundle.untrustedSkillFolders = [
       ...new Set(
-        config.untrustedSkillFolders.filter(
-          (folder): folder is string => typeof folder === "string" && isAbsolute(folder),
-        ),
+        config.untrustedSkillFolders
+          .filter((folder): folder is string => typeof folder === "string" && isAbsolute(folder))
+          .map((folder) => resolve(folder)),
       ),
     ];
   return bundle;
@@ -162,7 +162,9 @@ export function mergeConfigBundle(draft: SettingsFile, bundle: ConfigBundle): Co
   }
   if (bundle.untrustedSkillFolders) {
     draft.untrustedSkillFolders = [
-      ...new Set(bundle.untrustedSkillFolders.filter((folder) => isAbsolute(folder))),
+      ...new Set(
+        bundle.untrustedSkillFolders.filter((folder) => isAbsolute(folder)).map((f) => resolve(f)),
+      ),
     ];
     report.untrustedSkillFolders = draft.untrustedSkillFolders.length;
   }

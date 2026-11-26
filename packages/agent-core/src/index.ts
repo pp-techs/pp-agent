@@ -3323,12 +3323,13 @@ export class AgentHost {
   }
 
   /**
-   * Whether the skills of the workspace folder `cwd` load: every folder's does, unless the person
-   * turned them off for it.
+   * Whether the skills of the workspace folder `cwd` load: the app's own workspace folder always
+   * does, any other unless the person turned them off for it.
    */
   private skillsTrusted(cwd: string): boolean {
-    const untrusted = this.services?.settings.get().untrustedSkillFolders ?? [];
-    return !untrusted.includes(resolve(cwd));
+    const services = this.services;
+    if (services && resolve(cwd) === resolve(services.paths.workspaceDir)) return true;
+    return !(services?.settings.get().untrustedSkillFolders ?? []).includes(resolve(cwd));
   }
 
   /** Fingerprint of the installed skills and the conversation's workspace skills. */
@@ -4348,7 +4349,10 @@ export class AgentHost {
       scopes.push("skills");
       apply.reload = true;
     }
-    if (report.untrustedSkillFolders > 0) scopes.push("skills");
+    if (before.untrustedSkillFolders.join("\n") !== after.untrustedSkillFolders.join("\n")) {
+      scopes.push("skills");
+      apply.reload = true;
+    }
     if (after.language !== before.language) {
       configureLanguage(after.language);
       // Provider sign-in sources and untitled-chat names are worded by the agent process.
