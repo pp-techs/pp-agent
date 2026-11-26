@@ -12,6 +12,7 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import { MEMORY_LIMITS, type MemoryChange, type MemoryEntry } from "@workspace/shared";
 import { noteKey, type MemoryStore } from "./memory.ts";
 import { runOneShot, transcript } from "./one-shot.ts";
+import { redactSecrets } from "./redact.ts";
 
 /** Turns shorter than this are very unlikely to contain a lasting fact; skip the LLM call. */
 const MIN_CHARS = 40;
@@ -105,13 +106,15 @@ export type MemoryOp =
     }
   | { op: "delete"; ref: string };
 
-/** The conversation as `User: ...` / `Assistant: ...` lines, newest `MAX_INPUT_CHARS` kept. */
+/** The conversation as `User: ...` / `Assistant: ...` lines, newest `MAX_INPUT_CHARS` kept, with secrets scrubbed. */
 export function transcriptText(messages: readonly AgentMessage[]): string {
-  return transcript(messages, {
-    maxChars: MAX_INPUT_CHARS,
-    keep: "end",
-    closingTag: "conversation",
-  });
+  return redactSecrets(
+    transcript(messages, {
+      maxChars: MAX_INPUT_CHARS,
+      keep: "end",
+      closingTag: "conversation",
+    }),
+  );
 }
 
 /**
@@ -269,7 +272,10 @@ export interface MemoryExtractionOptions {
   cancelled: () => boolean;
 }
 
-/** The note-count warnings for full places, so the call updates instead of adding there. */
+/** Share of `MEMORY_LIMITS.maxEntries` at which the extraction call is asked to consolidate notes. */
+const CONSOLIDATE_THRESHOLD = Math.floor(MEMORY_LIMITS.maxEntries * 0.85);
+
+/** Capacity warnings for full or near-full places, so the call consolidates instead of overflowing. */
 function fullPlaces(entries: readonly MemoryEntry[], personal: boolean): string {
   const global = entries.filter((entry) => entry.workspaceId === null).length;
   const workspace = entries.length - global;
@@ -277,9 +283,24 @@ function fullPlaces(entries: readonly MemoryEntry[], personal: boolean): string 
     ...(global >= MEMORY_LIMITS.maxEntries ? ["[global]"] : []),
     ...(!personal && workspace >= MEMORY_LIMITS.maxEntries ? ["[workspace]"] : []),
   ];
-  return full.length === 0
-    ? ""
-    : `\nThese places are full (${MEMORY_LIMITS.maxEntries} notes): ${full.join(", ")}. Do not add notes there; update or merge known notes instead.`;
+  const nearFull = [
+    ...(global >= CONSOLIDATE_THRESHOLD && global < MEMORY_LIMITS.maxEntries
+      ? [`[global] (${global}/${MEMORY_LIMITS.maxEntries})`]
+      : []),
+    ...(!personal && workspace >= CONSOLIDATE_THRESHOLD && workspace < MEMORY_LIMITS.maxEntries
+      ? [`[workspace] (${workspace}/${MEMORY_LIMITS.maxEntries})`]
+      : []),
+  ];
+  const warnings: string[] = [];
+  if (full.length > 0)
+    warnings.push(
+      `These places are full (${MEMORY_LIMITS.maxEntries} notes): ${full.join(", ")}. Do not add notes there; update, merge, or delete outdated unpinned notes instead.`,
+    );
+  if (nearFull.length > 0)
+    warnings.push(
+      `These places are nearly full: ${nearFull.join(", ")}. Prefer updating/merging related unpinned notes and deleting obsolete ones over adding new notes.`,
+    );
+  return warnings.length === 0 ? "" : `\n${warnings.join("\n")}`;
 }
 
 /**

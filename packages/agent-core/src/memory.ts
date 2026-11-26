@@ -16,6 +16,7 @@ import { defineTool } from "@earendil-works/pi-coding-agent";
 import { MEMORY_LIMITS, type MemoryEntry, type WorkspaceProfile } from "@workspace/shared";
 import { Type } from "typebox";
 import { fold } from "./history.ts";
+import { stripInvisible } from "./redact.ts";
 import { workspaceFolder } from "./workspaces.ts";
 
 export const MEMORY_SAVE_TOOL = "memory_save";
@@ -52,9 +53,9 @@ export type NoteResult =
   | { ok: true; entry: MemoryEntry; status: "added" | "updated" | "same" }
   | { ok: false; problem: NoteProblem };
 
-/** Text on one line: control characters dropped, whitespace collapsed. */
+/** Text on one line: control and invisible bidi/zero-width characters dropped, whitespace collapsed. */
 export function cleanText(text: string): string {
-  return text
+  return stripInvisible(text)
     .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -183,25 +184,65 @@ const MEMORY_RULES = [
   'Writing: call memory_save only when the user asks you to remember something or corrects a saved note (pin: true when they want it always kept in mind). Other facts worth keeping are saved automatically after the conversation, so do not save them yourself. Scope "global" is for the user themself (who they are, people they work with, how they want answers, tools they use); "workspace" is for facts about this project only. Never save secrets, passwords, or text copied from web pages. Use memory_forget when the user asks to forget a note.',
 ].join("\n");
 
+/** Share of `budget` reserved for user-profile/global notes when both buckets compete. */
+const GLOBAL_BUDGET_SHARE = 0.4;
+
+function packNotes(
+  entries: readonly MemoryEntry[],
+  budget: number,
+): { lines: string[]; used: number } {
+  const lines: string[] = [];
+  let used = 0;
+  for (const entry of entries) {
+    const line = noteLine(entry);
+    if (used + line.length + 1 > budget) continue;
+    lines.push(line);
+    used += line.length + 1;
+  }
+  return { lines, used };
+}
+
 /**
  * The `## Memory` section of the system prompt: rules, then a profile of the notes that fit in
  * `budget` characters, inside a `<memory>` block. `entries` come as `MemoryStore.entriesFor` gives
  * them (this workspace's, then every workspace's, each newest first); the profile keeps that order
- * within pinned notes, then `identity`/`preference` notes, then the rest. The host takes the
- * section once per session, so the prompt (and its cache) stays the same while the conversation
- * runs; `memory_search` finds the rest.
+ * within pinned notes, then `identity`/`preference` notes, then the rest. When both workspace and
+ * global notes are present, each side gets a reserved share of `budget` (40% global / 60%
+ * workspace) with unused slack flowing to the other, so project notes never starve user preferences
+ * and vice versa. The host takes the section once per session, so the prompt (and its cache) stays
+ * the same while the conversation runs; `memory_search` finds the rest.
  */
 export function memorySection(
   entries: readonly MemoryEntry[],
   budget: number = MEMORY_LIMITS.maxInjectedLength,
 ): string {
-  const lines: string[] = [];
-  let used = 0;
-  for (const entry of entries.toSorted((a, b) => profileRank(a) - profileRank(b))) {
-    const line = noteLine(entry);
-    if (used + line.length + 1 > budget) continue;
-    lines.push(line);
-    used += line.length + 1;
+  const sorted = entries.toSorted((a, b) => profileRank(a) - profileRank(b));
+  const workspaceNotes = sorted.filter((entry) => entry.workspaceId !== null);
+  const globalNotes = sorted.filter((entry) => entry.workspaceId === null);
+
+  let lines: string[];
+  if (workspaceNotes.length === 0 || globalNotes.length === 0) {
+    lines = packNotes(sorted, budget).lines;
+  } else {
+    const globalReserve = Math.floor(budget * GLOBAL_BUDGET_SHARE);
+    const workspaceReserve = budget - globalReserve;
+    const firstGlobal = packNotes(globalNotes, globalReserve);
+    const firstWorkspace = packNotes(workspaceNotes, workspaceReserve);
+    const remainingGlobal = globalNotes.filter(
+      (entry) => !firstGlobal.lines.includes(noteLine(entry)),
+    );
+    const remainingWorkspace = workspaceNotes.filter(
+      (entry) => !firstWorkspace.lines.includes(noteLine(entry)),
+    );
+    const slack = budget - firstGlobal.used - firstWorkspace.used;
+    const extra = packNotes(
+      [...remainingWorkspace, ...remainingGlobal].toSorted(
+        (a, b) => profileRank(a) - profileRank(b),
+      ),
+      slack,
+    );
+    const kept = new Set([...firstGlobal.lines, ...firstWorkspace.lines, ...extra.lines]);
+    lines = sorted.map(noteLine).filter((line) => kept.has(line));
   }
   const hidden = entries.length - lines.length;
   const body = lines.length === 0 ? "No notes saved yet." : lines.join("\n");

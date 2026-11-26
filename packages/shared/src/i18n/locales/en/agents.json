@@ -104,6 +104,10 @@
       "label": "Scheduled tasks",
       "description": "Create and manage tasks that run on a schedule; asks first when creating."
     },
+    "skill_manage": {
+      "label": "Manage skills",
+      "description": "Create, inspect, patch, archive, and roll back reusable workspace skills; asks first before changing a skill."
+    },
     "office_read": {
       "label": "Inspect Word, Excel, PowerPoint files",
       "description": "Look at the structure and content of Office files without changing them."

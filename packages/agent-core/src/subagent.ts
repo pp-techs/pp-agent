@@ -20,7 +20,15 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { pathAccess, type PathRules } from "./path-access.ts";
+import { redactSecrets } from "./redact.ts";
 import { HelperTrace, type SpanSink } from "./run-trace.ts";
+import {
+  appendOutputContract,
+  buildSchemaRetryPrompt,
+  coerceOutputSchema,
+  type JsonSchema,
+  validateOutput,
+} from "./subagent-schema.ts";
 import { DELEGATE_TASK_TOOL, type HelperProgress } from "@workspace/shared";
 
 export const DELEGATE_TOOL = DELEGATE_TASK_TOOL;
@@ -29,11 +37,21 @@ export const DELEGATE_TOOL = DELEGATE_TASK_TOOL;
 export const MAX_TOOL_CALLS = 25;
 /** Model turns that used tools before a sub agent is asked to wrap up. */
 export const MAX_TOOL_TURNS = 12;
-/** Time a sub agent may work before it is asked to wrap up. */
-export const TIME_LIMIT_MS = 5 * 60_000;
+/** Idle window without stream/tool progress before a sub agent is treated as stalled. */
+export const STALE_IDLE_MS = 3 * 60_000;
+/** Single-tool execution window without progress before a sub agent is treated as stalled. */
+export const STALE_IN_TOOL_MS = 5 * 60_000;
+/** Hard outer wall-clock cap for a single sub agent even while actively making progress. */
+export const MAX_WALL_TIME_MS = 15 * 60_000;
+/** Backwards-compatible alias for the stale in-tool limit. */
+export const TIME_LIMIT_MS = STALE_IN_TOOL_MS;
+/** How often the stale-progress monitor checks activity timestamps. */
+const STALE_CHECK_MS = 15_000;
+/** Maximum wait for the batch leader's first response chunk before releasing same-route siblings. */
+export const PREFIX_STAGGER_CAP_MS = 10_000;
 /** Tasks one call may run at the same time. */
 export const MAX_PARALLEL_TASKS = 5;
-/** Time for the wrap-up answer itself. */
+/** Time for the wrap-up or schema-retry answer itself. */
 const WRAP_UP_LIMIT_MS = 90_000;
 /** Longest text handed back to the parent conversation, shared by all summaries of a call. */
 const MAX_RESULT_CHARS = 24_000;
@@ -133,6 +151,50 @@ function lastReply(session: AgentSession): string {
   return "";
 }
 
+/**
+ * Prompt-cache warm-up gate for parallel subagent batches.
+ *
+ * Siblings in one batch share the same model route, system prompt, and tools[]. Launching all of
+ * them at once makes every child miss the provider's prompt cache. The gate lets task 0 (the
+ * leader) start immediately and holds same-route siblings until the leader emits its first stream
+ * response event, finishes, `maxWaitMs` elapses, or `signal` aborts — costing at most one TTFT.
+ */
+export class PrefixCacheGate {
+  private opened = false;
+  private readonly waiters: (() => void)[] = [];
+
+  constructor(
+    readonly leaderRoute: string,
+    private readonly maxWaitMs: number = PREFIX_STAGGER_CAP_MS,
+  ) {}
+
+  /** Signals that the leader has started streaming (or finished), releasing waiting siblings. */
+  open(): void {
+    if (this.opened) return;
+    this.opened = true;
+    for (const wake of this.waiters.splice(0)) wake();
+  }
+
+  /** Waits until the gate opens, `maxWaitMs` elapses, or `signal` aborts. */
+  async wait(route: string, signal: AbortSignal | undefined): Promise<void> {
+    if (this.opened || this.maxWaitMs <= 0 || route !== this.leaderRoute) return;
+    if (signal?.aborted) return;
+    await new Promise<void>((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", done);
+        const index = this.waiters.indexOf(done);
+        if (index !== -1) this.waiters.splice(index, 1);
+        resolve();
+      };
+      const timer = setTimeout(done, this.maxWaitMs);
+      timer.unref?.();
+      signal?.addEventListener("abort", done, { once: true });
+      this.waiters.push(done);
+    });
+  }
+}
+
 /** An Agent the model may hand a task to, as the sub agent needs it. */
 export interface HelperAgent {
   name: string;
@@ -143,6 +205,8 @@ export interface HelperAgent {
   model: Model<Api> | undefined;
   /** Tool names the sub agent may use under this agent (read tier, not off, not asking). */
   tools: string[];
+  /** Skill names this agent may use (`undefined` = none; `null` = all enabled skills). */
+  skills?: readonly string[] | null;
 }
 
 export interface DelegateToolOptions {
@@ -157,6 +221,10 @@ export interface DelegateToolOptions {
   agents: () => HelperAgent[];
   /** Folders file reads may and may not reach besides the workspace. */
   pathRules: () => PathRules;
+  /** Skill directories (installed + trusted workspace) available to named helper agents. */
+  skillPaths?: () => readonly string[];
+  /** Globally disabled skill names to exclude when a helper agent loads skills. */
+  disabledSkills?: () => readonly string[];
   /** The run trace of the calling conversation, if it keeps one (the Run tab). */
   trace?: () => SpanSink | undefined;
 }
@@ -168,9 +236,11 @@ interface HelperSpec {
   prompt: string;
   model: Model<Api>;
   tools: string[];
+  outputSchema: JsonSchema | null;
+  skills: readonly string[] | null | undefined;
 }
 
-type HelperLimit = "calls" | "turns" | "time";
+type HelperLimit = "calls" | "turns" | "time" | "stalled";
 
 /** Runs one sub agent to its summary; throws when it fails or `signal` aborts. */
 async function runHelper(
@@ -179,6 +249,7 @@ async function runHelper(
   signal: AbortSignal | undefined,
   onStep: (tool: string, target: string) => void,
   trace?: HelperTrace,
+  onFirstResponse?: () => void,
 ): Promise<string> {
   if (signal?.aborted) throw new Error("Stopped.");
   const allowed = new Set(spec.tools);
@@ -186,12 +257,28 @@ async function runHelper(
     compaction: { enabled: false },
     retry: { enabled: true, maxRetries: 1 },
   });
+  const skillPaths = spec.skills !== undefined ? [...(options.skillPaths?.() ?? [])] : [];
+  const disabledSkills = new Set(options.disabledSkills?.() ?? []);
+  const allowedSkillSet = spec.skills ? new Set(spec.skills) : null;
   const resourceLoader = new DefaultResourceLoader({
     cwd: options.cwd,
     agentDir: options.agentDir,
     settingsManager,
     noExtensions: true,
     noSkills: true,
+    ...(skillPaths.length > 0
+      ? {
+          additionalSkillPaths: skillPaths,
+          skillsOverride: (base) => ({
+            ...base,
+            skills: base.skills.filter(
+              (skill) =>
+                !disabledSkills.has(skill.name) &&
+                (allowedSkillSet === null || allowedSkillSet.has(skill.name)),
+            ),
+          }),
+        }
+      : {}),
     noPromptTemplates: true,
     noThemes: true,
     extensionFactories: [
@@ -229,7 +316,15 @@ async function runHelper(
 
   let toolCalls = 0;
   let toolTurns = 0;
+  let activeTools = 0;
+  let lastActivity = Date.now();
   let limit: HelperLimit | null = null;
+  let signaledFirstResponse = false;
+  const notifyFirstResponse = () => {
+    if (signaledFirstResponse) return;
+    signaledFirstResponse = true;
+    onFirstResponse?.();
+  };
   const stop = (reason: HelperLimit) => {
     if (limit) return;
     limit = reason;
@@ -237,18 +332,29 @@ async function runHelper(
   };
   const onAbort = () => void session.abort();
   signal?.addEventListener("abort", onAbort, { once: true });
-  const timer = setTimeout(() => stop("time"), TIME_LIMIT_MS);
+  const wallTimer = setTimeout(() => stop("time"), MAX_WALL_TIME_MS);
+  const staleTimer = setInterval(() => {
+    const budget = activeTools > 0 ? STALE_IN_TOOL_MS : STALE_IDLE_MS;
+    if (Date.now() - lastActivity >= budget) stop("stalled");
+  }, STALE_CHECK_MS);
   const unsubscribe = session.subscribe((event) => {
-    if (event.type === "tool_execution_start") {
+    lastActivity = Date.now();
+    if (event.type === "message_start" || event.type === "message_update") {
+      notifyFirstResponse();
+    } else if (event.type === "tool_execution_start") {
+      notifyFirstResponse();
+      activeTools += 1;
       toolCalls += 1;
       onStep(event.toolName, progressTarget(event.args));
       trace?.startTool(event.toolCallId, event.toolName, event.args);
       if (toolCalls >= MAX_TOOL_CALLS) stop("calls");
     } else if (event.type === "tool_execution_end") {
+      activeTools = Math.max(0, activeTools - 1);
       trace?.endTool(event.toolCallId, event.result?.content, event.isError);
     } else if (event.type === "turn_start") {
       trace?.startStep();
     } else if (event.type === "message_end" && event.message.role === "assistant") {
+      notifyFirstResponse();
       trace?.endStep(event.message);
     } else if (event.type === "turn_end" && event.toolResults.length > 0) {
       toolTurns += 1;
@@ -263,7 +369,8 @@ async function runHelper(
     if (signal?.aborted) throw new Error("Stopped.");
     if (limit) {
       // Out of budget: take the tools away and ask for the summary of what was found.
-      clearTimeout(timer);
+      clearTimeout(wallTimer);
+      clearInterval(staleTimer);
       session.setActiveToolsByName([]);
       const wrapUp = setTimeout(() => void session.abort(), WRAP_UP_LIMIT_MS);
       try {
@@ -273,12 +380,36 @@ async function runHelper(
       }
       if (signal?.aborted) throw new Error("Stopped.");
     }
+    let answer = lastReply(session);
+    if (spec.outputSchema && !limit && answer) {
+      const check = validateOutput(answer, spec.outputSchema);
+      if (check.ok) {
+        answer = check.json;
+      } else {
+        // Exactly ONE bounded retry turn with verbatim validation errors (never re-paste schema).
+        session.setActiveToolsByName([]);
+        const retryTimer = setTimeout(() => void session.abort(), WRAP_UP_LIMIT_MS);
+        try {
+          await session.prompt(buildSchemaRetryPrompt(check.errors)).catch(() => undefined);
+        } finally {
+          clearTimeout(retryTimer);
+        }
+        if (signal?.aborted) throw new Error("Stopped.");
+        const retried = lastReply(session);
+        if (retried) {
+          const second = validateOutput(retried, spec.outputSchema);
+          answer = second.ok ? second.json : retried;
+        }
+      }
+    }
     const note = limit
-      ? `\n\n(The helper stopped early because it reached its ${limit === "time" ? "time" : "step"} limit.)`
+      ? `\n\n(The helper stopped early because it ${limit === "stalled" ? "stalled without progress" : `reached its ${limit === "time" ? "time" : "step"} limit`}.)`
       : "";
-    return `${lastReply(session) || "The helper finished without an answer."}${note}`;
+    return `${answer || "The helper finished without an answer."}${note}`;
   } finally {
-    clearTimeout(timer);
+    notifyFirstResponse();
+    clearTimeout(wallTimer);
+    clearInterval(staleTimer);
     unsubscribe();
     signal?.removeEventListener("abort", onAbort);
     session.dispose();
@@ -359,6 +490,12 @@ export function createDelegateTool(options: DelegateToolOptions) {
                 "Model to use (provider/id). Leave empty to use the Agent's model, else the one of this conversation",
             }),
           ),
+          outputSchema: Type.Optional(
+            Type.Record(Type.String(), Type.Unknown(), {
+              description:
+                "Optional JSON Schema object that the helper's final JSON answer must validate against",
+            }),
+          ),
         }),
         { minItems: 1, maxItems: MAX_PARALLEL_TASKS },
       ),
@@ -379,26 +516,31 @@ export function createDelegateTool(options: DelegateToolOptions) {
           throw new Error(
             `Unknown agent "${wanted}". Available: ${agents.map((a) => a.name).join(", ") || "none"}.`,
           );
+        const { schema: outputSchema, error: schemaError } = coerceOutputSchema(item.outputSchema);
+        if (schemaError) throw new Error(schemaError);
         const model = pickModel(options.runtime, item.model, agent?.model ?? ctx.model);
         if (!model) throw new Error("No model is available for the helper.");
         const label = uniqueLabel(
           taken,
           item.name?.trim() || agent?.name || `${DEFAULT_LABEL} ${index + 1}`,
         );
+        const basePrompt = [
+          SUBAGENT_PROMPT,
+          agent?.prompt,
+          background ? `## Background from the other assistant\n${background}` : undefined,
+        ]
+          .filter((part): part is string => Boolean(part))
+          .join("\n\n");
         return {
           label,
           task: item.task,
-          prompt: [
-            SUBAGENT_PROMPT,
-            agent?.prompt,
-            background ? `## Background from the other assistant\n${background}` : undefined,
-          ]
-            .filter((part): part is string => Boolean(part))
-            .join("\n\n"),
+          prompt: outputSchema ? appendOutputContract(basePrompt, outputSchema) : basePrompt,
           model,
           tools: agent
             ? delegatedTools(agent.tools, options.allowedTools())
             : options.allowedTools(),
+          outputSchema,
+          skills: agent?.skills,
         };
       });
 
@@ -412,13 +554,21 @@ export function createDelegateTool(options: DelegateToolOptions) {
       };
       report();
       const sink = options.trace?.();
+      const leader = specs[0];
+      const prefixGate =
+        specs.length >= 2 && leader
+          ? new PrefixCacheGate(`${leader.model.provider}/${leader.model.id}`)
+          : null;
       const settled = await Promise.allSettled(
         runs.map(async ({ spec, helper }, index) => {
+          const route = `${spec.model.provider}/${spec.model.id}`;
+          if (prefixGate && index > 0) await prefixGate.wait(route, signal);
+          if (signal?.aborted) throw new Error("Stopped.");
           const trace = sink
             ? new HelperTrace(sink, toolCallId, index, {
                 label: spec.label,
                 task: spec.task,
-                model: `${spec.model.provider}/${spec.model.id}`,
+                model: route,
               })
             : undefined;
           try {
@@ -431,12 +581,14 @@ export function createDelegateTool(options: DelegateToolOptions) {
                 report();
               },
               trace,
+              index === 0 ? () => prefixGate?.open() : undefined,
             );
             helper.status = "done";
             report();
             trace?.end({ output: summary });
             return summary;
           } catch (error) {
+            if (index === 0) prefixGate?.open();
             trace?.end({ error: error instanceof Error ? error.message : String(error) });
             helper.status = "failed";
             helper.error = (error instanceof Error ? error.message : String(error))
@@ -451,6 +603,7 @@ export function createDelegateTool(options: DelegateToolOptions) {
       if (signal?.aborted) throw new Error("Stopped.");
 
       // The cap covers the whole text, so the headings and separators come off the budget first.
+      // Scrub secrets BEFORE truncating so a cut can never drop a PEM header and leave a key body.
       const single = specs.length === 1;
       const framing = single
         ? 0
@@ -459,11 +612,11 @@ export function createDelegateTool(options: DelegateToolOptions) {
       const perSummary = Math.max(0, Math.floor((MAX_RESULT_CHARS - framing) / specs.length));
       const sections = settled.map((result, index) => {
         const spec = specs[index];
-        const body = (
+        const raw =
           result.status === "fulfilled"
             ? result.value
-            : `The helper failed: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`
-        ).slice(0, perSummary);
+            : `The helper failed: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`;
+        const body = redactSecrets(raw).slice(0, perSummary);
         return single ? body : `## ${spec?.label}\n${body}`;
       });
       const text = sections.join("\n\n");

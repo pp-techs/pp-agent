@@ -407,6 +407,11 @@
         "done": "Managed scheduled tasks",
         "notDone": "Manage scheduled tasks"
       },
+      "skillManage": {
+        "active": "Managing skills",
+        "done": "Managed skills",
+        "notDone": "Manage skills"
+      },
       "delegate": {
         "active": "Helper is researching",
         "done": "Helper finished",

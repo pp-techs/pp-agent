@@ -2,9 +2,13 @@ import { describe, expect, test, vi } from "vite-plus/test";
 import {
   classifySession,
   formatHistory,
+  formatHistoryAround,
   formatSessions,
   historyLines,
+  parseTimeBound,
   previewOf,
+  rankSessionMatches,
+  searchSessionHistory,
   selectSessions,
   sessionContextSection,
   sessionRef,
@@ -222,5 +226,62 @@ describe("sessions tool", () => {
     const withHome = tool({ peers: () => [{ id: "home", label: "Telegram", key: "telegram:42" }] });
     expect(textOf(await withHome.run({ action: "peers" }))).toContain("id: home");
     expect(textOf(await tool().run({ action: "peers" }))).toContain("nowhere to deliver");
+  });
+
+  test("full-text search finds matches across messages, demotes scheduled tasks, and supports scrolling", async () => {
+    const now = 1_700_000_000_000;
+    expect(parseTimeBound("7d", now)).toBe(now - 7 * 86_400_000);
+    expect(parseTimeBound("24h", now)).toBe(now - 24 * 3_600_000);
+
+    const taskRow = row({ id: "cron-1", kind: "task", title: "⏰ Daily", modified: now });
+    const winRow = row({ id: "win-1", kind: "window", title: "Pricing", modified: now - 10_000 });
+    const taskHit = searchSessionHistory(
+      taskRow,
+      [{ role: "assistant", text: "Báo giá hợp đồng A là 500 triệu", at: now }],
+      "bao gia hop dong",
+    );
+    const winHit = searchSessionHistory(
+      winRow,
+      [
+        { role: "user", text: "Xin chào", at: now - 20_000 },
+        { role: "assistant", text: "Báo giá hợp đồng B là 300 triệu", at: now - 10_000 },
+        { role: "user", text: "Chốt phương án này", at: now - 5_000 },
+      ],
+      "bao gia hop dong",
+    );
+    expect(taskHit).not.toBeNull();
+    expect(winHit).not.toBeNull();
+    const ranked = rankSessionMatches([taskHit!, winHit!], 10);
+    expect(ranked.map((m) => m.session.id)).toEqual(["win-1", "cron-1"]);
+
+    const scrolled = formatHistoryAround(
+      Array.from({ length: 10 }, (_, i) => ({ role: "user" as const, text: `msg-${i}`, at: null })),
+      5,
+      3,
+      "en",
+    );
+    expect(scrolled).toContain("[#5 * user]");
+    expect(scrolled).toContain("earlier messages not shown");
+    expect(scrolled).toContain("later messages not shown");
+
+    const { run } = tool({
+      list: async () => [taskRow, winRow],
+      history: async (id) =>
+        id === "win-1"
+          ? [
+              { role: "user", text: "Xin chào", at: now - 20_000 },
+              { role: "assistant", text: "Báo giá hợp đồng B là 300 triệu", at: now - 10_000 },
+            ]
+          : [{ role: "assistant", text: "Báo giá hợp đồng A là 500 triệu", at: now }],
+    });
+    const searchOut = textOf(await run({ action: "search", query: "bao gia" }));
+    expect(searchOut.indexOf("win-1")).toBeLessThan(searchOut.indexOf("cron-1"));
+    expect(searchOut).toContain("around=1");
+
+    const scrollOut = textOf(
+      await run({ action: "history", sessionId: "win-1", around: 1, limit: 2 }),
+    );
+    expect(scrollOut).toContain("[#1 * assistant");
+    expect(scrollOut).toContain("300 triệu");
   });
 });

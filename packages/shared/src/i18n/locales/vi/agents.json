@@ -104,6 +104,10 @@
       "label": "Tác vụ theo lịch",
       "description": "Tạo và quản lý tác vụ tự chạy theo lịch; hỏi trước khi tạo."
     },
+    "skill_manage": {
+      "label": "Quản lý kỹ năng",
+      "description": "Tạo, xem, chỉnh sửa, lưu trữ và hoàn tác kỹ năng trong thư mục làm việc; hỏi trước khi thay đổi."
+    },
     "office_read": {
       "label": "Xem tệp Word, Excel, PowerPoint",
       "description": "Xem cấu trúc và nội dung tệp Office mà không thay đổi chúng."

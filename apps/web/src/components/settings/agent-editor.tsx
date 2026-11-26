@@ -77,6 +77,7 @@ const TOOL_OPTION_NAMES = [
   "ask_user",
   "sessions",
   "schedule_manage",
+  "skill_manage",
   "office_read",
   "office_edit",
   "write",

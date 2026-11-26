@@ -403,6 +403,11 @@
         "done": "Đã quản lý tác vụ theo lịch",
         "notDone": "Quản lý tác vụ theo lịch"
       },
+      "skillManage": {
+        "active": "Đang quản lý kỹ năng",
+        "done": "Đã quản lý kỹ năng",
+        "notDone": "Quản lý kỹ năng"
+      },
       "delegate": {
         "active": "Trợ lý phụ đang tra cứu",
         "done": "Trợ lý phụ đã xong",

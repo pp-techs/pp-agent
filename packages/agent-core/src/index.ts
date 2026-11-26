@@ -332,6 +332,11 @@ import {
 } from "./schedule-tool.ts";
 import { createSessionsTool, SESSIONS_TOOL, type PeerRow } from "./sessions-tool.ts";
 import {
+  createSkillManageTool,
+  SKILL_MANAGE_TOOL,
+  skillManageActionTier,
+} from "./skill-manage-tool.ts";
+import {
   classifySession,
   historyLines,
   previewOf,
@@ -1431,11 +1436,21 @@ export class AgentHost {
   }
 
   private async compact(): Promise<void> {
-    const session = this.requireSession();
+    const conversation = this.requireOpen();
+    const session = conversation.session;
     if (this.running || session.isStreaming) throw new Error(t("conversations.waitForAnswer"));
     if (session.isCompacting) return;
     const short = t("conversations.tooShort");
     if (session.messages.length === 0) throw new Error(short);
+    // Snapshot unread messages for memory extraction before compaction summarizes them away.
+    const preCompactPasses = this.preparePasses(conversation, true);
+    if (preCompactPasses?.memory) {
+      this.launchPasses({
+        file: preCompactPasses.file,
+        memory: preCompactPasses.memory,
+        title: null,
+      });
+    }
     try {
       await session.compact().catch(async (error: unknown) => {
         if (!NOTHING_TO_COMPACT.test(errorMessage(error))) throw error;
@@ -2625,8 +2640,9 @@ export class AgentHost {
           ? createResearchTools(cwd, scope.research, scope.askUser)
           : []),
         ...(scope.askUser ? [createAskTool(scope.askUser)] : []),
-        // Like ask_user, only where a person is present: a scheduled run cannot create tasks.
+        // Like ask_user, only where a person is present: a scheduled run cannot create tasks or edit skills.
         ...(scope.askUser ? [createScheduleTool(this.scheduleHost(scope, sessionManager))] : []),
+        ...(scope.askUser ? [createSkillManageTool({ cwd })] : []),
         createSessionsTool({
           list: () => this.sessionRows(sessionManager.getSessionFile()),
           history: (id) => this.sessionHistory(id),
@@ -2651,8 +2667,12 @@ export class AgentHost {
               prompt: agentPromptSection(agent),
               model: findAvailable(runtime, agent.model),
               tools: helperTools(settings.get(), agent.tools),
+              skills: agent.skills,
             })),
           pathRules: () => this.pathRules(),
+          skillPaths: () =>
+            this.skillsTrusted(cwd) ? [skills.dir, workspaceSkillsDir(cwd)] : [skills.dir],
+          disabledSkills: () => settings.get().disabledSkills,
           trace: () => scope.trace?.(),
         }),
       ],
@@ -3233,11 +3253,13 @@ export class AgentHost {
           ? computerActionTier(event.input.action)
           : event.toolName === BROWSER_TOOL
             ? browserActionTier(event.input.action)
-            : toolTier(
-                event.toolName,
-                info?.annotations,
-                (server) => this.services?.mcpConfig.trustedServers().has(server) ?? false,
-              );
+            : event.toolName === SKILL_MANAGE_TOOL
+              ? skillManageActionTier(event.input.action)
+              : toolTier(
+                  event.toolName,
+                  info?.annotations,
+                  (server) => this.services?.mcpConfig.trustedServers().has(server) ?? false,
+                );
         const saved = this.services?.settings.get();
         if (!saved) return { block: true, reason: "The app is still starting." };
         const active = saved.yoloMode || yolo?.() === true;

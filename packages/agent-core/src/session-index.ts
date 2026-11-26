@@ -4,7 +4,8 @@
  * host feeds them the files Pi saved.
  */
 import { basename } from "node:path";
-import { contentText, typedText } from "./history.ts";
+import { contentText, fold, typedText } from "./history.ts";
+import { redactSecrets } from "./redact.ts";
 
 /** `chat`: a chat channel's conversation; `task`: a scheduled run; `window`: the desktop window. */
 export type SessionKind = "chat" | "task" | "window";
@@ -152,14 +153,183 @@ export function formatHistory(
   if (tail.length === 0) return "This session has no messages.";
   const omitted = lines.length - tail.length;
   const body = tail
-    .map((line) => {
+    .map((line, offset) => {
+      const index = omitted + offset;
       const at = line.at
         ? ` (${new Date(line.at).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" })})`
         : "";
-      return `[${line.role}${at}]\n${line.text}`;
+      return `[#${index} ${line.role}${at}]\n${redactSecrets(line.text)}`;
     })
     .join("\n\n");
   return omitted > 0 ? `(${omitted} earlier messages not shown)\n\n${body}` : body;
+}
+
+/**
+ * A window of `limit` messages centered on 0-based `around` (scroll mode around a search hit).
+ */
+export function formatHistoryAround(
+  lines: readonly HistoryLine[],
+  around: number,
+  limit: number,
+  locale: string,
+): string {
+  if (lines.length === 0) return "This session has no messages.";
+  const count = Math.min(Math.max(1, Math.trunc(limit)), HISTORY_LIMIT.max);
+  const anchor = Math.min(Math.max(0, Math.trunc(around)), lines.length - 1);
+  const half = Math.floor(count / 2);
+  let start = Math.max(0, anchor - half);
+  const end = Math.min(lines.length, start + count);
+  start = Math.max(0, end - count);
+  const slice = lines.slice(start, end);
+  const after = lines.length - end;
+  const body = slice
+    .map((line, offset) => {
+      const index = start + offset;
+      const mark = index === anchor ? " *" : "";
+      const at = line.at
+        ? ` (${new Date(line.at).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" })})`
+        : "";
+      return `[#${index}${mark} ${line.role}${at}]\n${redactSecrets(line.text)}`;
+    })
+    .join("\n\n");
+  const head = start > 0 ? `(${start} earlier messages not shown)\n\n` : "";
+  const tail = after > 0 ? `\n\n(${after} later messages not shown)` : "";
+  return `${head}${body}${tail}`;
+}
+
+const RELATIVE_BOUND = /^(\d+)\s*(h|d|w)$/i;
+const RELATIVE_UNIT_MS: Record<string, number> = {
+  h: 3_600_000,
+  d: 86_400_000,
+  w: 604_800_000,
+};
+const WORD = /[\p{L}\p{N}]+/gu;
+const SNIPPET_RADIUS = 120;
+
+/**
+ * Parses a relative bound (`"24h"`, `"7d"`, `"2w"`) or ISO date/datetime into epoch milliseconds.
+ * Returns null for empty or unrecognized strings.
+ */
+export function parseTimeBound(value: string | undefined, now: number = Date.now()): number | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  const rel = RELATIVE_BOUND.exec(trimmed);
+  if (rel) {
+    const amount = Number(rel[1]);
+    const unit = RELATIVE_UNIT_MS[rel[2]!.toLowerCase()];
+    if (Number.isFinite(amount) && unit) return now - amount * unit;
+  }
+  const parsed = Date.parse(trimmed);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+/** One full-text hit inside a saved session. */
+export interface SessionSearchMatch {
+  session: SessionRow;
+  /** 0-based index into the session's `historyLines`, passable to `history` (`around`). */
+  messageIndex: number;
+  role: "user" | "assistant";
+  at: number | null;
+  snippet: string;
+  score: number;
+}
+
+function snippetAround(text: string, words: readonly string[]): string {
+  const clean = redactSecrets(text).replace(/\s+/g, " ").trim();
+  if (clean.length <= SNIPPET_RADIUS * 2) return clean;
+  const folded = fold(clean.normalize("NFC"));
+  let hit = -1;
+  for (const word of words) {
+    const pos = folded.indexOf(word);
+    if (pos !== -1 && (hit === -1 || pos < hit)) hit = pos;
+  }
+  const center = hit === -1 ? 0 : hit;
+  const start = Math.max(0, center - SNIPPET_RADIUS);
+  const end = Math.min(clean.length, start + SNIPPET_RADIUS * 2);
+  return `${start > 0 ? "…" : ""}${clean.slice(start, end)}${end < clean.length ? "…" : ""}`;
+}
+
+/**
+ * Finds the best-matching message inside `lines` for `query` (accent-insensitive word match).
+ * Returns null when no message matches.
+ */
+export function searchSessionHistory(
+  session: SessionRow,
+  lines: readonly HistoryLine[],
+  query: string,
+  bounds?: { after?: number | null; before?: number | null },
+): SessionSearchMatch | null {
+  const wanted = [...new Set(fold(query.normalize("NFC")).match(WORD) ?? [])];
+  if (wanted.length === 0) return null;
+  let best: SessionSearchMatch | null = null;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
+    const stamp = line.at ?? session.modified;
+    if (bounds?.after != null && stamp < bounds.after) continue;
+    if (bounds?.before != null && stamp > bounds.before) continue;
+    const words = fold(line.text.normalize("NFC")).match(WORD) ?? [];
+    const score = wanted.filter((word) =>
+      words.some((have) => have === word || (word.length >= 3 && have.startsWith(word))),
+    ).length;
+    if (score === 0) continue;
+    if (!best || score > best.score || (score === best.score && index > best.messageIndex)) {
+      best = {
+        session,
+        messageIndex: index,
+        role: line.role,
+        at: line.at,
+        snippet: snippetAround(line.text, wanted),
+        score,
+      };
+    }
+  }
+  return best;
+}
+
+/**
+ * Ranks cross-session search hits: interactive sessions (`window`, `chat`) always rank ahead of
+ * scheduled runs (`task`) so repetitive cron vocabulary never causes recall blindness; within each
+ * tier, higher match score then newer session wins.
+ */
+export function rankSessionMatches(
+  matches: readonly SessionSearchMatch[],
+  limit: number,
+): SessionSearchMatch[] {
+  const cap = Math.min(Math.max(1, Math.trunc(limit)), SESSION_LIST_LIMIT.max);
+  return matches
+    .toSorted((a, b) => {
+      const aDemoted = a.session.kind === "task" ? 1 : 0;
+      const bDemoted = b.session.kind === "task" ? 1 : 0;
+      if (aDemoted !== bDemoted) return aDemoted - bDemoted;
+      if (b.score !== a.score) return b.score - a.score;
+      return b.session.modified - a.session.modified;
+    })
+    .slice(0, cap);
+}
+
+/** Renders cross-session search hits with session id and `around` message index for scrolling. */
+export function formatSearchMatches(
+  matches: readonly SessionSearchMatch[],
+  locale: string,
+): string {
+  if (matches.length === 0) return "No matching messages found.";
+  return matches
+    .map((hit) => {
+      const at = new Date(hit.at ?? hit.session.modified).toLocaleString(locale, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+      const where = hit.session.peer
+        ? `${hit.session.kind}, ${hit.session.peer}`
+        : hit.session.kind;
+      return [
+        `- sessionId: ${hit.session.id}${hit.session.isCurrent ? "  (this session)" : ""}`,
+        `  title: ${hit.session.title} (${where}; ${at})`,
+        `  match at #${hit.messageIndex} (${hit.role}) — call action "history" with sessionId and around=${hit.messageIndex} to read surrounding context`,
+        `  snippet: ${hit.snippet}`,
+      ].join("\n");
+    })
+    .join("\n");
 }
 
 /** Where the model is running, for its system prompt. */
@@ -198,7 +368,7 @@ export function sessionContextSection(context: SessionContext): string {
       : "- The user has no chat channel paired.",
     ...(context.sessionsTool
       ? [
-          "- Use the sessions tool to find other conversations (action list, history) and the places a message can be delivered (action peers). Ids come from its results; never invent one.",
+          "- Use the sessions tool to search past conversations (action search), list them (action list), read or scroll around a message (action history), and see delivery chats (action peers). Ids come from its results; never invent one.",
         ]
       : []),
   ].join("\n");

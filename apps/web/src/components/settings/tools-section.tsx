@@ -117,6 +117,7 @@ const BUILT_IN_TOOL_NAMES = [
   "ask_user",
   "sessions",
   "schedule_manage",
+  "skill_manage",
   "office_read",
   "office_edit",
   "email_accounts",
@@ -210,6 +211,7 @@ const BUILT_IN_GROUPS: Record<string, ToolGroupKind> = {
   delegate_task: "tasks",
   sessions: "tasks",
   schedule_manage: "tasks",
+  skill_manage: "tasks",
 };
 
 /** Built-in group kinds in the order the page lists them; MCP servers follow, A–Z. */
