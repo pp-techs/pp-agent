@@ -1,5 +1,9 @@
 # @workspace/mobile
 
+## 0.38.0
+
+No changes in this release.
+
 ## 0.37.2
 
 ### Patch Changes

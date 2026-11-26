@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <!-- `vp run version-packages` adds each release's section from its changesets; edit it in the Version Packages PR. -->
 
+## [0.38.0] — 2026-11-26
+
+Upgrade memory, cross-session recall, subagent delegation, and guarded skill management:
+
+- Add two-pass secret redaction and invisible Unicode stripping across memory extraction, subagent summaries (before truncation), and session recall.
+- Reserve split prompt budget between global/profile notes and workspace notes in `memorySection`, warn to consolidate when memory reaches 85% capacity, and trigger memory extraction before compaction.
+- Add full-text cross-session `search` (accent-insensitive, relative/ISO time bounds, demoting scheduled runs below interactive chats) and `history` scroll mode (`around`) to the `sessions` tool.
+- Add `PrefixCacheGate` for parallel subagent batches, progress-based stale timeout detection, optional `outputSchema` JSON validation with a single bounded retry turn, and skill inheritance for named helper agents.
+- Add guarded `skill_manage` tool (`list`, `read`, `history`, `create`, `patch`, `archive`, `rollback`) with per-action read/write approval tiers, read-before-write guard, secret blocking, recoverable `.archive/` retirement, and content-addressed SHA-256 audit ledger rollback (`SkillLedger`).
+
 ## [0.37.2] — 2026-11-26
 
 A workspace's own skills in `.agents/skills` now load by default, and "Use the skills this folder carries" turns them off per folder instead of on. In the message box, a skill picked with `/` now sits on its own line above the text instead of taking width from it.
