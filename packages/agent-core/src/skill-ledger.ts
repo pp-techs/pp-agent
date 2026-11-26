@@ -14,10 +14,11 @@ import {
   lstatSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 const SKILL_FILE = "SKILL.md";
 const LEDGER_FILE = ".skill-ledger.jsonl";
@@ -38,6 +39,8 @@ export interface SkillLedgerEntry {
   beforeHash: string | null;
   afterHash: string | null;
   summary: string;
+  /** Basename inside `.archive/` when `action === "archive"`, for full-directory rollback. */
+  archivedName?: string;
 }
 
 export interface RecordMutationInput {
@@ -47,11 +50,12 @@ export interface RecordMutationInput {
   beforeContent: string | null;
   afterContent: string | null;
   summary: string;
+  archivedName?: string;
 }
 
 export interface RollbackResult {
   entry: SkillLedgerEntry;
-  restored: "content" | "archived";
+  restored: "content" | "directory" | "archived";
 }
 
 function sha256(content: string): string {
@@ -77,10 +81,34 @@ function archiveStamp(now: Date = new Date()): string {
   ].join("");
 }
 
-/** Verifies `candidate` stays inside `root` and is not a symlink. */
-function assertInsideRoot(root: string, candidate: string): void {
+/** Verifies `candidate` stays inside `root` and neither `candidate` nor any ancestor up to `root` is a symlink. */
+function assertInsideRoot(root: string, candidate: string, workspaceRoot?: string): void {
   const resolvedRoot = resolve(root);
   const resolvedCandidate = resolve(candidate);
+
+  // Check ancestors from `workspaceRoot` (when provided) down to `resolvedRoot` so a symlinked
+  // `.agents` or `.agents/skills` folder cannot redirect writes outside the workspace.
+  if (workspaceRoot) {
+    const resolvedWs = resolve(workspaceRoot);
+    const realWs = existsSync(resolvedWs) ? realpathSync(resolvedWs) : resolvedWs;
+    let cursor = resolvedRoot;
+    while (cursor !== resolvedWs && cursor !== dirname(cursor)) {
+      if (existsSync(cursor) && lstatSync(cursor).isSymbolicLink()) {
+        throw new Error(`Refused symlink in skills root path: ${cursor}`);
+      }
+      cursor = dirname(cursor);
+    }
+    if (existsSync(resolvedRoot)) {
+      const realRoot = realpathSync(resolvedRoot);
+      const relWs = relative(realWs, realRoot);
+      if (relWs.startsWith("..") || relWs.includes(`..${sep}`)) {
+        throw new Error(`Refused skills root outside workspace: ${root}`);
+      }
+    }
+  } else if (existsSync(resolvedRoot) && lstatSync(resolvedRoot).isSymbolicLink()) {
+    throw new Error(`Refused symlink skills root: ${root}`);
+  }
+
   const rel = relative(resolvedRoot, resolvedCandidate);
   if (
     !rel ||
@@ -90,13 +118,20 @@ function assertInsideRoot(root: string, candidate: string): void {
   ) {
     throw new Error(`Refused path outside skills root: ${candidate}`);
   }
-  if (existsSync(resolvedCandidate) && lstatSync(resolvedCandidate).isSymbolicLink()) {
-    throw new Error(`Refused symlink inside skills root: ${candidate}`);
+  let cursor = resolvedCandidate;
+  while (cursor !== resolvedRoot && cursor !== dirname(cursor)) {
+    if (existsSync(cursor) && lstatSync(cursor).isSymbolicLink()) {
+      throw new Error(`Refused symlink inside skills root: ${cursor}`);
+    }
+    cursor = dirname(cursor);
   }
 }
 
 export class SkillLedger {
-  constructor(readonly skillsRoot: string) {}
+  constructor(
+    readonly skillsRoot: string,
+    readonly workspaceRoot?: string,
+  ) {}
 
   get ledgerPath(): string {
     return join(this.skillsRoot, LEDGER_FILE);
@@ -116,14 +151,14 @@ export class SkillLedger {
       throw new Error(`Invalid skill name "${name}". Use lowercase letters, numbers, and hyphens.`);
     }
     const dir = join(this.skillsRoot, name);
-    assertInsideRoot(this.skillsRoot, dir);
+    assertInsideRoot(this.skillsRoot, dir, this.workspaceRoot);
     return dir;
   }
 
   skillFile(name: string): string {
     const dir = this.skillDir(name);
     const file = join(dir, SKILL_FILE);
-    assertInsideRoot(this.skillsRoot, file);
+    assertInsideRoot(this.skillsRoot, file, this.workspaceRoot);
     return file;
   }
 
@@ -157,6 +192,7 @@ export class SkillLedger {
       beforeHash: input.beforeContent === null ? null : this.storeBlob(input.beforeContent),
       afterHash: input.afterContent === null ? null : this.storeBlob(input.afterContent),
       summary: input.summary.replace(/\s+/g, " ").trim().slice(0, 200),
+      ...(input.archivedName ? { archivedName: input.archivedName } : {}),
     };
     appendFileSync(this.ledgerPath, `${JSON.stringify(entry)}\n`, "utf8");
     this.trimIfOversized();
@@ -226,30 +262,78 @@ export class SkillLedger {
   }
 
   /**
-   * Fail-closed single-edit rollback: restores `SKILL.md` to `entry.beforeHash` (or archives a
-   * newly created skill when `beforeHash` is null) and records a new rollback ledger entry.
+   * Fail-closed single-edit rollback: restores a full archived directory when rolling back an
+   * `archive` entry, restores `SKILL.md` to `entry.beforeHash` for `patch`, or archives a newly
+   * created skill when `beforeHash` is null. Records a new rollback ledger entry and reverts the
+   * disk change if ledger recording fails.
    */
   rollback(entryId: string, actor: SkillLedgerActor = "agent"): RollbackResult {
     const target = this.find(entryId);
     if (!target) throw new Error(`No ledger entry found with id "${entryId}".`);
 
+    const dir = this.skillDir(target.skill);
     const file = this.skillFile(target.skill);
     const currentContent = existsSync(file) ? readFileSync(file, "utf8") : null;
 
+    if (target.action === "archive" && target.archivedName) {
+      if (existsSync(dir)) {
+        throw new Error(
+          `Cannot restore archived skill "${target.skill}": a skill folder already exists at ${dir}.`,
+        );
+      }
+      const archivedDir = join(this.archiveDir, basename(target.archivedName));
+      assertInsideRoot(this.archiveDir, archivedDir, this.workspaceRoot);
+      if (!existsSync(archivedDir)) {
+        throw new Error(
+          `Cannot roll back "${entryId}": archived directory ${target.archivedName} is missing.`,
+        );
+      }
+      renameSync(archivedDir, dir);
+      try {
+        const restoredContent = existsSync(file) ? readFileSync(file, "utf8") : null;
+        const entry = this.recordMutation({
+          actor,
+          action: "rollback",
+          skill: target.skill,
+          beforeContent: null,
+          afterContent: restoredContent,
+          summary: `Restored archived skill directory (${target.id})`,
+        });
+        return { entry, restored: "directory" };
+      } catch (error) {
+        try {
+          renameSync(dir, archivedDir);
+        } catch {
+          // Best-effort recovery.
+        }
+        throw error;
+      }
+    }
+
     if (target.beforeHash === null) {
-      if (!existsSync(this.skillDir(target.skill))) {
+      if (!existsSync(dir)) {
         throw new Error(`Skill "${target.skill}" is already absent; nothing to roll back.`);
       }
-      this.archiveFolder(target.skill);
-      const entry = this.recordMutation({
-        actor,
-        action: "rollback",
-        skill: target.skill,
-        beforeContent: currentContent,
-        afterContent: null,
-        summary: `Rolled back ${target.action} (${target.id}) by archiving skill`,
-      });
-      return { entry, restored: "archived" };
+      const archivedTo = this.archiveFolder(target.skill);
+      try {
+        const entry = this.recordMutation({
+          actor,
+          action: "rollback",
+          skill: target.skill,
+          beforeContent: currentContent,
+          afterContent: null,
+          summary: `Rolled back ${target.action} (${target.id}) by archiving skill`,
+          archivedName: basename(archivedTo),
+        });
+        return { entry, restored: "archived" };
+      } catch (error) {
+        try {
+          renameSync(archivedTo, dir);
+        } catch {
+          // Best-effort recovery.
+        }
+        throw error;
+      }
     }
 
     const previous = this.readBlob(target.beforeHash);
@@ -259,14 +343,25 @@ export class SkillLedger {
       );
     }
     atomicWrite(file, previous);
-    const entry = this.recordMutation({
-      actor,
-      action: "rollback",
-      skill: target.skill,
-      beforeContent: currentContent,
-      afterContent: previous,
-      summary: `Rolled back ${target.action} (${target.id})`,
-    });
-    return { entry, restored: "content" };
+    try {
+      const entry = this.recordMutation({
+        actor,
+        action: "rollback",
+        skill: target.skill,
+        beforeContent: currentContent,
+        afterContent: previous,
+        summary: `Rolled back ${target.action} (${target.id})`,
+      });
+      return { entry, restored: "content" };
+    } catch (error) {
+      if (currentContent !== null) {
+        try {
+          atomicWrite(file, currentContent);
+        } catch {
+          // Best-effort recovery.
+        }
+      }
+      throw error;
+    }
   }
 }

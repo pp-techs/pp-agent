@@ -190,16 +190,16 @@ const GLOBAL_BUDGET_SHARE = 0.4;
 function packNotes(
   entries: readonly MemoryEntry[],
   budget: number,
-): { lines: string[]; used: number } {
-  const lines: string[] = [];
+): { ids: Set<string>; used: number } {
+  const ids = new Set<string>();
   let used = 0;
   for (const entry of entries) {
     const line = noteLine(entry);
     if (used + line.length + 1 > budget) continue;
-    lines.push(line);
+    ids.add(entry.id);
     used += line.length + 1;
   }
-  return { lines, used };
+  return { ids, used };
 }
 
 /**
@@ -220,20 +220,16 @@ export function memorySection(
   const workspaceNotes = sorted.filter((entry) => entry.workspaceId !== null);
   const globalNotes = sorted.filter((entry) => entry.workspaceId === null);
 
-  let lines: string[];
+  let selectedIds: Set<string>;
   if (workspaceNotes.length === 0 || globalNotes.length === 0) {
-    lines = packNotes(sorted, budget).lines;
+    selectedIds = packNotes(sorted, budget).ids;
   } else {
     const globalReserve = Math.floor(budget * GLOBAL_BUDGET_SHARE);
     const workspaceReserve = budget - globalReserve;
     const firstGlobal = packNotes(globalNotes, globalReserve);
     const firstWorkspace = packNotes(workspaceNotes, workspaceReserve);
-    const remainingGlobal = globalNotes.filter(
-      (entry) => !firstGlobal.lines.includes(noteLine(entry)),
-    );
-    const remainingWorkspace = workspaceNotes.filter(
-      (entry) => !firstWorkspace.lines.includes(noteLine(entry)),
-    );
+    const remainingGlobal = globalNotes.filter((entry) => !firstGlobal.ids.has(entry.id));
+    const remainingWorkspace = workspaceNotes.filter((entry) => !firstWorkspace.ids.has(entry.id));
     const slack = budget - firstGlobal.used - firstWorkspace.used;
     const extra = packNotes(
       [...remainingWorkspace, ...remainingGlobal].toSorted(
@@ -241,9 +237,9 @@ export function memorySection(
       ),
       slack,
     );
-    const kept = new Set([...firstGlobal.lines, ...firstWorkspace.lines, ...extra.lines]);
-    lines = sorted.map(noteLine).filter((line) => kept.has(line));
+    selectedIds = new Set([...firstGlobal.ids, ...firstWorkspace.ids, ...extra.ids]);
   }
+  const lines = sorted.filter((entry) => selectedIds.has(entry.id)).map(noteLine);
   const hidden = entries.length - lines.length;
   const body = lines.length === 0 ? "No notes saved yet." : lines.join("\n");
   const more =

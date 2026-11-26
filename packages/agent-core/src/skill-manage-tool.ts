@@ -17,9 +17,10 @@ import {
   readdirSync,
   readFileSync,
   renameSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { defineTool, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import type { ToolTier } from "@workspace/shared";
 import { Type } from "typebox";
@@ -153,7 +154,7 @@ export interface SkillManageOptions {
 
 export function createSkillManageTool(options: SkillManageOptions) {
   const skillsRoot = workspaceSkillsDir(options.cwd);
-  const ledger = new SkillLedger(skillsRoot);
+  const ledger = new SkillLedger(skillsRoot, options.cwd);
   /** Read-before-write guard: tracks which skills were read in this session. */
   const readMarks = new Set<string>();
 
@@ -294,19 +295,30 @@ export function createSkillManageTool(options: SkillManageOptions) {
         }
         assertNoSecrets(`${description}\n${body}`);
         const content = serializeSkill(name, description, body);
+        const dir = ledger.skillDir(name);
         atomicWrite(file, content);
+        let entry;
+        try {
+          entry = ledger.recordMutation({
+            actor: "agent",
+            action: "create",
+            skill: name,
+            beforeContent: null,
+            afterContent: content,
+            summary: params.summary?.trim() || `Created skill ${name}`,
+          });
+        } catch (error) {
+          try {
+            rmSync(dir, { recursive: true, force: true });
+          } catch {
+            // Best-effort cleanup.
+          }
+          throw error;
+        }
         readMarks.add(name);
-        const entry = ledger.recordMutation({
-          actor: "agent",
-          action: "create",
-          skill: name,
-          beforeContent: null,
-          afterContent: content,
-          summary: params.summary?.trim() || `Created skill ${name}`,
-        });
         options.onMutated?.();
         return ok(
-          `Created skill "${name}" at ${file} (ledger entry: ${entry.id}). It will be available from the next message.`,
+          `Created skill "${name}" at ${file} (ledger entry: ${entry.id}). It will load after this turn settles when workspace skills are trusted.`,
         );
       }
 
@@ -321,7 +333,6 @@ export function createSkillManageTool(options: SkillManageOptions) {
         const newText = stripInvisible(params.newText ?? "");
         if (!oldText) throw new Error("`oldText` is required for patch.");
         if (oldText === newText) throw new Error("`newText` is identical to `oldText`.");
-        assertNoSecrets(newText);
 
         const current = readFileSync(file, "utf8");
         const first = current.indexOf(oldText);
@@ -336,6 +347,8 @@ export function createSkillManageTool(options: SkillManageOptions) {
           );
         }
         const updated = `${current.slice(0, first)}${newText}${current.slice(first + oldText.length)}`;
+        // Scan the entire spliced file so split-secret fragments cannot bypass redaction.
+        assertNoSecrets(updated);
         if (updated.length > MAX_BODY_CHARS + MAX_DESCRIPTION_LENGTH) {
           throw new Error(`Updated skill exceeds maximum size (${MAX_BODY_CHARS} characters).`);
         }
@@ -348,14 +361,24 @@ export function createSkillManageTool(options: SkillManageOptions) {
           throw new Error("Patched SKILL.md must keep a non-empty frontmatter `description`.");
         }
         atomicWrite(file, updated);
-        const entry = ledger.recordMutation({
-          actor: "agent",
-          action: "patch",
-          skill: name,
-          beforeContent: current,
-          afterContent: updated,
-          summary: params.summary?.trim() || `Patched skill ${name}`,
-        });
+        let entry;
+        try {
+          entry = ledger.recordMutation({
+            actor: "agent",
+            action: "patch",
+            skill: name,
+            beforeContent: current,
+            afterContent: updated,
+            summary: params.summary?.trim() || `Patched skill ${name}`,
+          });
+        } catch (error) {
+          try {
+            atomicWrite(file, current);
+          } catch {
+            // Best-effort restore.
+          }
+          throw error;
+        }
         options.onMutated?.();
         return ok(
           `Patched skill "${name}" at ${file} (ledger entry: ${entry.id}). Use action "rollback" with entryId "${entry.id}" to undo.`,
@@ -364,17 +387,29 @@ export function createSkillManageTool(options: SkillManageOptions) {
 
       if (params.action === "archive") {
         if (!existsSync(file)) throw new Error(`Skill "${name}" not found at ${file}.`);
+        const dir = ledger.skillDir(name);
         const current = readFileSync(file, "utf8");
         const archivedTo = ledger.archiveFolder(name);
+        let entry;
+        try {
+          entry = ledger.recordMutation({
+            actor: "agent",
+            action: "archive",
+            skill: name,
+            beforeContent: current,
+            afterContent: null,
+            summary: params.summary?.trim() || `Archived skill ${name}`,
+            archivedName: basename(archivedTo),
+          });
+        } catch (error) {
+          try {
+            renameSync(archivedTo, dir);
+          } catch {
+            // Best-effort restore.
+          }
+          throw error;
+        }
         readMarks.delete(name);
-        const entry = ledger.recordMutation({
-          actor: "agent",
-          action: "archive",
-          skill: name,
-          beforeContent: current,
-          afterContent: null,
-          summary: params.summary?.trim() || `Archived skill ${name}`,
-        });
         options.onMutated?.();
         return ok(
           `Archived skill "${name}" to ${archivedTo} (ledger entry: ${entry.id}). Use action "rollback" with entryId "${entry.id}" to restore.`,

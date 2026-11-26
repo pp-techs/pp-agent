@@ -220,6 +220,34 @@ describe("skill_manage tool", () => {
 
     await run(tool, { action: "rollback", entryId: archiveId! });
     expect(existsSync(join(cwd, ".agents", "skills", "vendor-audit", "SKILL.md"))).toBe(true);
+
+    // Archiving a skill with helper scripts restores the full directory on rollback.
+    const scriptsDir = join(cwd, ".agents", "skills", "vendor-audit", "scripts");
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(join(scriptsDir, "check.py"), "print('ok')\n", "utf8");
+    const archive2 = await run(tool, { action: "archive", name: "vendor-audit" });
+    const archive2Id = /ledger entry: ([a-z0-9-]+)/i.exec(archive2)?.[1];
+    expect(existsSync(join(scriptsDir, "check.py"))).toBe(false);
+    await run(tool, { action: "rollback", entryId: archive2Id! });
+    expect(readFileSync(join(scriptsDir, "check.py"), "utf8")).toBe("print('ok')\n");
+
+    // Split-secret patch (combining existing prefix with new suffix) is blocked.
+    const splitDir = join(cwd, ".agents", "skills", "split-test");
+    mkdirSync(splitDir, { recursive: true });
+    writeFileSync(
+      join(splitDir, "SKILL.md"),
+      "---\nname: split-test\ndescription: Split test\n---\n\nPrefix: sk-ant-api03-PLACEHOLDER\n",
+      "utf8",
+    );
+    await run(tool, { action: "read", name: "split-test" });
+    await expect(
+      run(tool, {
+        action: "patch",
+        name: "split-test",
+        oldText: "PLACEHOLDER",
+        newText: "abcdefghijklmnopqrstuvwxyz123456",
+      }),
+    ).rejects.toThrow(/secret|API key/i);
   });
 
   test("describeSkillManageCall renders clear approval card titles and patch diffs", () => {

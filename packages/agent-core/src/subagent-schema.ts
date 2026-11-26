@@ -40,7 +40,7 @@ export function appendOutputContract(base: string, schema: JsonSchema): string {
   return trimmed ? `${trimmed}\n\n${block}` : block;
 }
 
-/** Strips markdown fences and surrounding prose around the outermost `{...}` or `[...]`. */
+/** Strips markdown fences and surrounding prose, preserving valid scalar JSON values first. */
 export function extractJsonCandidate(text: string): string {
   let raw = (text ?? "").trim();
   if (raw.startsWith("```")) {
@@ -49,6 +49,14 @@ export function extractJsonCandidate(text: string): string {
     if (raw.trimEnd().endsWith("```")) raw = raw.trimEnd().slice(0, -3);
     raw = raw.trim();
     if (raw.toLowerCase().startsWith("json\n")) raw = raw.slice(5).trim();
+  }
+  if (raw) {
+    try {
+      JSON.parse(raw);
+      return raw;
+    } catch {
+      // Fall through to prose extraction for embedded objects/arrays.
+    }
   }
   const spans: { start: number; text: string }[] = [];
   for (const [opener, closer] of [
@@ -154,12 +162,13 @@ function checkNode(value: unknown, schema: JsonSchema, path: string, errors: str
         }
       }
     }
-    if (
+    const props =
       schema.properties &&
       typeof schema.properties === "object" &&
       !Array.isArray(schema.properties)
-    ) {
-      const props = schema.properties as Record<string, unknown>;
+        ? (schema.properties as Record<string, unknown>)
+        : null;
+    if (props) {
       for (const [key, propSchema] of Object.entries(props)) {
         if (
           Object.hasOwn(record, key) &&
@@ -168,6 +177,26 @@ function checkNode(value: unknown, schema: JsonSchema, path: string, errors: str
           !Array.isArray(propSchema)
         ) {
           checkNode(record[key], propSchema as JsonSchema, `${path}.${key}`, errors);
+          if (errors.length >= MAX_ERRORS) return;
+        }
+      }
+    }
+    if (schema.additionalProperties === false) {
+      for (const key of Object.keys(record)) {
+        if (!props || !Object.hasOwn(props, key)) {
+          errors.push(`${path}: unexpected property "${key}" (additionalProperties is false)`);
+          if (errors.length >= MAX_ERRORS) return;
+        }
+      }
+    } else if (
+      schema.additionalProperties &&
+      typeof schema.additionalProperties === "object" &&
+      !Array.isArray(schema.additionalProperties)
+    ) {
+      const extraSchema = schema.additionalProperties as JsonSchema;
+      for (const key of Object.keys(record)) {
+        if (!props || !Object.hasOwn(props, key)) {
+          checkNode(record[key], extraSchema, `${path}.${key}`, errors);
           if (errors.length >= MAX_ERRORS) return;
         }
       }

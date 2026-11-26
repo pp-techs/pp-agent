@@ -339,7 +339,10 @@ async function runHelper(
   }, STALE_CHECK_MS);
   const unsubscribe = session.subscribe((event) => {
     lastActivity = Date.now();
-    if (event.type === "message_start" || event.type === "message_update") {
+    if (
+      event.type === "message_update" ||
+      (event.type === "message_start" && event.message.role === "assistant")
+    ) {
       notifyFirstResponse();
     } else if (event.type === "tool_execution_start") {
       notifyFirstResponse();
@@ -381,7 +384,7 @@ async function runHelper(
       if (signal?.aborted) throw new Error("Stopped.");
     }
     let answer = lastReply(session);
-    if (spec.outputSchema && !limit && answer) {
+    if (spec.outputSchema && !limit) {
       const check = validateOutput(answer, spec.outputSchema);
       if (check.ok) {
         answer = check.json;
@@ -396,10 +399,13 @@ async function runHelper(
         }
         if (signal?.aborted) throw new Error("Stopped.");
         const retried = lastReply(session);
-        if (retried) {
-          const second = validateOutput(retried, spec.outputSchema);
-          answer = second.ok ? second.json : retried;
+        const second = validateOutput(retried, spec.outputSchema);
+        if (!second.ok) {
+          throw new Error(
+            `Output failed outputSchema validation after retry: ${second.errors.join("; ")}`,
+          );
         }
+        answer = second.json;
       }
     }
     const note = limit
@@ -616,7 +622,13 @@ export function createDelegateTool(options: DelegateToolOptions) {
           result.status === "fulfilled"
             ? result.value
             : `The helper failed: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`;
-        const body = redactSecrets(raw).slice(0, perSummary);
+        const scrubbed = redactSecrets(raw);
+        let body: string;
+        if (result.status === "fulfilled" && spec?.outputSchema && scrubbed.length > perSummary) {
+          body = `The helper failed: validated JSON output (${scrubbed.length} chars) exceeded the ${perSummary}-character budget.`;
+        } else {
+          body = scrubbed.slice(0, perSummary);
+        }
         return single ? body : `## ${spec?.label}\n${body}`;
       });
       const text = sections.join("\n\n");

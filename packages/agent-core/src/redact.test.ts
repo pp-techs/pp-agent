@@ -34,6 +34,19 @@ describe("redactSecrets", () => {
     expect(out).toContain('"name": "demo"');
   });
 
+  test("does not mistake query strings with @ for URL userinfo credentials", () => {
+    const link = "https://example.org?contact=mailto:support@example.org#top";
+    expect(redactSecrets(link)).toBe(link);
+  });
+
+  test("learns complete captured secrets containing punctuation for pass 2", () => {
+    const pw = "p@ss!word#1234567";
+    const text = `{"password": "${pw}"} Repeated: ${pw}`;
+    const out = redactSecrets(text);
+    expect(out).not.toContain(pw);
+    expect(out).toBe('{"password": "[REDACTED]"} Repeated: [REDACTED]');
+  });
+
   test("leaves ordinary text untouched", () => {
     const plain = "Doanh thu Q4 đạt 12.5 tỷ VND, tăng 18% so với cùng kỳ.";
     expect(redactSecrets(plain)).toBe(plain);

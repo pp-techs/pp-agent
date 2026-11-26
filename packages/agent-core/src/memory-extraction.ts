@@ -12,7 +12,7 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import { MEMORY_LIMITS, type MemoryChange, type MemoryEntry } from "@workspace/shared";
 import { noteKey, type MemoryStore } from "./memory.ts";
 import { runOneShot, transcript } from "./one-shot.ts";
-import { redactSecrets } from "./redact.ts";
+import { redactSecrets, stripInvisible } from "./redact.ts";
 
 /** Turns shorter than this are very unlikely to contain a lasting fact; skip the LLM call. */
 const MIN_CHARS = 40;
@@ -106,15 +106,18 @@ export type MemoryOp =
     }
   | { op: "delete"; ref: string };
 
-/** The conversation as `User: ...` / `Assistant: ...` lines, newest `MAX_INPUT_CHARS` kept, with secrets scrubbed. */
+/**
+ * The conversation as `User: ...` / `Assistant: ...` lines, with invisible characters stripped and
+ * secrets scrubbed BEFORE taking the newest `MAX_INPUT_CHARS` tail.
+ */
 export function transcriptText(messages: readonly AgentMessage[]): string {
-  return redactSecrets(
-    transcript(messages, {
-      maxChars: MAX_INPUT_CHARS,
-      keep: "end",
-      closingTag: "conversation",
-    }),
-  );
+  const full = transcript(messages, {
+    maxChars: Number.POSITIVE_INFINITY,
+    keep: "end",
+    closingTag: "conversation",
+  });
+  const scrubbed = redactSecrets(stripInvisible(full));
+  return scrubbed.length <= MAX_INPUT_CHARS ? scrubbed : scrubbed.slice(-MAX_INPUT_CHARS);
 }
 
 /**

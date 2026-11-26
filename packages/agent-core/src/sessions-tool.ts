@@ -141,12 +141,17 @@ export function createSessionsTool(access: SessionsAccess) {
         if (!query) throw new Error("`query` is required for search.");
         const after = parseTimeBound(params.after);
         const before = parseTimeBound(params.before);
-        const candidates = rows
+        // Prioritize interactive sessions before applying the scan cap so a burst of scheduled
+        // runs never pushes real conversations out of the search window.
+        const filtered = rows
           .filter((row) => visibility === "all" || row.isCurrent)
           .filter((row) => !params.kind || row.kind === params.kind)
           .filter((row) => !params.peer || row.peer === params.peer)
-          .filter((row) => after === null || row.modified >= after)
-          .slice(0, SEARCH_SCAN_LIMIT);
+          .filter((row) => after === null || row.modified >= after);
+        const candidates = [
+          ...filtered.filter((row) => row.kind !== "task"),
+          ...filtered.filter((row) => row.kind === "task"),
+        ].slice(0, SEARCH_SCAN_LIMIT);
 
         const matches: SessionSearchMatch[] = [];
         for (let offset = 0; offset < candidates.length; offset += SEARCH_CONCURRENCY) {

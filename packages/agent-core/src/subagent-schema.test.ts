@@ -23,13 +23,26 @@ describe("subagent-schema", () => {
     expect(coerceOutputSchema([1, 2]).error).toContain("JSON Schema object");
   });
 
-  test("extractJsonCandidate strips markdown fences and surrounding prose, preserving arrays", () => {
+  test("extractJsonCandidate preserves valid scalar JSON strings and strips fences", () => {
+    expect(extractJsonCandidate('"[1,2]"')).toBe('"[1,2]"');
     expect(extractJsonCandidate('Here is the result:\n```json\n[{"a":1},{"a":2}]\n```')).toBe(
       '[{"a":1},{"a":2}]',
     );
     expect(extractJsonCandidate('Result: {"ok": true, "items": [1]} done.')).toBe(
       '{"ok": true, "items": [1]}',
     );
+  });
+
+  test("validateOutput enforces additionalProperties: false", () => {
+    const schema = {
+      type: "object",
+      properties: { ok: { type: "boolean" } },
+      additionalProperties: false,
+    };
+    expect(validateOutput('{"ok": true}', schema).ok).toBe(true);
+    const extra = validateOutput('{"ok": true, "unexpected": 1}', schema);
+    expect(extra.ok).toBe(false);
+    if (!extra.ok) expect(extra.errors[0]).toContain("unexpected");
   });
 
   test("validateOutput checks required fields, types, nested items, enum, and bounds", () => {

@@ -22,7 +22,7 @@ const KNOWN_KEY_RE =
 
 const BEARER_RE = /\b(Bearer\s+)([A-Za-z0-9_\-.~+/=]{16,})/gi;
 
-const URL_USERINFO_RE = /(https?:\/\/[^/\s:@]+:)([^/\s@]+)(@)/gi;
+const URL_USERINFO_RE = /(https?:\/\/[^/\s:@?#]+:)([^/\s@?#]+)(@)/gi;
 
 const URL_SECRET_PARAM_RE =
   /([?&](?:api[_-]?key|apikey|token|access[_-]?token|auth|secret|password|passwd|key|x-amz-signature|sig|signature)=)([^&#\s]{8,})/gi;
@@ -47,6 +47,7 @@ export function redactSecrets(text: string): string {
   if (!text) return text;
   const learned = new Set<string>();
   const record = (raw: string) => {
+    if (raw.length >= 16) learned.add(raw);
     for (const token of raw.match(TOKEN_RE) ?? []) learned.add(token);
   };
 
