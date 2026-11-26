@@ -660,8 +660,8 @@ export interface ConfigBundle {
   language?: LanguageSetting;
   /** Skills the agent must not see; the full list when the bundle carries it. */
   disabledSkills?: string[];
-  /** Trusted skill folders (absolute paths); the full list when the bundle carries it. */
-  trustedSkillFolders?: string[];
+  /** Folders (absolute paths) whose skills are turned off; the full list when the bundle carries it. */
+  untrustedSkillFolders?: string[];
 }
 
 /** How much an applied bundle changed, per area; areas it left out count 0. */
@@ -673,7 +673,7 @@ export interface ConfigImportReport {
   /** General fields: the two models, thinking level, shell, yolo, language. */
   settings: number;
   disabledSkills: number;
-  trustedSkillFolders: number;
+  untrustedSkillFolders: number;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -767,8 +767,8 @@ export interface SettingsFile extends AppSettings {
   browserProfiles: BrowserProfile[];
   /** Apps the agent's `computer` tool may always use, or never. */
   computerApps: ComputerAppAccess;
-  /** Workspace folders (absolute) whose `.agents/skills` the person trusted; others' skills do not load. */
-  trustedSkillFolders: string[];
+  /** Workspace folders (absolute) whose `.agents/skills` the person turned off; all others load. */
+  untrustedSkillFolders: string[];
 }
 
 // ---------------------------------------------------------------------------------------------

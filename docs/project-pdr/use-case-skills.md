@@ -1,6 +1,6 @@
 # Use case: skills authoring and usage
 
-A skill is an [Agent Skills](https://agentskills.io) folder with a `SKILL.md`, stored under `<user-data>/agent/skills/<name>/`. Besides these, a workspace's own skills in `<workspace folder>/.agents/skills/` are loaded in its chats once the person trusts that folder for skills (`packages/agent-core/src/skills.ts`); nothing else is.
+A skill is an [Agent Skills](https://agentskills.io) folder with a `SKILL.md`, stored under `<user-data>/agent/skills/<name>/`. Besides these, a workspace's own skills in `<workspace folder>/.agents/skills/` are loaded in its chats unless the person turned them off for that folder (`packages/agent-core/src/skills.ts`); nothing else is.
 
 ## Built-in skills
 
@@ -19,11 +19,11 @@ The app ships two skills in `apps/desktop/resources/skills/` and copies them int
 
 - Type `/skill:<name> <args>` in the chat, or pick it from the **+** menu or `/` suggestions; the user bubble shows a "Skill: name" chip.
 - The agent also loads skills on its own unless a skill is set to run only when asked.
-- A conversation sees the skills that are enabled and in its agent's skills subset, from the installed ones and, when the workspace folder is trusted, its workspace's own (`.agents/skills`). The installed folder is loaded first, so an installed skill wins a name clash and the workspace skill of the same name is never used.
+- A conversation sees the skills that are enabled and in its agent's skills subset, from the installed ones and, unless the person turned them off for the folder, its workspace's own (`.agents/skills`). The installed folder is loaded first, so an installed skill wins a name clash and the workspace skill of the same name is never used.
 
 ## Trust a workspace's skills
 
-- The app's own workspace folder (Personal) always loads its skills. A downloaded folder can carry skills that steer the agent, so any other workspace's own skills stay unloaded until the person turns on **Use the skills this folder carries** in the workspace editor. The trusted folders are saved as `settings.json › trustedSkillFolders` (absolute paths); commands `get_workspace_skills_trust` and `set_workspace_skills_trust { id, trusted }`.
+- Every workspace's own skills load by default. A downloaded folder can carry skills that steer the agent, so the person can turn off **Use the skills this folder carries** in the workspace editor for such a folder. The folders turned off are saved as `settings.json › untrustedSkillFolders` (absolute paths); commands `get_workspace_skills_trust` and `set_workspace_skills_trust { id, trusted }`.
 - Trust can only be turned on at the computer: the switch is disabled in the web app, and remote access refuses `set_workspace_skills_trust` with `trusted: true` (turning it off is allowed).
 - The skill lists in Settings and the `/` suggestions show only skills that actually load.
 

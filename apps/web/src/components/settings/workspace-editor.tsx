@@ -317,9 +317,8 @@ function WorkspaceForm({
 }
 
 /**
- * Whether the skills the folder carries in `.agents/skills` load. Off until the person trusts the
- * folder: a downloaded folder could ship skills written to steer the agent. Saved at once, and
- * only on the computer.
+ * Whether the skills the folder carries in `.agents/skills` load. On unless the person turned them
+ * off for the folder. Saved at once, and only on the computer.
  */
 function WorkspaceSkillsTrust({
   bridge,
@@ -343,7 +342,7 @@ function WorkspaceSkillsTrust({
             ? t("workspaceEditor.skills.descriptionBuiltIn")
             : t("workspaceEditor.skills.description")
         }
-        checked={isBuiltIn || (trust.data ?? false)}
+        checked={isBuiltIn || (trust.data ?? true)}
         disabled={isWebApp || isBuiltIn || trust.isPending || setTrust.isPending}
         onCheckedChange={(trusted) => setTrust.mutate({ id: workspaceId, trusted })}
       />

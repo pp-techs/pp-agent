@@ -96,7 +96,7 @@ function parse(raw: unknown): SettingsFile {
     memoryEnabled: true,
     browserProfiles: readBrowserProfiles(null),
     computerApps: readComputerApps(null),
-    trustedSkillFolders: [],
+    untrustedSkillFolders: [],
   };
   if (typeof raw !== "object" || raw === null) return settings;
   const value = raw as Partial<Record<keyof SettingsFile, unknown>>;
@@ -136,10 +136,10 @@ function parse(raw: unknown): SettingsFile {
   settings.memoryEnabled = value.memoryEnabled !== false;
   settings.browserProfiles = readBrowserProfiles(value.browserProfiles);
   settings.computerApps = readComputerApps(value.computerApps);
-  if (Array.isArray(value.trustedSkillFolders))
-    settings.trustedSkillFolders = [
+  if (Array.isArray(value.untrustedSkillFolders))
+    settings.untrustedSkillFolders = [
       ...new Set(
-        value.trustedSkillFolders.filter(
+        value.untrustedSkillFolders.filter(
           (folder): folder is string => typeof folder === "string" && isAbsolute(folder),
         ),
       ),
