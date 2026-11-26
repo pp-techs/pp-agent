@@ -83,6 +83,7 @@ const ICONS: Record<string, LucideIcon> = {
   ask_user: MessageCircleQuestionIcon,
   sessions: HistoryIcon,
   schedule_manage: CalendarClockIcon,
+  skill_manage: BookOpenIcon,
   browser: GlobeIcon,
   computer: MonitorIcon,
   office_read: FileTextIcon,
@@ -215,6 +216,8 @@ function stepTitle(part: ToolPart, t: TFunction<"chat">) {
       return t(`toolStep.titles.sessions.${state}`);
     case "schedule_manage":
       return t(`toolStep.titles.scheduleManage.${state}`);
+    case "skill_manage":
+      return t(`toolStep.titles.skillManage.${state}`);
     case "browser":
       return browserTitle(part.args, state, t);
     case "computer":

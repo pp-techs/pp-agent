@@ -32,6 +32,15 @@ describe("transcriptText", () => {
     expect(transcriptText(messages as never)).toBe("User: hello\nAssistant: hi there");
   });
 
+  test("scrubs secrets from transcript before extraction", () => {
+    const secret = "sk-ant-api03-abcdefghijklmnopqrstuvwxyz123456";
+    const result = transcriptText([
+      { role: "user", content: `My key is ${secret}`, timestamp: 0 },
+    ] as never);
+    expect(result).not.toContain(secret);
+    expect(result).toContain("[REDACTED]");
+  });
+
   test("keeps only the newest slice, and a message cannot close the conversation block", () => {
     const big = "x".repeat(25_000);
     const result = transcriptText([{ role: "user", content: big, timestamp: 0 }] as never);
