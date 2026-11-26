@@ -82,7 +82,7 @@ Rules enforced in code. Paths are under `packages/agent-core/src/` unless noted.
 - Name: lowercase letters, digits, single hyphens (`^[a-z0-9]+(-[a-z0-9]+)*$`), at most 64 characters — the same rule Pi applies.
 - Description required, at most 1024 characters.
 - Duplicate names are refused on import; archives > 100 MB expanded are refused.
-- A workspace folder's own skills (`.agents/skills`) load only after the person trusts that folder, except the app's own workspace folder, which is always trusted (Settings › Workspaces, saved in `trustedSkillFolders`, off by default, only from the computer), and never replace an installed skill of the same name.
+- A workspace folder's own skills (`.agents/skills`) load by default; the person can turn them off per folder (Settings › Workspaces, saved in `untrustedSkillFolders`). Turning them back on is only possible from the computer; remote access may turn them off. They never replace an installed skill of the same name.
 
 ## MCP servers (`mcp.ts`)
 

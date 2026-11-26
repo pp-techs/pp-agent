@@ -130,17 +130,18 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
   // The skills (or `/goal`) the message starts with are shown as chips; the textarea holds the rest.
   const { tokens, prefix } = leadingTokens(draft, skills);
   const text = draft.slice(prefix.length);
-  const query = slashQuery(text);
-  // Once a skill is picked, more skills can follow; a command would drop them.
-  const suggestions = React.useMemo(() => {
-    if (query === null) return [];
+  const slash = slashQuery(text);
+  // Skills can be added at any point of the text; a command only opens an empty message.
+  const suggestions = ((): SlashItem[] => {
+    // `/goal` and `/research` take the rest of the message, so nothing is suggested after them.
+    if (slash === null || tokens.some((token) => token.kind === "command")) return [];
     const picked = new Set(tokens.map((token) => token.name));
     const items =
-      tokens.length > 0
+      tokens.length > 0 || slash.start > 0
         ? skills.filter((item) => !picked.has(item.name))
         : [...commands, ...skills];
-    return filterSlashItems(items, query);
-  }, [query, tokens, commands, skills]);
+    return filterSlashItems(items, slash.query);
+  })();
   const showSuggestions = !disabled && suggestions.length > 0 && dismissedFor !== draft;
   const active = Math.min(activeIndex, Math.max(suggestions.length - 1, 0));
 
@@ -150,9 +151,9 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
       setDraft("");
       item.run();
     } else {
-      // The `/word` being typed becomes the chip; other text stays. A skill already picked is
-      // not added twice.
-      const kept = query === null ? text : "";
+      // The `/word` being typed becomes a chip in front; the text around it stays. A skill
+      // already picked is not added twice.
+      const kept = slash === null ? text : text.slice(0, slash.start);
       const added = tokens.some((token) => token.kind === "skill" && token.name === item.name)
         ? ""
         : slashText(item);
@@ -378,7 +379,7 @@ export function PromptComposer({ bridge, disabled }: { bridge: DesktopBridge; di
                 aria-activedescendant={showSuggestions ? `slash-option-${active}` : undefined}
                 className={cn(
                   "max-h-52 min-h-9 py-2",
-                  tokens.length > 0 ? "min-w-40 flex-1 px-2" : "min-w-0 px-3",
+                  tokens.length > 0 ? "basis-full px-3" : "min-w-0 px-3",
                 )}
                 disabled={disabled}
                 onKeyDown={onKeyDown}

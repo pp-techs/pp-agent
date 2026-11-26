@@ -124,7 +124,7 @@ describe("mergeConfigBundle", () => {
       toolPolicies: 1,
       settings: 1,
       disabledSkills: 0,
-      trustedSkillFolders: 0,
+      untrustedSkillFolders: 0,
     });
   });
 
@@ -187,13 +187,13 @@ describe("mergeConfigBundle", () => {
       mergeConfigBundle(draft, {
         toolPolicies: { read: "allow" },
         disabledSkills: ["skill-a"],
-        trustedSkillFolders: ["/tmp/skills", "relative"],
+        untrustedSkillFolders: ["/tmp/skills", "relative"],
       });
     });
     const after = settings.get();
     expect(after.toolPolicies).toEqual({ read: "allow", grep: "ask" });
     expect(after.disabledSkills).toEqual(["skill-a"]);
-    expect(after.trustedSkillFolders).toEqual(["/tmp/skills"]);
+    expect(after.untrustedSkillFolders).toEqual(["/tmp/skills"]);
   });
 });
 

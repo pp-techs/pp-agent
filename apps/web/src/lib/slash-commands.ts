@@ -199,12 +199,15 @@ export function useSlashItems(bridge: DesktopBridge): {
 }
 
 /**
- * The `/` token being typed when the whole message so far is one (`/sk`, `/skill:mi`), else null.
- * Suggestions stop once a space follows the command.
+ * The `/` token being typed at the end of the message box text (`/sk`, `/skill:mi`, `design /lo`):
+ * `query` is what follows the slash and `start` where the slash sits. The slash must open the text
+ * or follow whitespace, so `a/b` and paths in the middle of a word do not count. Suggestions stop
+ * once a space follows the token. Null when the text does not end in one.
  */
-export function slashQuery(draft: string): string | null {
-  const match = /^\/(\S*)$/.exec(draft);
-  return match ? (match[1] ?? "").toLowerCase() : null;
+export function slashQuery(text: string): { query: string; start: number } | null {
+  const match = /(?:^|\s)\/(\S*)$/.exec(text);
+  if (!match) return null;
+  return { query: (match[1] ?? "").toLowerCase(), start: match.index + match[0].indexOf("/") };
 }
 
 /** Items matching `query`; prefix matches of the name come first. */

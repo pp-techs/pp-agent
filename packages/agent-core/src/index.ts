@@ -3324,12 +3324,12 @@ export class AgentHost {
 
   /**
    * Whether the skills of the workspace folder `cwd` load: the app's own workspace folder always
-   * does (nothing was downloaded into it by itself), any other once the person trusted it.
+   * does, any other unless the person turned them off for it.
    */
   private skillsTrusted(cwd: string): boolean {
     const services = this.services;
     if (services && resolve(cwd) === resolve(services.paths.workspaceDir)) return true;
-    return (services?.settings.get().trustedSkillFolders ?? []).includes(resolve(cwd));
+    return !(services?.settings.get().untrustedSkillFolders ?? []).includes(resolve(cwd));
   }
 
   /** Fingerprint of the installed skills and the conversation's workspace skills. */
@@ -4022,8 +4022,8 @@ export class AgentHost {
   }
 
   /**
-   * The skills of a workspace folder's `.agents/skills` that load: none until the person trusted
-   * the folder, and never one named like an installed skill (the installed one wins).
+   * The skills of a workspace folder's `.agents/skills` that load: none when the person turned
+   * them off for the folder, and never one named like an installed skill (the installed one wins).
    */
   private async loadedWorkspaceSkills(folder: string): Promise<SkillSummary[]> {
     const { settings, skills } = this.requireServices();
@@ -4051,13 +4051,13 @@ export class AgentHost {
     return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  /** Trusts or stops trusting a workspace folder's skills; the open conversation there reloads. */
+  /** Turns a workspace folder's skills on or off; the open conversation there reloads. */
   private setWorkspaceSkillsTrust(id: string, trusted: boolean): boolean {
     const { settings, paths } = this.requireServices();
     const folder = resolve(workspaceFolder(this.requireWorkspace(id), paths.workspaceDir));
     settings.update((draft) => {
-      draft.trustedSkillFolders = draft.trustedSkillFolders.filter((other) => other !== folder);
-      if (trusted) draft.trustedSkillFolders.push(folder);
+      draft.untrustedSkillFolders = draft.untrustedSkillFolders.filter((other) => other !== folder);
+      if (!trusted) draft.untrustedSkillFolders.push(folder);
     });
     this.changed(["workspaces", "skills"], { reload: id === this.workspaceId });
     return trusted;
@@ -4349,7 +4349,10 @@ export class AgentHost {
       scopes.push("skills");
       apply.reload = true;
     }
-    if (report.trustedSkillFolders > 0) scopes.push("skills");
+    if (before.untrustedSkillFolders.join("\n") !== after.untrustedSkillFolders.join("\n")) {
+      scopes.push("skills");
+      apply.reload = true;
+    }
     if (after.language !== before.language) {
       configureLanguage(after.language);
       // Provider sign-in sources and untitled-chat names are worded by the agent process.

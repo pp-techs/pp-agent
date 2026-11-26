@@ -7,7 +7,7 @@
  * and applying the same bundle twice changes nothing.
  */
 import { existsSync, readFileSync, renameSync, rmSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import {
   type ConfigBundle,
   type ConfigBundleFile,
@@ -43,7 +43,7 @@ export function exportConfigBundle(settings: SettingsFile, mcp: readonly McpConf
     yoloMode: settings.yoloMode,
     language: settings.language,
     disabledSkills: settings.disabledSkills,
-    trustedSkillFolders: settings.trustedSkillFolders,
+    untrustedSkillFolders: settings.untrustedSkillFolders,
   };
   const file: ConfigBundleFile = { ppAgentConfig: 1, config };
   return JSON.stringify(file, null, 2);
@@ -88,12 +88,12 @@ export function parseConfigBundle(json: string): ConfigBundle {
     bundle.disabledSkills = [
       ...new Set(config.disabledSkills.filter((name): name is string => typeof name === "string")),
     ];
-  if (Array.isArray(config.trustedSkillFolders))
-    bundle.trustedSkillFolders = [
+  if (Array.isArray(config.untrustedSkillFolders))
+    bundle.untrustedSkillFolders = [
       ...new Set(
-        config.trustedSkillFolders.filter(
-          (folder): folder is string => typeof folder === "string" && isAbsolute(folder),
-        ),
+        config.untrustedSkillFolders
+          .filter((folder): folder is string => typeof folder === "string" && isAbsolute(folder))
+          .map((folder) => resolve(folder)),
       ),
     ];
   return bundle;
@@ -112,7 +112,7 @@ export function mergeConfigBundle(draft: SettingsFile, bundle: ConfigBundle): Co
     toolPolicies: 0,
     settings: 0,
     disabledSkills: 0,
-    trustedSkillFolders: 0,
+    untrustedSkillFolders: 0,
   };
   for (const gateway of bundle.gateways ?? []) {
     const at = draft.gateways.findIndex((entry) => entry.id === gateway.id);
@@ -160,11 +160,13 @@ export function mergeConfigBundle(draft: SettingsFile, bundle: ConfigBundle): Co
     draft.disabledSkills = [...new Set(bundle.disabledSkills)];
     report.disabledSkills = bundle.disabledSkills.length;
   }
-  if (bundle.trustedSkillFolders) {
-    draft.trustedSkillFolders = [
-      ...new Set(bundle.trustedSkillFolders.filter((folder) => isAbsolute(folder))),
+  if (bundle.untrustedSkillFolders) {
+    draft.untrustedSkillFolders = [
+      ...new Set(
+        bundle.untrustedSkillFolders.filter((folder) => isAbsolute(folder)).map((f) => resolve(f)),
+      ),
     ];
-    report.trustedSkillFolders = draft.trustedSkillFolders.length;
+    report.untrustedSkillFolders = draft.untrustedSkillFolders.length;
   }
   return report;
 }
